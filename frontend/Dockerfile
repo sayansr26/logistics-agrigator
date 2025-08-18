@@ -5,21 +5,26 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm@8.15.1
 
-# Copy all source code first
-COPY . .
+# Copy package files first for better caching
+COPY package.json pnpm-lock.yaml* ./
 
 # Install dependencies
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
-# Skip copying node_modules entirely - will be mounted as volume
+# Copy all source code
+COPY . .
+
+# Create .next directory with proper permissions
+RUN mkdir -p .next
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
-# Change ownership
+# Change ownership of entire app directory
 RUN chown -R nextjs:nodejs /app
 
+# Switch to non-root user
 USER nextjs
 
 EXPOSE 3000

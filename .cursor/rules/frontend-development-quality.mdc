@@ -1,0 +1,269 @@
+# Frontend Development Quality Rules
+
+## **CRITICAL: Always Test Build After Changes**
+
+**MANDATORY: Run build command after every change to catch errors early**
+
+```bash
+# ❌ FORBIDDEN: Making changes without testing
+# Edit component files
+# Commit changes without verification
+
+# ✅ REQUIRED: Always test build after changes
+cd frontend && pnpm run build
+# Only proceed if build succeeds
+```
+
+## **Import Management Rules**
+
+### **CRITICAL: Icon Import Verification**
+
+When using Lucide React icons, ALWAYS ensure all icons are imported:
+
+```typescript
+// ✅ CORRECT: Import all icons used in the component
+import {
+  Truck,
+  Package,
+  Users,
+  AlertTriangle,  // ← Must import if used
+  MapPin,         // ← Must import if used
+  CreditCard      // ← Must import if used
+} from 'lucide-react'
+
+// ❌ WRONG: Using icons without importing
+const navigationItems = [
+  { icon: AlertTriangle }, // ← Error: not imported
+  { icon: MapPin },        // ← Error: not imported
+]
+```
+
+### **Component Import Verification**
+
+Before using any component, verify it's properly imported:
+
+```typescript
+// ✅ CORRECT: Import before use
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+
+// Use in JSX
+<Button>Click me</Button>
+<Card>Content</Card>
+```
+
+## **Build Verification Workflow**
+
+### **MANDATORY: Pre-commit Build Check**
+
+```bash
+# 1. Make changes to frontend files
+# 2. ALWAYS run build to catch errors
+cd frontend && pnpm run build
+
+# 3. If build fails, fix errors before proceeding
+# 4. Only commit after successful build
+```
+
+### **Component Development Workflow**
+
+```bash
+# 1. Create/edit component
+# 2. Add necessary imports
+# 3. Test build
+cd frontend && pnpm run build
+
+# 4. If successful, test in browser
+cd frontend && pnpm run dev
+
+# 5. Verify functionality
+# 6. Commit changes
+```
+
+## **Error Prevention Patterns**
+
+### **Icon Usage Checklist**
+
+Before using any Lucide icon:
+- [ ] Check if icon is imported in the file
+- [ ] Add import if missing
+- [ ] Verify icon name spelling
+- [ ] Test build to confirm
+
+### **Component Usage Checklist**
+
+Before using any component:
+- [ ] Verify component is imported
+- [ ] Check import path is correct
+- [ ] Ensure all props are properly typed
+- [ ] Test build to confirm
+
+## **TypeScript Error Prevention**
+
+### **Type Safety Rules**
+
+```typescript
+// ✅ CORRECT: Proper typing
+interface NavItem {
+  title: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  badge?: string
+  children?: NavItem[]
+}
+
+// ✅ CORRECT: Type-safe usage
+const navigationItems: NavItem[] = [
+  {
+    title: 'Dashboard',
+    href: '/dashboard',
+    icon: Home, // ← Must be imported Lucide icon
+  }
+]
+```
+
+### **Import Path Verification**
+
+```typescript
+// ✅ CORRECT: Verify all import paths
+import { Button } from '@/components/ui/button'           // ← shadcn/ui component
+import { Truck } from 'lucide-react'                      // ← Lucide icon
+import { DashboardLayout } from '@/components/layout/dashboard-layout' // ← Custom component
+
+// ❌ WRONG: Incorrect or missing imports
+import { Button } from './button'                         // ← Wrong path
+import { SomeIcon } from 'lucide-react'                  // ← Icon doesn't exist
+```
+
+## **Development Environment Rules**
+
+### **Build Command Variations**
+
+```bash
+# Quick build check (most common)
+cd frontend && pnpm run build
+
+# Build with type checking
+cd frontend && pnpm run build && pnpm run type-check
+
+# Build with linting
+cd frontend && pnpm run build && pnpm run lint
+
+# Full verification (recommended for major changes)
+cd frontend && pnpm run build && pnpm run lint && pnpm run type-check
+```
+
+### **Error Resolution Workflow**
+
+When build fails:
+
+1. **Read the error message carefully**
+2. **Identify the missing import or component**
+3. **Add the correct import**
+4. **Re-run build to verify fix**
+5. **Only proceed after successful build**
+
+```bash
+# Example error resolution
+# Error: 'AlertTriangle' is not defined
+# Solution: Add to imports
+import { AlertTriangle } from 'lucide-react'
+
+# Verify fix
+cd frontend && pnpm run build
+```
+
+## **Quality Gates**
+
+### **Pre-commit Requirements**
+
+Before any commit to frontend code:
+- [ ] Build passes (`pnpm run build`)
+- [ ] No TypeScript errors
+- [ ] All imports are correct
+- [ ] Components render without errors
+
+### **Component Development Requirements**
+
+When creating/editing components:
+- [ ] All dependencies imported
+- [ ] TypeScript types are correct
+- [ ] Build verification completed
+- [ ] Browser testing completed
+
+## **Common Error Patterns to Avoid**
+
+### **Missing Icon Imports**
+```typescript
+// ❌ COMMON ERROR
+const items = [
+  { icon: AlertTriangle } // ← Used but not imported
+]
+
+// ✅ SOLUTION
+import { AlertTriangle } from 'lucide-react'
+const items = [
+  { icon: AlertTriangle } // ← Now properly imported
+]
+```
+
+### **Wrong Import Paths**
+```typescript
+// ❌ COMMON ERROR
+import { Button } from '../ui/button' // ← Relative path might break
+
+// ✅ SOLUTION
+import { Button } from '@/components/ui/button' // ← Absolute path
+```
+
+### **Typos in Icon Names**
+```typescript
+// ❌ COMMON ERROR
+import { AlertTriangl } from 'lucide-react' // ← Typo
+
+// ✅ SOLUTION
+import { AlertTriangle } from 'lucide-react' // ← Correct spelling
+```
+
+## **Automation Recommendations**
+
+### **VS Code Settings**
+
+Add to `.vscode/settings.json`:
+```json
+{
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "editor.codeActionsOnSave": {
+    "source.addMissingImports": true,
+    "source.organizeImports": true
+  }
+}
+```
+
+### **Package.json Scripts**
+
+Ensure these scripts exist:
+```json
+{
+  "scripts": {
+    "build": "next build",
+    "type-check": "tsc --noEmit",
+    "lint": "next lint",
+    "verify": "pnpm run build && pnpm run type-check && pnpm run lint"
+  }
+}
+```
+
+## **CRITICAL REMINDER**
+
+**NEVER commit frontend changes without running `pnpm run build` first!**
+
+This simple step prevents:
+- ❌ Missing import errors
+- ❌ TypeScript compilation errors  
+- ❌ Component usage errors
+- ❌ Build failures in production
+- ❌ Broken user experience
+
+**Always build, then commit. No exceptions.**
