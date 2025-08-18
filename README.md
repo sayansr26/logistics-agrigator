@@ -1,0 +1,368 @@
+# Logistics Aggregator Portal
+
+A comprehensive logistics management solution for e-Commerce, B2B, and B2C enterprises in India, built with modern microservices architecture and Prisma ORM.
+
+## 🏗️ Architecture Overview
+
+### Microservices
+- **API Gateway** (Port 8000) - Request routing, rate limiting, and authentication
+- **Auth Service** (Port 8001) - JWT authentication, RBAC, 2FA with Prisma ORM
+- **User Service** (Port 8002) - User and client management with Prisma ORM
+- **Shipment Service** (Port 8003) - Order and tracking management with Prisma ORM
+- **Support Service** (Port 8004) - Help desk and ticketing with Prisma ORM  
+- **Platform Service** (Port 8005) - E-commerce platform integrations with Prisma ORM
+- **Frontend** (Port 3000) - Next.js 14 with TypeScript
+
+### External Services (Existing)
+- **Wallet Service** (Port 8006) - Financial transactions microservice
+- **Partner Service** (Port 8007) - Courier charges calculation microservice
+
+## 🚀 Tech Stack
+
+### Backend
+- **Runtime**: Node.js 18+
+- **Framework**: Express.js
+- **Database**: PostgreSQL 15+ with **Prisma ORM** (Type-safe database operations)
+- **Caching**: Redis 7+ for sessions and performance
+- **Authentication**: JWT with Role-Based Access Control (RBAC)
+- **Containerization**: Docker with Docker Compose
+
+### Frontend
+- **Framework**: Next.js 14 (App Router) with TypeScript
+- **Styling**: Tailwind CSS with custom design system
+- **State Management**: Zustand for client-side state
+- **Form Handling**: React Hook Form with Zod validation
+- **HTTP Client**: Axios with interceptors
+
+### Database & ORM
+- **Database**: PostgreSQL with separate databases per microservice
+- **ORM**: Prisma (Type-safe, migration-based, with Visual Studio)
+- **Migrations**: Version-controlled schema changes
+- **Type Generation**: Automatic TypeScript type generation
+
+## 📦 Project Structure
+
+```
+logistics/
+├── backend/                  # Microservices
+│   ├── api-gateway/         # Request routing and rate limiting
+│   ├── auth-service/        # Authentication with Prisma
+│   │   ├── prisma/         # Database schema and migrations
+│   │   │   ├── schema.prisma
+│   │   │   └── migrations/
+│   │   ├── controllers/    # Route handlers using Prisma
+│   │   ├── middleware/     # Auth, validation, error handling
+│   │   └── routes/         # API route definitions
+│   ├── user-service/        # User management (Prisma ready)
+│   ├── shipment-service/    # Shipment management (Prisma ready)
+│   ├── support-service/     # Help desk (Prisma ready)
+│   └── platform-service/    # Platform integrations (Prisma ready)
+├── frontend/                # Next.js application
+│   ├── src/app/            # App Router pages
+│   ├── src/components/     # Reusable UI components
+│   └── src/lib/           # Utilities and configurations
+├── shared/                  # Shared utilities across services
+│   └── lib/               # Prisma helpers, validation, auth utils
+├── docs/                    # Project documentation
+├── memory-bank/            # Project context and intelligence
+├── docker-compose.yml      # Development environment
+├── .env.example           # Environment variables template
+├── .gitignore             # Comprehensive gitignore
+└── README.md              # This file
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+- **Docker & Docker Compose** (recommended for development)
+- **Node.js 18+** (for local development)
+- **Git** for version control
+
+### 1. Environment Setup
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd logistics
+
+# Setup environment variables
+cp .env.example .env
+# Edit .env with your specific configurations
+```
+
+### 2. Start Development Environment
+
+```bash
+# Start all services (includes automatic database setup)
+docker-compose up
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+### 3. Access Applications
+
+- **Frontend**: http://localhost:3000
+- **API Gateway**: http://localhost:8000
+- **Health Check**: http://localhost:8000/health
+- **Prisma Studio**: `docker-compose exec auth-service npx prisma studio` (Port 5555)
+
+## 🗄️ Database Management with Prisma
+
+### Development Workflow
+
+```bash
+# Visual database browser
+docker-compose exec auth-service npx prisma studio
+
+# Generate Prisma client after schema changes  
+docker-compose exec auth-service npx prisma generate
+
+# Create new migration
+docker-compose exec auth-service npx prisma migrate dev --name "description"
+
+# Reset database (development only)
+docker-compose exec auth-service npx prisma migrate reset
+```
+
+### Schema Management
+
+```prisma
+// Example: backend/auth-service/prisma/schema.prisma
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  @@map("users")
+}
+```
+
+### Type-Safe Database Operations
+
+```javascript
+// Prisma provides full type safety
+const user = await prisma.user.create({
+  data: { email, passwordHash, role },
+  select: { id: true, email: true, role: true }
+});
+
+// Complex queries with relations
+const userWithSessions = await prisma.user.findUnique({
+  where: { id: userId },
+  include: { 
+    sessions: { take: 10 },
+    auditLogs: { orderBy: { createdAt: 'desc' } }
+  }
+});
+```
+
+## 🔌 API Documentation
+
+### Authentication Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register` | User registration |
+| POST | `/api/v1/auth/login` | User authentication |
+| POST | `/api/v1/auth/refresh` | Token refresh |
+| POST | `/api/v1/auth/logout` | User logout |
+| GET | `/api/v1/auth/me` | Current user profile |
+
+### Example API Usage
+
+```bash
+# Register new user
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePass123!","role":"client"}'
+
+# Login
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePass123!"}'
+```
+
+## 👥 User Roles & Permissions
+
+| Role | Permissions |
+|------|-------------|
+| **Admin** | All system access |
+| **Finance** | Wallet, billing, reports |
+| **Operations** | Shipments, tracking, partners |
+| **Client** | Own shipments, tracking, wallet view |
+| **Support** | Tickets, user support, knowledge base |
+
+## 🔄 Development Status
+
+### ✅ Completed (Phase 1 - Week 1)
+- [x] Complete project structure with Prisma ORM
+- [x] Docker development environment with all services
+- [x] PostgreSQL databases with automated schema management
+- [x] API Gateway with intelligent service routing
+- [x] Auth Service with JWT, RBAC, and comprehensive Prisma integration
+- [x] Frontend foundation with Next.js 14 and Tailwind CSS
+- [x] Shared utilities with Prisma helpers and error handling
+- [x] Comprehensive .gitignore and project documentation
+
+### 🚧 In Progress (Phase 1 - Week 2)
+- [ ] User Service development with Prisma schema
+- [ ] Frontend authentication forms and flows
+- [ ] Service integration testing
+- [ ] Dashboard UI components
+
+### 📋 Upcoming (Phase 1 - Weeks 3-8)
+- [ ] Shipment Service with CRUD operations
+- [ ] Platform Service (Shopify OAuth integration)
+- [ ] Integration with existing Wallet and Partner services
+- [ ] Bulk shipment processing
+- [ ] Real-time tracking and notifications
+
+## 🛠️ Development Commands
+
+### Service Management
+```bash
+# Start all services
+docker-compose up
+
+# Start specific service
+docker-compose up auth-service
+
+# View service logs
+docker-compose logs -f auth-service
+
+# Stop all services
+docker-compose down
+
+# Rebuild specific service
+docker-compose build auth-service
+```
+
+### Database Operations
+```bash
+# Access Prisma Studio (Visual Database Browser)
+docker-compose exec auth-service npx prisma studio
+
+# Create and apply migration
+docker-compose exec auth-service npx prisma migrate dev
+
+# Deploy migrations (production)
+docker-compose exec auth-service npx prisma migrate deploy
+
+# Generate Prisma client
+docker-compose exec auth-service npx prisma generate
+```
+
+### Testing
+```bash
+# Run service tests
+docker-compose exec auth-service npm test
+
+# Run integration tests
+docker-compose exec auth-service npm run test:integration
+
+# Run frontend tests
+docker-compose exec frontend npm test
+```
+
+## 🔒 Security Features
+
+- **JWT Authentication**: Access and refresh token pattern
+- **Role-Based Access Control**: 5 distinct user roles
+- **2FA Support**: TOTP-based two-factor authentication
+- **Password Security**: bcrypt hashing with 12 rounds
+- **SQL Injection Prevention**: Prisma ORM built-in protection
+- **Rate Limiting**: API throttling and DDoS protection
+- **Audit Logging**: Complete action trail with Prisma models
+- **Input Validation**: Joi-based validation with error handling
+
+## 🌍 India-Specific Features
+
+- **GST Compliance**: 18% tax calculations and reporting
+- **Local Courier Integration**: Delhivery, Blue Dart, DTDC support
+- **Regional Language Support**: Hindi and English (extensible)
+- **Pincode Validation**: 6-digit Indian postal code validation
+- **Currency**: INR-focused financial calculations
+
+## 📊 Monitoring & Health Checks
+
+### Service Health
+```bash
+# Check all service health
+curl http://localhost:8000/health
+
+# Check specific service
+curl http://localhost:8001/health
+```
+
+### Database Health
+- **Prisma Connection**: Included in service health checks
+- **Query Performance**: Development query logging
+- **Migration Status**: Automatic validation
+
+## 🚀 Deployment
+
+### Production Deployment
+- **VPS Deployment**: Docker Compose on dedicated server
+- **Database Migrations**: `npx prisma migrate deploy`
+- **SSL Certificates**: Manual certificate management
+- **Monitoring**: Health checks and structured logging
+- **Backup Strategy**: Automated PostgreSQL backups
+
+### Environment Configuration
+- **Development**: Hot reload with Prisma Studio access
+- **Production**: Optimized builds with connection pooling
+- **Security**: Environment-based secrets management
+
+## 📚 Documentation
+
+- **API Specs**: See `docs/API-Specifications.md`
+- **Architecture**: See `docs/SystemArchitecture.md` 
+- **Development Roadmap**: See `docs/DevelopmentRoadmap.md`
+- **Memory Bank**: See `memory-bank/` for project intelligence
+
+## 🤝 Contributing
+
+### Development Standards
+- **Prisma ORM**: Mandatory for all database operations
+- **TypeScript**: Encouraged for type safety
+- **ESLint + Prettier**: Code formatting and linting
+- **Conventional Commits**: Structured commit messages
+- **Migration-First**: Schema changes via Prisma migrations
+
+### Code Review Checklist
+- [ ] Prisma schema properly defined
+- [ ] Database migrations included
+- [ ] Error handling implemented
+- [ ] Tests written and passing
+- [ ] API documentation updated
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Port Conflicts**: Ensure ports 3000, 5432, 6379, 8000-8007 are available
+2. **Prisma Client**: Run `npx prisma generate` after schema changes
+3. **Database Connection**: Verify PostgreSQL and Redis services
+4. **Migration Issues**: Use `npx prisma migrate resolve` for conflicts
+
+### Prisma-Specific Issues
+- **Schema Changes**: Always create migrations, never modify DB directly
+- **Client Generation**: Required after schema updates
+- **Migration Conflicts**: Use Prisma's resolution tools
+- **Performance**: Use `select` and `include` strategically
+
+---
+
+**Project Status**: ✅ Phase 1 Week 1 Complete - Prisma Architecture Ready  
+**Last Updated**: January 2024  
+**Next Milestone**: User Service Development (Week 2)  
+**Team**: Logistics Development Team

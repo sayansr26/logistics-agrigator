@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:15-alpine
+    container_name: logistics-postgres
+    environment:
+      - POSTGRES_USER=logistics
+      - POSTGRES_PASSWORD=logistics123
+      - POSTGRES_DB=logistics_main
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - logistics-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: logistics-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - logistics-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: logistics-api-gateway
+    environment:
+      - NODE_ENV=development
+      - PORT=8000
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - logistics-network
+    command: npm run dev
+
+  # Auth Service with Prisma
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: logistics-auth-service
+    environment:
+      - NODE_ENV=development
+      - PORT=8001
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_EXPIRES_IN=3600
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend/auth-service:/app
+      - /app/node_modules
+      - /app/prisma/migrations
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics-network
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  # User Service (To be implemented with Prisma)
+  user-service:
+    build:
+      context: ./backend/user-service
+      dockerfile: Dockerfile
+    container_name: logistics-user-service
+    environment:
+      - NODE_ENV=development
+      - PORT=8002
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_users
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./backend/user-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics-network
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  # Shipment Service (To be implemented with Prisma)
+  shipment-service:
+    build:
+      context: ./backend/shipment-service
+      dockerfile: Dockerfile
+    container_name: logistics-shipment-service
+    environment:
+      - NODE_ENV=development
+      - PORT=8003
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_shipments
+      - REDIS_URL=redis://redis:6379
+      - WALLET_SERVICE_URL=http://localhost:8006
+      - PARTNER_SERVICE_URL=http://localhost:8007
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./backend/shipment-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics-network
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  # Support Service (To be implemented with Prisma)
+  support-service:
+    build:
+      context: ./backend/support-service
+      dockerfile: Dockerfile
+    container_name: logistics-support-service
+    environment:
+      - NODE_ENV=development
+      - PORT=8004
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_support
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./backend/support-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics-network
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  # Platform Service (To be implemented with Prisma)
+  platform-service:
+    build:
+      context: ./backend/platform-service
+      dockerfile: Dockerfile
+    container_name: logistics-platform-service
+    environment:
+      - NODE_ENV=development
+      - PORT=8005
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_platforms
+      - REDIS_URL=redis://redis:6379
+      - SHOPIFY_CLIENT_ID=your_shopify_client_id
+      - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./backend/platform-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics-network
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: logistics-frontend
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api-gateway
+    networks:
+      - logistics-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  logistics-network:
+    driver: bridge

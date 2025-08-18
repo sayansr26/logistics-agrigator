@@ -1,0 +1,27 @@
+{
+  "name": "@logistics/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities and configurations for Logistics Aggregator Portal",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.7.1",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "axios": "^1.6.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.7.1",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0"
+  },
+  "keywords": ["logistics", "shared", "utilities", "prisma"],
+  "author": "Logistics Team",
+  "license": "MIT"
+}
