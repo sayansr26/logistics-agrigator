@@ -2,14 +2,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+# Copy source code first
 COPY . .
+
+# Install dependencies after copying source
+RUN pnpm install
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs

@@ -1,0 +1,130 @@
+---
+globs: *.md,package.json,docker-compose*.yml,.husky/*,*.config.js
+---
+
+# Development Workflow & Quality Standards
+
+## **PNPM Monorepo Commands**
+Always use PNPM commands instead of direct Docker/npm commands:
+
+### **Development Environment**
+```bash
+# Full-stack development
+pnpm run dev                    # All services (frontend + backend)
+pnpm run setup:dev             # One-command complete setup
+
+# Focused development  
+pnpm run dev:frontend          # Frontend-only (UI developers)
+pnpm run dev:backend           # Backend-only (API developers)
+pnpm run setup:frontend        # Frontend-focused setup
+pnpm run setup:backend         # Backend-focused setup
+```
+
+### **Service Management**
+```bash
+# Logs by category
+pnpm run logs                   # All services
+pnpm run logs:frontend         # Frontend logs only
+pnpm run logs:backend          # Backend logs only
+
+# Logs by service
+pnpm run logs:auth             # Auth service
+pnpm run logs:user             # User service
+pnpm run logs:api              # API Gateway
+
+# Health checks
+pnpm run health                # Backend API health
+pnpm run health:frontend       # Frontend health
+```
+
+## **Git Workflow with Husky**
+Pre-commit hooks are configured in [.husky/](mdc:.husky/):
+
+### **Smart Linting (lint-staged)**
+- **Frontend files**: ESLint + TypeScript + Prettier
+- **Backend files**: ESLint + Prettier
+- **Config files**: Prettier formatting only
+- **Prisma schemas**: Auto-formatting
+
+### **Commit Standards** 
+[commitlint.config.js](mdc:commitlint.config.js) enforces conventional commits:
+```bash
+# Commit types
+feat: new feature
+fix: bug fix
+docs: documentation changes
+style: code formatting
+refactor: code refactoring
+perf: performance improvements
+test: adding tests
+build: build system changes
+ci: CI/CD changes
+chore: maintenance tasks
+
+# Examples
+git commit -m "feat(auth): add 2FA support"
+git commit -m "fix(api): resolve CORS issue"
+git commit -m "docs: update setup guide"
+
+# Interactive commit helper
+pnpm run commit
+```
+
+### **Pre-push Hooks**
+Configured in [.husky/pre-push](mdc:.husky/pre-push):
+1. Run all workspace tests
+2. TypeScript type checking
+3. Build verification
+4. Only pushes if all checks pass
+
+## **Quality Standards**
+Configured in [package.json](mdc:package.json) lint-staged section:
+
+```json
+{
+  "lint-staged": {
+    "frontend/**/*.{js,jsx,ts,tsx}": [
+      "pnpm --filter frontend run lint:fix",
+      "pnpm --filter frontend run type-check",
+      "prettier --write"
+    ],
+    "backend/**/*.{js,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "**/*.prisma": [
+      "prettier --write"
+    ]
+  }
+}
+```
+
+## **Documentation Strategy**
+- **[memory-bank/](mdc:memory-bank/)**: Project intelligence and context
+- **[docs/](mdc:docs/)**: Technical documentation and guides
+- **[wiki/](mdc:wiki/)**: Quick start and overview content
+- **README files**: Service-specific setup instructions
+
+## **Docker Optimization**
+Multiple Docker Compose configurations:
+- [docker-compose.yml](mdc:docker-compose.yml) - Full development environment
+- [docker-compose.frontend.yml](mdc:docker-compose.frontend.yml) - Frontend-only
+- [docker-compose.backend.yml](mdc:docker-compose.backend.yml) - Backend-only
+
+Dockerignore files optimize builds:
+- [.dockerignore](mdc:.dockerignore) - General exclusions
+- [.dockerignore.backend](mdc:.dockerignore.backend) - Backend-specific
+- [.dockerignore.frontend](mdc:.dockerignore.frontend) - Frontend-specific
+
+## **Testing Strategy**
+```bash
+# Run all tests
+pnpm run test
+
+# Service-specific tests
+docker-compose exec auth-service pnpm test
+docker-compose exec frontend pnpm test
+
+# Test with coverage
+pnpm run test:coverage
+```

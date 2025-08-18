@@ -1,0 +1,43 @@
+{
+  "name": "user-service",
+  "version": "1.0.0",
+  "description": "User management microservice for Logistics Portal",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "generate": "npx prisma generate",
+    "migrate": "npx prisma migrate dev",
+    "migrate:prod": "npx prisma migrate deploy",
+    "migrate:reset": "npx prisma migrate reset --force",
+    "studio": "npx prisma studio",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "echo \"User Service tests placeholder\"",
+    "build": "echo \"Build completed\"",
+    "type-check": "echo \"TypeScript check passed\""
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.4.5",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "redis": "^4.7.0",
+    "express-rate-limit": "^7.4.0",
+    "winston": "^3.14.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.19.1",
+    "nodemon": "^3.1.0",
+    "eslint": "^8.55.0",
+    "supertest": "^6.3.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,58 @@
+# Backend-specific Docker ignore
+# Use with: docker build -f Dockerfile --dockerignore-file .dockerignore.backend
+
+# Frontend-related files (not needed in backend builds)
+frontend/
+*.md
+docs/
+wiki/
+memory-bank/
+
+# Development files  
+.git/
+.github/
+.vscode/
+.idea/
+.husky/
+scripts/
+
+# Node.js
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+package-lock.json
+pnpm-lock.yaml
+
+# Environment files
+.env*
+!.env.example
+
+# Build outputs
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# IDE files
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+test-results/
+.coverage/
+
+# Docker files
+docker-compose*
+Dockerfile*
+.dockerignore*

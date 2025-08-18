@@ -1,0 +1,14 @@
+# PNPM Workspace Configuration for Logistics Aggregator Portal
+
+packages:
+  # Frontend application
+  - 'frontend'
+  
+  # All backend microservices
+  - 'backend/*'
+  
+  # Shared utilities
+  - 'shared'
+
+# Workspace-specific configurations
+prefer-workspace-packages: true

@@ -1,0 +1,157 @@
+---
+alwaysApply: true
+---
+
+# Development Efficiency Rules - ALWAYS APPLIED
+
+## **CRITICAL: No Echo Commands for Status**
+
+**NEVER run terminal echo commands just for printing status messages or summaries**
+
+```bash
+# ❌ FORBIDDEN: Don't waste time with echo commands
+echo "🔧 FIXING DOCKER COMPOSE ISSUES..."
+echo "✅ Status message here"
+echo "📋 Summary of what happened"
+
+# ✅ CORRECT: Just fix the actual issues
+docker-compose down
+# Fix the real problem
+docker-compose up
+```
+
+## **Focus Rules**
+
+1. **Identify the real problem** from error logs
+2. **Fix the actual issue** directly
+3. **Test the fix** with minimal commands
+4. **NO status printing** - let the results speak
+
+## **Docker Development Issues**
+
+When Docker services crash with "Cannot find module" errors:
+
+- **Don't** run echo commands to show status
+- **Don't** print summaries of what went wrong
+- **DO** fix the volume mount strategy immediately
+- **DO** test with actual service commands
+
+## **Efficient Problem Solving**
+
+```bash
+# ❌ BAD: Wasting time with status messages
+echo "Checking Docker processes..."
+docker ps
+echo "Services are failing because..."
+
+# ✅ GOOD: Direct problem solving
+docker-compose down
+# Fix the issue
+docker-compose up --build
+curl http://localhost:8001/health  # Test actual functionality
+```
+
+## **Communication Priority**
+
+1. **Code fixes** > Status messages
+2. **Working solutions** > Progress updates
+3. **Real results** > Explanatory text
+4. **User value** > Development theatrics
+5. **ASK USER** > Get stuck with blocking commands
+
+## **CRITICAL: Never Run Commands That Get Stuck**
+
+**NEVER run long-running or blocking commands - ASK USER instead**
+
+```bash
+# ❌ FORBIDDEN: These commands get stuck/block
+docker-compose up
+docker-compose up --build
+npm run dev
+pnpm run dev
+python script.py (if long-running)
+any command that runs indefinitely
+
+# ✅ CORRECT: Ask user to run these
+# "Please run: docker-compose up --build"
+# Then use quick commands to check status:
+docker ps
+curl http://localhost:3000
+```
+
+# Development Efficiency Rules - ALWAYS APPLIED
+
+## **CRITICAL: No Echo Commands for Status**
+
+**NEVER run terminal echo commands just for printing status messages or summaries**
+
+```bash
+# ❌ FORBIDDEN: Don't waste time with echo commands
+echo "🔧 FIXING DOCKER COMPOSE ISSUES..."
+echo "✅ Status message here"
+echo "📋 Summary of what happened"
+
+# ✅ CORRECT: Just fix the actual issues
+docker-compose down
+# Fix the real problem
+docker-compose up
+```
+
+## **Focus Rules**
+
+1. **Identify the real problem** from error logs
+2. **Fix the actual issue** directly
+3. **Test the fix** with minimal commands
+4. **NO status printing** - let the results speak
+
+## **Docker Development Issues**
+
+When Docker services crash with "Cannot find module" errors:
+
+- **Don't** run echo commands to show status
+- **Don't** print summaries of what went wrong
+- **DO** fix the volume mount strategy immediately
+- **DO** test with actual service commands
+
+## **Efficient Problem Solving**
+
+```bash
+# ❌ BAD: Wasting time with status messages
+echo "Checking Docker processes..."
+docker ps
+echo "Services are failing because..."
+
+# ✅ GOOD: Direct problem solving
+docker-compose down
+# Fix the issue
+docker-compose up --build
+curl http://localhost:8001/health  # Test actual functionality
+```
+
+## **Communication Priority**
+
+1. **Code fixes** > Status messages
+2. **Working solutions** > Progress updates
+3. **Real results** > Explanatory text
+4. **User value** > Development theatrics
+5. **ASK USER** > Get stuck with blocking commands
+
+## **CRITICAL: Never Run Commands That Get Stuck**
+
+**NEVER run long-running or blocking commands - ASK USER instead**
+
+```bash
+# ❌ FORBIDDEN: These commands get stuck/block
+docker-compose up
+docker-compose up --build
+npm run dev
+pnpm run dev
+python script.py (if long-running)
+any command that runs indefinitely
+
+# ✅ CORRECT: Ask user to run these
+# "Please run: docker-compose up --build"
+# Then use quick commands to check status:
+docker ps
+curl http://localhost:3000
+```

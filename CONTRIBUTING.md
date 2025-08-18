@@ -5,6 +5,7 @@ Thank you for your interest in contributing to the Logistics Aggregator Portal! 
 ## 🎯 **Quick Start for Contributors**
 
 ### **Before You Start**
+
 1. **Read the Documentation**:
    - [Project Overview](./wiki/README.md) - Understanding the project
    - [Quick Start Guide](./wiki/Quick-Start-Guide.md) - 10-minute setup
@@ -26,12 +27,14 @@ Thank you for your interest in contributing to the Logistics Aggregator Portal! 
 ### **1. Issue Selection and Assignment**
 
 #### **Finding Work**
+
 - **Check Current Priorities**: Review [Active Context](./memory-bank/activeContext.md) for current focus
 - **Browse Issues**: Look for issues labeled `good-first-issue` or `help-wanted`
 - **Weekly Priorities**: Check Week 2 tasks in development guides
 - **Team Coordination**: Coordinate with team leads for task assignment
 
 #### **Issue Assignment Process**
+
 1. **Comment on Issue**: Express interest and ask for assignment
 2. **Wait for Confirmation**: Team lead will assign and provide context
 3. **Understand Requirements**: Read issue description and acceptance criteria
@@ -40,6 +43,7 @@ Thank you for your interest in contributing to the Logistics Aggregator Portal! 
 ### **2. Development Workflow**
 
 #### **Branch Creation**
+
 ```bash
 # Create feature branch from main
 git checkout main
@@ -55,6 +59,7 @@ git checkout -b fix/789-auth-token-refresh
 #### **Development Standards**
 
 **Frontend Development:**
+
 - **Framework**: Next.js 14 with TypeScript and Tailwind CSS
 - **State Management**: Zustand for global state
 - **Forms**: React Hook Form with Zod validation
@@ -62,6 +67,7 @@ git checkout -b fix/789-auth-token-refresh
 - **Testing**: Jest with React Testing Library
 
 **Backend Development:**
+
 - **CRITICAL**: Always use Prisma ORM - **NEVER write raw SQL**
 - **Framework**: Node.js with Express.js
 - **Database**: PostgreSQL with Prisma ORM
@@ -70,6 +76,7 @@ git checkout -b fix/789-auth-token-refresh
 - **Testing**: Jest with Supertest for API testing
 
 #### **Code Quality Requirements**
+
 ```javascript
 // Backend: Always use Prisma patterns
 const user = await prisma.user.create({
@@ -91,6 +98,7 @@ export default function UserProfile({ user, onUpdate }: UserProfileProps) {
 ### **3. Commit Guidelines**
 
 #### **Commit Message Format**
+
 Follow [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
 ```
@@ -102,6 +110,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/) specificatio
 ```
 
 #### **Commit Types**
+
 - **feat**: New feature implementation
 - **fix**: Bug fix
 - **docs**: Documentation changes
@@ -111,6 +120,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/) specificatio
 - **chore**: Build process, dependency updates, etc.
 
 #### **Examples**
+
 ```bash
 # Feature implementation
 git commit -m "feat(auth): implement user registration form with validation"
@@ -128,11 +138,12 @@ git commit -m "feat(database): add user profile schema with audit logging"
 ### **4. Pull Request Process**
 
 #### **Before Creating PR**
+
 ```bash
 # Ensure code quality
-npm run lint              # Fix linting issues
-npm run type-check        # Fix TypeScript errors
-npm test                  # Ensure all tests pass
+pnpm run lint              # Fix linting issues
+pnpm run type-check        # Fix TypeScript errors
+pnpm test                  # Ensure all tests pass
 
 # For backend changes with Prisma:
 npx prisma generate       # Update Prisma client
@@ -140,6 +151,7 @@ npx prisma migrate dev    # Ensure migrations work
 ```
 
 #### **PR Creation Checklist**
+
 - [ ] **Branch Updated**: Merged latest `main` into feature branch
 - [ ] **Tests Pass**: All existing tests pass
 - [ ] **Code Quality**: No linting or TypeScript errors
@@ -148,33 +160,41 @@ npx prisma migrate dev    # Ensure migrations work
 - [ ] **API Documentation**: Updated if API changes were made
 
 #### **PR Description Template**
+
 ```markdown
 ## Summary
+
 Brief description of changes and motivation.
 
 ## Changes Made
+
 - [ ] Feature/fix implementation
 - [ ] Tests added/updated
 - [ ] Documentation updated
 - [ ] Database schema changes (if applicable)
 
 ## Testing
+
 - [ ] Unit tests pass
 - [ ] Integration tests pass
 - [ ] Manual testing completed
 - [ ] API endpoints tested (if applicable)
 
 ## Breaking Changes
+
 List any breaking changes and migration instructions.
 
 ## Screenshots/Demos
+
 Include screenshots for UI changes or API response examples.
 
 ## Related Issues
+
 Closes #123, Relates to #456
 ```
 
 #### **Review Process**
+
 1. **Automated Checks**: GitHub Actions will run tests and linting
 2. **Code Review**: Team members will review code quality and architecture
 3. **Testing**: Reviewers may test functionality locally
@@ -184,6 +204,7 @@ Closes #123, Relates to #456
 ## 🎨 **Code Style and Standards**
 
 ### **General Guidelines**
+
 - **Consistency**: Follow existing code patterns in the project
 - **Readability**: Write self-documenting code with clear variable names
 - **Comments**: Explain complex business logic, not obvious code
@@ -191,6 +212,7 @@ Closes #123, Relates to #456
 - **Security**: Follow security best practices for authentication and data handling
 
 ### **JavaScript/TypeScript**
+
 ```javascript
 // Use descriptive variable names
 const authenticatedUser = await validateJWT(token);
@@ -204,13 +226,14 @@ const createUser = async (userData) => {
     const user = await prisma.user.create({ data: userData });
     return user;
   } catch (error) {
-    logger.error('User creation failed:', error);
-    throw new APIError('Failed to create user');
+    logger.error("User creation failed:", error);
+    throw new APIError("Failed to create user");
   }
 };
 ```
 
 ### **React Components**
+
 ```typescript
 // Use TypeScript interfaces
 interface ComponentProps {
@@ -221,7 +244,7 @@ interface ComponentProps {
 // Prefer function components with hooks
 export default function UserCard({ user, onUpdate }: ComponentProps) {
   const [loading, setLoading] = useState(false);
-  
+
   const handleSubmit = async (formData: UserFormData) => {
     setLoading(true);
     try {
@@ -243,18 +266,19 @@ export default function UserCard({ user, onUpdate }: ComponentProps) {
 ```
 
 ### **Database Operations (Prisma)**
+
 ```javascript
 // Always use Prisma for database operations
 const getUserWithProfile = async (userId) => {
   return await prisma.user.findUnique({
     where: { id: userId },
-    include: { 
+    include: {
       profile: true,
-      auditLogs: { 
-        orderBy: { createdAt: 'desc' },
-        take: 10 
-      }
-    }
+      auditLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      },
+    },
   });
 };
 
@@ -263,20 +287,20 @@ const updateUserWithAudit = async (userId, updateData, req) => {
   return await prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
       where: { id: userId },
-      data: updateData
+      data: updateData,
     });
-    
+
     await tx.auditLog.create({
       data: {
         userId: req.user.id,
-        action: 'UPDATE',
-        resource: 'user',
+        action: "UPDATE",
+        resource: "user",
         resourceId: userId,
         changes: updateData,
-        ipAddress: req.ip
-      }
+        ipAddress: req.ip,
+      },
     });
-    
+
     return user;
   });
 };
@@ -285,57 +309,60 @@ const updateUserWithAudit = async (userId, updateData, req) => {
 ## 🧪 **Testing Guidelines**
 
 ### **Testing Strategy**
+
 - **Unit Tests**: Test individual functions and components
 - **Integration Tests**: Test API endpoints and database operations
 - **E2E Tests**: Test complete user workflows (critical paths)
 
 ### **Backend Testing**
+
 ```javascript
 // API endpoint testing
-describe('User API', () => {
-  test('should create user with valid data', async () => {
+describe("User API", () => {
+  test("should create user with valid data", async () => {
     const userData = {
-      email: 'test@example.com',
-      name: 'Test User',
-      role: 'CLIENT'
+      email: "test@example.com",
+      name: "Test User",
+      role: "CLIENT",
     };
-    
+
     const response = await request(app)
-      .post('/api/v1/users')
+      .post("/api/v1/users")
       .send(userData)
       .expect(201);
-    
-    expect(response.body.status).toBe('success');
+
+    expect(response.body.status).toBe("success");
     expect(response.body.data.user.email).toBe(userData.email);
   });
 });
 
 // Database testing with Prisma
-describe('User Service', () => {
+describe("User Service", () => {
   beforeEach(async () => {
     await prisma.user.deleteMany(); // Clean test database
   });
 
-  test('should create user with audit log', async () => {
+  test("should create user with audit log", async () => {
     const user = await createUser(userData);
     const auditLogs = await prisma.auditLog.findMany({
-      where: { resourceId: user.id }
+      where: { resourceId: user.id },
     });
-    
+
     expect(auditLogs).toHaveLength(1);
-    expect(auditLogs[0].action).toBe('CREATE');
+    expect(auditLogs[0].action).toBe("CREATE");
   });
 });
 ```
 
 ### **Frontend Testing**
+
 ```typescript
 // Component testing
 test('renders user profile form', () => {
   const mockUser = { id: '1', name: 'Test User', email: 'test@example.com' };
-  
+
   render(<UserProfileForm user={mockUser} onUpdate={jest.fn()} />);
-  
+
   expect(screen.getByDisplayValue(mockUser.name)).toBeInTheDocument();
   expect(screen.getByDisplayValue(mockUser.email)).toBeInTheDocument();
 });
@@ -347,7 +374,7 @@ test('submits user profile update', async () => {
       return res(ctx.json({ status: 'success', data: { user: updatedUser } }));
     })
   );
-  
+
   // Test component behavior with mocked API
 });
 ```
@@ -355,10 +382,11 @@ test('submits user profile update', async () => {
 ## 📝 **Documentation Requirements**
 
 ### **Code Documentation**
+
 ```javascript
 /**
  * Creates a new user with the provided data and logs the action.
- * 
+ *
  * @param {Object} userData - User creation data
  * @param {string} userData.email - User email address
  * @param {string} userData.name - User full name
@@ -374,14 +402,17 @@ const createUser = async (userData, req) => {
 ```
 
 ### **API Documentation**
+
 When adding new API endpoints, update `/docs/API-Specifications.md`:
 
-```markdown
+````markdown
 ### Create User
+
 **Endpoint:** `POST /api/v1/users`  
 **Authentication:** Required (Admin only)
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -389,8 +420,10 @@ When adding new API endpoints, update `/docs/API-Specifications.md`:
   "role": "CLIENT"
 }
 ```
+````
 
 **Response (201):**
+
 ```json
 {
   "status": "success",
@@ -406,7 +439,8 @@ When adding new API endpoints, update `/docs/API-Specifications.md`:
   }
 }
 ```
-```
+
+````
 
 ### **README Updates**
 Update relevant README sections when:
@@ -422,11 +456,11 @@ Update relevant README sections when:
 // Always verify JWT tokens
 const authenticateUser = (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
-  
+
   if (!token) {
     return res.status(401).json({ error: 'Access denied' });
   }
-  
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
@@ -443,21 +477,30 @@ const requireRole = (roles) => (req, res, next) => {
   }
   next();
 };
-```
+````
 
 ### **Data Validation**
+
 ```javascript
 // Always validate input data
 const userValidationSchema = Joi.object({
   email: Joi.string().email().required(),
   name: Joi.string().min(2).max(100).required(),
-  role: Joi.string().valid('ADMIN', 'CLIENT', 'FINANCE', 'OPERATIONS', 'SUPPORT')
+  role: Joi.string().valid(
+    "ADMIN",
+    "CLIENT",
+    "FINANCE",
+    "OPERATIONS",
+    "SUPPORT"
+  ),
 });
 
 const validateUserData = (req, res, next) => {
   const { error, value } = userValidationSchema.validate(req.body);
   if (error) {
-    return res.status(400).json({ error: 'Validation failed', details: error.details });
+    return res
+      .status(400)
+      .json({ error: "Validation failed", details: error.details });
   }
   req.body = value;
   next();
@@ -465,6 +508,7 @@ const validateUserData = (req, res, next) => {
 ```
 
 ### **Sensitive Data Handling**
+
 - **Never log passwords** or sensitive information
 - **Always hash passwords** using bcrypt with 12+ rounds
 - **Use environment variables** for secrets and API keys
@@ -474,6 +518,7 @@ const validateUserData = (req, res, next) => {
 ## 🚨 **Common Issues and Solutions**
 
 ### **Prisma Issues**
+
 ```bash
 # Schema changes not reflected
 npx prisma generate
@@ -486,6 +531,7 @@ npx prisma migrate reset  # Development only!
 ```
 
 ### **Docker Issues**
+
 ```bash
 # Port conflicts
 docker-compose down
@@ -501,6 +547,7 @@ docker-compose up --build
 ```
 
 ### **Git Issues**
+
 ```bash
 # Merge conflicts
 git status
@@ -519,18 +566,21 @@ git merge main
 ## 📞 **Getting Help**
 
 ### **Development Questions**
+
 1. **Check Documentation**: Review relevant guides and wiki pages
 2. **Search Issues**: Look for existing GitHub issues
 3. **Ask Team**: Post in team communication channels
 4. **Create Issue**: Open GitHub issue for bugs or feature requests
 
 ### **Code Review Feedback**
+
 - **Be Open**: Accept feedback positively and ask clarifying questions
 - **Explain Decisions**: Provide context for your implementation choices
 - **Address Comments**: Respond to all review comments before re-requesting review
 - **Learn and Improve**: Use feedback to improve your skills
 
 ### **Resources**
+
 - **Project Wiki**: [./wiki/README.md](./wiki/README.md)
 - **Memory Bank**: [./memory-bank/](./memory-bank/) - Complete project context
 - **Development Guides**: [./docs/](./docs/) - Detailed development instructions
@@ -539,18 +589,21 @@ git merge main
 ## 🎯 **Current Contribution Opportunities**
 
 ### **High Priority (Week 2)**
+
 - **User Service Development**: Prisma schema design and API implementation
 - **Frontend Authentication**: Login/register forms and state management
 - **Service Integration**: Connect frontend to backend APIs
 - **Documentation**: Update API specifications and guides
 
 ### **Medium Priority**
+
 - **Testing**: Add unit and integration tests
 - **UI Components**: Reusable component library development
 - **Error Handling**: Improve error messages and user feedback
 - **Performance**: Optimize database queries and API responses
 
 ### **Good First Issues**
+
 - **Documentation Improvements**: Fix typos, add examples, improve clarity
 - **UI Enhancements**: Improve styling, add loading states, enhance UX
 - **Validation Messages**: Improve form validation feedback
@@ -559,13 +612,16 @@ git merge main
 ## 👥 **Community**
 
 ### **Code of Conduct**
+
 - **Be Respectful**: Treat all contributors with respect and professionalism
 - **Be Collaborative**: Work together to achieve project goals
 - **Be Constructive**: Provide helpful feedback and suggestions
 - **Be Patient**: Support new contributors and help them learn
 
 ### **Recognition**
+
 Contributors will be recognized in:
+
 - **CHANGELOG.md**: Major contributions documented in release notes
 - **README.md**: Contributor acknowledgments section
 - **GitHub**: Contribution history and statistics

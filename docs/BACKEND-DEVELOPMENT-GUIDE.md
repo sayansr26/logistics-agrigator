@@ -3,7 +3,8 @@
 ## 🎯 **Quick Start for Backend Developers**
 
 ### **Your Responsibilities**
-- **Microservices Development**: Build Node.js + Express services with **Prisma ORM** 
+
+- **Microservices Development**: Build Node.js + Express services with **Prisma ORM**
 - **API Development**: Create RESTful endpoints with proper authentication
 - **Database Management**: Design Prisma schemas and manage migrations
 - **Service Integration**: Connect with existing Wallet and Partner services
@@ -11,6 +12,7 @@
 - **Documentation**: Maintain API specifications and service documentation
 
 ### **What You DON'T Touch**
+
 - ❌ **Frontend Code**: Never modify files in `frontend/` directory
 - ❌ **Frontend Dependencies**: No changes to frontend package.json or configurations
 - ❌ **UI Components**: React components, pages, or styling
@@ -21,20 +23,22 @@
 ## 🚨 **CRITICAL: Database Technology Rule**
 
 ### **MANDATORY: Always Use Prisma ORM**
+
 ```javascript
 // ✅ CORRECT: Use Prisma for all database operations
 const user = await prisma.user.create({
   data: { email, passwordHash, role },
-  select: { id: true, email: true, role: true }
+  select: { id: true, email: true, role: true },
 });
 
 // ❌ NEVER: Raw SQL queries are forbidden
-const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
 ```
 
 **Why Prisma?**
+
 - **Type Safety**: Compile-time query validation
-- **Migration Management**: Version-controlled schema changes  
+- **Migration Management**: Version-controlled schema changes
 - **Developer Experience**: Visual database tools (Prisma Studio)
 - **Security**: Built-in SQL injection prevention
 - **Performance**: Connection pooling and query optimization
@@ -85,6 +89,7 @@ backend/
 ```
 
 **Legend:**
+
 - ✅ **Complete**: Production-ready reference implementation
 - 🟢 **Work Here**: Your active development areas
 - 🔄 **In Progress/Future**: Upcoming development tasks
@@ -95,6 +100,7 @@ backend/
 ## 🚀 **Development Workflow**
 
 ### **1. Environment Setup**
+
 ```bash
 # Start all services
 docker-compose up
@@ -110,6 +116,7 @@ docker-compose exec auth-service npx prisma studio  # Visual DB browser
 ```
 
 ### **2. Daily Development Routine**
+
 ```bash
 # Check all services
 docker-compose ps
@@ -124,10 +131,11 @@ docker-compose exec user-service sh
 npx prisma studio          # Visual database browser
 npx prisma migrate dev      # Create new migration
 npx prisma generate         # Update Prisma client
-npm run dev                # Start development server
+pnpm run dev                # Start development server
 ```
 
 ### **3. Service Development Pattern**
+
 1. **Design Prisma Schema**: Define data models and relationships
 2. **Create Migration**: `npx prisma migrate dev --name "description"`
 3. **Generate Client**: `npx prisma generate` (automatic with migration)
@@ -142,17 +150,20 @@ npm run dev                # Start development server
 ## 📚 **Essential Documentation to Read**
 
 ### **Must Read Before Starting**
+
 1. **Memory Bank Overview**: `/memory-bank/README.md` - Complete project context
 2. **Project Intelligence**: `/memory-bank/projectIntelligence.md` - **CRITICAL Prisma patterns**
 3. **System Patterns**: `/memory-bank/systemPatterns.md` - Architecture and design patterns
 4. **Tech Context**: `/memory-bank/techContext.md` - Technology stack details
 
 ### **Reference Documentation**
+
 - **API Specifications**: `/docs/API-Specifications.md` - API contracts and examples
 - **Current Progress**: `/memory-bank/progress.md` - What's built and what's next
 - **Project Brief**: `/memory-bank/projectbrief.md` - Requirements and user roles
 
 ### **Code Reference (Your Best Friend)**
+
 - **Auth Service**: `/backend/auth-service/` - **Complete implementation example**
   - **Prisma Schema**: `prisma/schema.prisma` - Model definitions
   - **Controllers**: `controllers/authController.js` - Prisma usage patterns
@@ -164,18 +175,20 @@ npm run dev                # Start development server
 ## 🔧 **Prisma Development Patterns**
 
 ### **Standard Service Setup**
+
 ```javascript
 // config/database.js - Standard pattern for all services
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' 
-    ? ['query', 'info', 'warn', 'error'] 
-    : ['error']
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["error"],
 });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
+process.on("SIGINT", async () => {
   await prisma.$disconnect();
   process.exit();
 });
@@ -184,6 +197,7 @@ module.exports = { prisma };
 ```
 
 ### **Prisma Schema Pattern**
+
 ```prisma
 // prisma/schema.prisma - Standard model pattern
 generator client {
@@ -203,10 +217,10 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-  
+
   // Always include audit trail
   auditLogs    AuditLog[]
-  
+
   @@map("users")
 }
 
@@ -228,70 +242,73 @@ model AuditLog {
   ipAddress  String?  @map("ip_address") @db.VarChar(45)
   userAgent  String?  @map("user_agent") @db.Text
   timestamp  DateTime @default(now())
-  
+
   user       User     @relation(fields: [userId], references: [id])
-  
+
   @@map("audit_logs")
 }
 ```
 
 ### **Controller Pattern with Prisma**
+
 ```javascript
 // controllers/userController.js - Standard controller pattern
-const { prisma } = require('../config/database');
-const { successResponse, errorResponse } = require('@logistics/shared').response;
-const { handlePrismaError } = require('@logistics/shared').errors;
-const logger = require('@logistics/shared').logger;
+const { prisma } = require("../config/database");
+const { successResponse, errorResponse } =
+  require("@logistics/shared").response;
+const { handlePrismaError } = require("@logistics/shared").errors;
+const logger = require("@logistics/shared").logger;
 
 class UserController {
   static async createUser(req, res) {
     try {
       const { email, name, role } = req.body;
-      
+
       // Create user with Prisma
       const user = await prisma.user.create({
         data: { email, name, role },
-        select: { 
-          id: true, 
-          email: true, 
-          name: true, 
+        select: {
+          id: true,
+          email: true,
+          name: true,
           role: true,
-          createdAt: true 
-        }
+          createdAt: true,
+        },
       });
-      
+
       // Create audit log
       await prisma.auditLog.create({
         data: {
           userId: user.id,
-          action: 'CREATE',
-          resource: 'user',
+          action: "CREATE",
+          resource: "user",
           resourceId: user.id,
           changes: { email, name, role },
           ipAddress: req.ip,
-          userAgent: req.get('User-Agent')
-        }
+          userAgent: req.get("User-Agent"),
+        },
       });
-      
-      res.status(201).json(successResponse('User created successfully', user));
-      
+
+      res.status(201).json(successResponse("User created successfully", user));
     } catch (error) {
-      logger.error('Error creating user:', error);
-      
+      logger.error("Error creating user:", error);
+
       // Handle Prisma errors
-      if (error.code?.startsWith('P')) {
+      if (error.code?.startsWith("P")) {
         const apiError = handlePrismaError(error);
-        return res.status(apiError.statusCode).json(errorResponse(apiError.message));
+        return res
+          .status(apiError.statusCode)
+          .json(errorResponse(apiError.message));
       }
-      
-      res.status(500).json(errorResponse('Failed to create user'));
+
+      res.status(500).json(errorResponse("Failed to create user"));
     }
   }
-  
+
   static async getUserById(req, res) {
     try {
       const { id } = req.params;
-      
+
       const user = await prisma.user.findUnique({
         where: { id },
         select: {
@@ -301,62 +318,62 @@ class UserController {
           role: true,
           isActive: true,
           createdAt: true,
-          updatedAt: true
-        }
+          updatedAt: true,
+        },
       });
-      
+
       if (!user) {
-        return res.status(404).json(errorResponse('User not found'));
+        return res.status(404).json(errorResponse("User not found"));
       }
-      
-      res.json(successResponse('User retrieved successfully', user));
-      
+
+      res.json(successResponse("User retrieved successfully", user));
     } catch (error) {
-      logger.error('Error fetching user:', error);
-      res.status(500).json(errorResponse('Failed to fetch user'));
+      logger.error("Error fetching user:", error);
+      res.status(500).json(errorResponse("Failed to fetch user"));
     }
   }
-  
+
   // Always include update with audit logging
   static async updateUser(req, res) {
     try {
       const { id } = req.params;
       const updateData = req.body;
-      
+
       // Use transaction for update + audit
       const result = await prisma.$transaction(async (tx) => {
         const user = await tx.user.update({
           where: { id },
           data: updateData,
-          select: { id: true, email: true, name: true, role: true }
+          select: { id: true, email: true, name: true, role: true },
         });
-        
+
         await tx.auditLog.create({
           data: {
             userId: req.user.id,
-            action: 'UPDATE',
-            resource: 'user',
+            action: "UPDATE",
+            resource: "user",
             resourceId: id,
             changes: updateData,
             ipAddress: req.ip,
-            userAgent: req.get('User-Agent')
-          }
+            userAgent: req.get("User-Agent"),
+          },
         });
-        
+
         return user;
       });
-      
-      res.json(successResponse('User updated successfully', result));
-      
+
+      res.json(successResponse("User updated successfully", result));
     } catch (error) {
-      logger.error('Error updating user:', error);
-      
-      if (error.code?.startsWith('P')) {
+      logger.error("Error updating user:", error);
+
+      if (error.code?.startsWith("P")) {
         const apiError = handlePrismaError(error);
-        return res.status(apiError.statusCode).json(errorResponse(apiError.message));
+        return res
+          .status(apiError.statusCode)
+          .json(errorResponse(apiError.message));
       }
-      
-      res.status(500).json(errorResponse('Failed to update user'));
+
+      res.status(500).json(errorResponse("Failed to update user"));
     }
   }
 }
@@ -369,6 +386,7 @@ module.exports = UserController;
 ## 🎯 **Week 2 Tasks: User Service Development**
 
 ### **Priority 1: Prisma Schema Design**
+
 ```bash
 # Your first task: Design user and client schemas
 cd backend/user-service/
@@ -378,13 +396,16 @@ cd backend/user-service/
 ```
 
 **Schema Requirements:**
+
 - **Client Model**: Multi-tenant client accounts with branding settings
 - **UserProfile Model**: Extended user information beyond auth service
 - **UserInvitation Model**: User invitation system with expiration
 - **ClientSettings Model**: Client-specific configurations (timezone, currency, branding)
 
 ### **Priority 2: User Management APIs**
+
 **Endpoints to implement:**
+
 ```javascript
 // User profile management
 GET    /api/v1/users/profile      // Get current user profile
@@ -406,28 +427,30 @@ DELETE /api/v1/users/invitations/:id // Cancel invitation
 ```
 
 ### **Priority 3: Integration with Auth Service**
+
 ```javascript
 // Middleware to verify JWT tokens from Auth Service
 const verifyAuthServiceToken = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
+    const token = req.header("Authorization")?.replace("Bearer ", "");
+
     if (!token) {
-      return res.status(401).json(errorResponse('Access denied'));
+      return res.status(401).json(errorResponse("Access denied"));
     }
-    
+
     // Verify token with Auth Service or shared JWT secret
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
-    
+
     next();
   } catch (error) {
-    res.status(401).json(errorResponse('Invalid token'));
+    res.status(401).json(errorResponse("Invalid token"));
   }
 };
 ```
 
 ### **Current Status Tracking**
+
 - [ ] **Prisma Schema**: Design user, client, invitation models
 - [ ] **Database Migration**: Create initial migration
 - [ ] **User Controllers**: Profile management CRUD operations
@@ -444,6 +467,7 @@ const verifyAuthServiceToken = async (req, res, next) => {
 ### **Integration with Existing Services**
 
 #### **Wallet Service Integration**
+
 ```javascript
 // External service client pattern
 class WalletServiceClient {
@@ -452,51 +476,52 @@ class WalletServiceClient {
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: 10000,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
-    
+
     // Add retry interceptor
     this.client.interceptors.response.use(
-      response => response,
-      async error => {
+      (response) => response,
+      async (error) => {
         if (error.response?.status >= 500 && error.config?.retryCount < 3) {
           error.config.retryCount = (error.config.retryCount || 0) + 1;
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
           return this.client(error.config);
         }
         return Promise.reject(error);
       }
     );
   }
-  
+
   async getBalance(userId) {
     try {
       const response = await this.client.get(`/wallet/balance/${userId}`);
       return response.data;
     } catch (error) {
       logger.error(`Wallet service error: ${error.message}`);
-      throw new APIError('Wallet service unavailable', 503);
+      throw new APIError("Wallet service unavailable", 503);
     }
   }
-  
+
   async debitAmount(userId, amount, reference) {
     try {
-      const response = await this.client.post('/wallet/debit', {
+      const response = await this.client.post("/wallet/debit", {
         userId,
         amount,
         reference,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       return response.data;
     } catch (error) {
       logger.error(`Wallet debit error: ${error.message}`);
-      throw new APIError('Wallet transaction failed', 500);
+      throw new APIError("Wallet transaction failed", 500);
     }
   }
 }
 ```
 
 #### **Partner Service Integration**
+
 ```javascript
 // Courier charge calculation client
 class PartnerServiceClient {
@@ -504,53 +529,53 @@ class PartnerServiceClient {
     this.baseURL = process.env.PARTNER_SERVICE_URL;
     this.client = axios.create({
       baseURL: this.baseURL,
-      timeout: 15000  // Longer timeout for calculations
+      timeout: 15000, // Longer timeout for calculations
     });
   }
-  
+
   async calculateShippingCharges(shipmentData) {
     try {
-      const response = await this.client.post('/calculate-charges', {
+      const response = await this.client.post("/calculate-charges", {
         pickup: shipmentData.pickupAddress,
         delivery: shipmentData.deliveryAddress,
         weight: shipmentData.weight,
         dimensions: shipmentData.dimensions,
-        declaredValue: shipmentData.declaredValue
+        declaredValue: shipmentData.declaredValue,
       });
-      
+
       return response.data.charges;
     } catch (error) {
       logger.error(`Partner service error: ${error.message}`);
-      throw new APIError('Charge calculation failed', 500);
+      throw new APIError("Charge calculation failed", 500);
     }
   }
 }
 ```
 
 ### **Inter-Service Communication**
+
 ```javascript
 // Service-to-service communication pattern
-const callAuthService = async (endpoint, method = 'GET', data = null) => {
+const callAuthService = async (endpoint, method = "GET", data = null) => {
   try {
     const config = {
       method,
       url: `${process.env.AUTH_SERVICE_URL}${endpoint}`,
       headers: {
-        'Content-Type': 'application/json',
-        'X-Service-Key': process.env.INTER_SERVICE_KEY
-      }
+        "Content-Type": "application/json",
+        "X-Service-Key": process.env.INTER_SERVICE_KEY,
+      },
     };
-    
-    if (data && method !== 'GET') {
+
+    if (data && method !== "GET") {
       config.data = data;
     }
-    
+
     const response = await axios(config);
     return response.data;
-    
   } catch (error) {
     logger.error(`Auth service communication error: ${error.message}`);
-    throw new APIError('Internal service communication failed', 500);
+    throw new APIError("Internal service communication failed", 500);
   }
 };
 
@@ -565,24 +590,25 @@ const getUserAuthData = async (userId) => {
 ## 🔒 **Security Implementation**
 
 ### **Authentication Middleware**
+
 ```javascript
 // middleware/auth.js - JWT verification
-const jwt = require('jsonwebtoken');
-const { errorResponse } = require('@logistics/shared').response;
+const jwt = require("jsonwebtoken");
+const { errorResponse } = require("@logistics/shared").response;
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
   if (!token) {
-    return res.status(401).json(errorResponse('Access token required'));
+    return res.status(401).json(errorResponse("Access token required"));
   }
-  
+
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json(errorResponse('Invalid or expired token'));
+      return res.status(403).json(errorResponse("Invalid or expired token"));
     }
-    
+
     req.user = user;
     next();
   });
@@ -591,16 +617,18 @@ const authenticateToken = (req, res, next) => {
 const requireRole = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json(errorResponse('Authentication required'));
+      return res.status(401).json(errorResponse("Authentication required"));
     }
-    
-    const userRoles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
-    const hasPermission = roles.some(role => userRoles.includes(role));
-    
+
+    const userRoles = Array.isArray(req.user.role)
+      ? req.user.role
+      : [req.user.role];
+    const hasPermission = roles.some((role) => userRoles.includes(role));
+
     if (!hasPermission) {
-      return res.status(403).json(errorResponse('Insufficient permissions'));
+      return res.status(403).json(errorResponse("Insufficient permissions"));
     }
-    
+
     next();
   };
 };
@@ -609,39 +637,48 @@ module.exports = { authenticateToken, requireRole };
 ```
 
 ### **Input Validation**
+
 ```javascript
 // middleware/validation.js - Joi validation patterns
-const Joi = require('joi');
-const { errorResponse } = require('@logistics/shared').response;
+const Joi = require("joi");
+const { errorResponse } = require("@logistics/shared").response;
 
 // Standard validation schemas
 const userValidation = {
   createUser: Joi.object({
     email: Joi.string().email().required(),
     name: Joi.string().min(2).max(100).required(),
-    role: Joi.string().valid('ADMIN', 'FINANCE', 'OPERATIONS', 'CLIENT', 'SUPPORT').default('CLIENT')
+    role: Joi.string()
+      .valid("ADMIN", "FINANCE", "OPERATIONS", "CLIENT", "SUPPORT")
+      .default("CLIENT"),
   }),
-  
+
   updateUser: Joi.object({
     name: Joi.string().min(2).max(100),
     email: Joi.string().email(),
-    role: Joi.string().valid('ADMIN', 'FINANCE', 'OPERATIONS', 'CLIENT', 'SUPPORT')
-  }).min(1)
+    role: Joi.string().valid(
+      "ADMIN",
+      "FINANCE",
+      "OPERATIONS",
+      "CLIENT",
+      "SUPPORT"
+    ),
+  }).min(1),
 };
 
 const validate = (schema) => {
   return (req, res, next) => {
     const { error, value } = schema.validate(req.body, { stripUnknown: true });
-    
+
     if (error) {
-      const details = error.details.map(detail => ({
-        field: detail.path.join('.'),
-        message: detail.message
+      const details = error.details.map((detail) => ({
+        field: detail.path.join("."),
+        message: detail.message,
       }));
-      
-      return res.status(400).json(errorResponse('Validation failed', details));
+
+      return res.status(400).json(errorResponse("Validation failed", details));
     }
-    
+
     req.body = value;
     next();
   };
@@ -651,29 +688,30 @@ module.exports = { userValidation, validate };
 ```
 
 ### **Rate Limiting and Security Headers**
+
 ```javascript
 // middleware/security.js
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
+const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 
 // API rate limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: {
-    status: 'error',
+    status: "error",
     error: {
-      code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many requests, please try again later'
-    }
-  }
+      code: "RATE_LIMIT_EXCEEDED",
+      message: "Too many requests, please try again later",
+    },
+  },
 });
 
 // Strict rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  skipSuccessfulRequests: true
+  skipSuccessfulRequests: true,
 });
 
 // Security headers
@@ -683,9 +721,9 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"]
-    }
-  }
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
 });
 
 module.exports = { apiLimiter, authLimiter, securityHeaders };
@@ -696,6 +734,7 @@ module.exports = { apiLimiter, authLimiter, securityHeaders };
 ## 🧪 **Testing Your Services**
 
 ### **API Testing with Curl**
+
 ```bash
 # Test user creation
 curl -X POST http://localhost:8002/api/v1/users \
@@ -730,6 +769,7 @@ curl -X POST http://localhost:8002/api/v1/clients \
 ```
 
 ### **Database Testing with Prisma Studio**
+
 ```bash
 # Open visual database browser
 docker-compose exec user-service npx prisma studio
@@ -740,6 +780,7 @@ docker-compose exec user-service npx prisma studio
 ```
 
 ### **Service Health Checks**
+
 ```bash
 # Check service health
 curl http://localhost:8002/health
@@ -761,6 +802,7 @@ curl http://localhost:8002/health
 ## ⚠️ **Common Pitfalls & Solutions**
 
 ### **Prisma Common Issues**
+
 ```javascript
 // Problem: Prisma client not generated after schema changes
 // Solution: Always run after schema modifications
@@ -779,6 +821,7 @@ process.on('SIGTERM', async () => {
 ```
 
 ### **Authentication Issues**
+
 ```javascript
 // Problem: Token verification fails between services
 // Solution: Use shared JWT secret and proper token validation
@@ -786,17 +829,18 @@ const verifyToken = (token) => {
   try {
     return jwt.verify(token, process.env.JWT_SECRET);
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      throw new AuthenticationError('Token expired');
-    } else if (error.name === 'JsonWebTokenError') {
-      throw new AuthenticationError('Invalid token');
+    if (error.name === "TokenExpiredError") {
+      throw new AuthenticationError("Token expired");
+    } else if (error.name === "JsonWebTokenError") {
+      throw new AuthenticationError("Invalid token");
     }
-    throw new AuthenticationError('Token verification failed');
+    throw new AuthenticationError("Token verification failed");
   }
 };
 ```
 
 ### **Database Transaction Issues**
+
 ```javascript
 // Problem: Race conditions in concurrent operations
 // Solution: Use Prisma transactions for atomic operations
@@ -804,20 +848,20 @@ const updateUserWithAudit = async (userId, updateData, req) => {
   return await prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
       where: { id: userId },
-      data: updateData
+      data: updateData,
     });
-    
+
     await tx.auditLog.create({
       data: {
         userId: req.user.id,
-        action: 'UPDATE',
-        resource: 'user',
+        action: "UPDATE",
+        resource: "user",
         resourceId: userId,
         changes: updateData,
-        ipAddress: req.ip
-      }
+        ipAddress: req.ip,
+      },
     });
-    
+
     return user;
   });
 };
@@ -828,6 +872,7 @@ const updateUserWithAudit = async (userId, updateData, req) => {
 ## 📋 **Week 2 Success Criteria**
 
 ### **Must Complete (High Priority)**
+
 - [ ] **User Service Prisma Schema**: Complete user, client, invitation models
 - [ ] **User Profile APIs**: CRUD operations for user profile management
 - [ ] **Client Management APIs**: Multi-tenant client administration
@@ -835,6 +880,7 @@ const updateUserWithAudit = async (userId, updateData, req) => {
 - [ ] **Database Migrations**: Working migration with seed data
 
 ### **Should Complete (Medium Priority)**
+
 - [ ] **User Invitation System**: Send, accept, cancel invitations
 - [ ] **Client Settings**: Branding and configuration management
 - [ ] **Audit Logging**: Complete action trail for all operations
@@ -842,6 +888,7 @@ const updateUserWithAudit = async (userId, updateData, req) => {
 - [ ] **API Documentation**: Updated specifications with examples
 
 ### **Nice to Have (Low Priority)**
+
 - [ ] **Advanced Queries**: Complex filtering and search operations
 - [ ] **Caching Layer**: Redis caching for frequent queries
 - [ ] **Integration Testing**: Automated API testing suite
@@ -852,38 +899,43 @@ const updateUserWithAudit = async (userId, updateData, req) => {
 ## 🤝 **Working with Frontend Team**
 
 ### **API Contract Compliance**
+
 ```javascript
 // Always use standard response format
 const successResponse = (message, data = null) => ({
-  status: 'success',
+  status: "success",
   message,
   data,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 });
 
 const errorResponse = (message, details = null) => ({
-  status: 'error',
+  status: "error",
   error: {
     message,
-    details
+    details,
   },
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 });
 ```
 
 ### **CORS Configuration**
+
 ```javascript
 // Enable CORS for frontend development
-const cors = require('cors');
+const cors = require("cors");
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
 ```
 
 ### **Communication Protocol**
+
 1. **API Changes**: Update `/docs/API-Specifications.md` immediately
 2. **Breaking Changes**: Notify frontend team before deployment
 3. **New Endpoints**: Provide curl examples and response samples
@@ -894,18 +946,21 @@ app.use(cors({
 ## 📞 **Getting Help**
 
 ### **When You're Stuck**
+
 1. **Check Auth Service**: Use as complete implementation reference
 2. **Review Memory Bank**: Project patterns and architectural decisions
 3. **Test with Prisma Studio**: Visual database inspection and testing
 4. **Use Shared Utilities**: Pre-built error handling and validation
 
 ### **Escalation Process**
+
 1. **Self-Debug**: Use service logs and Prisma Studio
 2. **Reference Implementation**: Check Auth Service patterns
 3. **Team Discussion**: Bring specific technical questions
 4. **Code Review**: Submit PR for architectural guidance
 
 ### **Resources**
+
 - **Prisma Docs**: https://www.prisma.io/docs
 - **Express.js Docs**: https://expressjs.com
 - **Node.js Docs**: https://nodejs.org/docs

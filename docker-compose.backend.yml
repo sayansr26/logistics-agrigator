@@ -1,19 +1,21 @@
+version: "3.8"
+
 services:
   # Database Services
   postgres:
     image: postgres:15-alpine
-    container_name: logistics-postgres
+    container_name: logistics-postgres-dev
     environment:
       - POSTGRES_USER=logistics
       - POSTGRES_PASSWORD=logistics123
       - POSTGRES_DB=logistics_main
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
-    ports:
-      - "5432:5432"
     networks:
-      - logistics-network
+      - backend-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U logistics"]
       interval: 10s
@@ -22,14 +24,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: logistics-redis
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
+    container_name: logistics-redis-dev
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
-      - logistics-network
+      - backend-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -41,7 +42,7 @@ services:
     build:
       context: ./backend/api-gateway
       dockerfile: Dockerfile
-    container_name: logistics-api-gateway
+    container_name: logistics-api-gateway-dev
     environment:
       - NODE_ENV=development
       - PORT=8000
@@ -52,22 +53,19 @@ services:
       - "8000:8000"
     # volumes:
     # - ./backend/api-gateway:/app
-    # - /app/node_modules
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
 
-  # Auth Service with Prisma (Core Service)
+  # Auth Service
   auth-service:
     build:
       context: ./backend/auth-service
       dockerfile: Dockerfile
-    container_name: logistics-auth-service
+    container_name: logistics-auth-service-dev
     environment:
       - NODE_ENV=development
       - PORT=8001
@@ -86,15 +84,15 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
 
-  # User Service (Week 2 Development)
+  # User Service (Development Ready)
   user-service:
     build:
       context: ./backend/user-service
       dockerfile: Dockerfile
-    container_name: logistics-user-service
+    container_name: logistics-user-service-dev
     environment:
       - NODE_ENV=development
       - PORT=8002
@@ -114,18 +112,15 @@ services:
       auth-service:
         condition: service_started
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
-    profiles:
-      - all-services
-      - user-service
 
-  # Shipment Service (Week 3+ Development)
+  # Shipment Service (Future)
   shipment-service:
     build:
       context: ./backend/shipment-service
       dockerfile: Dockerfile
-    container_name: logistics-shipment-service
+    container_name: logistics-shipment-service-dev
     environment:
       - NODE_ENV=development
       - PORT=8003
@@ -134,8 +129,6 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
       - USER_SERVICE_URL=http://user-service:8002
-      - WALLET_SERVICE_URL=http://localhost:8006
-      - PARTNER_SERVICE_URL=http://localhost:8007
     ports:
       - "8003:8003"
     # volumes:
@@ -145,21 +138,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
     profiles:
-      - all-services
-      - shipment-service
+      - future-services
 
-  # Support Service (Week 4+ Development)
+  # Support Service (Future)
   support-service:
     build:
       context: ./backend/support-service
       dockerfile: Dockerfile
-    container_name: logistics-support-service
+    container_name: logistics-support-service-dev
     environment:
       - NODE_ENV=development
       - PORT=8004
@@ -167,7 +157,6 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
-      - USER_SERVICE_URL=http://user-service:8002
     ports:
       - "8004:8004"
     # volumes:
@@ -177,21 +166,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
     profiles:
-      - all-services
-      - support-service
+      - future-services
 
-  # Platform Service (Week 5+ Development)
+  # Platform Service (Future)
   platform-service:
     build:
       context: ./backend/platform-service
       dockerfile: Dockerfile
-    container_name: logistics-platform-service
+    container_name: logistics-platform-service-dev
     environment:
       - NODE_ENV=development
       - PORT=8005
@@ -200,9 +186,6 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
       - USER_SERVICE_URL=http://user-service:8002
-      - SHIPMENT_SERVICE_URL=http://shipment-service:8003
-      - SHOPIFY_CLIENT_ID=your_shopify_client_id
-      - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
       - "8005:8005"
     # volumes:
@@ -212,58 +195,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
     networks:
-      - logistics-network
+      - backend-network
     command: pnpm run start
     profiles:
-      - all-services
-      - platform-service
-
-  # Frontend (Core Service)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: logistics-frontend
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_APP_ENV=development
-    ports:
-      - "3000:3000"
-    # volumes:
-    # - ./frontend:/app
-    depends_on:
-      - api-gateway
-    networks:
-      - logistics-network
-    command: pnpm run start
+      - future-services
 
 volumes:
   postgres_data:
   redis_data:
-  api_gateway_node_modules:
-  auth_service_node_modules:
-  frontend_node_modules:
-  frontend_next:
 
 networks:
-  logistics-network:
+  backend-network:
     driver: bridge
-# 🚀 Development Commands:
-#
-# Core Services (default):
-#   pnpm run dev                    # postgres + redis + api-gateway + auth-service + frontend
-#
-# Extended Development:
-#   docker-compose --profile user-service up          # + user-service
-#   docker-compose --profile shipment-service up      # + shipment-service
-#   docker-compose --profile support-service up       # + support-service
-#   docker-compose --profile platform-service up      # + platform-service
-#   docker-compose --profile all-services up          # All services
-#
-# Specialized Docker Compose Files:
-#   pnpm run dev:frontend          # Frontend-focused development
-#   pnpm run dev:backend           # Backend-focused development
+# Usage Examples:
+# pnpm run dev:backend              # Start core backend services
+# pnpm run dev:backend:full         # Start all backend services (including future ones)

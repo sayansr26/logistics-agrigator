@@ -714,7 +714,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install -g pnpm@8.15.1 && pnpm install --prod --frozen-lockfile
 
 # Copy source code
 COPY . .

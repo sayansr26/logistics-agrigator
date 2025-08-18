@@ -17,14 +17,18 @@ RUN npx prisma generate
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
-# Create logs directory
-RUN mkdir -p logs && chown -R nodejs:nodejs logs
-
-# Change ownership
+# Set ownership
 RUN chown -R nodejs:nodejs /app
 
+# Switch to non-root user
 USER nodejs
 
-EXPOSE 8001
+# Expose port
+EXPOSE 8004
 
-CMD ["node", "server.js"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8004/health || exit 1
+
+# Start the application
+CMD ["pnpm", "run", "dev"]

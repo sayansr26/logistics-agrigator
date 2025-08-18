@@ -1,0 +1,117 @@
+{
+  "name": "logistics-aggregator-portal",
+  "version": "1.0.0",
+  "description": "Comprehensive logistics management solution for India",
+  "private": true,
+  "scripts": {
+    "install:all": "pnpm install",
+    "prepare": "husky install",
+    "dev": "docker-compose --profile all-services up",
+    "dev:detached": "docker-compose --profile all-services up -d",
+    "dev:build": "docker-compose --profile all-services up --build",
+    "dev:all": "docker-compose --profile all-services up",
+    "dev:user": "docker-compose --profile user-service up",
+    "dev:shipment": "docker-compose --profile shipment-service up",
+    "dev:support": "docker-compose --profile support-service up",
+    "dev:platform": "docker-compose --profile platform-service up",
+    "dev:frontend": "docker-compose -f docker-compose.frontend.yml up",
+    "dev:frontend:detached": "docker-compose -f docker-compose.frontend.yml up -d",
+    "dev:backend": "docker-compose -f docker-compose.backend.yml --profile future-services up",
+    "dev:backend:detached": "docker-compose -f docker-compose.backend.yml --profile future-services up -d",
+    "dev:backend:all": "docker-compose -f docker-compose.backend.yml --profile future-services up",
+    "stop": "docker-compose down",
+    "stop:frontend": "docker-compose -f docker-compose.frontend.yml down",
+    "stop:backend": "docker-compose -f docker-compose.backend.yml down",
+    "stop:all": "pnpm run stop && pnpm run stop:frontend && pnpm run stop:backend",
+    "clean": "docker-compose down -v && docker system prune -f",
+    "clean:frontend": "docker-compose -f docker-compose.frontend.yml down -v",
+    "clean:backend": "docker-compose -f docker-compose.backend.yml down -v",
+    "clean:all": "pnpm run clean && pnpm run clean:frontend && pnpm run clean:backend",
+    "logs": "docker-compose logs -f",
+    "logs:frontend": "docker-compose -f docker-compose.frontend.yml logs -f",
+    "logs:backend": "docker-compose -f docker-compose.backend.yml logs -f",
+    "logs:auth": "docker-compose logs -f auth-service",
+    "logs:user": "docker-compose logs -f user-service",
+    "logs:api": "docker-compose logs -f api-gateway",
+    "health": "curl -s http://localhost:8000/health",
+    "health:frontend": "curl -s http://localhost:3000/api/health",
+    "prisma:studio": "docker-compose exec auth-service npx prisma studio",
+    "prisma:generate": "pnpm -r run generate",
+    "prisma:migrate": "pnpm -r run migrate",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "type-check": "pnpm -r run type-check",
+    "setup:env": "cp .env.example .env",
+    "setup:dev": "pnpm run setup:env && pnpm install && pnpm run dev",
+    "setup:frontend": "pnpm run setup:env && pnpm install && pnpm run dev:frontend",
+    "setup:backend": "pnpm run setup:env && pnpm install && pnpm run dev:backend",
+    "lint:staged": "lint-staged",
+    "commit": "git-cz",
+    "commitlint": "commitlint --from HEAD~1 --to HEAD --verbose"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "commitizen": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^8.55.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.1",
+  "keywords": [
+    "logistics",
+    "microservices",
+    "prisma",
+    "nextjs",
+    "nodejs",
+    "india",
+    "monorepo",
+    "pnpm-workspace"
+  ],
+  "author": "Logistics Development Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/logistics-aggregator-portal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/logistics-aggregator-portal/issues"
+  },
+  "homepage": "https://github.com/your-org/logistics-aggregator-portal#readme",
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "lint-staged": {
+    "frontend/**/*.{js,jsx,ts,tsx}": [
+      "pnpm --filter frontend run lint:fix",
+      "pnpm --filter frontend run type-check",
+      "prettier --write"
+    ],
+    "backend/**/*.{js,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "shared/**/*.{js,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "**/*.prisma": [
+      "prettier --write"
+    ]
+  }
+}

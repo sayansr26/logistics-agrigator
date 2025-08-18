@@ -3,6 +3,7 @@
 ## Architectural Overview
 
 ### Microservices Architecture Pattern
+
 Our system follows a **Domain-Driven Design** approach with **bounded contexts** represented as independent microservices.
 
 ```
@@ -40,18 +41,20 @@ Our system follows a **Domain-Driven Design** approach with **bounded contexts**
 ```javascript
 // Service-specific database configuration
 // backend/auth-service/config/database.js
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' 
-    ? ['query', 'info', 'warn', 'error'] 
-    : ['error']
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["error"],
 });
 
 module.exports = { prisma };
 ```
 
 **Schema Pattern**:
+
 ```prisma
 // Standard model pattern for all services
 model User {
@@ -61,10 +64,10 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-  
+
   // Always include audit relationships
   auditLogs    AuditLog[]
-  
+
   @@map("users")
 }
 ```
@@ -76,12 +79,17 @@ model User {
 
 ```javascript
 // API Gateway routing pattern
-app.use('/api/v1/auth', proxy('http://auth-service:8001'));
-app.use('/api/v1/users', authMiddleware, proxy('http://user-service:8002'));
-app.use('/api/v1/shipments', authMiddleware, proxy('http://shipment-service:8003'));
+app.use("/api/v1/auth", proxy("http://auth-service:8001"));
+app.use("/api/v1/users", authMiddleware, proxy("http://user-service:8002"));
+app.use(
+  "/api/v1/shipments",
+  authMiddleware,
+  proxy("http://shipment-service:8003")
+);
 ```
 
 **Benefits**:
+
 - **Centralized Security**: Single authentication and authorization point
 - **Rate Limiting**: Prevent abuse and ensure fair usage
 - **Request/Response Transformation**: Consistent API contracts
@@ -95,9 +103,13 @@ app.use('/api/v1/shipments', authMiddleware, proxy('http://shipment-service:8003
 ```javascript
 // Future event pattern for shipment lifecycle
 const events = {
-  'shipment.created': ['wallet.debit', 'partner.calculate', 'notification.send'],
-  'shipment.picked': ['tracking.update', 'customer.notify'],
-  'shipment.delivered': ['wallet.settlement', 'analytics.record']
+  "shipment.created": [
+    "wallet.debit",
+    "partner.calculate",
+    "notification.send",
+  ],
+  "shipment.picked": ["tracking.update", "customer.notify"],
+  "shipment.delivered": ["wallet.settlement", "analytics.record"],
 };
 ```
 
@@ -112,14 +124,14 @@ const events = {
 // Standard multi-tenant query pattern
 const getUserShipments = async (userId, clientId) => {
   return await prisma.shipment.findMany({
-    where: { 
+    where: {
       userId,
-      clientId  // Always include client isolation
+      clientId, // Always include client isolation
     },
     include: {
       tracking: true,
-      addresses: true
-    }
+      addresses: true,
+    },
   });
 };
 ```
@@ -131,18 +143,25 @@ const getUserShipments = async (userId, clientId) => {
 
 ```javascript
 // Audit log creation pattern
-const createAuditLog = async (userId, action, resource, resourceId, changes, req) => {
+const createAuditLog = async (
+  userId,
+  action,
+  resource,
+  resourceId,
+  changes,
+  req
+) => {
   await prisma.auditLog.create({
     data: {
       userId,
-      action,           // 'CREATE', 'UPDATE', 'DELETE'
-      resource,         // 'user', 'shipment', 'client'
-      resourceId,       // UUID of affected resource
-      changes,          // JSON of what changed
+      action, // 'CREATE', 'UPDATE', 'DELETE'
+      resource, // 'user', 'shipment', 'client'
+      resourceId, // UUID of affected resource
+      changes, // JSON of what changed
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-      timestamp: new Date()
-    }
+      userAgent: req.get("User-Agent"),
+      timestamp: new Date(),
+    },
   });
 };
 ```
@@ -157,14 +176,14 @@ const createAuditLog = async (userId, action, resource, resourceId, changes, req
 const softDeleteUser = async (id) => {
   const user = await prisma.user.update({
     where: { id },
-    data: { 
+    data: {
       isDeleted: true,
-      deletedAt: new Date()
-    }
+      deletedAt: new Date(),
+    },
   });
-  
+
   // Audit the deletion
-  await createAuditLog(user.id, 'DELETE', 'user', id, { isDeleted: true });
+  await createAuditLog(user.id, "DELETE", "user", id, { isDeleted: true });
 };
 ```
 
@@ -181,15 +200,15 @@ const generateTokens = (user) => {
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: '15m' }  // Short-lived access token
+    { expiresIn: "15m" } // Short-lived access token
   );
-  
+
   const refreshToken = jwt.sign(
     { userId: user.id },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: '7d' }   // Long-lived refresh token
+    { expiresIn: "7d" } // Long-lived refresh token
   );
-  
+
   return { accessToken, refreshToken };
 };
 ```
@@ -204,17 +223,24 @@ const generateTokens = (user) => {
 const requirePermission = (permission) => {
   return (req, res, next) => {
     const userPermissions = getRolePermissions(req.user.role);
-    
-    if (!userPermissions.includes(permission) && !userPermissions.includes('all_permissions')) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+
+    if (
+      !userPermissions.includes(permission) &&
+      !userPermissions.includes("all_permissions")
+    ) {
+      return res.status(403).json({ error: "Insufficient permissions" });
     }
-    
+
     next();
   };
 };
 
 // Usage in routes
-router.get('/admin/users', requirePermission('admin_user_access'), getUsersController);
+router.get(
+  "/admin/users",
+  requirePermission("admin_user_access"),
+  getUsersController
+);
 ```
 
 ### 3. Input Validation Pattern
@@ -226,8 +252,13 @@ router.get('/admin/users', requirePermission('admin_user_access'), getUsersContr
 // Validation schema pattern
 const userRegistrationSchema = Joi.object({
   email: Joi.string().email().required(),
-  password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).required(),
-  role: Joi.string().valid('admin', 'finance', 'operations', 'client', 'support').optional()
+  password: Joi.string()
+    .min(8)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .required(),
+  role: Joi.string()
+    .valid("admin", "finance", "operations", "client", "support")
+    .optional(),
 });
 
 // Validation middleware
@@ -236,9 +267,12 @@ const validate = (schema) => {
     const { error, value } = schema.validate(req.body);
     if (error) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Validation failed',
-        details: error.details.map(d => ({ field: d.path[0], message: d.message }))
+        status: "error",
+        message: "Validation failed",
+        details: error.details.map((d) => ({
+          field: d.path[0],
+          message: d.message,
+        })),
       });
     }
     req.body = value;
@@ -261,13 +295,13 @@ class WalletServiceClient {
     this.client = axios.create({
       baseURL: process.env.WALLET_SERVICE_URL,
       timeout: 10000,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
-    
+
     // Add retry interceptor
     this.client.interceptors.response.use(
-      response => response,
-      error => {
+      (response) => response,
+      (error) => {
         if (error.response?.status >= 500 && error.config?.retryCount < 3) {
           error.config.retryCount = (error.config.retryCount || 0) + 1;
           return this.client(error.config);
@@ -276,14 +310,14 @@ class WalletServiceClient {
       }
     );
   }
-  
+
   async getBalance(userId) {
     try {
       const response = await this.client.get(`/wallet/balance/${userId}`);
       return response.data;
     } catch (error) {
       logger.error(`Wallet service error: ${error.message}`);
-      throw new APIError('Wallet service unavailable', 503);
+      throw new APIError("Wallet service unavailable", 503);
     }
   }
 }
@@ -299,25 +333,28 @@ class WalletServiceClient {
 class ShopifyIntegration {
   async authenticateStore(shop, code) {
     // Exchange authorization code for access token
-    const tokenResponse = await axios.post(`https://${shop}.myshopify.com/admin/oauth/access_token`, {
-      client_id: process.env.SHOPIFY_CLIENT_ID,
-      client_secret: process.env.SHOPIFY_CLIENT_SECRET,
-      code
-    });
-    
+    const tokenResponse = await axios.post(
+      `https://${shop}.myshopify.com/admin/oauth/access_token`,
+      {
+        client_id: process.env.SHOPIFY_CLIENT_ID,
+        client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+        code,
+      }
+    );
+
     // Store encrypted token
     const encryptedToken = encrypt(tokenResponse.data.access_token);
-    
+
     await prisma.platformIntegration.create({
       data: {
         clientId: req.user.clientId,
-        platform: 'shopify',
+        platform: "shopify",
         shopDomain: shop,
         accessToken: encryptedToken,
-        isActive: true
-      }
+        isActive: true,
+      },
     });
-    
+
     // Setup webhooks
     await this.setupWebhooks(shop, tokenResponse.data.access_token);
   }
@@ -334,35 +371,35 @@ class ShopifyIntegration {
 ```javascript
 // Error handling pattern
 class APIError extends Error {
-  constructor(message, statusCode = 500, code = 'INTERNAL_ERROR') {
+  constructor(message, statusCode = 500, code = "INTERNAL_ERROR") {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
-    this.name = 'APIError';
+    this.name = "APIError";
   }
 }
 
 // Global error handler middleware
 const errorHandler = (error, req, res, next) => {
   logger.error(`Error in ${req.method} ${req.path}:`, error);
-  
+
   if (error instanceof APIError) {
     return res.status(error.statusCode).json({
-      status: 'error',
+      status: "error",
       error: {
         code: error.code,
-        message: error.message
-      }
+        message: error.message,
+      },
     });
   }
-  
+
   // Default error response
   res.status(500).json({
-    status: 'error',
+    status: "error",
     error: {
-      code: 'INTERNAL_ERROR',
-      message: 'Internal server error'
-    }
+      code: "INTERNAL_ERROR",
+      message: "Internal server error",
+    },
   });
 };
 ```
@@ -376,17 +413,29 @@ const errorHandler = (error, req, res, next) => {
 // Prisma error transformation
 const handlePrismaError = (error) => {
   switch (error.code) {
-    case 'P2002':  // Unique constraint violation
-      return new APIError('A record with this data already exists', 409, 'DUPLICATE_ERROR');
-    
-    case 'P2025':  // Record not found
-      return new APIError('The requested resource was not found', 404, 'NOT_FOUND');
-    
-    case 'P2003':  // Foreign key constraint violation
-      return new APIError('Invalid reference to related record', 400, 'INVALID_REFERENCE');
-    
+    case "P2002": // Unique constraint violation
+      return new APIError(
+        "A record with this data already exists",
+        409,
+        "DUPLICATE_ERROR"
+      );
+
+    case "P2025": // Record not found
+      return new APIError(
+        "The requested resource was not found",
+        404,
+        "NOT_FOUND"
+      );
+
+    case "P2003": // Foreign key constraint violation
+      return new APIError(
+        "Invalid reference to related record",
+        400,
+        "INVALID_REFERENCE"
+      );
+
     default:
-      return new APIError('Database operation failed', 500, 'DATABASE_ERROR');
+      return new APIError("Database operation failed", 500, "DATABASE_ERROR");
   }
 };
 ```
@@ -406,11 +455,11 @@ const getCachedOrExecute = async (key, fetchFunction, ttl = 3600) => {
   if (cached) {
     return JSON.parse(cached);
   }
-  
+
   // Execute and cache
   const result = await fetchFunction();
   await redis.setex(key, ttl, JSON.stringify(result));
-  
+
   return result;
 };
 
@@ -419,7 +468,7 @@ const getUserProfile = async (userId) => {
   return await getCachedOrExecute(
     `user:profile:${userId}`,
     () => prisma.user.findUnique({ where: { id: userId } }),
-    1800  // 30 minutes
+    1800 // 30 minutes
   );
 };
 ```
@@ -440,12 +489,12 @@ const getShipmentsList = async (clientId, page = 1, limit = 20) => {
       status: true,
       createdAt: true,
       customer: {
-        select: { name: true, phone: true }
-      }
+        select: { name: true, phone: true },
+      },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     skip: (page - 1) * limit,
-    take: limit
+    take: limit,
   });
 };
 ```
@@ -460,24 +509,24 @@ const getShipmentsList = async (clientId, page = 1, limit = 20) => {
 ```javascript
 // Test database setup
 beforeAll(async () => {
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE users CASCADE');
+  await prisma.$executeRawUnsafe("TRUNCATE TABLE users CASCADE");
 });
 
 // API integration test pattern
-describe('User Registration', () => {
-  test('should create user with valid data', async () => {
+describe("User Registration", () => {
+  test("should create user with valid data", async () => {
     const userData = {
-      email: 'test@example.com',
-      password: 'SecurePass123!',
-      role: 'client'
+      email: "test@example.com",
+      password: "SecurePass123!",
+      role: "client",
     };
-    
+
     const response = await request(app)
-      .post('/api/v1/auth/register')
+      .post("/api/v1/auth/register")
       .send(userData)
       .expect(201);
-    
-    expect(response.body.status).toBe('success');
+
+    expect(response.body.status).toBe("success");
     expect(response.body.data.user.email).toBe(userData.email);
   });
 });
@@ -498,13 +547,13 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 FROM base AS development
-RUN npm ci
+RUN npm install -g pnpm@8.15.1 && pnpm install --frozen-lockfile
 RUN npx prisma generate
 COPY . .
 CMD ["npm", "run", "dev"]
 
 FROM base AS production
-RUN npm ci --only=production
+RUN npm install -g pnpm@8.15.1 && pnpm install --prod --frozen-lockfile
 RUN npx prisma generate
 COPY . .
 USER node
@@ -527,7 +576,7 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
-    command: sh -c "npx prisma migrate deploy && npm run dev"
+    command: sh -c "npx prisma migrate deploy && pnpm run dev"
 ```
 
 **Current Status**: All patterns implemented and validated in Auth Service. Ready for replication across remaining services (User, Shipment, Platform, Support).

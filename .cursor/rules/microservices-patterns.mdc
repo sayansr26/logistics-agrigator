@@ -1,0 +1,125 @@
+---
+globs: backend/**/*.js,backend/**/*.ts
+---
+
+# Microservices Architecture Patterns
+
+## **Service Structure**
+Each backend service follows the same pattern:
+```
+backend/[service-name]/
+├── prisma/
+│   ├── schema.prisma    # Service-specific database schema
+│   └── migrations/      # Database migrations
+├── controllers/         # Route handlers using Prisma
+├── middleware/          # Auth, validation, error handling  
+├── routes/             # API route definitions
+├── config/             # Database and Redis configuration
+├── Dockerfile          # Container configuration
+└── package.json        # Service dependencies
+```
+
+## **Standard Service Setup**
+```javascript
+// server.js - Express app setup
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const { prisma } = require('./config/database');
+const authRoutes = require('./routes/auth');
+const { errorHandler } = require('./middleware/errorHandler');
+
+const app = express();
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+app.use(express.json());
+
+// Routes
+app.use('/api/v1/auth', authRoutes);
+
+// Error handling
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 8001;
+app.listen(PORT, () => {
+  console.log(`${process.env.SERVICE_NAME || 'Service'} running on port ${PORT}`);
+});
+```
+
+## **Service Communication**
+- **API Gateway**: Route requests to appropriate services
+- **Inter-service**: Use HTTP calls with service discovery
+- **Authentication**: JWT tokens validated by each service
+- **Shared Utilities**: Import from `@logistics/shared`
+
+## **Database per Service**
+Each service has its own PostgreSQL database:
+- `logistics_auth` - Auth service
+- `logistics_users` - User service  
+- `logistics_shipments` - Shipment service
+- `logistics_support` - Support service
+- `logistics_platforms` - Platform service
+
+## **Service Ports**
+- **API Gateway**: 8000
+- **Auth Service**: 8001 (✅ Complete)
+- **User Service**: 8002 (🚧 In Development - Week 2)
+- **Shipment Service**: 8003 (📋 Future)
+- **Support Service**: 8004 (📋 Future)
+- **Platform Service**: 8005 (📋 Future)
+
+## **Docker Configuration**
+```dockerfile
+# Standard Dockerfile pattern
+FROM node:18-alpine
+WORKDIR /app
+
+# Copy package files and Prisma schema
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install pnpm and dependencies
+RUN npm install -g pnpm@8.15.1
+RUN pnpm install --frozen-lockfile
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy source code
+COPY . .
+
+# Security: Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
+USER nodejs
+
+EXPOSE ${PORT}
+CMD ["node", "server.js"]
+```
+
+## **Development Commands**
+```bash
+# Service-specific development
+pnpm run dev:backend              # Core services only
+pnpm run dev:backend:full         # All services (including future)
+
+# Service logs
+pnpm run logs:auth                # Auth service logs
+pnpm run logs:user                # User service logs
+pnpm run logs:api                 # API Gateway logs
+
+# Database operations
+pnpm run prisma:studio            # Visual database browser
+docker-compose exec auth-service npx prisma migrate dev
+docker-compose exec user-service npx prisma generate
+```
+
+## **External Service Integration**
+- **Wallet Service** (Port 8006): Existing financial transactions service
+- **Partner Service** (Port 8007): Existing courier charges calculation
+- Integration via HTTP API clients, not Prisma

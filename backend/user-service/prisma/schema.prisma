@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique // References auth service user
+  firstName   String
+  lastName    String
+  email       String   @unique
+  phoneNumber String?
+  companyName String?
+  address     Json?    // Flexible address storage
+  preferences Json?    // User preferences
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isActive    Boolean  @default(true)
+
+  // Relationships
+  shipments Shipment[]
+  tickets   SupportTicket[]
+
+  @@map("user_profiles")
+}
+
+model Shipment {
+  id              String   @id @default(cuid())
+  trackingNumber  String   @unique
+  userProfileId   String
+  status          String   // pending, confirmed, shipped, delivered, cancelled
+  origin          Json     // Address object
+  destination     Json     // Address object
+  estimatedCost   Decimal  @db.Decimal(10, 2)
+  actualCost      Decimal? @db.Decimal(10, 2)
+  weight          Decimal? @db.Decimal(8, 2)
+  dimensions      Json?    // length, width, height
+  shipmentDate    DateTime?
+  deliveryDate    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id])
+
+  @@map("shipments")
+}
+
+model SupportTicket {
+  id              String   @id @default(cuid())
+  userProfileId   String
+  subject         String
+  description     String
+  status          String   // open, in_progress, resolved, closed
+  priority        String   // low, medium, high, urgent
+  category        String   // general, billing, technical, shipment
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id])
+
+  @@map("support_tickets")
+}

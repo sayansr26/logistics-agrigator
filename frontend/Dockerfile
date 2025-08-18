@@ -2,14 +2,16 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
+
+# Copy all source code first
+COPY . .
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install
 
-# Copy source code
-COPY . .
+# Skip copying node_modules entirely - will be mounted as volume
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
@@ -22,4 +24,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]

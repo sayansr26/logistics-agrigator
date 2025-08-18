@@ -1,0 +1,25 @@
+# PNPM Configuration for Monorepo
+
+# Workspace settings
+link-workspace-packages=true
+prefer-workspace-packages=true
+
+# Performance optimizations
+store-dir=~/.pnpm-store
+cache-dir=~/.pnpm-cache
+
+# Security and audit
+audit-level=moderate
+
+# Node.js settings  
+node-linker=hoisted
+hoist-pattern[]=*prisma*
+hoist-pattern[]=*eslint*
+hoist-pattern[]=*typescript*
+
+# Package resolution
+auto-install-peers=false
+strict-peer-dependencies=false
+
+# Logging
+loglevel=info

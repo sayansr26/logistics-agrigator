@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PlatformIntegration {
+  id              String              @id @default(cuid())
+  userId          String              // References auth service
+  platformType    PlatformType
+  platformName    String              // "My Shopify Store"
+  
+  // Connection details (encrypted)
+  credentials     Json                // API keys, tokens, etc.
+  config          Json                // Platform-specific config
+  
+  // Status
+  status          IntegrationStatus   @default(PENDING)
+  isActive        Boolean             @default(true)
+  lastSync        DateTime?
+  
+  // Metadata
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  // Relationships
+  syncLogs        SyncLog[]
+  orders          PlatformOrder[]
+
+  @@unique([userId, platformType, platformName])
+  @@map("platform_integrations")
+}
+
+model PlatformOrder {
+  id                String              @id @default(cuid())
+  integrationId     String
+  platformOrderId   String              // External order ID
+  platformType      PlatformType
+  
+  // Order details
+  orderNumber       String
+  customerInfo      Json                // Name, email, address
+  orderItems        Json                // Products array
+  totalAmount       Decimal             @db.Decimal(10, 2)
+  currency          String              @default("INR")
+  
+  // Shipping details
+  shippingAddress   Json
+  shippingMethod    String?
+  
+  // Status
+  orderStatus       String              // pending, confirmed, shipped, etc.
+  fulfillmentStatus String?             // pending, partial, fulfilled
+  paymentStatus     String?             // pending, paid, refunded
+  
+  // Logistics
+  shipmentId        String?             // References shipment service
+  trackingNumber    String?
+  
+  // Timestamps
+  orderDate         DateTime
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relationships
+  integration       PlatformIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, platformOrderId])
+  @@map("platform_orders")
+}
+
+model SyncLog {
+  id            String              @id @default(cuid())
+  integrationId String
+  syncType      SyncType
+  status        SyncStatus
+  
+  // Sync details
+  recordsProcessed Int              @default(0)
+  recordsSuccess   Int              @default(0)
+  recordsFailed    Int              @default(0)
+  
+  // Error handling
+  errorMessage     String?
+  errorDetails     Json?
+  
+  // Timing
+  startedAt        DateTime          @default(now())
+  completedAt      DateTime?
+  duration         Int?              // seconds
+  
+  // Relationships
+  integration      PlatformIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@map("sync_logs")
+}
+
+model SupportedPlatform {
+  id              String      @id @default(cuid())
+  type            PlatformType @unique
+  name            String      // "Shopify", "WooCommerce"
+  description     String
+  logoUrl         String?
+  documentationUrl String?
+  
+  // Configuration
+  isActive        Boolean     @default(true)
+  requiredFields  Json        // What fields are needed for integration
+  features        Json        // What features are supported
+  
+  // Metadata
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("supported_platforms")
+}
+
+enum PlatformType {
+  SHOPIFY
+  WOOCOMMERCE
+  MAGENTO
+  OPENCART
+  BIGCOMMERCE
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+  SUSPENDED
+}
+
+enum SyncType {
+  FULL_SYNC
+  INCREMENTAL_SYNC
+  ORDER_SYNC
+  PRODUCT_SYNC
+  CUSTOMER_SYNC
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}

@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🧪 Running tests before push..."
+
+# Run tests for all workspaces
+pnpm run test
+
+# Run type checking for TypeScript projects  
+echo "🔍 Type checking..."
+pnpm --filter frontend run type-check
+pnpm --filter "backend/*" run type-check --if-present
+
+# Run build to ensure everything compiles
+echo "🏗️ Build check..."
+pnpm run build
+
+echo "✅ Pre-push checks passed!"

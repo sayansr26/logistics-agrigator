@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SupportTicket {
+  id            String         @id @default(cuid())
+  ticketNumber  String         @unique
+  userId        String         // References auth service
+  subject       String
+  description   String
+  status        TicketStatus   @default(OPEN)
+  priority      Priority       @default(MEDIUM)
+  category      Category       @default(GENERAL)
+  assignedTo    String?        // Support agent ID
+  resolution    String?
+  
+  // Metadata
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  closedAt      DateTime?
+  
+  // Relationships
+  responses     TicketResponse[]
+  attachments   Attachment[]
+
+  @@map("support_tickets")
+}
+
+model TicketResponse {
+  id            String        @id @default(cuid())
+  ticketId      String
+  responderId   String        // User or agent ID
+  responderType ResponderType
+  message       String
+  isInternal    Boolean       @default(false) // Internal notes
+  
+  createdAt     DateTime      @default(now())
+  
+  // Relationships
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_responses")
+}
+
+model Attachment {
+  id          String        @id @default(cuid())
+  ticketId    String
+  fileName    String
+  fileSize    Int
+  mimeType    String
+  filePath    String        // Storage path
+  uploadedBy  String        // User ID who uploaded
+  uploadedAt  DateTime      @default(now())
+  
+  // Relationships
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model FAQ {
+  id          String    @id @default(cuid())
+  question    String
+  answer      String
+  category    String
+  tags        String[]
+  isPublished Boolean   @default(true)
+  viewCount   Int       @default(0)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String    // Admin user ID
+
+  @@map("faqs")
+}
+
+model KnowledgeBase {
+  id          String    @id @default(cuid())
+  title       String
+  content     String
+  category    String
+  tags        String[]
+  isPublished Boolean   @default(true)
+  viewCount   Int       @default(0)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String    // Admin user ID
+
+  @@map("knowledge_base")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_RESPONSE
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum Category {
+  GENERAL
+  BILLING
+  TECHNICAL
+  SHIPMENT
+  ACCOUNT
+  COMPLAINT
+  FEATURE_REQUEST
+}
+
+enum ResponderType {
+  USER
+  AGENT
+  SYSTEM
+}

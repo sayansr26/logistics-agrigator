@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shipment {
+  id                String             @id @default(cuid())
+  trackingNumber    String             @unique
+  userId            String             // References auth service
+  status            ShipmentStatus     @default(PENDING)
+  priority          Priority           @default(STANDARD)
+  serviceType       String             // express, standard, economy
+  
+  // Origin and destination
+  originAddress     Json
+  destinationAddress Json
+  
+  // Package details
+  weight            Decimal?           @db.Decimal(8, 2)
+  dimensions        Json?              // {length, width, height, unit}
+  packageType       String?            // document, parcel, freight
+  description       String?
+  value             Decimal?           @db.Decimal(10, 2)
+  
+  // Pricing
+  estimatedCost     Decimal            @db.Decimal(10, 2)
+  actualCost        Decimal?           @db.Decimal(10, 2)
+  currency          String             @default("INR")
+  
+  // Dates
+  scheduledPickup   DateTime?
+  actualPickup      DateTime?
+  estimatedDelivery DateTime?
+  actualDelivery    DateTime?
+  
+  // Metadata
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  notes             String?
+  
+  // External integrations
+  partnerShipmentId String?            // Partner service reference
+  walletTransactionId String?          // Wallet service reference
+  
+  // Relationships
+  trackingEvents    TrackingEvent[]
+
+  @@map("shipments")
+}
+
+model TrackingEvent {
+  id            String     @id @default(cuid())
+  shipmentId    String
+  status        String
+  location      Json?      // Address object
+  description   String
+  timestamp     DateTime   @default(now())
+  eventType     EventType  @default(STATUS_UPDATE)
+  
+  // Relationships
+  shipment      Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  @@map("tracking_events")
+}
+
+model RateCard {
+  id            String   @id @default(cuid())
+  serviceType   String   // express, standard, economy  
+  fromZone      String   // postal code or zone
+  toZone        String   // postal code or zone
+  weightMin     Decimal  @db.Decimal(8, 2)
+  weightMax     Decimal  @db.Decimal(8, 2)
+  baseRate      Decimal  @db.Decimal(10, 2)
+  additionalRate Decimal @db.Decimal(10, 2) // per kg after base
+  currency      String   @default("INR")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("rate_cards")
+}
+
+enum ShipmentStatus {
+  PENDING
+  CONFIRMED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum Priority {
+  LOW
+  STANDARD
+  HIGH
+  URGENT
+}
+
+enum EventType {
+  STATUS_UPDATE
+  LOCATION_UPDATE
+  EXCEPTION
+  DELIVERY_ATTEMPT
+}

@@ -1,0 +1,114 @@
+---
+globs: frontend/**/*.js,frontend/**/*.jsx,frontend/**/*.ts,frontend/**/*.tsx
+---
+
+# Frontend Development Patterns - Next.js 14
+
+## **Framework Standards**
+- **Next.js 14**: App Router (not Pages Router)
+- **TypeScript**: Preferred for type safety
+- **Tailwind CSS**: Utility-first styling
+- **Zustand**: Global state management
+
+## **Project Structure**
+```
+frontend/
+├── src/app/              # App Router pages
+│   ├── (auth)/          # Route groups
+│   ├── dashboard/       # Protected pages
+│   └── globals.css      # Global styles
+├── src/components/      # Reusable components
+│   ├── ui/             # Base UI components
+│   └── forms/          # Form components
+├── src/lib/            # Utilities
+│   ├── api.ts          # API client
+│   └── auth.ts         # Auth utilities
+└── src/store/          # Zustand stores
+```
+
+## **Component Patterns**
+```typescript
+// Standard component pattern
+interface ComponentProps {
+  user: User;
+  onUpdate: (data: UserData) => void;
+}
+
+export default function UserComponent({ user, onUpdate }: ComponentProps) {
+  const [loading, setLoading] = useState(false);
+  
+  return (
+    <div className="w-full p-4 bg-white rounded-lg shadow">
+      {/* Component content */}
+    </div>
+  );
+}
+```
+
+## **API Integration**
+```typescript
+// Use centralized API client from src/lib/api.ts
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Standard API call pattern
+const apiCall = async (endpoint: string, options?: RequestInit) => {
+  const token = localStorage.getItem('accessToken');
+  
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      ...options?.headers
+    }
+  });
+  
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.statusText}`);
+  }
+  
+  return response.json();
+};
+```
+
+## **State Management**
+```typescript
+// Zustand store pattern
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  login: (user: User) => void;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isAuthenticated: false,
+      login: (user) => set({ user, isAuthenticated: true }),
+      logout: () => set({ user: null, isAuthenticated: false })
+    }),
+    { name: 'auth-storage' }
+  )
+);
+```
+
+## **Authentication Integration**
+- Connect to backend auth service at `http://localhost:8001`
+- Store JWT tokens in localStorage
+- Implement token refresh logic
+- Use protected route components
+
+## **Development Focus Areas**
+1. **Week 2 Priority**: Login/Register forms, authentication flow
+2. **Medium Priority**: Dashboard UI, user profile management
+3. **Future**: Shipment management, platform integrations
+
+## **DO NOT TOUCH**
+- ❌ Backend service files in `backend/`
+- ❌ Database schemas or migrations
+- ❌ Shared utility modifications (coordinate with backend team)
