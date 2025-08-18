@@ -1,0 +1,237 @@
+---
+globs: frontend/**/*,*.tsx,*.ts,*.jsx,*.js
+description: Frontend component structure and reusability guidelines
+---
+
+# Frontend Component Structure & Reusability
+
+## **MANDATORY: Component Organization**
+
+**ALWAYS divide frontend components for maximum reusability**
+
+### **Directory Structure**
+
+```
+frontend/src/
+├── components/           # Reusable UI components
+│   ├── ui/              # Basic UI elements (buttons, inputs, cards)
+│   ├── forms/           # Form components
+│   ├── layout/          # Layout components (header, sidebar, footer)
+│   └── features/        # Feature-specific components
+├── app/                 # Next.js 14 App Router pages
+├── hooks/               # Custom React hooks
+├── lib/                 # Utilities and configurations
+├── types/               # TypeScript type definitions
+└── styles/              # Global styles and Tailwind config
+```
+
+## **Component Hierarchy Rules**
+
+### **1. UI Components (Atomic Level)**
+
+Create small, reusable UI building blocks:
+
+```typescript
+// ✅ CORRECT: Atomic UI component
+// components/ui/Button.tsx
+interface ButtonProps {
+  variant?: "primary" | "secondary" | "danger";
+  size?: "sm" | "md" | "lg";
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+export function Button({
+  variant = "primary",
+  size = "md",
+  children,
+  ...props
+}: ButtonProps) {
+  // Implementation with Tailwind classes
+}
+```
+
+### **2. Form Components (Molecular Level)**
+
+Combine UI components for specific form needs:
+
+```typescript
+// ✅ CORRECT: Reusable form component
+// components/forms/LoginForm.tsx
+import { Button } from "../ui/Button";
+import { Input } from "../ui/Input";
+
+export function LoginForm({
+  onSubmit,
+}: {
+  onSubmit: (data: LoginData) => void;
+}) {
+  // Form logic with validation
+}
+```
+
+### **3. Feature Components (Organism Level)**
+
+Complex components that use multiple molecular components:
+
+```typescript
+// ✅ CORRECT: Feature-specific component
+// components/features/ShipmentTracker.tsx
+import { LoginForm } from "../forms/LoginForm";
+import { DataTable } from "../ui/DataTable";
+
+export function ShipmentTracker() {
+  // Complex feature logic
+}
+```
+
+## **CRITICAL: Component Design Principles**
+
+### **Single Responsibility**
+
+Each component should have ONE clear purpose:
+
+```typescript
+// ✅ CORRECT: Single responsibility
+export function UserAvatar({ user, size = "md" }: UserAvatarProps) {
+  // Only handles user avatar display
+}
+
+// ❌ WRONG: Multiple responsibilities
+export function UserAvatarWithMenu({
+  user,
+  onLogout,
+  showNotifications,
+}: BadProps) {
+  // Handles avatar, menu, logout, AND notifications - too much!
+}
+```
+
+### **Prop Interface Design**
+
+Always define clear, typed prop interfaces:
+
+```typescript
+// ✅ CORRECT: Well-defined props
+interface DataTableProps<T> {
+  data: T[];
+  columns: Column<T>[];
+  onRowSelect?: (row: T) => void;
+  loading?: boolean;
+  emptyMessage?: string;
+}
+
+// ❌ WRONG: Generic or unclear props
+interface BadTableProps {
+  stuff: any;
+  config: object;
+}
+```
+
+### **Composition Over Inheritance**
+
+Use component composition for flexibility:
+
+```typescript
+// ✅ CORRECT: Composable design
+export function Card({ children, className }: CardProps) {
+  return <div className={cn('rounded-lg border bg-white', className)}>{children}</div>
+}
+
+export function CardHeader({ children }: { children: React.ReactNode }) {
+  return <div className="p-6 pb-0">{children}</div>
+}
+
+// Usage:
+<Card>
+  <CardHeader>
+    <h3>Title</h3>
+  </CardHeader>
+  <CardContent>Content</CardContent>
+</Card>
+```
+
+## **State Management Rules**
+
+### **Local State First**
+
+Start with local state, escalate only when needed:
+
+```typescript
+// ✅ CORRECT: Local state for simple components
+function Counter() {
+  const [count, setCount] = useState(0);
+  // Simple local state
+}
+
+// ✅ CORRECT: Context for shared state
+function useAuth() {
+  // Shared authentication state
+}
+```
+
+### **Custom Hooks for Logic Reuse**
+
+Extract reusable logic into custom hooks:
+
+```typescript
+// ✅ CORRECT: Reusable hook
+// hooks/useApi.ts
+export function useApi<T>(endpoint: string) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // API logic
+  return { data, loading, error, refetch };
+}
+
+// Usage in components:
+function UserList() {
+  const { data: users, loading, error } = useApi<User[]>("/api/users");
+  // Component rendering logic
+}
+```
+
+## **File Naming Conventions**
+
+- **Components**: PascalCase (e.g., `UserProfile.tsx`)
+- **Hooks**: camelCase with `use` prefix (e.g., `useAuth.ts`)
+- **Utilities**: camelCase (e.g., `formatDate.ts`)
+- **Types**: PascalCase (e.g., `UserTypes.ts`)
+
+## **MANDATORY: Performance Optimization**
+
+### **Memoization**
+
+Use React.memo and useMemo for expensive operations:
+
+```typescript
+// ✅ CORRECT: Memoized component
+export const ExpensiveComponent = React.memo(({ data }: Props) => {
+  const processedData = useMemo(() =>
+    expensiveCalculation(data), [data]
+  )
+
+  return <div>{/* Render */}</div>
+})
+```
+
+### **Code Splitting**
+
+Use dynamic imports for large components:
+
+```typescript
+// ✅ CORRECT: Code splitting
+const HeavyChart = dynamic(() => import('./HeavyChart'), {
+  loading: () => <div>Loading chart...</div>
+})
+```
+
+## **Testing Requirements**
+
+Every reusable component MUST have:
+
+- Unit tests for functionality
+- Storybook stories for UI documentation
+- TypeScript types for props

@@ -5,42 +5,52 @@ alwaysApply: true
 # Logistics Aggregator Portal - Project Architecture
 
 ## **CRITICAL: Database Operations**
+
 **ALWAYS use Prisma ORM - NEVER write raw SQL queries**
 
 This is a fundamental architectural decision. All database operations must use Prisma:
+
 ```javascript
 // ✅ CORRECT: Use Prisma
 const user = await prisma.user.create({
   data: { email, passwordHash, role },
-  select: { id: true, email: true, role: true }
+  select: { id: true, email: true, role: true },
 });
 
 // ❌ FORBIDDEN: Raw SQL queries
-const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
 ```
 
 ## **Project Structure**
+
 - **Backend Services**: [backend/](mdc:backend/) - Microservices architecture
   - [auth-service/](mdc:backend/auth-service/) - JWT authentication with Prisma
-  - [user-service/](mdc:backend/user-service/) - User management (in development)
+  - [user-service/](mdc:backend/user-service/) - User management
+  - [shipment-service/](mdc:backend/shipment-service/) - Shipment tracking
+  - [support-service/](mdc:backend/support-service/) - Customer support
+  - [platform-service/](mdc:backend/platform-service/) - E-commerce integrations
+  - [api-gateway/](mdc:backend/api-gateway/) - Request routing & middleware
   - Each service has its own Prisma schema and database
 - **Frontend**: [frontend/](mdc:frontend/) - Next.js 14 with TypeScript
 - **Shared Utilities**: [shared/](mdc:shared/) - Cross-service utilities
 - **Documentation**: [memory-bank/](mdc:memory-bank/) - Project intelligence
 
 ## **Package Manager**
+
 - **PNPM Monorepo**: All commands use `pnpm` (never npm)
 - **Workspaces**: Frontend, backend services, shared utilities
 - **Root Scripts**: Use workspace-aware commands (e.g., `pnpm --filter frontend`)
 
 ## **Development Environment**
+
 - **Docker**: Use `pnpm run dev` for full stack
-- **Focused Development**: 
+- **Focused Development**:
   - `pnpm run dev:frontend` - UI development only
   - `pnpm run dev:backend` - API development only
 - **Database**: Prisma Studio via `pnpm run prisma:studio`
 
 ## **Code Quality**
+
 - **Pre-commit Hooks**: Husky with smart linting (lint-staged)
 - **Commit Messages**: Conventional commits format enforced
 - **TypeScript**: Encouraged for type safety

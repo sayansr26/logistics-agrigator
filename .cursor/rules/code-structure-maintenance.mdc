@@ -1,0 +1,364 @@
+---
+alwaysApply: true
+---
+
+# Code Structure & Maintenance Standards
+
+## **CRITICAL: Directory Structure Enforcement**
+
+### **Root Level Organization**
+
+```
+logistics/
+├── .cursor/rules/         # AI assistance rules (this file)
+├── .husky/               # Git hooks for code quality
+├── backend/              # All microservices
+│   ├── api-gateway/      # Request routing & middleware
+│   ├── auth-service/     # Authentication & authorization
+│   ├── user-service/     # User management
+│   ├── shipment-service/ # Shipment tracking
+│   ├── support-service/  # Customer support
+│   └── platform-service/ # Platform integrations
+├── frontend/             # Next.js application
+├── shared/               # Cross-service utilities
+├── docs/                 # Technical documentation
+├── memory-bank/          # Project context & intelligence
+└── scripts/              # Build & deployment scripts
+```
+
+### **Backend Service Structure**
+
+Every backend service MUST follow this structure:
+
+```
+service-name/
+├── prisma/
+│   ├── schema.prisma     # Database schema
+│   └── migrations/       # Database migrations
+├── src/                  # Source code (if using TypeScript)
+│   ├── controllers/      # Route handlers
+│   ├── middleware/       # Custom middleware
+│   ├── models/          # Data models & business logic
+│   ├── routes/          # Route definitions
+│   ├── services/        # Business services
+│   └── utils/           # Service-specific utilities
+├── tests/               # Test files
+├── .env.example         # Environment variables template
+├── Dockerfile           # Container configuration
+├── package.json         # Dependencies & scripts
+└── server.js           # Entry point
+```
+
+## **File Naming & Organization Rules**
+
+### **MANDATORY: Consistent Naming**
+
+- **Controllers**: `[entity]Controller.js` (e.g., `userController.js`)
+- **Routes**: `[entity].js` (e.g., `users.js`, `auth.js`)
+- **Middleware**: `[function]Middleware.js` (e.g., `authMiddleware.js`)
+- **Services**: `[entity]Service.js` (e.g., `userService.js`)
+- **Models**: `[Entity].js` (PascalCase, e.g., `User.js`)
+- **Utilities**: `[function].js` (camelCase, e.g., `dateUtils.js`)
+
+### **Frontend File Organization**
+
+```
+frontend/src/
+├── app/                 # Next.js 14 App Router
+│   ├── (auth)/         # Route groups
+│   ├── dashboard/      # Dashboard pages
+│   └── api/           # API routes
+├── components/
+│   ├── ui/            # Atomic components (Button, Input)
+│   ├── forms/         # Form components
+│   ├── layout/        # Layout components
+│   └── features/      # Feature-specific components
+├── hooks/             # Custom React hooks
+├── lib/               # Utilities & configurations
+├── types/             # TypeScript type definitions
+└── styles/            # Styling files
+```
+
+## **CRITICAL: Code Quality Standards**
+
+### **Import Organization**
+
+Always organize imports in this order:
+
+```javascript
+// ✅ CORRECT: Import order
+// 1. Node.js built-ins
+import path from "path";
+import fs from "fs";
+
+// 2. External libraries
+import express from "express";
+import { PrismaClient } from "@prisma/client";
+
+// 3. Internal modules (absolute imports first)
+import { authMiddleware } from "../middleware/authMiddleware.js";
+import { validateUser } from "../validation/userValidation.js";
+
+// 4. Relative imports (closest first)
+import "./styles.css";
+```
+
+### **Function & Component Organization**
+
+```javascript
+// ✅ CORRECT: Function organization
+// 1. Main exported function/component
+export function UserController() {
+  // Main logic
+}
+
+// 2. Helper functions (not exported)
+function validateUserInput(data) {
+  // Helper logic
+}
+
+// 3. Constants & configurations
+const USER_ROLES = ["Admin", "Client", "Operations"];
+```
+
+## **Documentation Requirements**
+
+### **MANDATORY: JSDoc Comments**
+
+All functions must have JSDoc comments:
+
+```javascript
+/**
+ * Creates a new user account with the provided information
+ * @param {Object} userData - The user data object
+ * @param {string} userData.email - User's email address
+ * @param {string} userData.password - User's password (will be hashed)
+ * @param {string} [userData.role='Client'] - User's role in the system
+ * @returns {Promise<Object>} The created user object (without password)
+ * @throws {ValidationError} When user data is invalid
+ * @throws {ConflictError} When email already exists
+ */
+async function createUser(userData) {
+  // Implementation
+}
+```
+
+### **README Requirements**
+
+Each service MUST have a README with:
+
+````markdown
+# Service Name
+
+## Purpose
+
+Brief description of what this service does.
+
+## API Endpoints
+
+- GET /endpoint - Description
+- POST /endpoint - Description
+
+## Environment Variables
+
+- `DATABASE_URL` - PostgreSQL connection string
+- `JWT_SECRET` - Secret for JWT token signing
+
+## Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run migrations
+pnpm run migrate
+
+# Start development server
+pnpm run dev
+```
+````
+
+## Testing
+
+```bash
+# Run tests
+pnpm run test
+```
+
+````
+
+## **Performance & Optimization Standards**
+
+### **Database Query Optimization**
+Always use Prisma's query optimization features:
+```javascript
+// ✅ CORRECT: Optimized queries with select
+const user = await prisma.user.findUnique({
+  where: { id },
+  select: {
+    id: true,
+    email: true,
+    profile: {
+      select: {
+        firstName: true,
+        lastName: true
+      }
+    }
+  }
+})
+
+// ✅ CORRECT: Efficient pagination
+const users = await prisma.user.findMany({
+  skip: (page - 1) * limit,
+  take: limit,
+  orderBy: { createdAt: 'desc' }
+})
+
+// ❌ WRONG: Over-fetching data
+const user = await prisma.user.findUnique({
+  where: { id },
+  include: { // Fetches ALL related data
+    profile: true,
+    sessions: true,
+    auditLogs: true
+  }
+})
+````
+
+### **API Response Optimization**
+
+Structure responses for optimal performance:
+
+```javascript
+// ✅ CORRECT: Structured response with metadata
+{
+  "success": true,
+  "data": {
+    "users": [...],
+    "total": 1250,
+    "page": 1,
+    "limit": 20,
+    "hasMore": true
+  },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "service": "user-service",
+    "version": "1.0.0"
+  }
+}
+```
+
+## **Error Handling & Logging Standards**
+
+### **MANDATORY: Consistent Error Classes**
+
+Create custom error classes for each service:
+
+```javascript
+// ✅ CORRECT: Custom error classes
+class ValidationError extends Error {
+  constructor(message, field = null) {
+    super(message);
+    this.name = "ValidationError";
+    this.statusCode = 400;
+    this.code = "VALIDATION_ERROR";
+    this.field = field;
+  }
+}
+
+class NotFoundError extends Error {
+  constructor(resource, id) {
+    super(`${resource} with ID ${id} not found`);
+    this.name = "NotFoundError";
+    this.statusCode = 404;
+    this.code = "RESOURCE_NOT_FOUND";
+    this.resource = resource;
+    this.resourceId = id;
+  }
+}
+```
+
+### **Audit Logging Requirements**
+
+All CRUD operations MUST be logged:
+
+```javascript
+// ✅ CORRECT: Audit logging
+async function createUser(userData, requestContext) {
+  const user = await prisma.user.create({ data: userData });
+
+  // Audit log entry
+  await auditLogger.log({
+    action: "USER_CREATED",
+    resourceType: "User",
+    resourceId: user.id,
+    userId: requestContext.user?.id,
+    ipAddress: requestContext.ipAddress,
+    userAgent: requestContext.userAgent,
+    metadata: {
+      userEmail: user.email,
+      userRole: user.role,
+    },
+  });
+
+  return user;
+}
+```
+
+## **Security Standards**
+
+### **Input Sanitization**
+
+Always sanitize user inputs:
+
+```javascript
+// ✅ CORRECT: Input sanitization
+import validator from "validator";
+import { escape } from "html-escaper";
+
+function sanitizeUserInput(input) {
+  return {
+    email: validator.normalizeEmail(input.email),
+    name: escape(input.name.trim()),
+    phone: input.phone.replace(/\D/g, ""), // Remove non-digits
+  };
+}
+```
+
+### **Password Security**
+
+Use bcrypt for password hashing:
+
+```javascript
+// ✅ CORRECT: Password hashing
+import bcrypt from "bcrypt";
+
+async function hashPassword(plainPassword) {
+  const saltRounds = 12;
+  return await bcrypt.hash(plainPassword, saltRounds);
+}
+
+async function verifyPassword(plainPassword, hashedPassword) {
+  return await bcrypt.compare(plainPassword, hashedPassword);
+}
+```
+
+## **Testing Requirements**
+
+### **Test File Organization**
+
+```
+service-name/tests/
+├── unit/              # Unit tests
+├── integration/       # Integration tests
+├── fixtures/          # Test data
+└── helpers/          # Test utilities
+```
+
+### **MANDATORY: Test Coverage**
+
+- Unit tests for all controllers
+- Integration tests for all API endpoints
+- Mock external service calls
+- Test error scenarios
+- Minimum 80% code coverage

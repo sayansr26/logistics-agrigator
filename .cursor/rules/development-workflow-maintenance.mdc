@@ -1,0 +1,289 @@
+---
+alwaysApply: true
+---
+
+# Development Workflow & Structure Maintenance
+
+## **CRITICAL: Always Use Established Commands**
+
+### **Development Commands (from [package.json](mdc:package.json))**
+
+**NEVER bypass established workflows - always use these commands:**
+
+```bash
+# ✅ CORRECT: Full-stack development
+pnpm run dev              # All services + frontend
+pnpm run setup:dev        # Complete setup (env + install + dev)
+
+# ✅ CORRECT: Focused development
+pnpm run dev:frontend     # Frontend only (UI developers)
+pnpm run dev:backend      # Backend only (API developers)
+pnpm run dev:frontend:detached  # Background frontend
+pnpm run dev:backend:detached   # Background backend
+
+# ✅ CORRECT: Individual service development
+pnpm run dev:user         # User service only
+pnpm run dev:shipment     # Shipment service only
+pnpm run dev:support      # Support service only
+pnpm run dev:platform     # Platform service only
+```
+
+### **MANDATORY: Docker Compose Profiles**
+
+Always respect the Docker Compose profile system:
+
+- **Core Services**: postgres, redis, api-gateway, auth-service, frontend
+- **All Backend Services**: Include support, shipment, platform services
+- **Individual Services**: Can be run independently for focused development
+
+## **Project Structure Maintenance Rules**
+
+### **NEVER Modify Core Structure**
+
+These directories and their purposes are FIXED:
+
+```
+logistics/
+├── backend/              # ← FIXED: All microservices here
+├── frontend/             # ← FIXED: Next.js application
+├── shared/               # ← FIXED: Cross-service utilities only
+├── docs/                 # ← FIXED: Technical documentation
+├── memory-bank/          # ← FIXED: Project context & rules
+├── .cursor/rules/        # ← FIXED: AI assistance rules
+└── scripts/              # ← FIXED: Build & deployment scripts
+```
+
+### **Backend Service Standards**
+
+When creating new services, MUST follow this pattern:
+
+```bash
+# ✅ CORRECT: New service structure
+backend/new-service/
+├── prisma/
+│   └── schema.prisma     # Service-specific database schema
+├── src/ or ./            # Source code location
+├── Dockerfile            # Container configuration
+├── package.json          # Service dependencies
+└── server.js            # Entry point
+```
+
+### **Frontend Component Standards**
+
+Maintain the established component hierarchy:
+
+```
+frontend/src/components/
+├── ui/                   # ← Atomic: Button, Input, Card, etc.
+├── forms/                # ← Molecular: LoginForm, ContactForm, etc.
+├── features/             # ← Organism: ShipmentTracker, UserDashboard, etc.
+└── layout/               # ← Template: Header, Sidebar, Footer, etc.
+```
+
+## **Development Environment Maintenance**
+
+### **Docker Configuration Standards**
+
+Always maintain these Docker patterns:
+
+```yaml
+# ✅ CORRECT: Service definition pattern
+service-name:
+  build:
+    context: ./backend/service-name
+    dockerfile: Dockerfile
+  container_name: logistics-service-name-dev
+  environment:
+    - NODE_ENV=development
+    - PORT=8XXX
+    - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_service_db
+  ports:
+    - "8XXX:8XXX"
+  # volumes: commented out for stability
+  # - ./backend/service-name:/app
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - logistics-network
+  command: pnpm run start
+  profiles:
+    - all-services
+    - service-name
+```
+
+### **Database Naming Convention**
+
+Each service MUST have its own database:
+
+```
+logistics_auth        # auth-service database
+logistics_users       # user-service database
+logistics_shipments   # shipment-service database
+logistics_support     # support-service database
+logistics_platforms   # platform-service database
+logistics_main        # shared/reference data (if needed)
+```
+
+## **Code Quality Maintenance**
+
+### **MANDATORY: Pre-commit Hooks**
+
+Never bypass the established quality gates:
+
+```bash
+# ✅ AUTOMATIC: These run on every commit
+# - ESLint fixes for all staged files
+# - Prettier formatting
+# - TypeScript type checking
+# - Conventional commit message validation
+
+# ✅ CORRECT: If hooks fail, fix issues first
+git commit -m "feat(auth): add 2FA support"  # Conventional format
+```
+
+### **Workspace Command Patterns**
+
+Always use workspace-aware commands:
+
+```bash
+# ✅ CORRECT: Workspace filtering
+pnpm --filter frontend install react-query
+pnpm --filter auth-service add bcrypt
+pnpm --filter shared add lodash
+
+# ✅ CORRECT: Run commands across workspaces
+pnpm -r run build         # Build all workspaces
+pnpm -r run test          # Test all workspaces
+pnpm -r run lint          # Lint all workspaces
+
+# ❌ WRONG: Direct service commands
+cd backend/auth-service && npm install bcrypt  # Breaks monorepo
+```
+
+## **API & Service Communication Standards**
+
+### **NEVER Break Service Boundaries**
+
+Services communicate ONLY through defined APIs:
+
+```javascript
+// ✅ CORRECT: HTTP API calls between services
+const userResponse = await fetch(`${USER_SERVICE_URL}/api/users/${userId}`, {
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "X-Service": "shipment-service",
+  },
+});
+
+// ❌ FORBIDDEN: Direct database access across services
+const user = await userServicePrisma.user.findUnique({ where: { id: userId } });
+```
+
+### **API Gateway Pattern Enforcement**
+
+All external API calls MUST go through API Gateway:
+
+```javascript
+// ✅ CORRECT: External requests via API Gateway
+// Frontend calls API Gateway
+fetch("http://localhost:8000/api/v1/users/profile");
+
+// ✅ CORRECT: API Gateway routes to service
+// api-gateway proxies to user-service:8002
+```
+
+## **Environment & Configuration Management**
+
+### **Environment Variable Standards**
+
+Each service MUST have consistent environment variables:
+
+```bash
+# ✅ REQUIRED: Every service has these
+NODE_ENV=development
+PORT=8XXX
+DATABASE_URL=postgresql://...
+JWT_SECRET=...
+
+# ✅ SERVICE-SPECIFIC: Additional as needed
+REDIS_URL=redis://redis:6379          # If using Redis
+AUTH_SERVICE_URL=http://auth-service:8001  # If calling auth service
+```
+
+### **Configuration File Standards**
+
+Maintain consistent configuration across services:
+
+```javascript
+// ✅ CORRECT: Standard config structure
+const config = {
+  port: process.env.PORT || 8001,
+  nodeEnv: process.env.NODE_ENV || "development",
+  database: {
+    url: process.env.DATABASE_URL,
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN || "1h",
+  },
+  services: {
+    authService: process.env.AUTH_SERVICE_URL,
+    userService: process.env.USER_SERVICE_URL,
+  },
+};
+```
+
+## **Documentation Maintenance**
+
+### **MANDATORY: Keep Documentation Updated**
+
+When making changes, always update:
+
+1. **Service README**: API endpoints, environment variables, setup instructions
+2. **Memory Bank**: Project context and patterns ([memory-bank/](mdc:memory-bank/))
+3. **API Documentation**: Request/response formats
+4. **Docker Documentation**: Service configurations and profiles
+
+### **Memory Bank Synchronization**
+
+The [memory-bank/](mdc:memory-bank/) must reflect current state:
+
+- [activeContext.md](mdc:memory-bank/activeContext.md) - Current work and decisions
+- [progress.md](mdc:memory-bank/progress.md) - What's working, what's left
+- [systemPatterns.md](mdc:memory-bank/systemPatterns.md) - Architecture decisions
+
+## **CRITICAL: Never Break Working Patterns**
+
+### **Established Dockerfile Patterns**
+
+Don't modify the working Dockerfile pattern:
+
+```dockerfile
+# ✅ CORRECT: Working pattern established
+FROM node:18-alpine
+WORKDIR /app
+
+# Install OpenSSL and pnpm (for Prisma services)
+RUN apk add --no-cache openssl
+RUN npm install -g pnpm@8.15.1
+
+# Copy all source code first
+COPY . .
+
+# Install dependencies and generate Prisma client
+RUN pnpm install
+RUN npx prisma generate  # Only for Prisma services
+```
+
+### **Volume Mount Strategy**
+
+The current volume mount strategy is working - don't change:
+
+```yaml
+# ✅ CURRENT WORKING PATTERN: No volume mounts for dependencies
+# volumes: commented out to prevent node_modules conflicts
+# - ./backend/service-name:/app
+```
+
+This ensures dependencies installed during Docker build aren't overwritten by host volume mounts.
