@@ -46,13 +46,6 @@ const navigationItems: NavItem[] = [
     href: "/shipments",
     icon: Package,
     badge: "89",
-    children: [
-      { title: "All Shipments", href: "/shipments", icon: Package },
-      { title: "Create Shipment", href: "/shipments/create", icon: Package },
-      { title: "Bulk Upload", href: "/shipments/bulk", icon: Package },
-      { title: "Track & Trace", href: "/shipments/track", icon: Package },
-      { title: "NDR Management", href: "/shipments/ndr", icon: Package },
-    ],
   },
   {
     title: "Orders",
