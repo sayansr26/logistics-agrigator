@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Breadcrumb,
-  BreadcrumbItem,
+  BreadcrumbItem as UIBreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
@@ -14,10 +14,10 @@ import { Home, ChevronRight } from "lucide-react";
 
 interface BreadcrumbNavProps {
   className?: string;
-  customBreadcrumbs?: BreadcrumbItem[];
+  customBreadcrumbs?: Crumb[];
 }
 
-interface BreadcrumbItem {
+interface Crumb {
   title: string;
   href?: string;
 }
@@ -55,9 +55,9 @@ const routeMap: Record<string, string> = {
   amazon: "Amazon",
 };
 
-function generateBreadcrumbs(pathname: string): BreadcrumbItem[] {
+function generateBreadcrumbs(pathname: string): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
-  const breadcrumbs: BreadcrumbItem[] = [];
+  const breadcrumbs: Crumb[] = [];
 
   // Always start with home
   breadcrumbs.push({ title: "Home", href: "/" });
@@ -102,7 +102,7 @@ export function BreadcrumbNav({
 
           return (
             <div key={index} className="flex items-center">
-              <BreadcrumbItem>
+              <UIBreadcrumbItem>
                 {item.href && !isLast ? (
                   <BreadcrumbLink asChild>
                     <Link href={item.href} className="flex items-center">
@@ -116,7 +116,7 @@ export function BreadcrumbNav({
                     {item.title}
                   </BreadcrumbPage>
                 )}
-              </BreadcrumbItem>
+              </UIBreadcrumbItem>
               {!isLast && (
                 <BreadcrumbSeparator>
                   <ChevronRight className="h-4 w-4" />

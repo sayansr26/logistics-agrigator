@@ -1,5 +1,16 @@
 // Mock data for logistics application
 
+export interface BulkUpload {
+  id: string;
+  uploadId: string;
+  dateTime: string;
+  status: "completed" | "failed" | "in_progress";
+  totalRecords: number;
+  successCount: number;
+  failedCount: number;
+  fileName: string;
+}
+
 export interface Shipment {
   id: string;
   trackingNumber: string;
@@ -53,6 +64,21 @@ export interface Order {
   createdAt: string;
   estimatedShipping: string;
   paymentStatus: "pending" | "paid" | "failed" | "refunded";
+}
+
+// NDR (Non-Delivery Report) interface
+export interface NDR {
+  id: string;
+  trackingNumber: string;
+  receiverName: string;
+  // receiverContact: string;
+  attemptNumber: number;
+  attemptDate: string;
+  attemptTime: string;
+  status: "pending" | "resolved" | "cancelled";
+  reason: string;
+  comments: string;
+  createdAt: string;
 }
 
 // Generate mock shipments
@@ -691,6 +717,175 @@ export const mockTransactions: Transaction[] = [
 ];
 
 // Mock invoices
+// Mock bulk uploads
+export const mockBulkUploads: BulkUpload[] = [
+  {
+    id: "1",
+    uploadId: "BULK2024001",
+    dateTime: "2024-01-15 10:30 AM",
+    status: "completed",
+    totalRecords: 50,
+    successCount: 48,
+    failedCount: 2,
+    fileName: "jan_shipments.xlsx",
+  },
+  {
+    id: "2",
+    uploadId: "BULK2024002",
+    dateTime: "2024-01-14 15:45 PM",
+    status: "failed",
+    totalRecords: 30,
+    successCount: 0,
+    failedCount: 30,
+    fileName: "urgent_orders.xlsx",
+  },
+  {
+    id: "3",
+    uploadId: "BULK2024003",
+    dateTime: "2024-01-14 09:15 AM",
+    status: "in_progress",
+    totalRecords: 100,
+    successCount: 45,
+    failedCount: 10,
+    fileName: "weekly_shipments.xlsx",
+  },
+  {
+    id: "4",
+    uploadId: "BULK2024004",
+    dateTime: "2024-01-13 14:20 PM",
+    status: "completed",
+    totalRecords: 75,
+    successCount: 73,
+    failedCount: 2,
+    fileName: "partner_shipments.xlsx",
+  },
+  {
+    id: "5",
+    uploadId: "BULK2024005",
+    dateTime: "2024-01-13 11:10 AM",
+    status: "completed",
+    totalRecords: 25,
+    successCount: 25,
+    failedCount: 0,
+    fileName: "express_delivery.xlsx",
+  },
+];
+
+// Mock NDRs (Non-Delivery Reports)
+export const mockNDRs: NDR[] = [
+  {
+    id: "1",
+    trackingNumber: "LOG2024001",
+    receiverName: "John Smith",
+    // receiverContact: "+1-555-0123",
+    attemptNumber: 1,
+    attemptDate: "2024-08-18",
+    attemptTime: "10:30 AM",
+    status: "pending",
+    reason: "Receiver not available",
+    comments: "No one answered the door during delivery attempt",
+    createdAt: "2024-08-18T10:30:00Z",
+  },
+  {
+    id: "2",
+    trackingNumber: "LOG2024002",
+    receiverName: "Sarah Johnson",
+    // receiverContact: "+1-555-0124",
+    attemptNumber: 2,
+    attemptDate: "2024-08-17",
+    attemptTime: "02:20 PM",
+    status: "resolved",
+    reason: "Incorrect address",
+    comments: "Package delivered to correct address after verification",
+    // courierPartner: "FedEx",
+    createdAt: "2024-08-17T14:20:00Z",
+  },
+  {
+    id: "3",
+    trackingNumber: "LOG2024003",
+    receiverName: "Mike Chen",
+    // receiverContact: "+1-555-0125",
+    attemptNumber: 1,
+    attemptDate: "2024-08-16",
+    attemptTime: "09:15 AM",
+    status: "pending",
+    reason: "Business closed",
+    comments: "Delivery attempted during business hours but office was closed",
+    // courierPartner: "UPS",
+    createdAt: "2024-08-16T09:15:00Z",
+  },
+  {
+    id: "4",
+    trackingNumber: "LOG2024004",
+    receiverName: "Emma Wilson",
+    // receiverContact: "+1-555-0126",
+    attemptNumber: 3,
+    attemptDate: "2024-08-15",
+    attemptTime: "04:45 PM",
+    status: "cancelled",
+    reason: "Receiver requested cancellation",
+    comments: "Customer called to cancel delivery and return to sender",
+    // courierPartner: "Aramex",
+    createdAt: "2024-08-15T16:45:00Z",
+  },
+  {
+    id: "5",
+    trackingNumber: "LOG2024005",
+    receiverName: "David Brown",
+    // receiverContact: "+1-555-0127",
+    attemptNumber: 1,
+    attemptDate: "2024-08-14",
+    attemptTime: "11:30 AM",
+    status: "pending",
+    reason: "Access restricted",
+    comments: "Security guard refused entry to building",
+    // courierPartner: "DHL Express",
+    createdAt: "2024-08-14T11:30:00Z",
+  },
+  {
+    id: "6",
+    trackingNumber: "LOG2024006",
+    receiverName: "Lisa Garcia",
+    // receiverContact: "+1-555-0128",
+    attemptNumber: 2,
+    attemptDate: "2024-08-13",
+    attemptTime: "03:20 PM",
+    status: "resolved",
+    reason: "Payment issue",
+    comments: "COD payment resolved, package delivered successfully",
+    // courierPartner: "FedEx",
+    createdAt: "2024-08-13T15:20:00Z",
+  },
+  {
+    id: "7",
+    trackingNumber: "LOG2024007",
+    receiverName: "Tom Anderson",
+    // receiverContact: "+1-555-0129",
+    attemptNumber: 1,
+    attemptDate: "2024-08-12",
+    attemptTime: "08:15 AM",
+    status: "pending",
+    reason: "Weather conditions",
+    comments: "Heavy rain prevented delivery, will retry next day",
+    // courierPartner: "UPS",
+    createdAt: "2024-08-12T08:15:00Z",
+  },
+  {
+    id: "8",
+    trackingNumber: "LOG2024008",
+    receiverName: "Anna Martinez",
+    // receiverContact: "+1-555-0130",
+    attemptNumber: 1,
+    attemptDate: "2024-08-11",
+    attemptTime: "07:45 AM",
+    status: "pending",
+    reason: "Vehicle breakdown",
+    comments: "Delivery vehicle had mechanical issues, rescheduled",
+    // courierPartner: "Aramex",
+    createdAt: "2024-08-11T07:45:00Z",
+  },
+];
+
 export const mockInvoices: Invoice[] = [
   {
     id: "1",
@@ -744,6 +939,33 @@ export function getInvoiceStatusColor(status: Invoice["status"]): string {
     case "pending":
       return "bg-yellow-100 text-yellow-800";
     case "overdue":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getBulkUploadStatusColor(status: BulkUpload["status"]): string {
+  switch (status) {
+    case "completed":
+      return "bg-green-100 text-green-800";
+    case "failed":
+      return "bg-red-100 text-red-800";
+    case "in_progress":
+      return "bg-orange-100 text-orange-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+// NDR utility functions
+export function getNDRStatusColor(status: NDR["status"]): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "resolved":
+      return "bg-green-100 text-green-800";
+    case "cancelled":
       return "bg-red-100 text-red-800";
     default:
       return "bg-gray-100 text-gray-800";
