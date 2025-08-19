@@ -30,17 +30,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  mockShipments,
-  getStatusColor,
+  mockOrders,
+  getOrderStatusColor,
+  getPlatformColor,
   getPriorityColor,
-  getPaymentModeColor,
-  getFirstWord,
+  getPaymentStatusColor,
   formatCurrency,
   formatDate,
-  type Shipment,
+  type Order,
 } from "@/lib/mock-data";
 import {
-  Package,
+  FileText,
   Search,
   Filter,
   MoreHorizontal,
@@ -51,39 +51,34 @@ import {
   ChevronRight,
   Plus,
   Upload,
-  Truck,
   Download,
   RefreshCw,
-  AlertTriangle,
+  ShoppingCart,
+  CreditCard,
+  Package,
+  Clock,
 } from "lucide-react";
-import Link from "next/link";
 
-export default function ShipmentsPage() {
+export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
-    { title: "Shipments" },
+    { title: "Orders" },
   ];
 
   // Filter data based on search term
-  const filteredShipments = mockShipments.filter(
-    (shipment) =>
-      shipment.trackingNumber
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      shipment.referenceNumber
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      shipment.senderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.receiverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.destination.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredOrders = mockOrders.filter(
+    (order) =>
+      order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.platform.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Pagination logic
-  const currentData = filteredShipments;
+  const currentData = filteredOrders;
   const totalPages = Math.ceil(currentData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -100,45 +95,40 @@ export default function ShipmentsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center space-x-2">
-              <Package className="h-8 w-8 text-logistics-600" />
-              <span>All Shipments</span>
+              <ShoppingCart className="h-8 w-8 text-logistics-600" />
+              <span>All Orders</span>
             </h1>
             <p className="text-muted-foreground mt-2">
-              Track and manage all your shipments in one place
+              Manage and track all your orders from various platforms
             </p>
           </div>
           <div className="flex items-center space-x-1.5">
             <Button variant="outline" size="sm">
-              <Truck className="h-3.5 w-3.5 mr-1.5" />
-              Track
-            </Button>
-            <Button variant="outline" size="sm">
-              <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-              NDR
-            </Button>
-            <Button variant="outline" size="sm">
               <Upload className="h-3.5 w-3.5 mr-1.5" />
-              Bulk
+              Import
             </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
-              <Link href="/shipments/create">
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Create Shipment
-              </Link>
+            <Button variant="outline" size="sm">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export
+            </Button>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Create Order
             </Button>
           </div>
         </div>
+
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <Package className="h-8 w-8 text-blue-600" />
+                <ShoppingCart className="h-8 w-8 text-blue-600" />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Total Shipments
+                    Total Orders
                   </p>
-                  <p className="text-2xl font-bold">{mockShipments.length}</p>
+                  <p className="text-2xl font-bold">{mockOrders.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -154,10 +144,7 @@ export default function ShipmentsPage() {
                     Delivered
                   </p>
                   <p className="text-2xl font-bold">
-                    {
-                      mockShipments.filter((s) => s.status === "delivered")
-                        .length
-                    }
+                    {mockOrders.filter((o) => o.status === "delivered").length}
                   </p>
                 </div>
               </div>
@@ -171,13 +158,10 @@ export default function ShipmentsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    In Transit
+                    Processing
                   </p>
                   <p className="text-2xl font-bold">
-                    {
-                      mockShipments.filter((s) => s.status === "in_transit")
-                        .length
-                    }
+                    {mockOrders.filter((o) => o.status === "processing").length}
                   </p>
                 </div>
               </div>
@@ -186,15 +170,13 @@ export default function ShipmentsPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-orange-100 rounded-full flex items-center justify-center">
-                  <div className="h-4 w-4 bg-orange-600 rounded-full"></div>
-                </div>
+                <Clock className="h-8 w-8 text-green-600" />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Pending
                   </p>
                   <p className="text-2xl font-bold">
-                    {mockShipments.filter((s) => s.status === "pending").length}
+                    {mockOrders.filter((o) => o.status === "pending").length}
                   </p>
                 </div>
               </div>
@@ -208,18 +190,18 @@ export default function ShipmentsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center space-x-2">
-                  <Package className="h-5 w-5" />
-                  <span>Shipments Management</span>
+                  <FileText className="h-5 w-5" />
+                  <span>Orders Management</span>
                 </CardTitle>
                 <CardDescription>
-                  Track and manage all shipments in your logistics network
+                  Track and manage orders from all connected platforms
                 </CardDescription>
               </div>
               <div className="flex items-center space-x-1.5">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search shipments..."
+                    placeholder="Search orders..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 w-56"
@@ -243,82 +225,68 @@ export default function ShipmentsPage() {
             <Table>
               <TableCaption>
                 {searchTerm
-                  ? `Filtered shipments for "${searchTerm}"`
-                  : "A list of recent shipments"}
+                  ? `Filtered orders for "${searchTerm}"`
+                  : "A list of recent orders"}
               </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tracking </TableHead>
-                  <TableHead>Pick up and Delivery </TableHead>
-                  <TableHead>Status & Partner</TableHead>
-                  <TableHead>Manifest Date/Time</TableHead>
-                  <TableHead>Payment Mode</TableHead>
+                  <TableHead>Order #</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Channel</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedData.map((shipment) => (
-                  <TableRow key={shipment.id}>
+                {paginatedData.map((order) => (
+                  <TableRow key={order.id}>
                     <TableCell className="font-medium">
-                      <div className="text-sm">
-                        <div>{shipment.trackingNumber}</div>
-                        <div className="text-muted-foreground text-xs">
-                          Ref: {shipment.referenceNumber}
-                        </div>
-                      </div>
+                      {order.orderNumber}
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {/* <div className="flex items-center space-x-2">
-                          <span className="font-medium">{getFirstWord(shipment.senderName)}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="font-medium">{getFirstWord(shipment.receiverName)}</span>
-                        </div> */}
-                        <div className="mt-1">
-                          <div className="text-xs text-muted-foreground">
-                            {shipment.origin}, {shipment.originState} (
-                            {shipment.originPinCode})
-                            <span className="font-medium">
-                              {getFirstWord(shipment.senderName)}
-                            </span>
-                          </div>
-                          <div className="border-t border-gray-300 my-1"></div>
-                          <div className="text-xs text-muted-foreground">
-                            {shipment.destination}, {shipment.destinationState}{" "}
-                            ({shipment.destinationPinCode})
-                            <span className="font-medium">
-                              {getFirstWord(shipment.receiverName)}
-                            </span>
-                          </div>
-                        </div>
+                        <div className="font-medium">{order.customerName}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm space-y-1">
-                        <Badge className={getStatusColor(shipment.status)}>
-                          {shipment.status.replace("_", " ")}
-                        </Badge>
-                        <div className="text-xs text-muted-foreground">
-                          {shipment.courierPartner}
-                        </div>
-                      </div>
+                      <Badge className={getPlatformColor(order.platform)}>
+                        {order.platform.charAt(0).toUpperCase() +
+                          order.platform.slice(1)}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      <div>
-                        <div className="font-medium">
-                          {shipment.manifestDate}
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {shipment.manifestTime}
-                        </div>
-                      </div>
+                    <TableCell>
+                      <Badge className={getOrderStatusColor(order.status)}>
+                        {order.status.replace("_", " ")}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge
-                        className={getPaymentModeColor(shipment.paymentMode)}
+                        variant="outline"
+                        className={getPriorityColor(order.priority)}
                       >
-                        {shipment.paymentMode.toUpperCase()}
+                        {order.priority}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-1">
+                        <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{order.itemCount}</span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        className={getPaymentStatusColor(order.paymentStatus)}
+                      >
+                        {order.paymentStatus}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDate(order.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -335,20 +303,16 @@ export default function ShipmentsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Edit className="mr-2 h-4 w-4" />
-                            Edit Shipment
+                            Edit Order
                           </DropdownMenuItem>
                           <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Print Label
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Generate Challan
+                            <Package className="mr-2 h-4 w-4" />
+                            Create Shipment
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Cancel Shipment
+                            Cancel Order
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

@@ -51,24 +51,12 @@ const navigationItems: NavItem[] = [
     title: "Orders",
     href: "/orders",
     icon: FileText,
-    children: [
-      { title: "All Orders", href: "/orders", icon: FileText },
-      { title: "Platform Orders", href: "/orders/platform", icon: FileText },
-      { title: "Manual Orders", href: "/orders/manual", icon: FileText },
-      { title: "Order History", href: "/orders/history", icon: FileText },
-    ],
+    badge: "24",
   },
   {
     title: "Wallet & Billing",
     href: "/wallet",
     icon: CreditCard,
-    children: [
-      { title: "Wallet Balance", href: "/wallet", icon: CreditCard },
-      { title: "Transactions", href: "/wallet/transactions", icon: CreditCard },
-      { title: "Invoices", href: "/wallet/invoices", icon: FileText },
-      { title: "Settlements", href: "/wallet/settlements", icon: CreditCard },
-      { title: "GST Reports", href: "/wallet/gst", icon: FileText },
-    ],
   },
   {
     title: "Disputes & Support",

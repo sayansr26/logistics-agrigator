@@ -25,14 +25,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Forms Demo (`/demo/forms`): Complete form patterns with validation
   - Tables Demo (`/demo/tables`): Data tables with search, pagination, actions
   - Navigation Demo (`/demo/navigation`): Navigation system showcase
+- **Orders Management Page** (`/orders`): Complete order listing and management interface
+  - Order table with tracking, customer details, platform integration
+  - Search and pagination functionality
+  - Order status and payment status tracking
+  - Statistics cards for revenue, orders, and pending items
+- **Shipment Tracking Enhancements**: Extended shipment functionality
+  - Reference number display below tracking numbers
+  - State and pin code information in route section
+  - Manifest date and time tracking
+  - Payment mode indicators
+  - First word display for sender/receiver names
+  - Combined status and partner information
+- **Create Shipment Form** (`/shipments/create`): Comprehensive shipment creation interface
+  - Multi-section form with docket, delivery, invoice, and dimension information
+  - Dynamic box dimension management with add/remove functionality
+  - File upload support for attachments
+  - Volume calculation for multiple boxes
+- **Wallet & Billing System** (`/wallet`): Complete financial management interface
+  - Wallet balance and transaction history
+  - Invoice management and billing information
+  - Tabbed interface for transactions and invoices
+  - Search and filtering capabilities
+  - Detailed transaction breakdown with account details
+  - INR currency formatting for Indian market
 
 ### Changed
 
 - **Homepage Behavior**: Now redirects to login page for proper app flow
 - **Navigation Structure**: Updated to reflect real logistics application requirements
+  - Orders page converted from submenu to direct navigation link
+  - Wallet & Billing page converted from submenu to direct navigation link
 - **Header Layout**: Fixed positioning to respect sidebar space
 - **Component Architecture**: Migrated from custom components to shadcn/ui library
 - **Development Workflow**: Added mandatory build verification after frontend changes
+- **Currency Format**: Updated from USD to INR for Indian market compliance
+- **Mock Data Organization**: Centralized all static data, interfaces, and utilities in `mock-data.ts`
+  - Moved Transaction and Invoice interfaces to shared location
+  - Consolidated utility functions for consistent styling
+  - Removed duplicate code from component files
+- **Wallet Transaction Table Structure**: Streamlined transaction display
+  - Changed "TRANSACTION DETAILS" column to "Transaction ID"
+  - Removed "Description" column for cleaner layout
+  - Simplified account details to show only account number
+  - Removed account type and balance from account details display
+- **Data Model Simplification**: Removed unused fields from Transaction interface
+  - Removed `accountType` and `balance` from account details
+  - Commented out `description` field to match UI requirements
 
 ### Fixed
 
