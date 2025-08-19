@@ -3,10 +3,15 @@
 export interface Shipment {
   id: string;
   trackingNumber: string;
+  referenceNumber: string;
   senderName: string;
   receiverName: string;
   origin: string;
+  originState: string;
+  originPinCode: string;
   destination: string;
+  destinationState: string;
+  destinationPinCode: string;
   status: "pending" | "in_transit" | "delivered" | "cancelled" | "delayed";
   priority: "low" | "medium" | "high" | "urgent";
   weight: number;
@@ -14,6 +19,9 @@ export interface Shipment {
   createdAt: string;
   estimatedDelivery: string;
   courierPartner: string;
+  manifestDate: string;
+  manifestTime: string;
+  paymentMode: "prepaid" | "cod" | "credit" | "wallet";
 }
 
 export interface User {
@@ -27,15 +35,40 @@ export interface User {
   avatar?: string;
 }
 
+export interface Order {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  platform: "shopify" | "woocommerce" | "manual" | "amazon" | "flipkart";
+  status:
+    | "pending"
+    | "confirmed"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "cancelled";
+  priority: "low" | "medium" | "high" | "urgent";
+  itemCount: number;
+  shippingAddress: string;
+  createdAt: string;
+  estimatedShipping: string;
+  paymentStatus: "pending" | "paid" | "failed" | "refunded";
+}
+
 // Generate mock shipments
 export const mockShipments: Shipment[] = [
   {
     id: "1",
     trackingNumber: "LOG2024001",
+    referenceNumber: "REF001234",
     senderName: "TechCorp Inc.",
     receiverName: "John Smith",
-    origin: "Mumbai, India",
-    destination: "New York, USA",
+    origin: "Mumbai",
+    originState: "Maharashtra",
+    originPinCode: "400001",
+    destination: "New York",
+    destinationState: "New York",
+    destinationPinCode: "10001",
     status: "in_transit",
     priority: "high",
     weight: 2.5,
@@ -43,14 +76,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-15T10:30:00Z",
     estimatedDelivery: "2024-08-20T15:00:00Z",
     courierPartner: "DHL Express",
+    manifestDate: "2024-08-15",
+    manifestTime: "14:30",
+    paymentMode: "prepaid",
   },
   {
     id: "2",
     trackingNumber: "LOG2024002",
+    referenceNumber: "REF001235",
     senderName: "Fashion Store",
     receiverName: "Sarah Johnson",
-    origin: "Delhi, India",
-    destination: "London, UK",
+    origin: "Delhi",
+    originState: "Delhi",
+    originPinCode: "110001",
+    destination: "London",
+    destinationState: "England",
+    destinationPinCode: "SW1A 1AA",
     status: "delivered",
     priority: "medium",
     weight: 1.2,
@@ -58,14 +99,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-14T14:20:00Z",
     estimatedDelivery: "2024-08-18T12:00:00Z",
     courierPartner: "FedEx",
+    manifestDate: "2024-08-14",
+    manifestTime: "16:45",
+    paymentMode: "cod",
   },
   {
     id: "3",
     trackingNumber: "LOG2024003",
+    referenceNumber: "REF001236",
     senderName: "Electronics Hub",
     receiverName: "Mike Chen",
-    origin: "Bangalore, India",
-    destination: "Toronto, Canada",
+    origin: "Bangalore",
+    originState: "Karnataka",
+    originPinCode: "560001",
+    destination: "Toronto",
+    destinationState: "Ontario",
+    destinationPinCode: "M5H 2N2",
     status: "pending",
     priority: "low",
     weight: 5.8,
@@ -73,14 +122,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-16T09:15:00Z",
     estimatedDelivery: "2024-08-22T10:30:00Z",
     courierPartner: "UPS",
+    manifestDate: "2024-08-16",
+    manifestTime: "11:20",
+    paymentMode: "credit",
   },
   {
     id: "4",
     trackingNumber: "LOG2024004",
+    referenceNumber: "REF001237",
     senderName: "BookWorld",
     receiverName: "Emma Wilson",
-    origin: "Chennai, India",
-    destination: "Sydney, Australia",
+    origin: "Chennai",
+    originState: "Tamil Nadu",
+    originPinCode: "600001",
+    destination: "Sydney",
+    destinationState: "New South Wales",
+    destinationPinCode: "2000",
     status: "delayed",
     priority: "medium",
     weight: 0.8,
@@ -88,14 +145,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-13T16:45:00Z",
     estimatedDelivery: "2024-08-19T14:20:00Z",
     courierPartner: "Aramex",
+    manifestDate: "2024-08-13",
+    manifestTime: "18:15",
+    paymentMode: "wallet",
   },
   {
     id: "5",
     trackingNumber: "LOG2024005",
+    referenceNumber: "REF001238",
     senderName: "Gadget Store",
     receiverName: "David Brown",
-    origin: "Hyderabad, India",
-    destination: "Berlin, Germany",
+    origin: "Hyderabad",
+    originState: "Telangana",
+    originPinCode: "500001",
+    destination: "Berlin",
+    destinationState: "Berlin",
+    destinationPinCode: "10115",
     status: "cancelled",
     priority: "urgent",
     weight: 3.2,
@@ -103,14 +168,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-12T11:30:00Z",
     estimatedDelivery: "2024-08-17T09:00:00Z",
     courierPartner: "DHL Express",
+    manifestDate: "2024-08-12",
+    manifestTime: "13:45",
+    paymentMode: "prepaid",
   },
   {
     id: "6",
     trackingNumber: "LOG2024006",
+    referenceNumber: "REF001239",
     senderName: "Artisan Crafts",
     receiverName: "Lisa Garcia",
-    origin: "Pune, India",
-    destination: "Mexico City, Mexico",
+    origin: "Pune",
+    originState: "Maharashtra",
+    originPinCode: "411001",
+    destination: "Mexico City",
+    destinationState: "CDMX",
+    destinationPinCode: "01000",
     status: "in_transit",
     priority: "high",
     weight: 1.5,
@@ -118,14 +191,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-16T13:20:00Z",
     estimatedDelivery: "2024-08-21T16:45:00Z",
     courierPartner: "FedEx",
+    manifestDate: "2024-08-16",
+    manifestTime: "15:30",
+    paymentMode: "cod",
   },
   {
     id: "7",
     trackingNumber: "LOG2024007",
+    referenceNumber: "REF001240",
     senderName: "Sports Equipment Co.",
     receiverName: "Tom Anderson",
-    origin: "Kolkata, India",
-    destination: "Tokyo, Japan",
+    origin: "Kolkata",
+    originState: "West Bengal",
+    originPinCode: "700001",
+    destination: "Tokyo",
+    destinationState: "Tokyo",
+    destinationPinCode: "100-0001",
     status: "delivered",
     priority: "low",
     weight: 4.7,
@@ -133,14 +214,22 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-11T08:15:00Z",
     estimatedDelivery: "2024-08-16T11:30:00Z",
     courierPartner: "UPS",
+    manifestDate: "2024-08-11",
+    manifestTime: "10:45",
+    paymentMode: "wallet",
   },
   {
     id: "8",
     trackingNumber: "LOG2024008",
+    referenceNumber: "REF001241",
     senderName: "Home Decor Ltd.",
     receiverName: "Anna Martinez",
-    origin: "Ahmedabad, India",
-    destination: "Paris, France",
+    origin: "Ahmedabad",
+    originState: "Gujarat",
+    originPinCode: "380001",
+    destination: "Paris",
+    destinationState: "Île-de-France",
+    destinationPinCode: "75001",
     status: "pending",
     priority: "medium",
     weight: 2.1,
@@ -148,6 +237,117 @@ export const mockShipments: Shipment[] = [
     createdAt: "2024-08-17T07:45:00Z",
     estimatedDelivery: "2024-08-23T13:15:00Z",
     courierPartner: "Aramex",
+    manifestDate: "2024-08-17",
+    manifestTime: "09:30",
+    paymentMode: "credit",
+  },
+];
+
+// Generate mock orders
+export const mockOrders: Order[] = [
+  {
+    id: "1",
+    orderNumber: "ORD2024001",
+    customerName: "John Smith",
+    platform: "shopify",
+    status: "confirmed",
+    priority: "high",
+    itemCount: 3,
+    shippingAddress: "123 Main St, New York, NY 10001",
+    createdAt: "2024-08-18T10:30:00Z",
+    estimatedShipping: "2024-08-20T15:00:00Z",
+    paymentStatus: "paid",
+  },
+  {
+    id: "2",
+    orderNumber: "ORD2024002",
+    customerName: "Sarah Johnson",
+    platform: "woocommerce",
+    status: "processing",
+    priority: "medium",
+    itemCount: 2,
+    shippingAddress: "456 Oak Ave, Los Angeles, CA 90210",
+    createdAt: "2024-08-18T09:15:00Z",
+    estimatedShipping: "2024-08-21T12:00:00Z",
+    paymentStatus: "paid",
+  },
+  {
+    id: "3",
+    orderNumber: "ORD2024003",
+    customerName: "Mike Chen",
+    platform: "amazon",
+    status: "pending",
+    priority: "low",
+    itemCount: 1,
+    shippingAddress: "789 Pine St, Chicago, IL 60601",
+    createdAt: "2024-08-18T08:45:00Z",
+    estimatedShipping: "2024-08-22T10:30:00Z",
+    paymentStatus: "pending",
+  },
+  {
+    id: "4",
+    orderNumber: "ORD2024004",
+    customerName: "Emma Wilson",
+    platform: "manual",
+    status: "shipped",
+    priority: "urgent",
+    itemCount: 5,
+    shippingAddress: "321 Elm Dr, Miami, FL 33101",
+    createdAt: "2024-08-17T16:20:00Z",
+    estimatedShipping: "2024-08-19T14:00:00Z",
+    paymentStatus: "paid",
+  },
+  {
+    id: "5",
+    orderNumber: "ORD2024005",
+    customerName: "David Brown",
+    platform: "flipkart",
+    status: "cancelled",
+    priority: "medium",
+    itemCount: 2,
+    shippingAddress: "654 Maple Ln, Seattle, WA 98101",
+    createdAt: "2024-08-17T14:10:00Z",
+    estimatedShipping: "2024-08-20T11:30:00Z",
+    paymentStatus: "refunded",
+  },
+  {
+    id: "6",
+    orderNumber: "ORD2024006",
+    customerName: "Lisa Garcia",
+    platform: "shopify",
+    status: "delivered",
+    priority: "high",
+    itemCount: 4,
+    shippingAddress: "987 Cedar St, Austin, TX 73301",
+    createdAt: "2024-08-16T13:30:00Z",
+    estimatedShipping: "2024-08-18T16:45:00Z",
+    paymentStatus: "paid",
+  },
+  {
+    id: "7",
+    orderNumber: "ORD2024007",
+    customerName: "Tom Anderson",
+    platform: "woocommerce",
+    status: "processing",
+    priority: "low",
+    itemCount: 1,
+    shippingAddress: "147 Birch Ave, Denver, CO 80201",
+    createdAt: "2024-08-16T11:15:00Z",
+    estimatedShipping: "2024-08-21T09:00:00Z",
+    paymentStatus: "paid",
+  },
+  {
+    id: "8",
+    orderNumber: "ORD2024008",
+    customerName: "Anna Martinez",
+    platform: "amazon",
+    status: "confirmed",
+    priority: "medium",
+    itemCount: 3,
+    shippingAddress: "258 Willow St, Phoenix, AZ 85001",
+    createdAt: "2024-08-18T07:45:00Z",
+    estimatedShipping: "2024-08-22T13:15:00Z",
+    paymentStatus: "paid",
   },
 ];
 
@@ -264,7 +464,7 @@ export function getUserStatusColor(status: User["status"]): string {
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
   }).format(amount);
 }
 
@@ -276,4 +476,276 @@ export function formatDate(dateString: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(dateString));
+}
+
+export function getOrderStatusColor(status: Order["status"]): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "confirmed":
+      return "bg-blue-100 text-blue-800";
+    case "processing":
+      return "bg-purple-100 text-purple-800";
+    case "shipped":
+      return "bg-indigo-100 text-indigo-800";
+    case "delivered":
+      return "bg-green-100 text-green-800";
+    case "cancelled":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getPlatformColor(platform: Order["platform"]): string {
+  switch (platform) {
+    case "shopify":
+      return "bg-green-100 text-green-800";
+    case "woocommerce":
+      return "bg-purple-100 text-purple-800";
+    case "amazon":
+      return "bg-orange-100 text-orange-800";
+    case "flipkart":
+      return "bg-blue-100 text-blue-800";
+    case "manual":
+      return "bg-gray-100 text-gray-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getPaymentStatusColor(status: Order["paymentStatus"]): string {
+  switch (status) {
+    case "paid":
+      return "bg-green-100 text-green-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "failed":
+      return "bg-red-100 text-red-800";
+    case "refunded":
+      return "bg-orange-100 text-orange-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getPaymentModeColor(mode: Shipment["paymentMode"]): string {
+  switch (mode) {
+    case "prepaid":
+      return "bg-green-100 text-green-800";
+    case "cod":
+      return "bg-orange-100 text-orange-800";
+    case "credit":
+      return "bg-blue-100 text-blue-800";
+    case "wallet":
+      return "bg-purple-100 text-purple-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getFirstWord(name: string): string {
+  return name.split(" ")[0];
+}
+
+// Wallet & Billing interfaces
+export interface Transaction {
+  id: string;
+  transactionDetails: {
+    date: string;
+    time: string;
+    status: "completed" | "pending" | "failed";
+    reference: string;
+  };
+  accountDetails: {
+    accountNumber: string;
+  };
+  orderId: string;
+  awbLrn: string;
+  weightZone: {
+    weight: number;
+    zone: string;
+  };
+  // description: string;
+  credit: number;
+  debit: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  amount: number;
+  status: "paid" | "pending" | "overdue";
+  dueDate: string;
+  issuedDate: string;
+  description: string;
+}
+
+// Mock wallet transactions
+export const mockTransactions: Transaction[] = [
+  {
+    id: "1",
+    transactionDetails: {
+      date: "2024-08-18",
+      time: "10:30 AM",
+      status: "completed",
+      reference: "TXN001234",
+    },
+    accountDetails: {
+      accountNumber: "SUBS 5KG",
+    },
+    orderId: "ORD2024001",
+    awbLrn: "DHL123456789",
+    weightZone: {
+      weight: 2.5,
+      zone: "A",
+    },
+    // description: "Shipment charges for DHL Express delivery",
+    credit: 0,
+    debit: 45.5,
+  },
+  {
+    id: "2",
+    transactionDetails: {
+      date: "2024-08-17",
+      time: "02:20 PM",
+      status: "completed",
+      reference: "TXN001235",
+    },
+    accountDetails: {
+      accountNumber: "SUBS 5KG",
+    },
+    orderId: "",
+    awbLrn: "",
+    weightZone: {
+      weight: 0,
+      zone: "",
+    },
+    // description: "Wallet top-up via Credit Card ending ****1234",
+    credit: 500.0,
+    debit: 0,
+  },
+  {
+    id: "3",
+    transactionDetails: {
+      date: "2024-08-16",
+      time: "09:15 AM",
+      status: "pending",
+      reference: "TXN001236",
+    },
+    accountDetails: {
+      accountNumber: "SUBS 5KG",
+    },
+    orderId: "ORD2024005",
+    awbLrn: "UPS987654321",
+    weightZone: {
+      weight: 1.8,
+      zone: "B",
+    },
+    // description: "Refund for cancelled shipment - UPS Ground",
+    credit: 32.75,
+    debit: 0,
+  },
+  {
+    id: "4",
+    transactionDetails: {
+      date: "2024-08-15",
+      time: "04:45 PM",
+      status: "completed",
+      reference: "TXN001237",
+    },
+    accountDetails: {
+      accountNumber: "SUBS 5KG",
+    },
+    orderId: "",
+    awbLrn: "",
+    weightZone: {
+      weight: 0,
+      zone: "",
+    },
+    // description: "Monthly platform subscription fee",
+    credit: 0,
+    debit: 25.0,
+  },
+  {
+    id: "5",
+    transactionDetails: {
+      date: "2024-08-14",
+      time: "11:30 AM",
+      status: "completed",
+      reference: "TXN001238",
+    },
+    accountDetails: {
+      accountNumber: "SUBS 5KG",
+    },
+    orderId: "ORD2024003",
+    awbLrn: "FDX456789123",
+    weightZone: {
+      weight: 3.2,
+      zone: "C",
+    },
+    // description: "Shipment charges for FedEx Express delivery",
+    credit: 0,
+    debit: 38.2,
+  },
+];
+
+// Mock invoices
+export const mockInvoices: Invoice[] = [
+  {
+    id: "1",
+    invoiceNumber: "INV-2024-001",
+    amount: 1250.0,
+    status: "paid",
+    dueDate: "2024-08-25",
+    issuedDate: "2024-08-01",
+    description: "Monthly Shipping Services - July 2024",
+  },
+  {
+    id: "2",
+    invoiceNumber: "INV-2024-002",
+    amount: 875.5,
+    status: "pending",
+    dueDate: "2024-08-30",
+    issuedDate: "2024-08-15",
+    description: "Additional Services & Fees",
+  },
+  {
+    id: "3",
+    invoiceNumber: "INV-2024-003",
+    amount: 450.0,
+    status: "overdue",
+    dueDate: "2024-08-10",
+    issuedDate: "2024-07-25",
+    description: "Express Delivery Services",
+  },
+];
+
+// Wallet utility functions
+export function getTransactionStatusColor(
+  status: Transaction["transactionDetails"]["status"],
+): string {
+  switch (status) {
+    case "completed":
+      return "bg-green-100 text-green-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "failed":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getInvoiceStatusColor(status: Invoice["status"]): string {
+  switch (status) {
+    case "paid":
+      return "bg-green-100 text-green-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "overdue":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
 }
