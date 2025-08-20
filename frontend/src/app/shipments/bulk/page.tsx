@@ -30,14 +30,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  mockShipments,
-  getStatusColor,
-  getPriorityColor,
-  getPaymentModeColor,
-  getFirstWord,
-  formatCurrency,
-  formatDate,
-  type Shipment,
+  mockBulkUploads,
+  getBulkUploadStatusColor,
+  type BulkUpload,
 } from "@/lib/mock-data";
 import {
   Package,
@@ -51,39 +46,31 @@ import {
   ChevronRight,
   Plus,
   Upload,
-  Truck,
   Download,
   RefreshCw,
-  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 
-export default function ShipmentsPage() {
+export default function BulkShipmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
-    { title: "Shipments" },
+    { title: "Shipments", href: "/shipments" },
+    { title: "Bulk Shipments" },
   ];
 
   // Filter data based on search term
-  const filteredShipments = mockShipments.filter(
-    (shipment) =>
-      shipment.trackingNumber
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      shipment.referenceNumber
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      shipment.senderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.receiverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shipment.destination.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredUploads = mockBulkUploads.filter(
+    (upload) =>
+      upload.uploadId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      upload.fileName.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Pagination logic
-  const currentData = filteredShipments;
+  const currentData = filteredUploads;
   const totalPages = Math.ceil(currentData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -101,39 +88,24 @@ export default function ShipmentsPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center space-x-2">
               <Package className="h-8 w-8 text-logistics-600" />
-              <span>All Shipments</span>
+              <span>Bulk Shipments</span>
             </h1>
             <p className="text-muted-foreground mt-2">
-              Track and manage all your shipments in one place
+              Create and manage bulk shipments efficiently
             </p>
           </div>
           <div className="flex items-center space-x-1.5">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/shipments/track">
-                <Truck className="h-3.5 w-3.5 mr-1.5" />
-                Track
-              </Link>
+            <Button variant="outline" size="sm">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Download Template
             </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/shipments/ndr">
-                <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                NDR
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/shipments/bulk">
-                <Upload className="h-3.5 w-3.5 mr-1.5" />
-                Bulk
-              </Link>
-            </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
-              <Link href="/shipments/create">
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Create Shipment
-              </Link>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              Upload Shipments
             </Button>
           </div>
         </div>
+
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
@@ -142,9 +114,9 @@ export default function ShipmentsPage() {
                 <Package className="h-8 w-8 text-blue-600" />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Total Shipments
+                    Total Bulk Uploads
                   </p>
-                  <p className="text-2xl font-bold">{mockShipments.length}</p>
+                  <p className="text-2xl font-bold">24</p>
                 </div>
               </div>
             </CardContent>
@@ -157,14 +129,9 @@ export default function ShipmentsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Delivered
+                    Successful
                   </p>
-                  <p className="text-2xl font-bold">
-                    {
-                      mockShipments.filter((s) => s.status === "delivered")
-                        .length
-                    }
-                  </p>
+                  <p className="text-2xl font-bold">18</p>
                 </div>
               </div>
             </CardContent>
@@ -172,19 +139,14 @@ export default function ShipmentsPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <div className="h-4 w-4 bg-blue-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
+                  <div className="h-4 w-4 bg-red-600 rounded-full"></div>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    In Transit
+                    Failed
                   </p>
-                  <p className="text-2xl font-bold">
-                    {
-                      mockShipments.filter((s) => s.status === "in_transit")
-                        .length
-                    }
-                  </p>
+                  <p className="text-2xl font-bold">6</p>
                 </div>
               </div>
             </CardContent>
@@ -197,11 +159,9 @@ export default function ShipmentsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Pending
+                    In Progress
                   </p>
-                  <p className="text-2xl font-bold">
-                    {mockShipments.filter((s) => s.status === "pending").length}
-                  </p>
+                  <p className="text-2xl font-bold">2</p>
                 </div>
               </div>
             </CardContent>
@@ -215,17 +175,17 @@ export default function ShipmentsPage() {
               <div>
                 <CardTitle className="flex items-center space-x-2">
                   <Package className="h-5 w-5" />
-                  <span>Shipments Management</span>
+                  <span>Bulk Upload History</span>
                 </CardTitle>
                 <CardDescription>
-                  Track and manage all shipments in your logistics network
+                  Track and manage your bulk shipment uploads
                 </CardDescription>
               </div>
               <div className="flex items-center space-x-1.5">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search shipments..."
+                    placeholder="Search uploads..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 w-56"
@@ -233,10 +193,6 @@ export default function ShipmentsPage() {
                 </div>
                 <Button variant="outline" size="sm" className="px-2">
                   <Filter className="h-3.5 w-3.5" />
-                </Button>
-                <Button variant="outline" size="sm" className="px-3">
-                  <Download className="h-3.5 w-3.5 mr-1" />
-                  Export
                 </Button>
                 <Button variant="outline" size="sm" className="px-3">
                   <RefreshCw className="h-3.5 w-3.5 mr-1" />
@@ -249,83 +205,40 @@ export default function ShipmentsPage() {
             <Table>
               <TableCaption>
                 {searchTerm
-                  ? `Filtered shipments for "${searchTerm}"`
-                  : "A list of recent shipments"}
+                  ? `Filtered uploads for "${searchTerm}"`
+                  : "A list of recent bulk uploads"}
               </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tracking </TableHead>
-                  <TableHead>Pick up and Delivery </TableHead>
-                  <TableHead>Status & Partner</TableHead>
-                  <TableHead>Manifest Date/Time</TableHead>
-                  <TableHead>Payment Mode</TableHead>
+                  <TableHead>Upload ID</TableHead>
+                  <TableHead>Date & Time</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Total Records</TableHead>
+                  <TableHead>Success</TableHead>
+                  <TableHead>Failed</TableHead>
+                  <TableHead>File Name</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedData.map((shipment) => (
-                  <TableRow key={shipment.id}>
+                {paginatedData.map((upload) => (
+                  <TableRow key={upload.id}>
                     <TableCell className="font-medium">
-                      <div className="text-sm">
-                        <div>{shipment.trackingNumber}</div>
-                        <div className="text-muted-foreground text-xs">
-                          Ref: {shipment.referenceNumber}
-                        </div>
-                      </div>
+                      {upload.uploadId}
                     </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {/* <div className="flex items-center space-x-2">
-                          <span className="font-medium">{getFirstWord(shipment.senderName)}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="font-medium">{getFirstWord(shipment.receiverName)}</span>
-                        </div> */}
-                        <div className="mt-1">
-                          <div className="text-xs text-muted-foreground">
-                            {shipment.origin}, {shipment.originState} (
-                            {shipment.originPinCode})
-                            <span className="font-medium">
-                              {getFirstWord(shipment.senderName)}
-                            </span>
-                          </div>
-                          <div className="border-t border-gray-300 my-1"></div>
-                          <div className="text-xs text-muted-foreground">
-                            {shipment.destination}, {shipment.destinationState}{" "}
-                            ({shipment.destinationPinCode})
-                            <span className="font-medium">
-                              {getFirstWord(shipment.receiverName)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm space-y-1">
-                        <Badge className={getStatusColor(shipment.status)}>
-                          {shipment.status.replace("_", " ")}
-                        </Badge>
-                        <div className="text-xs text-muted-foreground">
-                          {shipment.courierPartner}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <div>
-                        <div className="font-medium">
-                          {shipment.manifestDate}
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {shipment.manifestTime}
-                        </div>
-                      </div>
-                    </TableCell>
+                    <TableCell>{upload.dateTime}</TableCell>
                     <TableCell>
                       <Badge
-                        className={getPaymentModeColor(shipment.paymentMode)}
+                        className={getBulkUploadStatusColor(upload.status)}
                       >
-                        {shipment.paymentMode.toUpperCase()}
+                        {upload.status.charAt(0).toUpperCase() +
+                          upload.status.slice(1)}
                       </Badge>
                     </TableCell>
+                    <TableCell>{upload.totalRecords}</TableCell>
+                    <TableCell>{upload.successCount}</TableCell>
+                    <TableCell>{upload.failedCount}</TableCell>
+                    <TableCell>{upload.fileName}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -340,21 +253,13 @@ export default function ShipmentsPage() {
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Shipment
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Print Label
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Generate Challan
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Report
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Cancel Shipment
+                            Delete Upload
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
