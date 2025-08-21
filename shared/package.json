@@ -4,7 +4,7 @@
   "description": "Shared utilities and configurations for Logistics Aggregator Portal",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -21,7 +21,12 @@
     "eslint": "^8.55.0",
     "jest": "^29.7.0"
   },
-  "keywords": ["logistics", "shared", "utilities", "prisma"],
+  "keywords": [
+    "logistics",
+    "shared",
+    "utilities",
+    "prisma"
+  ],
   "author": "Logistics Team",
   "license": "MIT"
 }

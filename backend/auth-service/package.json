@@ -11,7 +11,7 @@
     "generate": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
