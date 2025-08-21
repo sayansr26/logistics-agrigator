@@ -18,7 +18,7 @@ const swaggerSpecs = require("./config/swagger");
 
 // Import middleware
 const auth = require("./middleware/auth");
-const { errorHandler, notFoundHandler, asyncHandler } = require("./middleware/errorHandler");
+const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { validatePaginationQuery } = require("./middleware/validate");
 const APIResponse = require("./shared/lib/response");
 
@@ -118,7 +118,7 @@ app.get("/health", async (req, res) => {
     if (process.env.REDIS_URL) {
       const redisStart = Date.now();
       const redisUtils = require("./shared/lib/redis");
-      
+
       try {
         const redisClient = redisUtils.getClient();
         await redisClient.ping();
@@ -233,7 +233,11 @@ app.get("/health", async (req, res) => {
  *                 message: "Public endpoint - no authentication required"
  */
 app.get("/api/test/public", (req, res) => {
-  res.json(APIResponse.success({ message: "Public endpoint - no authentication required" }));
+  res.json(
+    APIResponse.success({
+      message: "Public endpoint - no authentication required",
+    }),
+  );
 });
 
 /**
@@ -268,14 +272,16 @@ app.get("/api/test/public", (req, res) => {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get("/api/test/authenticated", auth.authenticate, (req, res) => {
-  res.json(APIResponse.success({ 
-    message: "Authenticated endpoint", 
-    user: {
-      userId: req.user.userId,
-      email: req.user.email,
-      role: req.user.role,
-    },
-  }));
+  res.json(
+    APIResponse.success({
+      message: "Authenticated endpoint",
+      user: {
+        userId: req.user.userId,
+        email: req.user.email,
+        role: req.user.role,
+      },
+    }),
+  );
 });
 
 /**
@@ -317,22 +323,26 @@ app.get("/api/test/authenticated", auth.authenticate, (req, res) => {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get("/api/test/with-profile", auth.authenticateWithProfile, (req, res) => {
-  res.json(APIResponse.success({ 
-    message: "Authenticated with profile endpoint", 
-    user: {
-      userId: req.user.userId,
-      email: req.user.email,
-      role: req.user.role,
-      hasProfile: req.user.hasProfile,
-      clientId: req.user.clientId,
-    },
-    profile: req.userProfile ? {
-      id: req.userProfile.id,
-      firstName: req.userProfile.firstName,
-      lastName: req.userProfile.lastName,
-      isActive: req.userProfile.isActive,
-    } : null,
-  }));
+  res.json(
+    APIResponse.success({
+      message: "Authenticated with profile endpoint",
+      user: {
+        userId: req.user.userId,
+        email: req.user.email,
+        role: req.user.role,
+        hasProfile: req.user.hasProfile,
+        clientId: req.user.clientId,
+      },
+      profile: req.userProfile
+        ? {
+            id: req.userProfile.id,
+            firstName: req.userProfile.firstName,
+            lastName: req.userProfile.lastName,
+            isActive: req.userProfile.isActive,
+          }
+        : null,
+    }),
+  );
 });
 
 /**
@@ -370,7 +380,12 @@ app.get("/api/test/with-profile", auth.authenticateWithProfile, (req, res) => {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get("/api/test/admin-only", auth.adminOnly, (req, res) => {
-  res.json(APIResponse.success({ message: "Admin only endpoint", role: req.user.role }));
+  res.json(
+    APIResponse.success({
+      message: "Admin only endpoint",
+      role: req.user.role,
+    }),
+  );
 });
 
 /**
@@ -408,13 +423,19 @@ app.get("/api/test/admin-only", auth.adminOnly, (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-app.get("/api/test/client-access", auth.requireClientAccess(["client", "operations", "admin"]), (req, res) => {
-  res.json(APIResponse.success({ 
-    message: "Client access endpoint", 
-    role: req.user.role,
-    clientId: req.user.clientId, 
-  }));
-});
+app.get(
+  "/api/test/client-access",
+  auth.requireClientAccess(["client", "operations", "admin"]),
+  (req, res) => {
+    res.json(
+      APIResponse.success({
+        message: "Client access endpoint",
+        role: req.user.role,
+        clientId: req.user.clientId,
+      }),
+    );
+  },
+);
 
 /**
  * @swagger
@@ -479,10 +500,12 @@ app.get("/api/test/client-access", auth.requireClientAccess(["client", "operatio
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get("/api/test/pagination", validatePaginationQuery, (req, res) => {
-  res.json(APIResponse.success({ 
-    message: "Pagination test endpoint", 
-    query: req.query, 
-  }));
+  res.json(
+    APIResponse.success({
+      message: "Pagination test endpoint",
+      query: req.query,
+    }),
+  );
 });
 
 // API Routes

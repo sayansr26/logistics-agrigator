@@ -17,12 +17,7 @@ class UserInvitationController {
   // Create a new user invitation
   static async createInvitation(req, res) {
     try {
-      const {
-        clientId,
-        email,
-        role = "client",
-        expiresAt,
-      } = req.body;
+      const { clientId, email, role = "client", expiresAt } = req.body;
 
       // Verify client exists
       const client = await prisma.client.findUnique({
@@ -34,10 +29,7 @@ class UserInvitationController {
       }
 
       // Role-based access control
-      if (
-        req.user.role !== "admin" &&
-        req.user.clientId !== clientId
-      ) {
+      if (req.user.role !== "admin" && req.user.clientId !== clientId) {
         throw new UserServiceError(
           "Access denied. You can only create invitations for your own client.",
           "INVITATION_ACCESS_DENIED",
@@ -55,7 +47,7 @@ class UserInvitationController {
       }
 
       // Check if user is already invited or exists
-      const [existingInvitation, existingProfile] = await Promise.all([
+      const [existingInvitation] = await Promise.all([
         prisma.userInvitation.findFirst({
           where: {
             email,
@@ -266,7 +258,9 @@ class UserInvitationController {
       const totalPages = Math.ceil(total / limit);
 
       // Remove tokens from response for security
-      const sanitizedInvitations = invitations.map(({ token, ...invitation }) => invitation);
+      const sanitizedInvitations = invitations.map(
+        ({ token, ...invitation }) => invitation,
+      );
 
       res.json(
         APIResponse.success({
@@ -908,7 +902,8 @@ class UserInvitationController {
       }
 
       const stats = await prisma.$transaction(async (tx) => {
-        const baseWhere = req.user.role === "admin" ? {} : { clientId: req.user.clientId };
+        const baseWhere =
+          req.user.role === "admin" ? {} : { clientId: req.user.clientId };
 
         const [
           totalInvitations,

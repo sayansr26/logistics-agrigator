@@ -8,7 +8,6 @@ const logger = require("../shared/lib/logger");
 const {
   UserServiceError,
   ProfileNotFoundError,
-  ProfileValidationError,
   ClientNotFoundError,
 } = require("../middleware/errorHandler");
 
@@ -405,7 +404,10 @@ class UserController {
       }
 
       // Validate client change if provided
-      if (updateData.clientId && updateData.clientId !== existingProfile.clientId) {
+      if (
+        updateData.clientId &&
+        updateData.clientId !== existingProfile.clientId
+      ) {
         if (req.user.role !== "admin") {
           throw new UserServiceError(
             "Only admin can change client association",
@@ -660,7 +662,10 @@ class UserController {
       // Admin and support can see all profiles
 
       // Apply filters
-      if (clientId && (req.user.role === "admin" || req.user.role === "support")) {
+      if (
+        clientId &&
+        (req.user.role === "admin" || req.user.role === "support")
+      ) {
         where.clientId = clientId;
       }
 
@@ -998,7 +1003,9 @@ class UserController {
         prisma.userProfile.count({ where }),
         prisma.userProfile.count({ where: { ...where, isActive: true } }),
         prisma.userProfile.count({ where: { ...where, isVerified: true } }),
-        prisma.userProfile.count({ where: { ...where, clientId: { not: null } } }),
+        prisma.userProfile.count({
+          where: { ...where, clientId: { not: null } },
+        }),
         prisma.userProfile.count({
           where: {
             ...where,
@@ -1039,8 +1046,14 @@ class UserController {
               verified: verifiedProfiles,
               withClients: profilesWithClients,
               recent: recentProfiles,
-              completionRate: totalProfiles > 0 ? (verifiedProfiles / totalProfiles) * 100 : 0,
-              clientAssociationRate: totalProfiles > 0 ? (profilesWithClients / totalProfiles) * 100 : 0,
+              completionRate:
+                totalProfiles > 0
+                  ? (verifiedProfiles / totalProfiles) * 100
+                  : 0,
+              clientAssociationRate:
+                totalProfiles > 0
+                  ? (profilesWithClients / totalProfiles) * 100
+                  : 0,
             },
           },
           {

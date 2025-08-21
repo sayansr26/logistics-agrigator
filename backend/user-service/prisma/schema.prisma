@@ -13,40 +13,40 @@ datasource db {
 
 // User Profile - extends auth service user with detailed profile information
 model UserProfile {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @unique @map("user_id") @db.Uuid // References auth-service user.id
-  firstName       String   @map("first_name") @db.VarChar(100)
-  lastName        String   @map("last_name") @db.VarChar(100)
-  phoneNumber     String?  @map("phone_number") @db.VarChar(20)
-  companyName     String?  @map("company_name") @db.VarChar(200)
-  designation     String?  @db.VarChar(100)
-  department      String?  @db.VarChar(100)
-  
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @unique @map("user_id") @db.Uuid // References auth-service user.id
+  firstName   String  @map("first_name") @db.VarChar(100)
+  lastName    String  @map("last_name") @db.VarChar(100)
+  phoneNumber String? @map("phone_number") @db.VarChar(20)
+  companyName String? @map("company_name") @db.VarChar(200)
+  designation String? @db.VarChar(100)
+  department  String? @db.VarChar(100)
+
   // Address information
-  address         Json?    // Flexible address storage
-  billingAddress  Json?    @map("billing_address") // Separate billing address
-  
+  address        Json? // Flexible address storage
+  billingAddress Json? @map("billing_address") // Separate billing address
+
   // Profile settings and preferences
-  preferences     Json?    // User preferences (theme, notifications, etc.)
-  timezone        String?  @db.VarChar(50)
-  language        String   @default("en") @db.VarChar(10)
-  
+  preferences Json? // User preferences (theme, notifications, etc.)
+  timezone    String? @db.VarChar(50)
+  language    String  @default("en") @db.VarChar(10)
+
   // Profile status
-  isActive        Boolean  @default(true) @map("is_active")
-  isVerified      Boolean  @default(false) @map("is_verified")
-  profileComplete Boolean  @default(false) @map("profile_complete")
-  
+  isActive        Boolean @default(true) @map("is_active")
+  isVerified      Boolean @default(false) @map("is_verified")
+  profileComplete Boolean @default(false) @map("profile_complete")
+
   // Client association for multi-tenancy
-  clientId        String?  @map("client_id") @db.Uuid
-  
+  clientId String? @map("client_id") @db.Uuid
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  lastLoginAt DateTime? @map("last_login_at")
 
   // Relationships
-  client          Client?  @relation(fields: [clientId], references: [id])
-  auditLogs       AuditLog[]
+  client    Client?    @relation(fields: [clientId], references: [id])
+  auditLogs AuditLog[]
 
   @@index([userId])
   @@index([clientId])
@@ -56,30 +56,30 @@ model UserProfile {
 
 // Client - for multi-tenant white-label support
 model Client {
-  id              String   @id @default(uuid()) @db.Uuid
-  name            String   @db.VarChar(200)
-  slug            String   @unique @db.VarChar(100) // URL-friendly identifier
-  domain          String?  @unique @db.VarChar(255) // Custom domain
-  
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String  @db.VarChar(200)
+  slug   String  @unique @db.VarChar(100) // URL-friendly identifier
+  domain String? @unique @db.VarChar(255) // Custom domain
+
   // Contact information
-  contactEmail    String   @map("contact_email") @db.VarChar(255)
-  contactPhone    String?  @map("contact_phone") @db.VarChar(20)
-  
+  contactEmail String  @map("contact_email") @db.VarChar(255)
+  contactPhone String? @map("contact_phone") @db.VarChar(20)
+
   // Business information
-  businessType    String?  @map("business_type") @db.VarChar(100)
-  industry        String?  @db.VarChar(100)
-  companySize     String?  @map("company_size") @db.VarChar(50)
-  
+  businessType String? @map("business_type") @db.VarChar(100)
+  industry     String? @db.VarChar(100)
+  companySize  String? @map("company_size") @db.VarChar(50)
+
   // Address
-  address         Json?    // Business address
-  
+  address Json? // Business address
+
   // Client status
-  isActive        Boolean  @default(true) @map("is_active")
+  isActive         Boolean @default(true) @map("is_active")
   subscriptionTier String  @default("basic") @map("subscription_tier") @db.VarChar(50)
-  
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relationships
   userProfiles    UserProfile[]
@@ -94,58 +94,58 @@ model Client {
 
 // Client Settings - for white-label branding and configuration
 model ClientSettings {
-  id              String   @id @default(uuid()) @db.Uuid
-  clientId        String   @unique @map("client_id") @db.Uuid
-  
+  id       String @id @default(uuid()) @db.Uuid
+  clientId String @unique @map("client_id") @db.Uuid
+
   // Branding
-  brandName       String?  @map("brand_name") @db.VarChar(200)
-  logo            String?  @db.VarChar(500) // Logo URL
-  primaryColor    String?  @map("primary_color") @db.VarChar(10) // Hex color
-  secondaryColor  String?  @map("secondary_color") @db.VarChar(10)
-  favicon         String?  @db.VarChar(500) // Favicon URL
-  
+  brandName      String? @map("brand_name") @db.VarChar(200)
+  logo           String? @db.VarChar(500) // Logo URL
+  primaryColor   String? @map("primary_color") @db.VarChar(10) // Hex color
+  secondaryColor String? @map("secondary_color") @db.VarChar(10)
+  favicon        String? @db.VarChar(500) // Favicon URL
+
   // Configuration
-  features        Json?    // Enabled features for this client
-  limits          Json?    // Usage limits and quotas
-  integrations    Json?    // Third-party integrations config
-  
+  features     Json? // Enabled features for this client
+  limits       Json? // Usage limits and quotas
+  integrations Json? // Third-party integrations config
+
   // Email settings
-  emailFromName   String?  @map("email_from_name") @db.VarChar(100)
+  emailFromName    String? @map("email_from_name") @db.VarChar(100)
   emailFromAddress String? @map("email_from_address") @db.VarChar(255)
-  emailTemplates  Json?    @map("email_templates") // Custom email templates
-  
+  emailTemplates   Json?   @map("email_templates") // Custom email templates
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_settings")
 }
 
 // User Invitation - for managing user invitations to clients
 model UserInvitation {
-  id              String   @id @default(uuid()) @db.Uuid
-  clientId        String   @map("client_id") @db.Uuid
-  email           String   @db.VarChar(255)
-  role            Role     @default(client)
-  
+  id       String @id @default(uuid()) @db.Uuid
+  clientId String @map("client_id") @db.Uuid
+  email    String @db.VarChar(255)
+  role     Role   @default(client)
+
   // Invitation details
-  invitedBy       String   @map("invited_by") @db.Uuid // User ID who sent invitation
-  token           String   @unique @db.VarChar(255) // Invitation token
-  
+  invitedBy String @map("invited_by") @db.Uuid // User ID who sent invitation
+  token     String @unique @db.VarChar(255) // Invitation token
+
   // Status and expiry
-  status          InvitationStatus @default(pending)
-  expiresAt       DateTime @map("expires_at")
-  acceptedAt      DateTime? @map("accepted_at")
-  
+  status     InvitationStatus @default(pending)
+  expiresAt  DateTime         @map("expires_at")
+  acceptedAt DateTime?        @map("accepted_at")
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([email])
   @@index([token])
@@ -156,31 +156,31 @@ model UserInvitation {
 
 // Audit Log - for compliance and security tracking
 model AuditLog {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String?  @map("user_id") @db.Uuid // From auth service
-  userProfileId   String?  @map("user_profile_id") @db.Uuid // Local user profile
-  clientId        String?  @map("client_id") @db.Uuid
-  
+  id            String  @id @default(uuid()) @db.Uuid
+  userId        String? @map("user_id") @db.Uuid // From auth service
+  userProfileId String? @map("user_profile_id") @db.Uuid // Local user profile
+  clientId      String? @map("client_id") @db.Uuid
+
   // Action details
-  action          String   @db.VarChar(100) // CREATE_PROFILE, UPDATE_CLIENT, etc.
-  resource        String   @db.VarChar(100) // UserProfile, Client, etc.
-  resourceId      String?  @map("resource_id") @db.Uuid
-  
+  action     String  @db.VarChar(100) // CREATE_PROFILE, UPDATE_CLIENT, etc.
+  resource   String  @db.VarChar(100) // UserProfile, Client, etc.
+  resourceId String? @map("resource_id") @db.Uuid
+
   // Change tracking
-  changes         Json?    // Before/after values
-  metadata        Json?    // Additional context
-  
+  changes  Json? // Before/after values
+  metadata Json? // Additional context
+
   // Request context
-  ipAddress       String?  @map("ip_address") @db.Inet
-  userAgent       String?  @map("user_agent")
-  requestId       String?  @map("request_id") @db.VarChar(100)
-  
+  ipAddress String? @map("ip_address") @db.Inet
+  userAgent String? @map("user_agent")
+  requestId String? @map("request_id") @db.VarChar(100)
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relationships
-  userProfile     UserProfile? @relation(fields: [userProfileId], references: [id])
-  client          Client?      @relation(fields: [clientId], references: [id])
+  userProfile UserProfile? @relation(fields: [userProfileId], references: [id])
+  client      Client?      @relation(fields: [clientId], references: [id])
 
   @@index([userId])
   @@index([userProfileId])
