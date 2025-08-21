@@ -9,6 +9,9 @@ This project includes automated documentation updates that run every time you pu
 ### **Memory Bank Updates**
 
 - **`memory-bank/activeContext.md`** - Recent changes and current work focus
+- **`memory-bank/projectIntelligence.md`** - New patterns and implementation insights
+- **`memory-bank/systemPatterns.md`** - Architectural changes and system updates
+- **`memory-bank/techContext.md`** - Technology stack changes and updates
 - **`memory-bank/progress.md`** - Development activity and progress tracking
 
 ### **Changelog Updates**
@@ -83,6 +86,22 @@ pnpm run update:memory
   - Git commit summary
   - Modified areas breakdown
   - Timestamp of update
+
+- **projectIntelligence.md** - Adds "Intelligence Update" section with:
+  - New patterns identified from code changes
+  - Technology stack updates
+  - Implementation insights from recent commits
+
+- **systemPatterns.md** - Adds "Architecture Update" section with:
+  - Service architecture modifications
+  - Container orchestration updates
+  - Shared library pattern changes
+
+- **techContext.md** - Adds "Technology Update" section with:
+  - Package dependency changes
+  - Docker configuration updates
+  - Database schema modifications
+  - Configuration file updates
 
 - **progress.md** - Adds "Progress Update" section with:
   - Recent commits (last 5)

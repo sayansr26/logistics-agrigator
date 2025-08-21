@@ -155,6 +155,199 @@ EOF
     log_success "activeContext.md updated"
 }
 
+# Function to update projectIntelligence.md
+update_project_intelligence() {
+    log_info "Updating projectIntelligence.md..."
+    
+    local INTELLIGENCE_FILE="$MEMORY_BANK_DIR/projectIntelligence.md"
+    local TIMESTAMP=$(get_timestamp)
+    
+    # Create backup
+    cp "$INTELLIGENCE_FILE" "$TEMP_DIR/intelligence_backup.md"
+    
+    # Analyze changes for intelligence updates
+    local NEW_PATTERNS=""
+    local TECH_UPDATES=""
+    
+    # Check for new patterns in backend services
+    if [[ -n "$BACKEND_CHANGES" ]]; then
+        NEW_PATTERNS="- Backend service modifications detected"
+        if echo "$BACKEND_CHANGES" | grep -q "middleware\|controller\|route"; then
+            NEW_PATTERNS="${NEW_PATTERNS}\n- New middleware/controller/route patterns"
+        fi
+        if echo "$BACKEND_CHANGES" | grep -q "prisma\|schema"; then
+            NEW_PATTERNS="${NEW_PATTERNS}\n- Database schema updates"
+        fi
+        if echo "$BACKEND_CHANGES" | grep -q "docker\|compose"; then
+            TECH_UPDATES="- Docker configuration updates"
+        fi
+    fi
+    
+    # Check for new technologies or dependencies
+    if echo "$MODIFIED_FILES" | grep -q "package\.json"; then
+        TECH_UPDATES="${TECH_UPDATES}\n- Package dependencies updated"
+    fi
+    
+    # Only add intelligence update if there are significant changes
+    if [[ -n "$NEW_PATTERNS" || -n "$TECH_UPDATES" ]]; then
+        cat > "$TEMP_DIR/intelligence_update.md" << EOF
+
+## Intelligence Update - $TIMESTAMP
+
+### New Patterns Identified
+$NEW_PATTERNS
+
+### Technology Stack Updates
+$TECH_UPDATES
+
+### Recent Implementation Insights
+$(head -3 "$TEMP_DIR/git_changes.txt" | sed 's/^/- /')
+
+---
+EOF
+        
+        # Insert intelligence update after the main header
+        awk '
+            /^## Critical Implementation Paths/ && !header_found { 
+                while ((getline line < "'"$TEMP_DIR"'/intelligence_update.md") > 0) print line; 
+                close("'"$TEMP_DIR"'/intelligence_update.md"); 
+                print $0;
+                header_found=1; 
+                next 
+            } 
+            { print }
+        ' "$INTELLIGENCE_FILE" > "$TEMP_DIR/intelligence_new.md"
+        
+        # Replace original file
+        cp "$TEMP_DIR/intelligence_new.md" "$INTELLIGENCE_FILE"
+        
+        log_success "projectIntelligence.md updated with new patterns"
+    else
+        log_info "No significant patterns to add to projectIntelligence.md"
+    fi
+}
+
+# Function to update systemPatterns.md
+update_system_patterns() {
+    log_info "Updating systemPatterns.md..."
+    
+    local PATTERNS_FILE="$MEMORY_BANK_DIR/systemPatterns.md"
+    local TIMESTAMP=$(get_timestamp)
+    
+    # Create backup
+    cp "$PATTERNS_FILE" "$TEMP_DIR/patterns_backup.md"
+    
+    # Check for architectural changes
+    local ARCH_UPDATES=""
+    
+    if echo "$BACKEND_CHANGES" | grep -q "service"; then
+        ARCH_UPDATES="- Service architecture modifications"
+    fi
+    if echo "$MODIFIED_FILES" | grep -q "docker-compose"; then
+        ARCH_UPDATES="${ARCH_UPDATES}\n- Container orchestration updates"
+    fi
+    if echo "$BACKEND_CHANGES" | grep -q "shared"; then
+        ARCH_UPDATES="${ARCH_UPDATES}\n- Shared library pattern updates"
+    fi
+    
+    # Only update if there are architectural changes
+    if [[ -n "$ARCH_UPDATES" ]]; then
+        cat > "$TEMP_DIR/patterns_update.md" << EOF
+
+## Architecture Update - $TIMESTAMP
+
+### System Changes
+$ARCH_UPDATES
+
+### Implementation Notes
+$(head -3 "$TEMP_DIR/git_changes.txt" | sed 's/^/- /')
+
+---
+EOF
+        
+        # Insert patterns update after the architectural overview
+        awk '
+            /^### Service Communication Patterns/ && !header_found { 
+                while ((getline line < "'"$TEMP_DIR"'/patterns_update.md") > 0) print line; 
+                close("'"$TEMP_DIR"'/patterns_update.md"); 
+                print $0;
+                header_found=1; 
+                next 
+            } 
+            { print }
+        ' "$PATTERNS_FILE" > "$TEMP_DIR/patterns_new.md"
+        
+        # Replace original file
+        cp "$TEMP_DIR/patterns_new.md" "$PATTERNS_FILE"
+        
+        log_success "systemPatterns.md updated with architectural changes"
+    else
+        log_info "No architectural changes to add to systemPatterns.md"
+    fi
+}
+
+# Function to update techContext.md
+update_tech_context() {
+    log_info "Updating techContext.md..."
+    
+    local TECH_FILE="$MEMORY_BANK_DIR/techContext.md"
+    local TIMESTAMP=$(get_timestamp)
+    
+    # Create backup
+    cp "$TECH_FILE" "$TEMP_DIR/tech_backup.md"
+    
+    # Check for technology stack changes
+    local TECH_CHANGES=""
+    
+    if echo "$MODIFIED_FILES" | grep -q "package\.json"; then
+        TECH_CHANGES="- Package dependencies updated"
+    fi
+    if echo "$MODIFIED_FILES" | grep -q "docker"; then
+        TECH_CHANGES="${TECH_CHANGES}\n- Docker configuration changes"
+    fi
+    if echo "$BACKEND_CHANGES" | grep -q "prisma"; then
+        TECH_CHANGES="${TECH_CHANGES}\n- Database schema modifications"
+    fi
+    if echo "$CONFIG_CHANGES" | grep -q "yml\|yaml\|json"; then
+        TECH_CHANGES="${TECH_CHANGES}\n- Configuration updates"
+    fi
+    
+    # Only update if there are technology changes
+    if [[ -n "$TECH_CHANGES" ]]; then
+        cat > "$TEMP_DIR/tech_update.md" << EOF
+
+## Technology Update - $TIMESTAMP
+
+### Stack Changes
+$TECH_CHANGES
+
+### Recent Tech Commits
+$(head -3 "$TEMP_DIR/git_changes.txt" | sed 's/^/- /')
+
+---
+EOF
+        
+        # Insert tech update after the development tools section
+        awk '
+            /^### Development Tools & Workflow/ && !header_found { 
+                while ((getline line < "'"$TEMP_DIR"'/tech_update.md") > 0) print line; 
+                close("'"$TEMP_DIR"'/tech_update.md"); 
+                print $0;
+                header_found=1; 
+                next 
+            } 
+            { print }
+        ' "$TECH_FILE" > "$TEMP_DIR/tech_new.md"
+        
+        # Replace original file
+        cp "$TEMP_DIR/tech_new.md" "$TECH_FILE"
+        
+        log_success "techContext.md updated with technology changes"
+    else
+        log_info "No technology changes to add to techContext.md"
+    fi
+}
+
 # Function to update progress.md
 update_progress() {
     log_info "Updating progress.md..."
@@ -259,6 +452,9 @@ commit_updates() {
     
     # Add updated files to git
     git add "$MEMORY_BANK_DIR/activeContext.md"
+    git add "$MEMORY_BANK_DIR/projectIntelligence.md"
+    git add "$MEMORY_BANK_DIR/systemPatterns.md"
+    git add "$MEMORY_BANK_DIR/techContext.md"
     git add "$MEMORY_BANK_DIR/progress.md"
     git add "$CHANGELOG_FILE"
     
@@ -272,6 +468,9 @@ commit_updates() {
     git commit -m "docs: auto-update memory bank and changelog
 
 - Updated activeContext.md with recent changes
+- Updated projectIntelligence.md with new patterns
+- Updated systemPatterns.md with architectural changes
+- Updated techContext.md with technology updates
 - Updated progress.md with development activity
 - Updated CHANGELOG.md with commit history
 
@@ -309,6 +508,9 @@ main() {
     get_git_changes
     categorize_changes
     update_active_context
+    update_project_intelligence
+    update_system_patterns
+    update_tech_context
     update_progress
     update_changelog
     commit_updates
@@ -320,6 +522,9 @@ main() {
     echo ""
     log_info "📝 Updated files:"
     log_info "   - $MEMORY_BANK_DIR/activeContext.md"
+    log_info "   - $MEMORY_BANK_DIR/projectIntelligence.md"
+    log_info "   - $MEMORY_BANK_DIR/systemPatterns.md"
+    log_info "   - $MEMORY_BANK_DIR/techContext.md"
     log_info "   - $MEMORY_BANK_DIR/progress.md"
     log_info "   - $CHANGELOG_FILE"
     echo ""
