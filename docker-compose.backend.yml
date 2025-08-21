@@ -107,6 +107,7 @@ services:
       - "8002:8002"
     volumes:
       - ./backend/user-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
     depends_on:
       postgres:
