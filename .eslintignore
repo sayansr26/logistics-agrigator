@@ -73,3 +73,6 @@ coverage/
 
 # Scripts
 scripts/
+
+# Frontend (handled by Next.js ESLint)
+frontend/

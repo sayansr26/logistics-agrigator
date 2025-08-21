@@ -48,18 +48,5 @@ module.exports = {
         commonjs: true,
       },
     },
-    {
-      // Frontend configuration
-      files: ["frontend/**/*.{js,jsx,ts,tsx}"],
-      env: {
-        browser: true,
-        es6: true,
-      },
-      extends: ["eslint:recommended"],
-      rules: {
-        // Frontend-specific rules
-        "no-undef": "off", // React/Next.js globals handled separately
-      },
-    },
   ],
 };
