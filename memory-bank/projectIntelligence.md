@@ -69,6 +69,23 @@ This is a fundamental architectural decision that affects all services and devel
 
 ---
 
+## Intelligence Update - August 21, 2025
+
+### New Patterns Identified
+
+- Backend service modifications detected\n- New middleware/controller/route patterns\n- Database schema updates
+
+### Technology Stack Updates
+
+\n- Package dependencies updated
+
+### Recent Implementation Insights
+
+- e76ac81 fix: resolve linting issues and add Prisma prettier support
+- 1e04061 docs: auto-update memory bank and changelog
+
+---
+
 ## Critical Implementation Paths
 
 ### Database & ORM Patterns (MANDATORY)
@@ -102,16 +119,16 @@ await prisma.$transaction(async (tx) => {
 ```prisma
 // Standard model pattern for all services
 model User {
-  id                   String   @id @default(uuid()) @db.Uuid
-  email                String   @unique @db.VarChar(255)
-  passwordHash         String   @map("password_hash") @db.VarChar(255)
-  role                 Role
-  isActive             Boolean  @default(true) @map("is_active")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Always include audit trail
-  auditLogs            AuditLog[]
+  auditLogs AuditLog[]
 
   @@map("users")
 }
