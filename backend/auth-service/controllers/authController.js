@@ -2,8 +2,16 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const speakeasy = require("speakeasy");
 const QRCode = require("qrcode");
-const { prisma } = require("../config/database");
+const { prisma, prismaHelpers } = require("../config/database");
 const { getRedisClient } = require("../config/redis");
+const APIResponse = require("../shared/lib/response");
+const {
+  ConflictError,
+  AuthenticationError,
+  ValidationError,
+  NotFoundError,
+  errorUtils,
+} = require("../shared/lib/errors");
 
 class AuthController {
   // User registration
@@ -17,13 +25,7 @@ class AuthController {
       });
 
       if (existingUser) {
-        return res.status(400).json({
-          status: "error",
-          error: {
-            code: "USER_EXISTS",
-            message: "User with this email already exists",
-          },
-        });
+        throw new ConflictError("User with this email already exists");
       }
 
       // Hash password
@@ -63,19 +65,30 @@ class AuthController {
         },
       });
 
-      res.status(201).json({
-        status: "success",
-        data: { user },
-      });
+      const successResponse = APIResponse.success({ user });
+      res.status(201).json(successResponse);
     } catch (error) {
       console.error("Registration error:", error);
-      res.status(500).json({
-        status: "error",
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "Registration failed",
-        },
-      });
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Registration failed",
+        "INTERNAL_ERROR"
+      );
+      res.status(500).json(errorResponse);
     }
   }
 

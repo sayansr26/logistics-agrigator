@@ -1,9 +1,13 @@
 require("dotenv").config();
+
+// Set service name for logger before importing
+process.env.SERVICE_NAME = "auth-service";
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
+const logger = require("./shared/lib/logger");
 
 const authRoutes = require("./routes/auth");
 const { errorHandler } = require("./middleware/errorHandler");
@@ -18,8 +22,8 @@ const PORT = process.env.PORT || 8001;
 app.use(helmet());
 app.use(cors());
 
-// Logging
-app.use(morgan("combined"));
+// Logging - use shared logger
+app.use(logger.httpLogger);
 
 // Body parsing
 app.use(express.json());
@@ -183,18 +187,21 @@ async function startServer() {
   try {
     // Connect to database
     await connectDB();
-    console.log("Database connected via Prisma");
+    logger.info("Database connected via Prisma");
 
     // Connect to Redis
     await connectRedis();
-    console.log("Redis connected");
+    logger.info("Redis connected");
 
     app.listen(PORT, () => {
-      console.log(`Auth Service running on port ${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
+      logger.info(
+        `🚀 Auth Service running on port ${PORT} (LIVE RELOAD ENABLED)`
+      );
+      logger.info(`Health check: http://localhost:${PORT}/health`);
+      logger.info(`Swagger docs: http://localhost:${PORT}/api-docs`);
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.error("Failed to start server:", error);
     process.exit(1);
   }
 }

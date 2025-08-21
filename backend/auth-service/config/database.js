@@ -1,16 +1,18 @@
-const { PrismaClient } = require('@prisma/client');
+// Use shared database utilities
+const { createPrismaClient, prismaHelpers } = require("../shared/lib/database");
 
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+// Create service-specific Prisma client
+const prisma = createPrismaClient({
+  // Auth service specific options can go here
 });
 
 const connectDB = async () => {
   try {
     await prisma.$connect();
-    console.log('Prisma connected to PostgreSQL');
+    console.log("Auth Service: Prisma connected to PostgreSQL");
     return prisma;
   } catch (error) {
-    console.error('Database connection failed:', error);
+    console.error("Auth Service: Database connection failed:", error);
     throw error;
   }
 };
@@ -18,14 +20,15 @@ const connectDB = async () => {
 const disconnectDB = async () => {
   try {
     await prisma.$disconnect();
-    console.log('Prisma disconnected');
+    console.log("Auth Service: Prisma disconnected");
   } catch (error) {
-    console.error('Error disconnecting from database:', error);
+    console.error("Auth Service: Error disconnecting from database:", error);
   }
 };
 
 module.exports = {
   prisma,
   connectDB,
-  disconnectDB
+  disconnectDB,
+  prismaHelpers,
 };

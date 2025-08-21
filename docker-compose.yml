@@ -50,9 +50,9 @@ services:
       - CORS_ORIGIN=http://localhost:3000
     ports:
       - "8000:8000"
-    # volumes:
-    # - ./backend/api-gateway:/app
-    # - /app/node_modules
+    volumes:
+      - ./backend/api-gateway:/app
+      - /app/node_modules
     depends_on:
       redis:
         condition: service_healthy
@@ -60,13 +60,13 @@ services:
         condition: service_healthy
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
 
   # Auth Service with Prisma (Core Service)
   auth-service:
     build:
-      context: ./backend/auth-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/auth-service/Dockerfile
     container_name: logistics-auth-service
     environment:
       - NODE_ENV=development
@@ -78,8 +78,11 @@ services:
       - JWT_REFRESH_EXPIRES_IN=604800
     ports:
       - "8001:8001"
+    # For live reload in development, uncomment these volumes:
     # volumes:
-    # - ./backend/auth-service:/app
+    #   - ./backend/auth-service:/app
+    #   - ./shared:/app/shared
+    #   - auth_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,7 +90,7 @@ services:
         condition: service_healthy
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
 
   # User Service (Week 2 Development)
   user-service:
@@ -104,8 +107,9 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8001
     ports:
       - "8002:8002"
-    # volumes:
-    # - ./backend/user-service:/app
+    volumes:
+      - ./backend/user-service:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,7 +119,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
     profiles:
       - all-services
       - user-service
@@ -138,8 +142,9 @@ services:
       - PARTNER_SERVICE_URL=http://localhost:8007
     ports:
       - "8003:8003"
-    # volumes:
-    # - ./backend/shipment-service:/app
+    volumes:
+      - ./backend/shipment-service:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -149,7 +154,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
     profiles:
       - all-services
       - shipment-service
@@ -170,8 +175,9 @@ services:
       - USER_SERVICE_URL=http://user-service:8002
     ports:
       - "8004:8004"
-    # volumes:
-    # - ./backend/support-service:/app
+    volumes:
+      - ./backend/support-service:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -181,7 +187,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
     profiles:
       - all-services
       - support-service
@@ -205,8 +211,9 @@ services:
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
       - "8005:8005"
-    # volumes:
-    # - ./backend/platform-service:/app
+    volumes:
+      - ./backend/platform-service:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -216,7 +223,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
     profiles:
       - all-services
       - platform-service
@@ -233,13 +240,14 @@ services:
       - NEXT_PUBLIC_APP_ENV=development
     ports:
       - "3000:3000"
-    # volumes:
-    # - ./frontend:/app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - api-gateway
     networks:
       - logistics-network
-    command: pnpm run start
+    command: pnpm run dev
 
 volumes:
   postgres_data:

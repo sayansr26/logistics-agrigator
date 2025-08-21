@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Generated files
+**/.prisma/
+**/prisma/migrations/
+**/*.d.ts
+
+# Logs
+logs/
+*.log
+
+# Package files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Git
+.git/
+
+# Coverage
+coverage/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Binary files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+
+# Temporary files
+tmp/
+temp/
+.tmp/
