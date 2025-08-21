@@ -17,7 +17,7 @@ app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",
     credentials: true,
-  })
+  }),
 );
 app.use(logger.httpLogger);
 app.use(express.json({ limit: "10mb" }));
@@ -55,7 +55,7 @@ app.use("*", (req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   logger.error("Unhandled error:", err);
   res.status(500).json({
     error: "Internal Server Error",
@@ -65,7 +65,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   logger.info(
-    `🚀 User Service running on port ${PORT} (LIVE RELOAD ENABLED ✨)`
+    `🚀 User Service running on port ${PORT} (LIVE RELOAD ENABLED ✨)`,
   );
   logger.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   logger.info(`🔗 Health check: http://localhost:${PORT}/health`);

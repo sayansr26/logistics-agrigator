@@ -37,7 +37,7 @@ app.use(
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Logistics Auth Service API",
-  })
+  }),
 );
 
 // OpenAPI JSON endpoint
@@ -195,7 +195,7 @@ async function startServer() {
 
     app.listen(PORT, () => {
       logger.info(
-        `🚀 Auth Service running on port ${PORT} (LIVE RELOAD ENABLED)`
+        `🚀 Auth Service running on port ${PORT} (LIVE RELOAD ENABLED)`,
       );
       logger.info(`Health check: http://localhost:${PORT}/health`);
       logger.info(`Swagger docs: http://localhost:${PORT}/api-docs`);
