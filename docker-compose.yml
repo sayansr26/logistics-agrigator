@@ -95,8 +95,8 @@ services:
   # User Service (Week 2 Development)
   user-service:
     build:
-      context: ./backend/user-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/user-service/Dockerfile
     container_name: logistics-user-service
     environment:
       - NODE_ENV=development

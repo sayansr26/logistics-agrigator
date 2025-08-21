@@ -93,8 +93,8 @@ services:
   # User Service (Development Ready)
   user-service:
     build:
-      context: ./backend/user-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/user-service/Dockerfile
     container_name: logistics-user-service-dev
     environment:
       - NODE_ENV=development

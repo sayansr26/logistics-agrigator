@@ -14,6 +14,7 @@ Husky configuration in [.husky/](mdc:.husky/) enforces:
 ## **Code Review Checklist**
 
 ### **Database & Backend**
+- [ ] **Controller Pattern**: ALL business logic in controller methods (NO inline functions in routes)
 - [ ] **Prisma ORM**: All database operations use Prisma (NO raw SQL)
 - [ ] **Migrations**: Database changes include proper Prisma migrations
 - [ ] **Audit Logging**: CRUD operations include audit trail
@@ -48,6 +49,7 @@ Husky configuration in [.husky/](mdc:.husky/) enforces:
 - ✅ **TypeScript**: Encouraged for type safety
 
 ### **MUST NOT Do**
+- ❌ **Inline Functions**: NEVER use inline functions in routes (use controller methods)
 - ❌ **Raw SQL**: Never write direct SQL queries
 - ❌ **Cross-service DB**: Services cannot access other service databases
 - ❌ **NPM Commands**: Always use PNPM in monorepo

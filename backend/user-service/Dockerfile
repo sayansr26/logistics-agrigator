@@ -6,8 +6,11 @@ WORKDIR /app
 RUN apk add --no-cache openssl
 RUN npm install -g pnpm@8.15.1
 
-# Copy all source code first
-COPY . .
+# Copy shared library first (from build context root)
+COPY shared ./shared
+
+# Copy service source code
+COPY backend/user-service .
 
 # Install dependencies and generate Prisma client
 RUN pnpm install

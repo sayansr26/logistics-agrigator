@@ -271,6 +271,28 @@ router.delete(
 module.exports = router;
 ```
 
+### **CRITICAL: No Inline Functions in Routes**
+
+**NEVER use inline functions in routes - ALL business logic MUST be in controller methods:**
+
+```javascript
+// ❌ FORBIDDEN: Inline functions in routes
+router.get("/users/:id", authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+    });
+    // Business logic here - WRONG!
+    res.json({ user });
+  } catch (error) {
+    // Error handling here - WRONG!
+  }
+});
+
+// ✅ CORRECT: Use controller methods
+router.get("/users/:id", authenticate, asyncHandler(UserController.getUser));
+```
+
 ## **Middleware Implementation Standards**
 
 ### **Authentication Middleware (Shared)**

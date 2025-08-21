@@ -1,15 +1,11 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const speakeasy = require("speakeasy");
-const QRCode = require("qrcode");
-const { prisma, prismaHelpers } = require("../config/database");
+const { prisma } = require("../config/database");
 const { getRedisClient } = require("../config/redis");
 const APIResponse = require("../shared/lib/response");
 const {
   ConflictError,
-  AuthenticationError,
-  ValidationError,
-  NotFoundError,
   errorUtils,
 } = require("../shared/lib/errors");
 
@@ -17,7 +13,7 @@ class AuthController {
   // User registration
   static async register(req, res) {
     try {
-      const { email, password, name, role = "client", clientId } = req.body;
+      const { email, password, role = "client", clientId } = req.body;
 
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
@@ -86,7 +82,7 @@ class AuthController {
       // Handle unexpected errors
       const errorResponse = APIResponse.error(
         "Registration failed",
-        "INTERNAL_ERROR"
+        "INTERNAL_ERROR",
       );
       res.status(500).json(errorResponse);
     }
@@ -167,13 +163,13 @@ class AuthController {
           permissions,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" }
+        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" },
       );
 
       const refreshToken = jwt.sign(
         { userId: user.id },
         process.env.JWT_SECRET,
-        { expiresIn: "30d" }
+        { expiresIn: "30d" },
       );
 
       // Store refresh token with Prisma
@@ -192,7 +188,7 @@ class AuthController {
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role })
+        JSON.stringify({ userId: user.id, role: user.role }),
       );
 
       // Log successful login
@@ -287,14 +283,14 @@ class AuthController {
           permissions,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" }
+        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" },
       );
 
       // Generate new refresh token
       const newRefreshToken = jwt.sign(
         { userId: user.id },
         process.env.JWT_SECRET,
-        { expiresIn: "30d" }
+        { expiresIn: "30d" },
       );
 
       // Update session with new refresh token
@@ -313,7 +309,7 @@ class AuthController {
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role })
+        JSON.stringify({ userId: user.id, role: user.role }),
       );
 
       // Log token refresh
@@ -383,7 +379,7 @@ class AuthController {
             await redisClient.setEx(
               `blacklist:${accessToken}`,
               expiresIn,
-              "true"
+              "true",
             );
           }
         } catch (tokenError) {
@@ -610,6 +606,113 @@ class AuthController {
     };
 
     return permissions[role] || [];
+  }
+
+  // Get current user basic info
+  static async getCurrentUser(req, res) {
+    try {
+      // Create audit log for user info access
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "GET_USER_INFO",
+          resource: "User",
+          resourceId: req.user.userId,
+          metadata: {
+            source: "auth-service",
+            endpoint: "/auth/me",
+            requestingRole: req.user.role,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      res.json({
+        status: "success",
+        data: {
+          user: {
+            id: req.user.userId,
+            role: req.user.role,
+            clientId: req.user.clientId,
+            permissions: req.user.permissions,
+          },
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          service: "auth-service",
+        },
+      });
+    } catch (error) {
+      console.error("Get current user error:", error);
+      res.status(500).json({
+        status: "error",
+        error: {
+          code: "USER_INFO_ERROR",
+          message: "Failed to retrieve user information",
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          service: "auth-service",
+        },
+      });
+    }
+  }
+
+  // Get enhanced user profile with capabilities
+  static async getUserProfile(req, res) {
+    try {
+      // Create audit log for profile access
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "GET_USER_PROFILE",
+          resource: "User",
+          resourceId: req.user.userId,
+          metadata: {
+            source: "auth-service",
+            endpoint: "/auth/profile",
+            requestingRole: req.user.role,
+            enrichedContext: true,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      res.json({
+        status: "success",
+        data: {
+          user: {
+            id: req.user.userId,
+            role: req.user.role,
+            clientId: req.user.clientId,
+            permissions: req.user.permissions,
+            isAdmin: req.user.isAdmin,
+            canAccessAll: req.user.canAccessAll,
+            capabilities: req.user.capabilities,
+            requestTimestamp: req.user.requestTimestamp,
+          },
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          service: "auth-service",
+        },
+      });
+    } catch (error) {
+      console.error("Get user profile error:", error);
+      res.status(500).json({
+        status: "error",
+        error: {
+          code: "PROFILE_ERROR",
+          message: "Failed to retrieve user profile",
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          service: "auth-service",
+        },
+      });
+    }
   }
 }
 

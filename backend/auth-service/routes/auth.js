@@ -4,11 +4,8 @@ const AuthController = require("../controllers/authController");
 const { validate } = require("../middleware/validate");
 const {
   authenticate,
-  authorize,
-  requireRole,
   enrichUserContext,
   adminOnly,
-  operationsOrHigher,
 } = require("../middleware/auth");
 const {
   registrationLimiter,
@@ -149,7 +146,7 @@ router.post(
   "/register",
   registrationLimiter,
   validate(registerSchema),
-  AuthController.register
+  AuthController.register,
 );
 /**
  * @swagger
@@ -198,7 +195,7 @@ router.post(
   "/login",
   loginLimiter,
   validate(loginSchema),
-  AuthController.login
+  AuthController.login,
 );
 /**
  * @swagger
@@ -239,7 +236,7 @@ router.post(
 router.post(
   "/refresh",
   validate(refreshTokenSchema),
-  AuthController.refreshToken
+  AuthController.refreshToken,
 );
 /**
  * @swagger
@@ -407,14 +404,14 @@ router.post(
   "/admin/cleanup-sessions",
   authenticate,
   adminOnly,
-  AuthController.cleanupExpiredSessions
+  AuthController.cleanupExpiredSessions,
 );
 router.post(
   "/admin/blacklist-token",
   authenticate,
   adminOnly,
   validate(blacklistTokenSchema),
-  AuthController.blacklistToken
+  AuthController.blacklistToken,
 );
 
 /**
@@ -464,19 +461,7 @@ router.post(
  *         $ref: '#/components/responses/UnauthorizedError'
  */
 // Protected routes (require authentication)
-router.get("/me", authenticate, (req, res) => {
-  res.json({
-    status: "success",
-    data: {
-      user: {
-        id: req.user.userId,
-        role: req.user.role,
-        clientId: req.user.clientId,
-        permissions: req.user.permissions,
-      },
-    },
-  });
-});
+router.get("/me", authenticate, AuthController.getCurrentUser);
 
 /**
  * @swagger
@@ -558,22 +543,6 @@ router.get("/me", authenticate, (req, res) => {
  *         $ref: '#/components/responses/UnauthorizedError'
  */
 // Enhanced user profile with capabilities
-router.get("/profile", authenticate, enrichUserContext, (req, res) => {
-  res.json({
-    status: "success",
-    data: {
-      user: {
-        id: req.user.userId,
-        role: req.user.role,
-        clientId: req.user.clientId,
-        permissions: req.user.permissions,
-        isAdmin: req.user.isAdmin,
-        canAccessAll: req.user.canAccessAll,
-        capabilities: req.user.capabilities,
-        requestTimestamp: req.user.requestTimestamp,
-      },
-    },
-  });
-});
+router.get("/profile", authenticate, enrichUserContext, AuthController.getUserProfile);
 
 module.exports = router;

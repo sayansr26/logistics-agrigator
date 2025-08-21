@@ -266,8 +266,106 @@ service-name/
 └── server.js       # Express app setup
 ```
 
+## **CRITICAL: Controller Pattern Enforcement**
+
+### **MANDATORY: No Inline Functions in Routes**
+
+**ALL business logic MUST be in controller methods - NEVER use inline functions in routes.**
+
+```javascript
+// ❌ FORBIDDEN: Inline functions in routes
+router.get("/users/:id", auth.authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+    });
+    // 20+ lines of business logic here - WRONG!
+    res.json({ user });
+  } catch (error) {
+    // Error handling here - WRONG!
+  }
+});
+
+// ✅ CORRECT: Proper controller method
+router.get("/users/:id", auth.authenticate, asyncHandler(UserController.getUser));
+
+// Controller implementation
+class UserController {
+  static async getUser(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, email: true, role: true },
+      });
+
+      if (!user) {
+        throw new NotFoundError("User", id);
+      }
+
+      // Audit logging
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "GET_USER",
+          resource: "User",
+          resourceId: id,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      res.json(APIResponse.success({ user }));
+    } catch (error) {
+      logger.error("Get user error", {
+        error: error.message,
+        userId: req.params.id,
+        service: "user-service",
+      });
+      throw error;
+    }
+  }
+}
+```
+
+### **Controller Method Requirements**
+
+Every controller method MUST include:
+
+- ✅ **Static Methods**: All controller methods must be static
+- ✅ **Error Handling**: Comprehensive try/catch with proper error logging
+- ✅ **Audit Logging**: All CRUD operations must create audit logs
+- ✅ **Input Validation**: Parameter and body validation (handled by middleware)
+- ✅ **Structured Responses**: Use APIResponse.success() and APIResponse.error()
+- ✅ **Logging**: Detailed logging for debugging and monitoring
+- ✅ **Prisma Transactions**: Use transactions for multi-table operations
+
+### **Route Organization Pattern**
+
+```javascript
+// ✅ CORRECT: Clean route definitions
+const express = require("express");
+const { asyncHandler } = require("../middleware/errorHandler");
+const auth = require("../middleware/auth");
+const { validateCreateUser, validateUuidParam } = require("../middleware/validate");
+const UserController = require("../controllers/userController");
+
+const router = express.Router();
+
+// All routes use controller methods - NO inline functions
+router.post("/users", auth.adminOnly, validateCreateUser, asyncHandler(UserController.createUser));
+router.get("/users", auth.authenticate, asyncHandler(UserController.listUsers));
+router.get("/users/:id", auth.authenticate, validateUuidParam, asyncHandler(UserController.getUser));
+router.put("/users/:id", auth.authenticate, validateUuidParam, asyncHandler(UserController.updateUser));
+router.delete("/users/:id", auth.adminOnly, validateUuidParam, asyncHandler(UserController.deleteUser));
+
+module.exports = router;
+```
+
 ## **NEVER DO**
 
+- ❌ **Use inline functions in routes** (ALL logic must be in controllers)
 - ❌ Write raw SQL queries (use Prisma only)
 - ❌ Skip audit logging for CRUD operations
 - ❌ Create endpoints without authentication
@@ -275,3 +373,4 @@ service-name/
 - ❌ Use custom response formats
 - ❌ Skip error handling middleware
 - ❌ Create services without health checks
+- ❌ Put business logic directly in route handlers
