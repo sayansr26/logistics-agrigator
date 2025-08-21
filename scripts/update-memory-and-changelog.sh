@@ -46,6 +46,37 @@ get_timestamp() {
     date '+%B %d, %Y'
 }
 
+# Function to check if we should skip auto-updates (batching logic)
+should_skip_update() {
+    # Get the remote branch
+    REMOTE_BRANCH=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "origin/master")
+    
+    # Get the latest commit message
+    LATEST_COMMIT=$(git log -1 --pretty=format:"%s" 2>/dev/null)
+    
+    # Skip if the latest commit is an auto-update commit
+    if [[ "$LATEST_COMMIT" =~ ^docs:\ auto-update\ memory\ bank ]]; then
+        log_warning "Skipping auto-update: Latest commit is already an auto-update"
+        return 0  # Should skip
+    fi
+    
+    # Check if there are only auto-update commits since last push
+    if git rev-parse "$REMOTE_BRANCH" >/dev/null 2>&1; then
+        RECENT_COMMITS=$(git log --oneline "$REMOTE_BRANCH"..HEAD 2>/dev/null)
+        
+        # If all recent commits are auto-updates, skip
+        if [[ -n "$RECENT_COMMITS" ]]; then
+            NON_AUTO_COMMITS=$(echo "$RECENT_COMMITS" | grep -v "docs: auto-update memory bank" || true)
+            if [[ -z "$NON_AUTO_COMMITS" ]]; then
+                log_warning "Skipping auto-update: Only auto-update commits since last push"
+                return 0  # Should skip
+            fi
+        fi
+    fi
+    
+    return 1  # Should not skip
+}
+
 # Function to get git changes since last push
 get_git_changes() {
     log_info "Analyzing git changes..."
@@ -56,17 +87,30 @@ get_git_changes() {
     # Get changes since last push (or all changes if no remote)
     if git rev-parse "$REMOTE_BRANCH" >/dev/null 2>&1; then
         CHANGES=$(git log --oneline "$REMOTE_BRANCH"..HEAD 2>/dev/null || git log --oneline -10)
+        # Filter out auto-update commits for analysis
+        CHANGES=$(echo "$CHANGES" | grep -v "docs: auto-update memory bank" || true)
     else
         CHANGES=$(git log --oneline -10)
+        CHANGES=$(echo "$CHANGES" | grep -v "docs: auto-update memory bank" || true)
     fi
     
-    # Get modified files
-    MODIFIED_FILES=$(git diff --name-only "$REMOTE_BRANCH"..HEAD 2>/dev/null || git diff --name-only --cached)
+    # Get modified files (excluding previous auto-update commits)
+    if git rev-parse "$REMOTE_BRANCH" >/dev/null 2>&1; then
+        # Get the hash of the last non-auto-update commit
+        LAST_REAL_COMMIT=$(git log "$REMOTE_BRANCH"..HEAD --oneline | grep -v "docs: auto-update memory bank" | head -1 | cut -d' ' -f1)
+        if [[ -n "$LAST_REAL_COMMIT" ]]; then
+            MODIFIED_FILES=$(git diff --name-only "$REMOTE_BRANCH".."$LAST_REAL_COMMIT" 2>/dev/null)
+        else
+            MODIFIED_FILES=$(git diff --name-only "$REMOTE_BRANCH"..HEAD 2>/dev/null)
+        fi
+    else
+        MODIFIED_FILES=$(git diff --name-only --cached)
+    fi
     
     echo "$CHANGES" > "$TEMP_DIR/git_changes.txt"
     echo "$MODIFIED_FILES" > "$TEMP_DIR/modified_files.txt"
     
-    log_success "Git changes analyzed"
+    log_success "Git changes analyzed (auto-update commits filtered)"
 }
 
 # Function to categorize changes
@@ -504,8 +548,26 @@ main() {
         exit 1
     fi
     
+    # Check if we should skip this update (batching logic)
+    if should_skip_update; then
+        log_success "🎯 Skipping auto-update to prevent commit cycling"
+        log_info "💡 This prevents continuous auto-update commits"
+        log_info "📝 Memory bank will be updated on the next real code change"
+        rm -rf "$TEMP_DIR"
+        exit 0
+    fi
+    
     # Execute update process
     get_git_changes
+    
+    # Check if there are any real changes to process
+    if [[ ! -s "$TEMP_DIR/git_changes.txt" ]]; then
+        log_warning "No real changes found (only auto-update commits)"
+        log_info "🎯 Skipping memory bank update"
+        rm -rf "$TEMP_DIR"
+        exit 0
+    fi
+    
     categorize_changes
     update_active_context
     update_project_intelligence
