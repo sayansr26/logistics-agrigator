@@ -1,6 +1,11 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+echo "📝 Updating memory bank and changelog..."
+
+# Update memory bank and changelog before other checks
+./scripts/update-memory-and-changelog.sh
+
 echo "🧪 Running tests before push..."
 
 # Run tests for all workspaces

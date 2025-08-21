@@ -52,6 +52,7 @@
     "fresh:install": "pnpm run cleanup && pnpm run setup:dev",
     "fresh:frontend": "pnpm run cleanup && pnpm run setup:frontend",
     "fresh:backend": "pnpm run cleanup && pnpm run setup:backend",
+    "update:memory": "./scripts/update-memory-and-changelog.sh",
     "lint:staged": "lint-staged",
     "commit": "git-cz",
     "commitlint": "commitlint --from HEAD~1 --to HEAD --verbose"
