@@ -57,8 +57,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function ShipmentsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -335,11 +337,19 @@ export default function ShipmentsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/shipments/${shipment.id}`)
+                            }
+                          >
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/shipments/${shipment.id}/edit`)
+                            }
+                          >
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Shipment
                           </DropdownMenuItem>

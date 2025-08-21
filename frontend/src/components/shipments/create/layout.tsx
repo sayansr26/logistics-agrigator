@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, Send } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Save, Send } from "lucide-react";
 import { CreateShipmentStepper } from "./stepper";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
 
@@ -71,6 +71,13 @@ export function CreateShipmentLayout({ children }: CreateShipmentLayoutProps) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => useShipmentFormStore.getState().resetForm()}
+            >
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Reset Form
+            </Button>
             <Button variant="outline">
               <Save className="h-4 w-4 mr-2" />
               Save Draft

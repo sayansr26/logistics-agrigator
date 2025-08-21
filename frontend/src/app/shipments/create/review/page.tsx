@@ -171,7 +171,7 @@ export default function ReviewPage() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-6">
+        {/* <div className="flex items-center justify-between pt-6">
           <Button
             variant="outline"
             onClick={() => router.push("/shipments/create/dimensions")}
@@ -196,7 +196,7 @@ export default function ReviewPage() {
               {isSubmitting ? "Creating Shipment..." : "Create Shipment"}
             </Button>
           </div>
-        </div>
+        </div> */}
       </div>
     </CreateShipmentLayout>
   );

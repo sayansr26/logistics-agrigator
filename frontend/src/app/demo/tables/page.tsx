@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ import {
 } from "lucide-react";
 
 export default function TablesDemo() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"shipments" | "users">(
     "shipments",
   );
@@ -381,7 +383,9 @@ function ShipmentsTable({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/shipments/${shipment.id}`)}
+                  >
                     <Eye className="mr-2 h-4 w-4" />
                     View Details
                   </DropdownMenuItem>
