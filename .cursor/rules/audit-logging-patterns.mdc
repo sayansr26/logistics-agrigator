@@ -1,0 +1,318 @@
+---
+description: Audit logging patterns for compliance and security
+globs: backend/**/*.js,backend/**/*.ts
+---
+
+# Audit Logging Patterns
+
+## **MANDATORY: Audit All CRUD Operations**
+
+Every database operation MUST include audit logging for compliance and security.
+
+### **Standard Audit Log Entry**
+
+```javascript
+// ✅ REQUIRED: Audit log pattern
+await prisma.auditLog.create({
+  data: {
+    userId: req.user?.id, // Who performed the action
+    action: "CREATE", // What action (CREATE, UPDATE, DELETE, READ)
+    resource: "user", // What resource type
+    resourceId: user.id, // Which specific resource
+    changes: userData, // What data changed
+    ipAddress: req.ip, // Source IP address
+    userAgent: req.get("User-Agent"), // Client information
+    timestamp: new Date(), // When it happened
+  },
+});
+```
+
+### **Standard Audit Actions**
+
+```javascript
+// Use these exact action strings
+const AUDIT_ACTIONS = {
+  CREATE: "CREATE",
+  READ: "READ",
+  UPDATE: "UPDATE",
+  DELETE: "DELETE",
+  LOGIN: "LOGIN",
+  LOGOUT: "LOGOUT",
+  UNAUTHORIZED_ACCESS: "UNAUTHORIZED_ACCESS",
+  BULK_OPERATION: "BULK_OPERATION",
+};
+```
+
+### **Transaction Pattern with Audit**
+
+```javascript
+// ✅ REQUIRED: Always use transactions for operation + audit
+const createUserWithAudit = async (userData, req) => {
+  return await prisma.$transaction(async (tx) => {
+    // Perform the operation
+    const user = await tx.user.create({
+      data: userData,
+      select: { id: true, email: true, role: true },
+    });
+
+    // MANDATORY: Audit the operation
+    await tx.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: "CREATE",
+        resource: "user",
+        resourceId: user.id,
+        changes: userData,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    return user;
+  });
+};
+```
+
+### **Update Operations with Before/After**
+
+```javascript
+// ✅ REQUIRED: Track before/after values for updates
+const updateUserWithAudit = async (userId, updateData, req) => {
+  return await prisma.$transaction(async (tx) => {
+    // Get current state
+    const beforeState = await tx.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true, role: true },
+    });
+
+    // Perform update
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    // MANDATORY: Audit with before/after
+    await tx.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: "UPDATE",
+        resource: "user",
+        resourceId: userId,
+        changes: {
+          before: beforeState,
+          after: updateData,
+          changedFields: Object.keys(updateData),
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    return user;
+  });
+};
+```
+
+## **Security Event Logging**
+
+### **Failed Authentication Attempts**
+
+```javascript
+// ✅ REQUIRED: Log security violations
+const logUnauthorizedAccess = async (req, requiredRoles) => {
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "UNAUTHORIZED_ACCESS",
+      resource: req.originalUrl,
+      changes: {
+        requiredRoles: requiredRoles,
+        userRole: req.user?.role,
+        attemptedAction: req.method,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    },
+  });
+};
+```
+
+### **Bulk Operations Logging**
+
+```javascript
+// ✅ REQUIRED: Log bulk operations with summary
+const bulkCreateWithAudit = async (itemsData, req) => {
+  return await prisma.$transaction(async (tx) => {
+    const results = [];
+    const errors = [];
+
+    for (const itemData of itemsData) {
+      try {
+        const item = await tx.item.create({ data: itemData });
+        results.push(item);
+      } catch (error) {
+        errors.push({ itemData, error: error.message });
+      }
+    }
+
+    // MANDATORY: Log bulk operation summary
+    await tx.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: "BULK_OPERATION",
+        resource: "item",
+        changes: {
+          operation: "bulk_create",
+          totalAttempted: itemsData.length,
+          successful: results.length,
+          failed: errors.length,
+          successfulIds: results.map((item) => item.id),
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    return { results, errors };
+  });
+};
+```
+
+## **Audit Query Patterns**
+
+### **Audit Trail Retrieval**
+
+```javascript
+// Standard audit trail queries
+const getAuditTrail = async (resourceId, filters = {}) => {
+  return await prisma.auditLog.findMany({
+    where: {
+      resourceId: resourceId,
+      action: filters.action,
+      createdAt: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+    },
+    include: {
+      user: {
+        select: { email: true, name: true, role: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: filters.limit || 100,
+  });
+};
+```
+
+### **User Activity Tracking**
+
+```javascript
+// Track user activity for security monitoring
+const getUserActivity = async (userId, days = 30) => {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+
+  return await prisma.auditLog.findMany({
+    where: {
+      userId: userId,
+      createdAt: { gte: startDate },
+    },
+    select: {
+      action: true,
+      resource: true,
+      createdAt: true,
+      ipAddress: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+};
+```
+
+## **Audit Helper Functions**
+
+### **Shared Audit Utilities**
+
+```javascript
+// shared/lib/audit.js - Reusable audit functions
+const createAuditLog = async (tx, auditData) => {
+  return await tx.auditLog.create({
+    data: {
+      userId: auditData.userId,
+      action: auditData.action,
+      resource: auditData.resource,
+      resourceId: auditData.resourceId,
+      changes: auditData.changes,
+      ipAddress: auditData.ipAddress,
+      userAgent: auditData.userAgent,
+    },
+  });
+};
+
+const auditCRUDOperation = async (
+  operation,
+  resource,
+  resourceId,
+  changes,
+  req
+) => {
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user?.id,
+      action: operation.toUpperCase(),
+      resource: resource,
+      resourceId: resourceId,
+      changes: changes,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    },
+  });
+};
+
+module.exports = { createAuditLog, auditCRUDOperation };
+```
+
+## **MANDATORY: Audit Schema**
+
+Every service MUST include this audit log model:
+
+```prisma
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  resource   String   @db.VarChar(100)
+  resourceId String?  @map("resource_id") @db.Uuid
+  changes    Json?
+  ipAddress  String?  @map("ip_address") @db.Inet
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Performance indexes
+  @@index([userId])
+  @@index([createdAt])
+  @@index([resource])
+  @@index([action])
+  @@map("audit_logs")
+}
+```
+
+## **Compliance Requirements**
+
+### **Data Retention**
+
+- Audit logs MUST be retained for 7 years minimum
+- Implement archival strategy for old logs
+- Regular backup of audit data
+
+### **Access Control**
+
+- Only admin and finance roles can access audit trails
+- Audit log queries MUST be logged themselves
+- No modification of audit logs allowed
+
+### **Monitoring**
+
+- Alert on suspicious activity patterns
+- Monitor failed authentication attempts
+- Track bulk operations and data exports

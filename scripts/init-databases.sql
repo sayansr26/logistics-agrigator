@@ -1,6 +1,9 @@
 -- Create databases for each microservice
 -- This script runs automatically when PostgreSQL container starts
 
+-- API Gateway Database
+CREATE DATABASE logistics_gateway;
+
 -- Auth Service Database
 CREATE DATABASE logistics_auth;
 
@@ -17,6 +20,7 @@ CREATE DATABASE logistics_support;
 CREATE DATABASE logistics_platforms;
 
 -- Grant privileges to logistics user
+GRANT ALL PRIVILEGES ON DATABASE logistics_gateway TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_auth TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_users TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_shipments TO logistics;

@@ -1,0 +1,827 @@
+---
+description: Complete backend service development standards based on auth service implementation patterns
+globs: backend/**/*.js,backend/**/*.ts,backend/**/*.prisma,backend/**/package.json,backend/**/Dockerfile
+---
+
+# Backend Service Development Standards
+
+> **Based on Auth Service Implementation Patterns**  
+> This rule defines the complete development standards for all backend microservices in the Logistics Aggregator Portal, derived from the production-ready auth service implementation.
+
+## **CRITICAL: Service Architecture Patterns**
+
+### **Mandatory Service Structure**
+
+Every backend service MUST follow this exact structure:
+
+```
+backend/service-name/
+├── prisma/
+│   ├── schema.prisma          # Database schema with audit patterns
+│   └── migrations/            # Version-controlled migrations
+├── src/ OR ./                 # Source code location
+│   ├── controllers/           # Business logic handlers
+│   ├── middleware/            # Service-specific middleware
+│   ├── routes/                # API route definitions
+│   ├── services/              # Business service layer
+│   └── utils/                 # Service utilities
+├── config/                    # Configuration modules
+│   ├── database.js            # Prisma client setup
+│   ├── redis.js               # Redis client setup
+│   └── swagger.js             # OpenAPI documentation
+├── .env.example               # Environment template
+├── .env                       # Environment variables (auto-generated)
+├── Dockerfile                 # Container configuration
+├── package.json               # Dependencies and scripts
+└── server.js                  # Entry point with Express setup
+```
+
+### **Database Schema Patterns (Prisma)**
+
+**MANDATORY: Every service schema MUST include:**
+
+```prisma
+// Base audit fields for ALL models
+model BaseModel {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("base_model")
+}
+
+// REQUIRED: Audit logging model for every service
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?  // User who performed action
+  action      String   // CREATE, UPDATE, DELETE, etc.
+  resource    String   // Table/model name
+  resourceId  String?  // ID of affected resource
+  changes     Json?    // What changed
+  ipAddress   String?  // Request IP
+  userAgent   String?  // Request user agent
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// Service-specific models follow this pattern
+model ServiceEntity {
+  id        String   @id @default(cuid())
+  // Service-specific fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  auditLogs AuditLog[] @relation("EntityAuditLogs")
+
+  @@map("service_entities")
+}
+```
+
+**Database Naming Convention:**
+
+- Service DB: `logistics_{service_name}` (e.g., `logistics_users`, `logistics_shipments`)
+- Table names: snake_case with service prefix if needed
+- Field names: camelCase in Prisma, snake_case in DB
+
+## **Controller Implementation Patterns**
+
+### **Standard Controller Structure**
+
+Based on auth service patterns, every controller MUST follow:
+
+```javascript
+// controllers/entityController.js
+const { PrismaClient } = require("@prisma/client");
+const { getRedisClient } = require("../config/redis");
+const prisma = new PrismaClient();
+
+class EntityController {
+  // MANDATORY: All methods must be static
+  static async create(req, res) {
+    try {
+      // 1. Input validation (use Joi schemas)
+      // 2. Business logic
+      // 3. Database transaction
+      // 4. Audit logging
+      // 5. Response formatting
+
+      const entity = await prisma.entity.create({
+        data: validatedData,
+        select: {
+          // Only select needed fields for security
+          id: true,
+          name: true,
+          createdAt: true,
+        },
+      });
+
+      // MANDATORY: Audit logging
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user?.userId,
+          action: "CREATE",
+          resource: "Entity",
+          resourceId: entity.id,
+          changes: { created: validatedData },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      res.status(201).json({
+        status: "success",
+        data: { entity },
+      });
+    } catch (error) {
+      console.error("Entity creation error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Internal server error",
+        code: "INTERNAL_ERROR",
+      });
+    }
+  }
+
+  static async getById(req, res) {
+    // Implementation pattern...
+  }
+
+  static async update(req, res) {
+    // Implementation pattern...
+  }
+
+  static async delete(req, res) {
+    // Implementation pattern...
+  }
+
+  static async list(req, res) {
+    // Implementation with pagination...
+  }
+}
+
+module.exports = EntityController;
+```
+
+### **MANDATORY: Error Response Format**
+
+All services MUST use this exact error response format:
+
+```javascript
+// Success Response
+{
+  "status": "success",
+  "data": { /* response data */ },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "service": "service-name",
+    "version": "1.0.0"
+  }
+}
+
+// Error Response
+{
+  "status": "error",
+  "message": "Human-readable error message",
+  "code": "ERROR_CODE",
+  "details": { /* additional error details */ },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "service": "service-name"
+  }
+}
+```
+
+## **Route Implementation Patterns**
+
+### **Standard Route Structure**
+
+```javascript
+// routes/entities.js
+const express = require("express");
+const Joi = require("joi");
+const { authenticate, authorize, requireRole } = require("../middleware/auth");
+const { validate } = require("../middleware/validate");
+const EntityController = require("../controllers/entityController");
+const { rateLimiter } = require("../middleware/rateLimiter");
+
+const router = express.Router();
+
+// MANDATORY: Input validation schemas
+const createEntitySchema = Joi.object({
+  name: Joi.string().min(2).max(100).required(),
+  description: Joi.string().max(500).optional(),
+  // Service-specific fields
+});
+
+const updateEntitySchema = Joi.object({
+  name: Joi.string().min(2).max(100).optional(),
+  description: Joi.string().max(500).optional(),
+});
+
+// MANDATORY: Swagger documentation for ALL endpoints
+/**
+ * @swagger
+ * /api/entities:
+ *   post:
+ *     summary: Create new entity
+ *     tags: [Entities]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateEntityRequest'
+ *     responses:
+ *       201:
+ *         description: Entity created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EntityResponse'
+ */
+router.post(
+  "/",
+  rateLimiter.createEntity, // Service-specific rate limiting
+  authenticate,
+  requireRole(["admin", "operations"]), // Role-based access
+  validate(createEntitySchema),
+  EntityController.create
+);
+
+router.get("/", authenticate, EntityController.list);
+router.get("/:id", authenticate, EntityController.getById);
+router.put(
+  "/:id",
+  authenticate,
+  requireRole(["admin", "operations"]),
+  validate(updateEntitySchema),
+  EntityController.update
+);
+router.delete(
+  "/:id",
+  authenticate,
+  requireRole(["admin"]),
+  EntityController.delete
+);
+
+module.exports = router;
+```
+
+## **Middleware Implementation Standards**
+
+### **Authentication Middleware (Shared)**
+
+Use the shared auth middleware from `shared/lib/auth.js`:
+
+```javascript
+// middleware/auth.js (service-specific extensions)
+const { authMiddleware } = require("../../shared/lib/auth");
+
+// Extend shared middleware with service-specific logic
+const serviceSpecificAuth = async (req, res, next) => {
+  // Service-specific authentication logic
+  next();
+};
+
+module.exports = {
+  ...authMiddleware,
+  serviceSpecificAuth,
+};
+```
+
+### **Rate Limiting Patterns**
+
+```javascript
+// middleware/rateLimiter.js
+const rateLimit = require("express-rate-limit");
+
+// Service-specific rate limits
+const createEntityLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: {
+    status: "error",
+    message: "Too many entity creation attempts",
+    code: "RATE_LIMIT_EXCEEDED",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = {
+  createEntityLimiter,
+  // Other service-specific limiters
+};
+```
+
+## **Server.js Implementation Pattern**
+
+### **Standard Server Setup**
+
+```javascript
+// server.js
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const swaggerUi = require("swagger-ui-express");
+const { PrismaClient } = require("@prisma/client");
+const { getRedisClient } = require("./config/redis");
+const swaggerSpecs = require("./config/swagger");
+
+const app = express();
+const prisma = new PrismaClient();
+const PORT = process.env.PORT || 8002;
+
+// MANDATORY: Security middleware
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// MANDATORY: Health check endpoint
+app.get("/health", async (req, res) => {
+  const startTime = Date.now();
+  const healthStatus = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    service: "service-name",
+    version: process.env.npm_package_version || "1.0.0",
+    environment: process.env.NODE_ENV || "development",
+    dependencies: {},
+  };
+
+  let isHealthy = true;
+
+  // Database health check
+  try {
+    const pgStart = Date.now();
+    await prisma.$queryRaw`SELECT 1`;
+    const pgTime = Date.now() - pgStart;
+    healthStatus.database = "connected";
+    healthStatus.dependencies.postgres = {
+      status: "healthy",
+      responseTime: pgTime,
+    };
+  } catch (error) {
+    isHealthy = false;
+    healthStatus.database = "disconnected";
+    healthStatus.dependencies.postgres = {
+      status: "unhealthy",
+      error: error.message,
+    };
+  }
+
+  // Redis health check
+  try {
+    const redisStart = Date.now();
+    const redisClient = getRedisClient();
+    await redisClient.ping();
+    const redisTime = Date.now() - redisStart;
+    healthStatus.redis = "connected";
+    healthStatus.dependencies.redis = {
+      status: "healthy",
+      responseTime: redisTime,
+    };
+  } catch (error) {
+    isHealthy = false;
+    healthStatus.redis = "disconnected";
+    healthStatus.dependencies.redis = {
+      status: "unhealthy",
+      error: error.message,
+    };
+  }
+
+  // System metrics
+  const memUsage = process.memoryUsage();
+  healthStatus.system = {
+    memory: {
+      used: Math.round(memUsage.heapUsed / 1024 / 1024),
+      total: Math.round(memUsage.heapTotal / 1024 / 1024),
+      unit: "MB",
+    },
+    pid: process.pid,
+    platform: process.platform,
+    nodeVersion: process.version,
+  };
+
+  healthStatus.responseTime = Date.now() - startTime;
+
+  if (!isHealthy) {
+    healthStatus.status = "error";
+    return res.status(503).json(healthStatus);
+  }
+
+  res.json(healthStatus);
+});
+
+// MANDATORY: Swagger documentation
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpecs, {
+    explorer: true,
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: `Logistics ${serviceName} Service API`,
+  })
+);
+
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json(swaggerSpecs);
+});
+
+// API routes
+app.use("/api/entities", require("./routes/entities"));
+
+// MANDATORY: Error handling middleware
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({
+    status: "error",
+    message: "Internal server error",
+    code: "INTERNAL_ERROR",
+  });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`${serviceName} service running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`API docs: http://localhost:${PORT}/api-docs`);
+});
+```
+
+## **Configuration Patterns**
+
+### **Database Configuration**
+
+```javascript
+// config/database.js
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient({
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["error"],
+  errorFormat: "pretty",
+});
+
+// MANDATORY: Graceful shutdown
+process.on("beforeExit", async () => {
+  await prisma.$disconnect();
+});
+
+module.exports = { prisma };
+```
+
+### **Redis Configuration**
+
+```javascript
+// config/redis.js
+const Redis = require("ioredis");
+
+let redisClient = null;
+
+const getRedisClient = () => {
+  if (!redisClient) {
+    redisClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+      retryDelayOnFailover: 100,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+
+    redisClient.on("error", (err) => {
+      console.error("Redis connection error:", err);
+    });
+
+    redisClient.on("connect", () => {
+      console.log("Redis connected successfully");
+    });
+  }
+
+  return redisClient;
+};
+
+module.exports = { getRedisClient };
+```
+
+### **Swagger Configuration**
+
+```javascript
+// config/swagger.js
+const swaggerJsdoc = require("swagger-jsdoc");
+
+const options = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "Logistics Service Name API",
+      version: "1.0.0",
+      description: "Service description for the Logistics Aggregator Portal",
+      contact: { name: "API Support", email: "support@logistics.com" },
+      license: { name: "MIT", url: "https://opensource.org/licenses/MIT" },
+    },
+    servers: [
+      {
+        url: `http://localhost:${process.env.PORT || 8002}`,
+        description: "Development server",
+      },
+      { url: "https://api.logistics.com", description: "Production server" },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "JWT token obtained from auth service",
+        },
+      },
+      schemas: {
+        // Service-specific schemas
+        Entity: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "cuid123" },
+            name: { type: "string", example: "Entity Name" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        SuccessResponse: {
+          type: "object",
+          properties: {
+            status: { type: "string", example: "success" },
+            data: { type: "object" },
+            meta: { type: "object" },
+          },
+        },
+        ErrorResponse: {
+          type: "object",
+          properties: {
+            status: { type: "string", example: "error" },
+            message: { type: "string" },
+            code: { type: "string" },
+            details: { type: "object" },
+          },
+        },
+      },
+    },
+    tags: [
+      { name: "Entities", description: "Entity management operations" },
+      { name: "Health", description: "Service health and monitoring" },
+    ],
+  },
+  apis: ["./routes/*.js", "./server.js"],
+};
+
+module.exports = swaggerJsdoc(options);
+```
+
+## **Environment Configuration Standards**
+
+### **MANDATORY: .env.example Structure**
+
+Every service MUST have a comprehensive `.env.example`:
+
+```bash
+# Environment variables for Service Name
+
+# Database
+DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_service"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# JWT Configuration
+JWT_SECRET="your-super-secret-jwt-key-change-in-production"
+JWT_EXPIRES_IN="3600"
+
+# Service Configuration
+NODE_ENV="development"
+PORT="8002"
+
+# Service URLs (for inter-service communication)
+AUTH_SERVICE_URL="http://localhost:8001"
+USER_SERVICE_URL="http://localhost:8002"
+SHIPMENT_SERVICE_URL="http://localhost:8003"
+SUPPORT_SERVICE_URL="http://localhost:8004"
+PLATFORM_SERVICE_URL="http://localhost:8005"
+API_GATEWAY_URL="http://localhost:8000"
+
+# External Services
+WALLET_SERVICE_URL="http://localhost:8006"
+WALLET_SERVICE_API_KEY="your_wallet_service_api_key"
+PARTNER_SERVICE_URL="http://localhost:8007"
+PARTNER_SERVICE_API_KEY="your_partner_service_api_key"
+
+# Prisma
+PRISMA_QUERY_ENGINE_BINARY=""
+
+# Service-Specific Configuration
+# Add service-specific environment variables here
+```
+
+## **Testing Patterns**
+
+### **MANDATORY: Test Structure**
+
+```
+service-name/tests/
+├── unit/
+│   ├── controllers/
+│   ├── services/
+│   └── utils/
+├── integration/
+│   ├── routes/
+│   └── database/
+├── fixtures/
+│   └── testData.js
+└── helpers/
+    └── testSetup.js
+```
+
+### **Test Implementation Pattern**
+
+```javascript
+// tests/integration/routes/entities.test.js
+const request = require("supertest");
+const app = require("../../../server");
+const { prisma } = require("../../../config/database");
+
+describe("Entities API", () => {
+  beforeEach(async () => {
+    // Clean test database
+    await prisma.entity.deleteMany();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  describe("POST /api/entities", () => {
+    it("should create entity with valid data", async () => {
+      const entityData = {
+        name: "Test Entity",
+        description: "Test Description",
+      };
+
+      const response = await request(app)
+        .post("/api/entities")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send(entityData)
+        .expect(201);
+
+      expect(response.body.status).toBe("success");
+      expect(response.body.data.entity.name).toBe(entityData.name);
+    });
+  });
+});
+```
+
+## **Docker Configuration Standards**
+
+### **MANDATORY: Dockerfile Pattern**
+
+```dockerfile
+# Dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache openssl
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
+
+# Copy source code
+COPY . .
+
+# Install dependencies
+RUN pnpm install
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Expose port
+EXPOSE ${PORT:-8002}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8002}/health || exit 1
+
+# Start application
+CMD ["pnpm", "start"]
+```
+
+## **Package.json Standards**
+
+### **MANDATORY: Scripts and Dependencies**
+
+```json
+{
+  "name": "logistics-service-name",
+  "version": "1.0.0",
+  "description": "Service description",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "migrate": "npx prisma migrate dev",
+    "generate": "npx prisma generate",
+    "studio": "npx prisma studio"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "@prisma/client": "^5.22.0",
+    "ioredis": "^5.3.2",
+    "express-rate-limit": "^7.1.5",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4",
+    "eslint": "^8.55.0"
+  }
+}
+```
+
+## **Development Workflow Standards**
+
+### **MANDATORY: Development Process**
+
+1. **Setup**: Use `pnpm run setup:backend` to create proper `.env` files
+2. **Database**: Run `pnpm run migrate` to apply schema changes
+3. **Development**: Use `pnpm run dev` for hot reloading
+4. **Testing**: Write tests for all endpoints and business logic
+5. **Documentation**: Update Swagger documentation for all API changes
+6. **Audit**: Ensure all CRUD operations have audit logging
+
+### **Code Quality Gates**
+
+- ✅ All endpoints must have Swagger documentation
+- ✅ All database operations must include audit logging
+- ✅ All inputs must be validated with Joi schemas
+- ✅ All responses must follow standard format
+- ✅ All routes must have appropriate authentication/authorization
+- ✅ All services must have comprehensive health checks
+- ✅ All errors must be properly handled and logged
+
+## **Inter-Service Communication**
+
+### **MANDATORY: Service Integration Pattern**
+
+```javascript
+// services/externalService.js
+const axios = require("axios");
+
+class ExternalServiceClient {
+  constructor() {
+    this.baseURL = process.env.USER_SERVICE_URL;
+    this.timeout = 5000;
+  }
+
+  async getUserById(userId, authToken) {
+    try {
+      const response = await axios.get(`${this.baseURL}/api/users/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "X-Service": "service-name",
+        },
+        timeout: this.timeout,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("External service call failed:", error.message);
+      throw new Error("Failed to fetch user data");
+    }
+  }
+}
+
+module.exports = new ExternalServiceClient();
+```
+
+This rule ensures all backend services follow the proven patterns from the auth service implementation while maintaining consistency and production readiness across the entire microservices architecture.

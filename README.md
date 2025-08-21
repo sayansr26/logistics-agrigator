@@ -89,6 +89,50 @@ logistics/
 npm install -g pnpm@8.15.1
 ```
 
+### 🛠️ Development Scripts
+
+We provide comprehensive scripts for easy development setup and maintenance:
+
+#### 🧹 Cleanup Scripts
+```bash
+# Clean all dependencies, build files, and artifacts
+pnpm run cleanup
+
+# Deep cleanup (includes Docker system prune)
+pnpm run cleanup:deep
+```
+
+#### 🚀 Setup Scripts
+```bash
+# Full stack setup (auto-creates .env files + installs dependencies)
+pnpm run setup:dev
+
+# Frontend only setup
+pnpm run setup:frontend
+
+# Backend only setup
+pnpm run setup:backend
+```
+
+#### 🔄 Fresh Install (Cleanup + Setup)
+```bash
+# Complete fresh installation
+pnpm run fresh:install
+
+# Fresh frontend installation
+pnpm run fresh:frontend
+
+# Fresh backend installation
+pnpm run fresh:backend
+```
+
+**✨ What the setup scripts do:**
+- ✅ Auto-create `.env` files for all services
+- ✅ Install all dependencies with pnpm
+- ✅ Generate Prisma clients
+- ✅ Configure service-specific databases
+- ✅ Set up inter-service communication URLs
+
 ### 1. Environment Setup
 
 ```bash
@@ -96,12 +140,13 @@ npm install -g pnpm@8.15.1
 git clone <repository-url>
 cd logistics
 
-# Setup environment variables
-cp .env.example .env
-# Edit .env with your specific configurations
+# 🚀 NEW: Use our automated setup script
+pnpm run setup:dev
 
-# Install all dependencies (monorepo workspaces)
-pnpm install
+# OR manual setup (old way)
+# cp .env.example .env
+# Edit .env with your specific configurations
+# pnpm install
 ```
 
 ### 2. Start Development Environment

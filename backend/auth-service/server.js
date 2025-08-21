@@ -1,13 +1,15 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const swaggerUi = require("swagger-ui-express");
 
-const authRoutes = require('./routes/auth');
-const { errorHandler } = require('./middleware/errorHandler');
-const { connectDB, prisma } = require('./config/database');
-const { connectRedis } = require('./config/redis');
+const authRoutes = require("./routes/auth");
+const { errorHandler } = require("./middleware/errorHandler");
+const { connectDB, prisma } = require("./config/database");
+const { connectRedis, getRedisClient } = require("./config/redis");
+const swaggerSpecs = require("./config/swagger");
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -17,51 +19,161 @@ app.use(helmet());
 app.use(cors());
 
 // Logging
-app.use(morgan('combined'));
+app.use(morgan("combined"));
 
 // Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
-app.use('/auth', authRoutes);
+// API Documentation
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpecs, {
+    explorer: true,
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: "Logistics Auth Service API",
+  })
+);
 
-// Health check
-app.get('/health', async (req, res) => {
+// OpenAPI JSON endpoint
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json(swaggerSpecs);
+});
+
+// Routes
+app.use("/auth", authRoutes);
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Health check endpoint
+ *     description: Returns the health status of the auth service and its dependencies
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthResponse'
+ *             example:
+ *               status: ok
+ *               timestamp: '2024-01-01T00:00:00.000Z'
+ *               uptime: 3600
+ *               service: auth-service
+ *               version: '1.0.0'
+ *               database: connected
+ *               redis: connected
+ *               dependencies:
+ *                 postgres:
+ *                   status: healthy
+ *                   responseTime: 5
+ *                 redis:
+ *                   status: healthy
+ *                   responseTime: 2
+ *       503:
+ *         description: Service is unhealthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// Enhanced health check
+app.get("/health", async (req, res) => {
+  const startTime = Date.now();
+  const healthStatus = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    service: "auth-service",
+    version: process.env.npm_package_version || "1.0.0",
+    environment: process.env.NODE_ENV || "development",
+    dependencies: {},
+  };
+
+  let isHealthy = true;
+
   try {
-    // Check Prisma connection
+    // Check PostgreSQL connection
+    const pgStart = Date.now();
     await prisma.$queryRaw`SELECT 1`;
-    
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      service: 'auth-service',
-      database: 'connected',
-      prisma: 'connected'
-    });
+    const pgTime = Date.now() - pgStart;
+
+    healthStatus.database = "connected";
+    healthStatus.dependencies.postgres = {
+      status: "healthy",
+      responseTime: pgTime,
+    };
   } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      service: 'auth-service',
-      database: 'disconnected',
-      error: error.message
-    });
+    isHealthy = false;
+    healthStatus.database = "disconnected";
+    healthStatus.dependencies.postgres = {
+      status: "unhealthy",
+      error: error.message,
+    };
   }
+
+  try {
+    // Check Redis connection
+    const redisStart = Date.now();
+    const redisClient = getRedisClient();
+    await redisClient.ping();
+    const redisTime = Date.now() - redisStart;
+
+    healthStatus.redis = "connected";
+    healthStatus.dependencies.redis = {
+      status: "healthy",
+      responseTime: redisTime,
+    };
+  } catch (error) {
+    isHealthy = false;
+    healthStatus.redis = "disconnected";
+    healthStatus.dependencies.redis = {
+      status: "unhealthy",
+      error: error.message,
+    };
+  }
+
+  // Add memory and CPU usage
+  const memUsage = process.memoryUsage();
+  healthStatus.system = {
+    memory: {
+      used: Math.round(memUsage.heapUsed / 1024 / 1024),
+      total: Math.round(memUsage.heapTotal / 1024 / 1024),
+      external: Math.round(memUsage.external / 1024 / 1024),
+      unit: "MB",
+    },
+    pid: process.pid,
+    platform: process.platform,
+    nodeVersion: process.version,
+  };
+
+  // Overall response time
+  healthStatus.responseTime = Date.now() - startTime;
+
+  if (!isHealthy) {
+    healthStatus.status = "error";
+    return res.status(503).json(healthStatus);
+  }
+
+  res.json(healthStatus);
 });
 
 // Error handling
 app.use(errorHandler);
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\nReceived SIGINT, shutting down gracefully...');
+process.on("SIGINT", async () => {
+  console.log("\nReceived SIGINT, shutting down gracefully...");
   await prisma.$disconnect();
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('\nReceived SIGTERM, shutting down gracefully...');
+process.on("SIGTERM", async () => {
+  console.log("\nReceived SIGTERM, shutting down gracefully...");
   await prisma.$disconnect();
   process.exit(0);
 });
@@ -71,18 +183,18 @@ async function startServer() {
   try {
     // Connect to database
     await connectDB();
-    console.log('Database connected via Prisma');
-    
+    console.log("Database connected via Prisma");
+
     // Connect to Redis
     await connectRedis();
-    console.log('Redis connected');
-    
+    console.log("Redis connected");
+
     app.listen(PORT, () => {
       console.log(`Auth Service running on port ${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
 }

@@ -1,0 +1,466 @@
+---
+description: API documentation standards using Swagger/OpenAPI
+globs: backend/**/*.js,backend/**/*.ts
+---
+
+# API Documentation Standards
+
+## **MANDATORY: Swagger Documentation**
+
+Every API endpoint MUST have complete Swagger/OpenAPI documentation.
+
+### **Service Configuration**
+
+```javascript
+// swagger/config.js - Required for each service
+const swaggerJsdoc = require("swagger-jsdoc");
+const swaggerUi = require("swagger-ui-express");
+
+const options = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "User Service API",
+      version: "1.0.0",
+      description: "User management and client administration API",
+      contact: {
+        name: "Logistics Development Team",
+        email: "dev@logistics.com",
+      },
+    },
+    servers: [
+      {
+        url: "http://localhost:8002",
+        description: "Development server",
+      },
+      {
+        url: "https://api.logistics.com",
+        description: "Production server",
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
+  },
+  apis: ["./routes/*.js", "./swagger/schemas/*.js"],
+};
+
+const specs = swaggerJsdoc(options);
+module.exports = { specs, swaggerUi };
+```
+
+### **Endpoint Documentation Pattern**
+
+```javascript
+/**
+ * @swagger
+ * /api/users:
+ *   post:
+ *     summary: Create a new user
+ *     description: Creates a new user account with specified role and permissions
+ *     tags: [User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateUserRequest'
+ *           examples:
+ *             client_user:
+ *               summary: Create client user
+ *               value:
+ *                 email: "client@example.com"
+ *                 name: "John Doe"
+ *                 role: "client"
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+router.post(
+  "/users",
+  authenticateToken,
+  requireRole(["admin", "finance"]),
+  validate(createUserSchema),
+  UserController.createUser
+);
+```
+
+### **Schema Definitions**
+
+```javascript
+// swagger/schemas/user.js
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     User:
+ *       type: object
+ *       required:
+ *         - id
+ *         - email
+ *         - name
+ *         - role
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: Unique user identifier
+ *           example: "123e4567-e89b-12d3-a456-426614174000"
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: User email address
+ *           example: "user@example.com"
+ *         name:
+ *           type: string
+ *           minLength: 2
+ *           maxLength: 100
+ *           description: User full name
+ *           example: "John Doe"
+ *         role:
+ *           type: string
+ *           enum: [admin, finance, operations, client, support]
+ *           description: User role in the system
+ *           example: "client"
+ *         isActive:
+ *           type: boolean
+ *           description: Whether user account is active
+ *           example: true
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Account creation timestamp
+ *           example: "2024-01-15T10:30:00.000Z"
+ *
+ *     CreateUserRequest:
+ *       type: object
+ *       required:
+ *         - email
+ *         - name
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: "newuser@example.com"
+ *         name:
+ *           type: string
+ *           minLength: 2
+ *           maxLength: 100
+ *           example: "Jane Smith"
+ *         role:
+ *           type: string
+ *           enum: [admin, finance, operations, client, support]
+ *           default: client
+ *           example: "client"
+ */
+```
+
+### **Standard Response Schemas**
+
+```javascript
+// swagger/schemas/responses.js
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     SuccessResponse:
+ *       type: object
+ *       required:
+ *         - status
+ *         - message
+ *         - meta
+ *       properties:
+ *         status:
+ *           type: string
+ *           enum: [success]
+ *           example: "success"
+ *         message:
+ *           type: string
+ *           example: "Operation completed successfully"
+ *         data:
+ *           description: Response payload (varies by endpoint)
+ *         meta:
+ *           type: object
+ *           properties:
+ *             timestamp:
+ *               type: string
+ *               format: date-time
+ *               example: "2024-01-15T10:30:00.000Z"
+ *             service:
+ *               type: string
+ *               example: "user-service"
+ *             requestId:
+ *               type: string
+ *               format: uuid
+ *               example: "req-123e4567-e89b-12d3-a456-426614174000"
+ *
+ *     ErrorResponse:
+ *       type: object
+ *       required:
+ *         - status
+ *         - error
+ *         - meta
+ *       properties:
+ *         status:
+ *           type: string
+ *           enum: [error]
+ *           example: "error"
+ *         error:
+ *           type: object
+ *           required:
+ *             - code
+ *             - message
+ *           properties:
+ *             code:
+ *               type: string
+ *               example: "VALIDATION_ERROR"
+ *             message:
+ *               type: string
+ *               example: "Request validation failed"
+ *             details:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   field:
+ *                     type: string
+ *                     example: "email"
+ *                   message:
+ *                     type: string
+ *                     example: "Invalid email format"
+ */
+```
+
+### **Common Response Components**
+
+```javascript
+// swagger/responses/common.js
+/**
+ * @swagger
+ * components:
+ *   responses:
+ *     UnauthorizedError:
+ *       description: Authentication required
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ErrorResponse'
+ *           example:
+ *             status: "error"
+ *             error:
+ *               code: "MISSING_TOKEN"
+ *               message: "Access token required"
+ *
+ *     ForbiddenError:
+ *       description: Insufficient permissions
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ErrorResponse'
+ *           example:
+ *             status: "error"
+ *             error:
+ *               code: "INSUFFICIENT_PERMISSIONS"
+ *               message: "Access denied"
+ *
+ *     ValidationError:
+ *       description: Request validation failed
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ErrorResponse'
+ *           example:
+ *             status: "error"
+ *             error:
+ *               code: "VALIDATION_ERROR"
+ *               message: "Request validation failed"
+ *               details:
+ *                 - field: "email"
+ *                   message: "Invalid email format"
+ *
+ *     NotFoundError:
+ *       description: Resource not found
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ErrorResponse'
+ *           example:
+ *             status: "error"
+ *             error:
+ *               code: "NOT_FOUND"
+ *               message: "User with ID 123 not found"
+ */
+```
+
+## **Service Integration**
+
+### **Swagger UI Setup**
+
+```javascript
+// server.js - Required integration
+const express = require("express");
+const { specs, swaggerUi } = require("./swagger/config");
+
+const app = express();
+
+// MANDATORY: Swagger documentation endpoint
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
+
+// MANDATORY: JSON spec endpoint
+app.get("/api-docs.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(specs);
+});
+
+// MANDATORY: Health check with documentation link
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "user-service",
+    timestamp: new Date().toISOString(),
+    documentation: `${req.protocol}://${req.get("host")}/api-docs`,
+  });
+});
+```
+
+### **Parameter Documentation**
+
+```javascript
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     summary: List users with filtering
+ *     tags: [User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Number of items per page
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [admin, finance, operations, client, support]
+ *         description: Filter by user role
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *           minLength: 2
+ *         description: Search in name and email fields
+ */
+```
+
+## **Documentation Quality Checklist**
+
+### **MANDATORY: Every Endpoint Must Have**
+
+- [ ] Complete summary and description
+- [ ] Proper tags for organization
+- [ ] Security requirements specified
+- [ ] All parameters documented with examples
+- [ ] Request body schema with examples
+- [ ] All response codes with schemas
+- [ ] Error responses using standard components
+
+### **MANDATORY: Schema Requirements**
+
+- [ ] All properties documented with types
+- [ ] Required fields marked appropriately
+- [ ] Validation constraints specified
+- [ ] Examples provided for all schemas
+- [ ] Enum values documented
+- [ ] Nested objects properly referenced
+
+### **MANDATORY: Service Documentation**
+
+- [ ] Service description with purpose
+- [ ] Authentication methods explained
+- [ ] Contact information provided
+- [ ] Multiple environments configured
+- [ ] Health check endpoint documented
+
+## **Validation & Maintenance**
+
+### **Documentation Validation Script**
+
+```javascript
+// scripts/validate-swagger.js
+const SwaggerParser = require("@apidevtools/swagger-parser");
+const { specs } = require("../swagger/config");
+
+async function validateSwaggerSpec() {
+  try {
+    await SwaggerParser.validate(specs);
+    console.log("✅ Swagger specification is valid");
+    return true;
+  } catch (error) {
+    console.error("❌ Swagger validation failed:", error.message);
+    return false;
+  }
+}
+
+module.exports = { validateSwaggerSpec };
+```
+
+### **Package.json Scripts**
+
+```json
+{
+  "scripts": {
+    "docs:validate": "node scripts/validate-swagger.js",
+    "docs:generate": "swagger-jsdoc -d swagger/config.js -o swagger.json",
+    "docs:serve": "swagger-ui-serve swagger.json"
+  }
+}
+```
+
+## **File Structure**
+
+```
+service-name/
+├── swagger/
+│   ├── config.js           # Swagger configuration
+│   ├── schemas/            # Schema definitions
+│   │   ├── user.js
+│   │   └── responses.js
+│   └── responses/          # Reusable responses
+│       └── common.js
+├── routes/                 # API routes with Swagger docs
+└── scripts/
+    └── validate-swagger.js # Documentation validation
+```
+
+**Complete API documentation is MANDATORY and must be maintained alongside code changes.**

@@ -1,0 +1,845 @@
+---
+description: Service-specific implementation patterns for different business domains (User, Shipment, Support, Platform, API Gateway)
+globs: backend/user-service/**/*,backend/shipment-service/**/*,backend/support-service/**/*,backend/platform-service/**/*,backend/api-gateway/**/*
+---
+
+# Service-Specific Implementation Patterns
+
+> **Service Type Guidelines**  
+> This rule defines specific implementation patterns for different types of services in the Logistics Aggregator Portal, based on their business domains and responsibilities.
+
+## **User Service Implementation Patterns**
+
+### **Core Responsibilities**
+
+- User profile management
+- Client organization management
+- File upload handling (avatars, documents)
+- User preferences and settings
+
+### **Specific Schema Patterns**
+
+```prisma
+// User Service Schema (backend/user-service/prisma/schema.prisma)
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  firstName   String
+  lastName    String
+  phone       String?
+  avatar      String?  // File path or URL
+  role        Role     @default(CLIENT)
+  clientId    String?  // For multi-tenant support
+  isActive    Boolean  @default(true)
+  preferences Json?    // User preferences
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  client      Client?  @relation(fields: [clientId], references: [id])
+  documents   UserDocument[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Client {
+  id           String   @id @default(cuid())
+  name         String
+  domain       String?  @unique // For white-label
+  logo         String?
+  settings     Json?    // Client-specific settings
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  users        User[]
+
+  @@map("clients")
+}
+
+model UserDocument {
+  id          String      @id @default(cuid())
+  userId      String
+  fileName    String
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  documentType DocumentType
+  createdAt   DateTime    @default(now())
+
+  // Relationships
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_documents")
+}
+
+enum DocumentType {
+  AVATAR
+  ID_PROOF
+  ADDRESS_PROOF
+  BUSINESS_LICENSE
+  OTHER
+}
+```
+
+### **File Upload Controller Pattern**
+
+```javascript
+// controllers/userController.js - File upload handling
+static async uploadAvatar(req, res) {
+  try {
+    const userId = req.user.userId;
+    const file = req.file; // Multer middleware
+
+    // Validate file
+    if (!file) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No file uploaded',
+        code: 'FILE_REQUIRED'
+      });
+    }
+
+    // File size and type validation
+    const maxSize = parseInt(process.env.MAX_UPLOAD_SIZE) || 10485760; // 10MB
+    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png').split(',');
+
+    if (file.size > maxSize) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'File size too large',
+        code: 'FILE_TOO_LARGE'
+      });
+    }
+
+    const fileExt = file.originalname.split('.').pop().toLowerCase();
+    if (!allowedTypes.includes(fileExt)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'File type not allowed',
+        code: 'INVALID_FILE_TYPE'
+      });
+    }
+
+    // Save file and update user
+    const filePath = `${process.env.USER_AVATAR_UPLOAD_PATH}/${userId}_${Date.now()}.${fileExt}`;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatar: filePath },
+      select: { id: true, avatar: true }
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'AVATAR_UPLOAD',
+        resource: 'User',
+        resourceId: userId,
+        changes: { avatar: filePath },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: { user: updatedUser }
+    });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to upload avatar',
+      code: 'UPLOAD_ERROR'
+    });
+  }
+}
+```
+
+## **Shipment Service Implementation Patterns**
+
+### **Core Responsibilities**
+
+- Order and shipment management
+- Tracking and status updates
+- Courier integration
+- Notification handling (SMS/Email)
+
+### **Specific Schema Patterns**
+
+```prisma
+// Shipment Service Schema
+model Shipment {
+  id              String        @id @default(cuid())
+  trackingNumber  String        @unique
+  referenceNumber String?
+  userId          String        // From user service
+  clientId        String?       // Multi-tenant support
+
+  // Shipment details
+  status          ShipmentStatus @default(CREATED)
+  courierPartner  String?
+  serviceType     String?
+  packageWeight   Float?
+  packageValue    Float?
+  currency        String        @default("INR")
+
+  // Addresses
+  senderAddress   Json          // Address object
+  receiverAddress Json          // Address object
+
+  // Tracking
+  estimatedDelivery DateTime?
+  actualDelivery    DateTime?
+
+  // Metadata
+  manifestDate    DateTime?
+  paymentMode     PaymentMode   @default(PREPAID)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relationships
+  trackingEvents  TrackingEvent[]
+  documents       ShipmentDocument[]
+  notifications   Notification[]
+
+  @@map("shipments")
+}
+
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  status      String
+  location    String?
+  description String?
+  timestamp   DateTime @default(now())
+
+  // Relationships
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@map("tracking_events")
+}
+
+enum ShipmentStatus {
+  CREATED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+enum PaymentMode {
+  PREPAID
+  COD
+}
+```
+
+### **Notification Service Pattern**
+
+```javascript
+// services/notificationService.js
+class NotificationService {
+  static async sendShipmentUpdate(shipmentId, status, userPhone, userEmail) {
+    try {
+      const shipment = await prisma.shipment.findUnique({
+        where: { id: shipmentId },
+        select: { trackingNumber: true, referenceNumber: true },
+      });
+
+      // SMS notification
+      if (userPhone && process.env.SMS_PROVIDER === "msg91") {
+        await this.sendSMS(userPhone, {
+          trackingNumber: shipment.trackingNumber,
+          status: status,
+          referenceNumber: shipment.referenceNumber,
+        });
+      }
+
+      // Email notification
+      if (userEmail && process.env.EMAIL_PROVIDER === "sendgrid") {
+        await this.sendEmail(userEmail, {
+          trackingNumber: shipment.trackingNumber,
+          status: status,
+          referenceNumber: shipment.referenceNumber,
+        });
+      }
+
+      // Log notification
+      await prisma.notification.create({
+        data: {
+          shipmentId,
+          type: "STATUS_UPDATE",
+          channel: "SMS_EMAIL",
+          status: "SENT",
+          metadata: { status, trackingNumber: shipment.trackingNumber },
+        },
+      });
+    } catch (error) {
+      console.error("Notification error:", error);
+      // Log failed notification
+      await prisma.notification.create({
+        data: {
+          shipmentId,
+          type: "STATUS_UPDATE",
+          channel: "SMS_EMAIL",
+          status: "FAILED",
+          error: error.message,
+        },
+      });
+    }
+  }
+
+  static async sendSMS(phone, data) {
+    // MSG91 integration
+    const message = `Your shipment ${data.trackingNumber} is now ${data.status}. Track: ${process.env.TRACKING_URL_BASE}/${data.trackingNumber}`;
+
+    // Implementation depends on SMS provider
+    // This is a placeholder for actual SMS API call
+  }
+
+  static async sendEmail(email, data) {
+    // SendGrid integration
+    // Implementation depends on email provider
+    // This is a placeholder for actual email API call
+  }
+}
+```
+
+## **Support Service Implementation Patterns**
+
+### **Core Responsibilities**
+
+- Ticket management and resolution
+- Live chat support
+- Knowledge base management
+- Escalation handling
+
+### **Specific Schema Patterns**
+
+```prisma
+// Support Service Schema
+model Ticket {
+  id          String        @id @default(cuid())
+  ticketNumber String       @unique
+  userId      String        // From user service
+  clientId    String?       // Multi-tenant support
+
+  // Ticket details
+  subject     String
+  description String
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  category    String?
+
+  // Assignment
+  assignedTo  String?       // Support agent ID
+  assignedAt  DateTime?
+
+  // Tracking
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+
+  // Relationships
+  messages    TicketMessage[]
+  attachments TicketAttachment[]
+  escalations TicketEscalation[]
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  senderId  String   // User or agent ID
+  senderType SenderType
+  message   String
+  isInternal Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  // Relationships
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum SenderType {
+  USER
+  AGENT
+  SYSTEM
+}
+```
+
+### **Auto-Assignment Logic**
+
+```javascript
+// services/ticketService.js
+class TicketService {
+  static async createTicket(ticketData, userId) {
+    try {
+      // Generate ticket number
+      const ticketNumber = await this.generateTicketNumber();
+
+      // Auto-assign if enabled
+      let assignedTo = null;
+      if (process.env.AUTO_ASSIGN_TICKETS === "true") {
+        assignedTo = await this.findAvailableAgent(ticketData.category);
+      }
+
+      const ticket = await prisma.ticket.create({
+        data: {
+          ...ticketData,
+          ticketNumber,
+          userId,
+          assignedTo,
+          assignedAt: assignedTo ? new Date() : null,
+        },
+        include: {
+          messages: true,
+          attachments: true,
+        },
+      });
+
+      // Schedule escalation if needed
+      if (ticket.priority === "HIGH" || ticket.priority === "URGENT") {
+        await this.scheduleEscalation(ticket.id);
+      }
+
+      // Send notification to assigned agent
+      if (assignedTo) {
+        await this.notifyAgent(assignedTo, ticket);
+      }
+
+      return ticket;
+    } catch (error) {
+      console.error("Ticket creation error:", error);
+      throw error;
+    }
+  }
+
+  static async scheduleEscalation(ticketId) {
+    const escalationTime =
+      parseInt(process.env.TICKET_ESCALATION_TIME) || 86400; // 24 hours
+
+    // This would typically use a job queue like Bull or Agenda
+    setTimeout(async () => {
+      await this.escalateTicket(ticketId);
+    }, escalationTime * 1000);
+  }
+}
+```
+
+## **Platform Service Implementation Patterns**
+
+### **Core Responsibilities**
+
+- E-commerce platform integrations (Shopify, Amazon, etc.)
+- Order synchronization
+- Webhook handling
+- Platform-specific API management
+
+### **Specific Schema Patterns**
+
+```prisma
+// Platform Service Schema
+model PlatformIntegration {
+  id           String          @id @default(cuid())
+  userId       String          // From user service
+  clientId     String?         // Multi-tenant support
+  platform     PlatformType
+
+  // Credentials (encrypted)
+  credentials  Json            // Platform-specific credentials
+
+  // Configuration
+  isActive     Boolean         @default(true)
+  syncEnabled  Boolean         @default(true)
+  lastSyncAt   DateTime?
+
+  // Metadata
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Relationships
+  syncLogs     PlatformSyncLog[]
+  webhooks     PlatformWebhook[]
+
+  @@map("platform_integrations")
+}
+
+model PlatformSyncLog {
+  id            String              @id @default(cuid())
+  integrationId String
+  syncType      SyncType
+  status        SyncStatus
+  recordsProcessed Int              @default(0)
+  recordsSuccess   Int              @default(0)
+  recordsError     Int              @default(0)
+  errorDetails  Json?
+  startedAt     DateTime            @default(now())
+  completedAt   DateTime?
+
+  // Relationships
+  integration   PlatformIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@map("platform_sync_logs")
+}
+
+enum PlatformType {
+  SHOPIFY
+  AMAZON
+  WOOCOMMERCE
+  MAGENTO
+  CUSTOM
+}
+
+enum SyncType {
+  ORDERS
+  PRODUCTS
+  CUSTOMERS
+  INVENTORY
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+```
+
+### **Shopify Integration Pattern**
+
+```javascript
+// services/shopifyService.js
+class ShopifyService {
+  constructor(credentials) {
+    this.clientId = credentials.clientId;
+    this.clientSecret = credentials.clientSecret;
+    this.accessToken = credentials.accessToken;
+    this.shopDomain = credentials.shopDomain;
+    this.apiVersion = process.env.SHOPIFY_API_VERSION || "2024-01";
+  }
+
+  async syncOrders(integrationId, lastSyncDate = null) {
+    try {
+      const syncLog = await prisma.platformSyncLog.create({
+        data: {
+          integrationId,
+          syncType: "ORDERS",
+          status: "RUNNING",
+        },
+      });
+
+      let orders = [];
+      let hasNextPage = true;
+      let cursor = null;
+
+      while (hasNextPage) {
+        const response = await this.fetchOrders(cursor, lastSyncDate);
+        orders = orders.concat(response.orders);
+
+        hasNextPage = response.pageInfo.hasNextPage;
+        cursor = response.pageInfo.endCursor;
+      }
+
+      // Process orders
+      let successCount = 0;
+      let errorCount = 0;
+      const errors = [];
+
+      for (const order of orders) {
+        try {
+          await this.processOrder(order, integrationId);
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          errors.push({
+            orderId: order.id,
+            error: error.message,
+          });
+        }
+      }
+
+      // Update sync log
+      await prisma.platformSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: errorCount > 0 ? "COMPLETED" : "COMPLETED",
+          recordsProcessed: orders.length,
+          recordsSuccess: successCount,
+          recordsError: errorCount,
+          errorDetails: errors.length > 0 ? { errors } : null,
+          completedAt: new Date(),
+        },
+      });
+
+      return {
+        processed: orders.length,
+        success: successCount,
+        errors: errorCount,
+      };
+    } catch (error) {
+      console.error("Shopify sync error:", error);
+
+      // Update sync log with error
+      await prisma.platformSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: "FAILED",
+          errorDetails: { error: error.message },
+          completedAt: new Date(),
+        },
+      });
+
+      throw error;
+    }
+  }
+
+  async handleWebhook(webhookData, integrationId) {
+    try {
+      // Verify webhook signature
+      const isValid = this.verifyWebhookSignature(webhookData);
+      if (!isValid) {
+        throw new Error("Invalid webhook signature");
+      }
+
+      // Process webhook based on topic
+      switch (webhookData.topic) {
+        case "orders/create":
+          await this.processOrder(webhookData.data, integrationId);
+          break;
+        case "orders/updated":
+          await this.updateOrder(webhookData.data, integrationId);
+          break;
+        case "orders/cancelled":
+          await this.cancelOrder(webhookData.data, integrationId);
+          break;
+        default:
+          console.log(`Unhandled webhook topic: ${webhookData.topic}`);
+      }
+
+      // Log webhook processing
+      await prisma.platformWebhook.create({
+        data: {
+          integrationId,
+          topic: webhookData.topic,
+          status: "PROCESSED",
+          payload: webhookData.data,
+        },
+      });
+    } catch (error) {
+      console.error("Webhook processing error:", error);
+
+      // Log webhook error
+      await prisma.platformWebhook.create({
+        data: {
+          integrationId,
+          topic: webhookData.topic || "unknown",
+          status: "FAILED",
+          payload: webhookData.data,
+          error: error.message,
+        },
+      });
+
+      throw error;
+    }
+  }
+}
+```
+
+## **API Gateway Implementation Patterns**
+
+### **Core Responsibilities**
+
+- Request routing and load balancing
+- Rate limiting and throttling
+- Authentication middleware
+- Request/response transformation
+
+### **Specific Configuration**
+
+```javascript
+// config/routes.js - Service routing configuration
+const serviceRoutes = {
+  "/api/auth": {
+    target: process.env.AUTH_SERVICE_URL,
+    timeout: 5000,
+    retries: 3,
+  },
+  "/api/users": {
+    target: process.env.USER_SERVICE_URL,
+    timeout: 10000, // Longer for file uploads
+    retries: 2,
+  },
+  "/api/shipments": {
+    target: process.env.SHIPMENT_SERVICE_URL,
+    timeout: 8000,
+    retries: 3,
+  },
+  "/api/support": {
+    target: process.env.SUPPORT_SERVICE_URL,
+    timeout: 15000, // Longer for chat/real-time features
+    retries: 2,
+  },
+  "/api/platforms": {
+    target: process.env.PLATFORM_SERVICE_URL,
+    timeout: 30000, // Longer for sync operations
+    retries: 1,
+  },
+};
+
+module.exports = { serviceRoutes };
+```
+
+### **Circuit Breaker Pattern**
+
+```javascript
+// middleware/circuitBreaker.js
+class CircuitBreaker {
+  constructor(service, options = {}) {
+    this.service = service;
+    this.failureThreshold = options.failureThreshold || 5;
+    this.timeout = options.timeout || 60000;
+    this.monitoringPeriod = options.monitoringPeriod || 10000;
+
+    this.state = "CLOSED"; // CLOSED, OPEN, HALF_OPEN
+    this.failureCount = 0;
+    this.lastFailureTime = null;
+    this.nextAttempt = null;
+  }
+
+  async call(request) {
+    if (this.state === "OPEN") {
+      if (Date.now() < this.nextAttempt) {
+        throw new Error(`Circuit breaker is OPEN for ${this.service}`);
+      }
+      this.state = "HALF_OPEN";
+    }
+
+    try {
+      const result = await this.makeRequest(request);
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  onSuccess() {
+    this.failureCount = 0;
+    this.state = "CLOSED";
+  }
+
+  onFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.failureCount >= this.failureThreshold) {
+      this.state = "OPEN";
+      this.nextAttempt = Date.now() + this.timeout;
+    }
+  }
+}
+```
+
+## **Common Service Utilities**
+
+### **Pagination Helper**
+
+```javascript
+// utils/pagination.js
+class PaginationHelper {
+  static getPaginationParams(req) {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    return { page, limit, offset };
+  }
+
+  static formatPaginatedResponse(data, total, page, limit) {
+    const totalPages = Math.ceil(total / limit);
+    const hasNext = page < totalPages;
+    const hasPrev = page > 1;
+
+    return {
+      status: "success",
+      data: {
+        items: data,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext,
+          hasPrev,
+          nextPage: hasNext ? page + 1 : null,
+          prevPage: hasPrev ? page - 1 : null,
+        },
+      },
+    };
+  }
+}
+```
+
+### **Audit Logger Utility**
+
+```javascript
+// utils/auditLogger.js
+class AuditLogger {
+  static async log(action, resource, resourceId, changes, req) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user?.userId,
+          action,
+          resource,
+          resourceId,
+          changes: changes || {},
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+    } catch (error) {
+      console.error("Audit logging failed:", error);
+      // Don't throw - audit logging failure shouldn't break the main operation
+    }
+  }
+
+  static async logBulk(entries) {
+    try {
+      await prisma.auditLog.createMany({
+        data: entries,
+      });
+    } catch (error) {
+      console.error("Bulk audit logging failed:", error);
+    }
+  }
+}
+```
+
+This rule provides specific implementation patterns for each service type while maintaining consistency with the overall backend architecture established by the auth service.
