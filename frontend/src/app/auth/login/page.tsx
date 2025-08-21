@@ -59,9 +59,6 @@ export default function LoginPage() {
     // Simulate API call delay
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    // For now, just redirect to dashboard (static)
-    console.log("Login attempt:", data);
-
     // TODO: Replace with actual API call
     // const response = await fetch('/api/auth/login', {
     //   method: 'POST',
@@ -217,7 +214,7 @@ export default function LoginPage() {
             {/* Sign Up Link */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
-                Don't have an account?{" "}
+                Don&apos;t have an account?{" "}
                 <Link
                   href="/auth/register"
                   className="text-logistics-600 hover:text-logistics-700 font-medium"

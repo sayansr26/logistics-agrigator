@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Truck, Package, MapPin } from "lucide-react";
 
 // Form validation schema
@@ -87,8 +86,8 @@ export default function FormsDemo() {
     defaultValues,
   });
 
-  function onSubmit(data: ShipmentFormValues) {
-    console.log("Form submitted:", data);
+  function onSubmit(_data: ShipmentFormValues) {
+    // Form submitted successfully
     alert("Form submitted successfully! Check console for data.");
   }
 

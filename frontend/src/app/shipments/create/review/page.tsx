@@ -1,77 +1,146 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { CreateShipmentLayout } from "@/components/shipments/create/layout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
 import {
   Package,
+  Truck,
   MapPin,
+  Calendar,
+  Clock,
+  DollarSign,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  MoreHorizontal,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
+  Copy,
+  ExternalLink,
+  Search,
+  Filter,
+  Download,
+  RefreshCw,
+  HelpCircle,
+  MessageSquare,
+  Phone,
+  Mail,
+  User,
+  Building,
+  ChevronRight,
+  ArrowRight,
+  Check,
+  Navigation,
+  Layers,
+  Smartphone,
+  Monitor,
+  Home,
+  ChevronDown,
+  Menu,
   FileText,
   Box,
-  CheckCircle,
-  ArrowLeft,
 } from "lucide-react";
 
 export default function ReviewPage() {
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const formData = useShipmentFormStore();
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      // TODO: Implement actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      router.push("/shipments?created=true");
-    } catch (error) {
-      console.error("Error creating shipment:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const {
+    currentStep,
+    referenceNo,
+    actualWeight,
+    pickupAddress,
+    productDescription,
+    phoneNumber,
+    alternatePhone,
+    email,
+    receiverName,
+    address,
+    landmark,
+    pincode,
+    area,
+    city,
+    state,
+    eWayBillNo,
+    invoiceNo,
+    invoiceAmt,
+    invoiceDate,
+    attachment,
+    boxes,
+    setStep,
+  } = useShipmentFormStore();
+
+  const handleStepChange = (step: number) => {
+    setStep(step);
   };
 
-  const SectionTitle = ({
-    icon: Icon,
-    title,
-  }: {
-    icon: any;
-    title: string;
-  }) => (
-    <div className="flex items-center space-x-2 text-lg font-medium">
-      <Icon className="h-5 w-5" />
-      <span>{title}</span>
-    </div>
-  );
-
-  const Field = ({ label, value }: { label: string; value: string }) => (
-    <div className="space-y-1">
-      <dt className="text-sm font-medium text-gray-500">{label}</dt>
-      <dd className="text-sm text-gray-900">{value || "-"}</dd>
-    </div>
-  );
+  const handleSubmit = () => {
+    // In real app, this would submit the shipment data via API
+    // Submission logic would go here
+  };
 
   return (
-    <CreateShipmentLayout>
+    <CreateShipmentLayout
+      currentStep={currentStep}
+      onStepChange={handleStepChange}
+    >
       <div className="space-y-6">
         {/* Docket Information */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              <SectionTitle icon={Package} title="Docket Information" />
+            <CardTitle className="flex items-center space-x-2">
+              <Package className="h-5 w-5" />
+              <span>Docket Information</span>
             </CardTitle>
+            <CardDescription>
+              Review your shipment details before creating
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6">
-              <Field label="Reference No" value={formData.referenceNo} />
-              <Field label="Actual Weight" value={formData.actualWeight} />
-              <Field label="Pickup Address" value={formData.pickupAddress} />
-              <Field
-                label="Product Description"
-                value={formData.productDescription}
-              />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Reference Number
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {referenceNo || "Not provided"}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Weight
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {actualWeight ? `${actualWeight} kg` : "Not provided"}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Pickup Address
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {pickupAddress || "Not provided"}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Product Description
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {productDescription || "Not provided"}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -79,124 +148,147 @@ export default function ReviewPage() {
         {/* Delivery Location */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              <SectionTitle
-                icon={MapPin}
-                title="Delivery Location Information"
-              />
+            <CardTitle className="flex items-center space-x-2">
+              <MapPin className="h-5 w-5" />
+              <span>Delivery Location</span>
             </CardTitle>
+            <CardDescription>
+              Receiver and delivery address information
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6">
-              <Field label="Phone Number" value={formData.phoneNumber} />
-              <Field label="Alternate Phone" value={formData.alternatePhone} />
-              <Field label="Email" value={formData.email} />
-              <Field label="Receiver Name" value={formData.receiverName} />
-              <div className="col-span-2">
-                <Field label="Address" value={formData.address} />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Receiver Name
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {receiverName || "Not provided"}
+                </p>
               </div>
-              <Field label="Landmark" value={formData.landmark} />
-              <Field label="Pincode" value={formData.pincode} />
-              <Field label="Area" value={formData.area} />
-              <Field label="City" value={formData.city} />
-              <Field label="State" value={formData.state} />
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Phone Number
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {phoneNumber || "Not provided"}
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Address
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {address
+                    ? `${address}, ${area}, ${city}, ${state} ${pincode}`
+                    : "Not provided"}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Invoices */}
+        {/* Invoice Information */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              <SectionTitle icon={FileText} title="Invoice Details" />
+            <CardTitle className="flex items-center space-x-2">
+              <FileText className="h-5 w-5" />
+              <span>Invoice Information</span>
             </CardTitle>
+            <CardDescription>Invoice and e-way bill details</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6">
-              <Field label="E-Way Bill No" value={formData.eWayBillNo} />
-              <Field label="Invoice No" value={formData.invoiceNo} />
-              <Field label="Invoice Amount" value={formData.invoiceAmt} />
-              <Field label="Invoice Date" value={formData.invoiceDate} />
-              <Field
-                label="Attachment"
-                value={
-                  formData.attachment
-                    ? formData.attachment.name
-                    : "No file attached"
-                }
-              />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Invoice Number
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {invoiceNo || "Not provided"}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Invoice Amount
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {invoiceAmt ? `$${invoiceAmt}` : "Not provided"}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Invoice Date
+                </label>
+                <p className="text-sm font-medium mt-1">
+                  {invoiceDate || "Not provided"}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Dimensions */}
+        {/* Box Dimensions */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              <SectionTitle icon={Box} title="Package Dimensions" />
+            <CardTitle className="flex items-center space-x-2">
+              <Box className="h-5 w-5" />
+              <span>Box Dimensions</span>
             </CardTitle>
+            <CardDescription>
+              Package dimensions and specifications
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div className="text-sm font-medium">
-                Total Boxes: {formData.boxes.length}
-              </div>
-              <div className="grid gap-6">
-                {formData.boxes.map((box, index) => (
-                  <div key={box.id} className="border rounded-lg p-4">
-                    <h4 className="font-medium mb-4">Box {index + 1}</h4>
-                    <div className="grid grid-cols-3 gap-4">
-                      <Field label="Length (cm)" value={box.length} />
-                      <Field label="Height (cm)" value={box.height} />
-                      <Field label="Width (cm)" value={box.width} />
-                      {box.length && box.height && box.width && (
-                        <div className="col-span-3 bg-gray-50 p-3 rounded">
-                          <span className="font-medium">Volume: </span>
-                          <span>
-                            {(
-                              parseFloat(box.length) *
-                              parseFloat(box.height) *
-                              parseFloat(box.width)
-                            ).toFixed(2)}{" "}
-                            cm³
-                          </span>
-                        </div>
-                      )}
+          <CardContent className="space-y-4">
+            {boxes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No boxes added</p>
+            ) : (
+              boxes.map((box, index) => (
+                <div key={box.id} className="border rounded-lg p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Box {index + 1}</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Length
+                      </label>
+                      <p className="text-sm font-medium mt-1">
+                        {box.length ? `${box.length} cm` : "Not provided"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Width
+                      </label>
+                      <p className="text-sm font-medium mt-1">
+                        {box.width ? `${box.width} cm` : "Not provided"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Height
+                      </label>
+                      <p className="text-sm font-medium mt-1">
+                        {box.height ? `${box.height} cm` : "Not provided"}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                  {box.length && box.height && box.width && (
+                    <div className="bg-gray-50 p-3 rounded text-sm">
+                      <span className="font-medium">Volume: </span>
+                      <span>
+                        {(
+                          parseFloat(box.length) *
+                          parseFloat(box.height) *
+                          parseFloat(box.width)
+                        ).toFixed(2)}{" "}
+                        cm³
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
-
-        {/* Action Buttons */}
-        {/* <div className="flex items-center justify-between pt-6">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/shipments/create/dimensions")}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dimensions
-          </Button>
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="outline"
-              onClick={() => formData.resetForm()}
-              disabled={isSubmitting}
-            >
-              Reset Form
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              {isSubmitting ? "Creating Shipment..." : "Create Shipment"}
-            </Button>
-          </div>
-        </div> */}
       </div>
     </CreateShipmentLayout>
   );

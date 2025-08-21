@@ -81,6 +81,46 @@ export interface NDR {
   createdAt: string;
 }
 
+// Dispute interface
+export interface Dispute {
+  id: string;
+  disputeNumber: string;
+  trackingNumber: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  origin: string;
+  destination: string;
+  courierPartner: string;
+  issueType: string;
+  reason: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  priority: "low" | "medium" | "high" | "urgent";
+  createdAt: string;
+  lastUpdated: string;
+  assignedTo?: string;
+  resolution?: string;
+}
+
+// Support Ticket interface
+export interface SupportTicket {
+  id: string;
+  ticketNumber: string;
+  customerName: string;
+  customerEmail: string;
+  subject: string;
+  description: string;
+  category: string;
+  subcategory: string;
+  priority: "low" | "medium" | "high" | "urgent";
+  status: "open" | "in_progress" | "waiting_customer" | "resolved" | "closed";
+  createdAt: string;
+  lastResponse?: string;
+  responseTime?: number; // in hours
+  assignedTo?: string;
+  tags?: string[];
+}
+
 // Generate mock shipments
 export const mockShipments: Shipment[] = [
   {
@@ -916,6 +956,207 @@ export const mockInvoices: Invoice[] = [
   },
 ];
 
+// Generate mock disputes
+export const mockDisputes: Dispute[] = [
+  {
+    id: "1",
+    disputeNumber: "DISP-2024-001",
+    trackingNumber: "LOG2024001",
+    customerName: "John Smith",
+    customerEmail: "john.smith@email.com",
+    customerPhone: "+1-555-0101",
+    origin: "Mumbai",
+    destination: "New York",
+    courierPartner: "FedEx",
+    issueType: "Delivery Delay",
+    reason: "Package delayed due to weather conditions",
+    status: "open",
+    priority: "high",
+    createdAt: "2024-08-15T10:30:00Z",
+    lastUpdated: "2024-08-16T14:20:00Z",
+    assignedTo: "Support Team A",
+  },
+  {
+    id: "2",
+    disputeNumber: "DISP-2024-002",
+    trackingNumber: "LOG2024002",
+    customerName: "Sarah Johnson",
+    customerEmail: "sarah.j@email.com",
+    customerPhone: "+1-555-0102",
+    origin: "Delhi",
+    destination: "Los Angeles",
+    courierPartner: "DHL",
+    issueType: "Package Damaged",
+    reason: "Package arrived with visible damage",
+    status: "in_progress",
+    priority: "urgent",
+    createdAt: "2024-08-14T09:15:00Z",
+    lastUpdated: "2024-08-16T11:45:00Z",
+    assignedTo: "Claims Team B",
+  },
+  {
+    id: "3",
+    disputeNumber: "DISP-2024-003",
+    trackingNumber: "LOG2024003",
+    customerName: "Mike Wilson",
+    customerEmail: "mike.w@email.com",
+    customerPhone: "+1-555-0103",
+    origin: "Bangalore",
+    destination: "Chicago",
+    courierPartner: "UPS",
+    issueType: "Wrong Address",
+    reason: "Package delivered to incorrect address",
+    status: "resolved",
+    priority: "medium",
+    createdAt: "2024-08-12T16:45:00Z",
+    lastUpdated: "2024-08-15T13:30:00Z",
+    assignedTo: "Support Team A",
+    resolution: "Package redirected to correct address",
+  },
+  {
+    id: "4",
+    disputeNumber: "DISP-2024-004",
+    trackingNumber: "LOG2024004",
+    customerName: "Emily Davis",
+    customerEmail: "emily.d@email.com",
+    customerPhone: "+1-555-0104",
+    origin: "Chennai",
+    destination: "Houston",
+    courierPartner: "Aramex",
+    issueType: "Missing Package",
+    reason: "Package not received despite delivery confirmation",
+    status: "open",
+    priority: "high",
+    createdAt: "2024-08-16T08:20:00Z",
+    lastUpdated: "2024-08-16T15:10:00Z",
+    assignedTo: "Investigation Team C",
+  },
+  {
+    id: "5",
+    disputeNumber: "DISP-2024-005",
+    trackingNumber: "LOG2024005",
+    customerName: "David Brown",
+    customerEmail: "david.b@email.com",
+    customerPhone: "+1-555-0105",
+    origin: "Hyderabad",
+    destination: "Phoenix",
+    courierPartner: "Blue Dart",
+    issueType: "Billing Dispute",
+    reason: "Incorrect charges applied to shipment",
+    status: "in_progress",
+    priority: "medium",
+    createdAt: "2024-08-13T12:00:00Z",
+    lastUpdated: "2024-08-16T10:15:00Z",
+    assignedTo: "Finance Team D",
+  },
+];
+
+// Generate mock support tickets
+export const mockSupportTickets: SupportTicket[] = [
+  {
+    id: "1",
+    ticketNumber: "SUP-2024-001",
+    customerName: "Alice Cooper",
+    subject: "Account Access Issues",
+    description:
+      "Unable to log into my account. Getting 'Invalid credentials' error even with correct password.",
+    category: "Technical Support",
+    subcategory: "Account Access",
+    priority: "high",
+    status: "open",
+    createdAt: "2024-08-16T09:00:00Z",
+    assignedTo: "Tech Support Team",
+    tags: ["login", "account", "technical"],
+    customerEmail: "",
+  },
+  {
+    id: "2",
+    ticketNumber: "SUP-2024-002",
+    customerName: "Robert Taylor",
+    subject: "Bulk Upload Template Request",
+    description:
+      "Need the latest Excel template for bulk shipment uploads. Current template seems outdated.",
+    category: "General Inquiry",
+    subcategory: "Documentation",
+    priority: "low",
+    status: "resolved",
+    createdAt: "2024-08-15T14:30:00Z",
+    lastResponse: "2024-08-15T16:45:00Z",
+    responseTime: 2,
+    assignedTo: "Customer Success Team",
+    tags: ["template", "bulk-upload", "excel"],
+    customerEmail: "",
+  },
+  {
+    id: "3",
+    ticketNumber: "SUP-2024-003",
+    customerName: "Lisa Anderson",
+    subject: "API Integration Support",
+    description:
+      "Need help integrating our Shopify store with the logistics API. Getting 401 authentication errors.",
+    category: "Technical Support",
+    subcategory: "API Integration",
+    priority: "high",
+    status: "in_progress",
+    createdAt: "2024-08-14T11:15:00Z",
+    lastResponse: "2024-08-16T13:20:00Z",
+    responseTime: 50,
+    assignedTo: "Developer Support Team",
+    tags: ["api", "shopify", "integration", "authentication"],
+    customerEmail: "",
+  },
+  {
+    id: "4",
+    ticketNumber: "SUP-2024-004",
+    customerName: "James Miller",
+    subject: "Pricing Information",
+    description:
+      "Looking for detailed pricing information for international shipments to Europe. Need rates for different weight categories.",
+    category: "Sales Inquiry",
+    subcategory: "Pricing",
+    priority: "medium",
+    status: "waiting_customer",
+    createdAt: "2024-08-13T10:45:00Z",
+    lastResponse: "2024-08-15T15:30:00Z",
+    responseTime: 29,
+    assignedTo: "Sales Team",
+    tags: ["pricing", "international", "europe", "rates"],
+    customerEmail: "",
+  },
+  {
+    id: "5",
+    ticketNumber: "SUP-2024-005",
+    customerName: "Maria Garcia",
+    subject: "Refund Request",
+    description:
+      "Requesting refund for cancelled shipment LOG2024006. Payment was deducted but shipment was cancelled due to courier unavailability.",
+    category: "Billing Support",
+    subcategory: "Refunds",
+    priority: "urgent",
+    status: "open",
+    createdAt: "2024-08-16T07:30:00Z",
+    assignedTo: "Finance Team",
+    tags: ["refund", "cancelled", "payment", "urgent"],
+    customerEmail: "",
+  },
+  {
+    id: "6",
+    ticketNumber: "SUP-2024-006",
+    customerName: "Tom Wilson",
+    subject: "Mobile App Feature Request",
+    description:
+      "Would be great to have push notifications for shipment status updates in the mobile app. Currently only email notifications available.",
+    category: "Feature Request",
+    subcategory: "Mobile App",
+    priority: "low",
+    status: "open",
+    createdAt: "2024-08-12T16:20:00Z",
+    assignedTo: "Product Team",
+    tags: ["mobile-app", "notifications", "feature-request"],
+    customerEmail: "",
+  },
+];
+
 // Wallet utility functions
 export function getTransactionStatusColor(
   status: Transaction["transactionDetails"]["status"],
@@ -967,6 +1208,57 @@ export function getNDRStatusColor(status: NDR["status"]): string {
       return "bg-green-100 text-green-800";
     case "cancelled":
       return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+// Dispute utility functions
+export function getDisputeStatusColor(status: Dispute["status"]): string {
+  switch (status) {
+    case "open":
+      return "bg-red-100 text-red-800";
+    case "in_progress":
+      return "bg-yellow-100 text-yellow-800";
+    case "resolved":
+      return "bg-green-100 text-green-800";
+    case "closed":
+      return "bg-gray-100 text-gray-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+// Support Ticket utility functions
+export function getTicketPriorityColor(
+  priority: SupportTicket["priority"],
+): string {
+  switch (priority) {
+    case "urgent":
+      return "border-red-500 text-red-700 bg-red-50";
+    case "high":
+      return "border-orange-500 text-orange-700 bg-orange-50";
+    case "medium":
+      return "border-yellow-500 text-yellow-700 bg-yellow-50";
+    case "low":
+      return "border-green-500 text-green-700 bg-green-50";
+    default:
+      return "border-gray-500 text-gray-700 bg-gray-50";
+  }
+}
+
+export function getTicketStatusColor(status: SupportTicket["status"]): string {
+  switch (status) {
+    case "open":
+      return "bg-red-100 text-red-800";
+    case "in_progress":
+      return "bg-yellow-100 text-yellow-800";
+    case "waiting_customer":
+      return "bg-blue-100 text-blue-800";
+    case "resolved":
+      return "bg-green-100 text-green-800";
+    case "closed":
+      return "bg-gray-100 text-gray-800";
     default:
       return "bg-gray-100 text-gray-800";
   }

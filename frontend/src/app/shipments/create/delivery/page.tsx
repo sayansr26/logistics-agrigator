@@ -10,6 +10,7 @@ import { MapPin } from "lucide-react";
 
 export default function DeliveryLocationPage() {
   const {
+    currentStep,
     phoneNumber,
     alternatePhone,
     email,
@@ -21,10 +22,18 @@ export default function DeliveryLocationPage() {
     city,
     state,
     setField,
+    setStep,
   } = useShipmentFormStore();
 
+  const handleStepChange = (step: number) => {
+    setStep(step);
+  };
+
   return (
-    <CreateShipmentLayout>
+    <CreateShipmentLayout
+      currentStep={currentStep}
+      onStepChange={handleStepChange}
+    >
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">

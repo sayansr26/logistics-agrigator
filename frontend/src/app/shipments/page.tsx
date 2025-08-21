@@ -32,12 +32,8 @@ import {
 import {
   mockShipments,
   getStatusColor,
-  getPriorityColor,
   getPaymentModeColor,
   getFirstWord,
-  formatCurrency,
-  formatDate,
-  type Shipment,
 } from "@/lib/mock-data";
 import {
   Package,

@@ -18,16 +18,25 @@ import { FileText } from "lucide-react";
 
 export default function DocketInformationPage() {
   const {
+    currentStep,
     referenceNo,
     actualWeight,
     pickupAddress,
     productDescription,
     setField,
+    setStep,
     errors,
   } = useShipmentFormStore();
 
+  const handleStepChange = (step: number) => {
+    setStep(step);
+  };
+
   return (
-    <CreateShipmentLayout>
+    <CreateShipmentLayout
+      currentStep={currentStep}
+      onStepChange={handleStepChange}
+    >
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">

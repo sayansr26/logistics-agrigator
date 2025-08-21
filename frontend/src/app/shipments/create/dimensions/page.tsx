@@ -9,10 +9,18 @@ import { useShipmentFormStore } from "@/store/shipment-form-store";
 import { Package, Plus, Trash2 } from "lucide-react";
 
 export default function DimensionsPage() {
-  const { boxes, addBox, removeBox, updateBox } = useShipmentFormStore();
+  const { currentStep, boxes, addBox, removeBox, updateBox, setStep } =
+    useShipmentFormStore();
+
+  const handleStepChange = (step: number) => {
+    setStep(step);
+  };
 
   return (
-    <CreateShipmentLayout>
+    <CreateShipmentLayout
+      currentStep={currentStep}
+      onStepChange={handleStepChange}
+    >
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
