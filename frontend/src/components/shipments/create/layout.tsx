@@ -1,16 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import React from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCcw, Save, Send } from "lucide-react";
+import { RefreshCcw, Save, Send } from "lucide-react";
 import { CreateShipmentStepper } from "./stepper";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
 
 interface CreateShipmentLayoutProps {
   children: React.ReactNode;
   currentStep: number;
-  onStepChange: (step: number) => void;
+  onStepChange: (_step: number) => void;
 }
 
 export function CreateShipmentLayout({
@@ -18,21 +18,11 @@ export function CreateShipmentLayout({
   currentStep,
   onStepChange,
 }: CreateShipmentLayoutProps) {
-  const router = useRouter();
-
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
     { title: "Shipments", href: "/shipments" },
     { title: "Create Shipment" },
   ];
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      onStepChange(currentStep - 1);
-    } else {
-      router.push("/shipments");
-    }
-  };
 
   const handleNext = () => {
     // In real app, this would validate the current step

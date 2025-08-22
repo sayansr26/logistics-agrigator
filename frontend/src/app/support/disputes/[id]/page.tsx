@@ -91,7 +91,7 @@ export default function DisputeDetailPage({ params }: DisputeDetailProps) {
     { title: `Dispute #${dispute.disputeNumber}` },
   ];
 
-  const handleStatusUpdate = (newStatus: string) => {
+  const handleStatusUpdate = (_newStatus: string) => {
     // In real app, this would update the dispute status via API
     // Status update logic would go here
   };

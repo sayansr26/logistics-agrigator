@@ -29,46 +29,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  mockBulkUploads,
-  getBulkUploadStatusColor,
-  type BulkUpload,
-} from "@/lib/mock-data";
+import { mockBulkUploads, getBulkUploadStatusColor } from "@/lib/mock-data";
 import {
   Upload,
   Download,
   RefreshCw,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
   MoreHorizontal,
   Eye,
   Trash2,
-  Copy,
-  ExternalLink,
   Search,
   Filter,
-  Plus,
   Package,
-  Truck,
-  MapPin,
-  Calendar,
-  Clock,
-  DollarSign,
-  User,
-  Building,
+  ChevronLeft,
   ChevronRight,
-  ArrowRight,
-  Check,
-  Navigation,
-  Layers,
-  Smartphone,
-  Monitor,
-  Home,
-  ChevronDown,
-  Menu,
 } from "lucide-react";
-import Link from "next/link";
 
 export default function BulkShipmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");

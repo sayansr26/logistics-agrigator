@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Header } from "./header";
 import { Sidebar } from "./sidebar";
 import { BreadcrumbNav } from "./breadcrumb-nav";

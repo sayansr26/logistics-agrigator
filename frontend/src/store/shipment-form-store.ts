@@ -43,19 +43,19 @@ interface ShipmentFormState {
   errors: Record<string, string>;
 
   // Methods
-  setStep: (step: number) => void;
-  setField: (field: string, value: any) => void;
-  updateField: (field: string, value: any) => void;
-  setErrors: (errors: Record<string, string>) => void;
+  setStep: (_step: number) => void;
+  setField: (_field: string, _value: any) => void;
+  updateField: (_field: string, _value: any) => void;
+  setErrors: (_errors: Record<string, string>) => void;
   resetForm: () => void;
 
   // Box management methods
   addBox: () => void;
-  removeBox: (id: string) => void;
-  updateBox: (id: string, field: keyof Box, value: string) => void;
+  removeBox: (_id: string) => void;
+  updateBox: (_id: string, _field: keyof Box, _value: string) => void;
 }
 
-export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
+export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
   currentStep: 1,
 
   // Initialize docket form fields

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,48 +16,19 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  MoreHorizontal,
   Plus,
-  Eye,
-  Edit,
-  Trash2,
-  Copy,
-  ExternalLink,
-  Search,
-  Filter,
   Download,
-  RefreshCw,
-  HelpCircle,
   MessageSquare,
   Phone,
   Mail,
-  User,
-  Building,
   ChevronRight,
-  ArrowRight,
   Check,
-  Navigation,
-  Layers,
-  Smartphone,
-  Monitor,
-  Home,
-  ChevronDown,
-  Menu,
   Info,
   Shield,
   FileText,
   Upload,
-  Share2,
-  Printer,
-  CheckCircle2,
 } from "lucide-react";
-import {
-  mockShipments,
-  getStatusColor,
-  getPriorityColor,
-  formatCurrency,
-  formatDate,
-} from "@/lib/mock-data";
+import { mockShipments, getStatusColor, formatCurrency } from "@/lib/mock-data";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -69,7 +39,6 @@ interface ShipmentDetailProps {
 export default function ShipmentDetailPage({ params }: ShipmentDetailProps) {
   const router = useRouter();
   const { id } = params;
-  const [showNotes, setShowNotes] = useState(false);
 
   // Find the shipment by ID (in real app, this would be an API call)
   const shipment = mockShipments.find((s) => s.id === id);
@@ -104,16 +73,6 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailProps) {
     { title: "Shipments", href: "/shipments" },
     { title: `Shipment #${shipment.trackingNumber}` },
   ];
-
-  const handleStatusUpdate = (newStatus: string) => {
-    // In real app, this would update the shipment status via API
-    // Status update logic would go here
-  };
-
-  const handlePriorityUpdate = (newPriority: string) => {
-    // In real app, this would update the shipment priority via API
-    // Priority update logic would go here
-  };
 
   const handleAddNote = () => {
     // In real app, this would add a note via API

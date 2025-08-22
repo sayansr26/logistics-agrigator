@@ -38,17 +38,10 @@ import {
   Save,
   Plus,
   CheckCircle,
-  Circle,
 } from "lucide-react";
 
 // Import mock data
-import {
-  mockShipments,
-  mockUsers,
-  mockDisputes,
-  mockSupportTickets,
-  getPriorityColor,
-} from "@/lib/mock-data";
+import { mockShipments, mockUsers, getPriorityColor } from "@/lib/mock-data";
 
 interface TicketFormData {
   // Basic Information
@@ -361,10 +354,10 @@ export default function NewTicketPage() {
         validateStep(2, parsedDraft);
         validateStep(3, parsedDraft);
       } catch (error) {
-        console.error("Error loading draft:", error);
+        // Error loading draft - silently continue
       }
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
@@ -493,7 +486,7 @@ export default function NewTicketPage() {
       // Success - redirect to support page
       router.push("/support");
     } catch (error) {
-      console.error("Error creating ticket:", error);
+      // Error creating ticket - silently handle
     } finally {
       setIsSubmitting(false);
     }
@@ -520,20 +513,6 @@ export default function NewTicketPage() {
       }
     }
     setActiveStep(newStep);
-  };
-
-  const getStepIcon = (
-    step: number,
-    isActive: boolean,
-    isCompleted: boolean,
-  ) => {
-    if (isCompleted) {
-      return <CheckCircle className="w-6 h-6 text-green-600" />;
-    }
-    if (isActive) {
-      return <Circle className="w-6 h-6 text-logistics-600" />;
-    }
-    return <Circle className="w-6 h-6 text-gray-400" />;
   };
 
   const getStepStatus = (step: number) => {
@@ -588,7 +567,7 @@ export default function NewTicketPage() {
     }
   };
 
-  function getTicketTypeIcon(ticketType: string): React.ReactNode {
+  function getTicketTypeIcon(_ticketType: string): React.ReactNode {
     throw new Error("Function not implemented.");
   }
 

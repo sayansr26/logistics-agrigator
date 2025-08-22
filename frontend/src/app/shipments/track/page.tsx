@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+
 import { Separator } from "@/components/ui/separator";
 import {
   Package,
@@ -15,41 +15,13 @@ import {
   MapPin,
   Calendar,
   Clock,
-  DollarSign,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
-  MoreHorizontal,
-  Plus,
-  Eye,
-  Edit,
-  Trash2,
   Copy,
-  ExternalLink,
-  Search,
-  Filter,
-  Download,
-  RefreshCw,
-  HelpCircle,
-  MessageSquare,
-  Phone,
-  Mail,
-  User,
-  Building,
-  ChevronRight,
-  ArrowRight,
-  Check,
-  Navigation,
-  Layers,
-  Smartphone,
-  Monitor,
-  Home,
-  ChevronDown,
-  Menu,
   Share2,
   Printer,
   CheckCircle2,
   Upload,
+  Plus,
 } from "lucide-react";
 
 // Mock tracking data - replace with actual API call
@@ -104,18 +76,6 @@ const mockTrackingData = {
   ],
 };
 
-const getStatusColor = (status: string) => {
-  const statusColors = {
-    delivered: "bg-green-500",
-    out_for_delivery: "bg-blue-500",
-    in_transit: "bg-yellow-500",
-    picked_up: "bg-purple-500",
-    label_created: "bg-gray-500",
-    exception: "bg-red-500",
-  };
-  return statusColors[status as keyof typeof statusColors] || "bg-gray-500";
-};
-
 const getStatusBadge = (status: string) => {
   const statusMap = {
     delivered: { label: "Delivered", variant: "default" as const },
@@ -138,7 +98,7 @@ const getStatusBadge = (status: string) => {
 
 export default function TrackPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [trackingResult, setTrackingResult] = useState<any>(null);
+  const [, setTrackingResult] = useState<any>(null);
   const [isTracking, setIsTracking] = useState(false);
 
   const customBreadcrumbs = [

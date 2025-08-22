@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { CreateShipmentLayout } from "@/components/shipments/create/layout";
 import {
   Card,
@@ -9,53 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+
 import { useShipmentFormStore } from "@/store/shipment-form-store";
-import {
-  Package,
-  Truck,
-  MapPin,
-  Calendar,
-  Clock,
-  DollarSign,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  MoreHorizontal,
-  Plus,
-  Eye,
-  Edit,
-  Trash2,
-  Copy,
-  ExternalLink,
-  Search,
-  Filter,
-  Download,
-  RefreshCw,
-  HelpCircle,
-  MessageSquare,
-  Phone,
-  Mail,
-  User,
-  Building,
-  ChevronRight,
-  ArrowRight,
-  Check,
-  Navigation,
-  Layers,
-  Smartphone,
-  Monitor,
-  Home,
-  ChevronDown,
-  Menu,
-  FileText,
-  Box,
-} from "lucide-react";
+import { Package, MapPin, FileText, Box } from "lucide-react";
 
 export default function ReviewPage() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   const {
     currentStep,
     referenceNo,
@@ -63,31 +20,21 @@ export default function ReviewPage() {
     pickupAddress,
     productDescription,
     phoneNumber,
-    alternatePhone,
-    email,
     receiverName,
     address,
-    landmark,
     pincode,
     area,
     city,
     state,
-    eWayBillNo,
     invoiceNo,
     invoiceAmt,
     invoiceDate,
-    attachment,
     boxes,
     setStep,
   } = useShipmentFormStore();
 
   const handleStepChange = (step: number) => {
     setStep(step);
-  };
-
-  const handleSubmit = () => {
-    // In real app, this would submit the shipment data via API
-    // Submission logic would go here
   };
 
   return (

@@ -3,7 +3,7 @@ import { Package, MapPin, FileText, Box, CheckCircle } from "lucide-react";
 
 interface StepperProps {
   currentStep: number;
-  onStepClick?: (step: number) => void;
+  onStepClick?: (_step: number) => void;
 }
 
 const steps = [

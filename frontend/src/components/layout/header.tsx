@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,42 +27,15 @@ import { cn } from "@/lib/utils";
 import {
   Truck,
   Package,
-  MapPin,
-  Calendar,
-  Clock,
   DollarSign,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  MoreHorizontal,
-  Plus,
-  Eye,
-  Edit,
-  Trash2,
-  Copy,
-  ExternalLink,
-  Search,
-  Filter,
-  Download,
-  RefreshCw,
   HelpCircle,
   MessageSquare,
-  Phone,
-  Mail,
   User,
-  Building,
-  ChevronRight,
-  ArrowRight,
-  Check,
-  Navigation,
-  Layers,
-  Smartphone,
-  Monitor,
-  Home,
-  ChevronDown,
   Menu,
   Settings,
   LogOut,
+  AlertTriangle,
+  Search,
 } from "lucide-react";
 
 interface HeaderProps {

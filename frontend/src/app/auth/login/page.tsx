@@ -53,7 +53,7 @@ export default function LoginPage() {
     },
   });
 
-  async function onSubmit(data: LoginFormValues) {
+  async function onSubmit(_data: LoginFormValues) {
     setIsLoading(true);
 
     // Simulate API call delay

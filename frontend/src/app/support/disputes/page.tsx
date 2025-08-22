@@ -32,16 +32,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   mockDisputes,
-  mockSupportTickets,
   getDisputeStatusColor,
-  getTicketPriorityColor,
-  getTicketStatusColor,
   formatDate,
-  type SupportTicket,
 } from "@/lib/mock-data";
 import {
   AlertTriangle,
-  ArrowLeft,
   Search,
   Filter,
   MoreHorizontal,
