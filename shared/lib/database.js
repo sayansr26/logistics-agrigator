@@ -1,13 +1,14 @@
 // Shared database utilities for Prisma
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
 
 // Create Prisma client factory
 const createPrismaClient = (options = {}) => {
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' 
-      ? ['query', 'info', 'warn', 'error'] 
-      : ['error'],
-    ...options
+    log:
+      process.env.NODE_ENV === "development"
+        ? ["query", "info", "warn", "error"]
+        : ["error"],
+    ...options,
   });
 };
 
@@ -15,31 +16,31 @@ const createPrismaClient = (options = {}) => {
 const prismaHelpers = {
   // Handle Prisma errors
   handlePrismaError: (error) => {
-    if (error.code === 'P2002') {
+    if (error.code === "P2002") {
       return {
-        code: 'UNIQUE_CONSTRAINT_VIOLATION',
-        message: 'A record with this data already exists',
-        field: error.meta?.target?.[0] || 'unknown'
+        code: "UNIQUE_CONSTRAINT_VIOLATION",
+        message: "A record with this data already exists",
+        field: error.meta?.target?.[0] || "unknown",
       };
     }
-    
-    if (error.code === 'P2025') {
+
+    if (error.code === "P2025") {
       return {
-        code: 'RECORD_NOT_FOUND',
-        message: 'The requested record was not found'
+        code: "RECORD_NOT_FOUND",
+        message: "The requested record was not found",
       };
     }
-    
-    if (error.code === 'P2003') {
+
+    if (error.code === "P2003") {
       return {
-        code: 'FOREIGN_KEY_CONSTRAINT_VIOLATION',
-        message: 'Invalid reference to related record'
+        code: "FOREIGN_KEY_CONSTRAINT_VIOLATION",
+        message: "Invalid reference to related record",
       };
     }
-    
+
     return {
-      code: 'DATABASE_ERROR',
-      message: error.message || 'Database operation failed'
+      code: "DATABASE_ERROR",
+      message: error.message || "Database operation failed",
     };
   },
 
@@ -48,7 +49,7 @@ const prismaHelpers = {
     const skip = (page - 1) * limit;
     return {
       skip,
-      take: limit
+      take: limit,
     };
   },
 
@@ -60,8 +61,8 @@ const prismaHelpers = {
         page: Number(page),
         limit: Number(limit),
         total: Number(total),
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   },
 
@@ -74,20 +75,15 @@ const prismaHelpers = {
   softDelete: async (model, where) => {
     return await model.update({
       where,
-      data: { isActive: false, updatedAt: new Date() }
+      data: { isActive: false, updatedAt: new Date() },
     });
   },
 
   // Audit log helper
-  createAuditLog: async (prisma, {
-    userId,
-    action,
-    resource,
-    resourceId,
-    changes,
-    ipAddress,
-    userAgent
-  }) => {
+  createAuditLog: async (
+    prisma,
+    { userId, action, resource, resourceId, changes, ipAddress, userAgent },
+  ) => {
     return await prisma.auditLog.create({
       data: {
         userId,
@@ -96,13 +92,13 @@ const prismaHelpers = {
         resourceId,
         changes,
         ipAddress,
-        userAgent
-      }
+        userAgent,
+      },
     });
-  }
+  },
 };
 
 module.exports = {
   createPrismaClient,
-  prismaHelpers
+  prismaHelpers,
 };

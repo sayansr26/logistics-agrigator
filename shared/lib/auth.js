@@ -27,11 +27,7 @@ const authUtils = {
 
   // Verify JWT token
   verifyToken: (token) => {
-    try {
-      return jwt.verify(token, process.env.JWT_SECRET);
-    } catch (error) {
-      throw error;
-    }
+    return jwt.verify(token, process.env.JWT_SECRET);
   },
 
   // Generate refresh token
@@ -59,7 +55,7 @@ const authUtils = {
     }
 
     return requiredPermissions.every((permission) =>
-      userPermissions.includes(permission)
+      userPermissions.includes(permission),
     );
   },
 };
@@ -115,7 +111,7 @@ const authMiddleware = {
         // If Redis is not available, continue without session validation
         console.warn(
           "Redis not available for session validation:",
-          redisError.message
+          redisError.message,
         );
       }
 
@@ -212,7 +208,7 @@ const authMiddleware = {
       req.user.capabilities = {
         canManageUsers: ["admin", "support"].includes(req.user.role),
         canViewReports: ["admin", "finance", "operations"].includes(
-          req.user.role
+          req.user.role,
         ),
         canManageShipments: ["admin", "operations"].includes(req.user.role),
         canAccessWallet: ["admin", "finance", "client"].includes(req.user.role),
@@ -244,7 +240,7 @@ const authMiddleware = {
     return authMiddleware.requireRole(["operations", "finance", "admin"])(
       req,
       res,
-      next
+      next,
     );
   },
 

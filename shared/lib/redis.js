@@ -1,4 +1,4 @@
-const redis = require('redis');
+const redis = require("redis");
 
 // Shared Redis utilities
 let client;
@@ -8,16 +8,16 @@ const redisUtils = {
   createClient: async (url) => {
     try {
       client = redis.createClient({ url });
-      
-      client.on('error', (err) => {
-        console.error('Redis Client Error:', err);
+
+      client.on("error", (err) => {
+        console.error("Redis Client Error:", err);
       });
-      
+
       await client.connect();
-      console.log('Redis connected');
+      console.log("Redis connected");
       return client;
     } catch (error) {
-      console.error('Redis connection failed:', error);
+      console.error("Redis connection failed:", error);
       throw error;
     }
   },
@@ -25,7 +25,7 @@ const redisUtils = {
   // Get Redis client
   getClient: () => {
     if (!client) {
-      throw new Error('Redis client not initialized');
+      throw new Error("Redis client not initialized");
     }
     return client;
   },
@@ -33,7 +33,11 @@ const redisUtils = {
   // Set with expiration
   setWithExpiry: async (key, value, expirationInSeconds) => {
     const redisClient = redisUtils.getClient();
-    return await redisClient.setEx(key, expirationInSeconds, JSON.stringify(value));
+    return await redisClient.setEx(
+      key,
+      expirationInSeconds,
+      JSON.stringify(value),
+    );
   },
 
   // Get and parse JSON
@@ -57,7 +61,11 @@ const redisUtils = {
 
   // Set session
   setSession: async (userId, sessionData, expirationInSeconds = 3600) => {
-    return await redisUtils.setWithExpiry(`session:${userId}`, sessionData, expirationInSeconds);
+    return await redisUtils.setWithExpiry(
+      `session:${userId}`,
+      sessionData,
+      expirationInSeconds,
+    );
   },
 
   // Get session
@@ -68,7 +76,7 @@ const redisUtils = {
   // Delete session
   deleteSession: async (userId) => {
     return await redisUtils.delete(`session:${userId}`);
-  }
+  },
 };
 
 module.exports = redisUtils;

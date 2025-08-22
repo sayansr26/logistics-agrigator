@@ -16,8 +16,8 @@ try {
           const metaStr =
             Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
           return `[${timestamp}] ${level.toUpperCase()} [${service}] ${message}${metaStr}`;
-        }
-      )
+        },
+      ),
     ),
     defaultMeta: {
       service: process.env.SERVICE_NAME || "logistics-service",
@@ -31,8 +31,8 @@ try {
               const metaStr =
                 Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
               return `[${timestamp}] ${level} [${service}] ${message}${metaStr}`;
-            }
-          )
+            },
+          ),
         ),
       }),
     ],
@@ -46,9 +46,9 @@ try {
         level: "error",
         format: winston.format.combine(
           winston.format.timestamp(),
-          winston.format.json()
+          winston.format.json(),
         ),
-      })
+      }),
     );
 
     logger.add(
@@ -56,9 +56,9 @@ try {
         filename: "logs/combined.log",
         format: winston.format.combine(
           winston.format.timestamp(),
-          winston.format.json()
+          winston.format.json(),
         ),
-      })
+      }),
     );
   }
 

@@ -19,7 +19,7 @@ const errorHandler = (err, req, res, next) => {
       "Resource already exists",
       "DUPLICATE_ENTRY",
       null,
-      409
+      409,
     );
     return res.status(409).json(errorResponse);
   }
@@ -30,7 +30,7 @@ const errorHandler = (err, req, res, next) => {
       "Invalid token",
       "INVALID_TOKEN",
       null,
-      401
+      401,
     );
     return res.status(401).json(errorResponse);
   }
@@ -40,7 +40,7 @@ const errorHandler = (err, req, res, next) => {
       "Token has expired",
       "TOKEN_EXPIRED",
       null,
-      401
+      401,
     );
     return res.status(401).json(errorResponse);
   }
@@ -56,7 +56,7 @@ const errorHandler = (err, req, res, next) => {
     "Internal server error",
     "INTERNAL_ERROR",
     null,
-    500
+    500,
   );
   res.status(500).json(errorResponse);
 };

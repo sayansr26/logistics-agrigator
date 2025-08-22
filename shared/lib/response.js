@@ -3,38 +3,43 @@
 class APIResponse {
   static success(data, meta = {}) {
     return {
-      status: 'success',
+      status: "success",
       data,
       meta: {
         timestamp: new Date().toISOString(),
-        ...meta
-      }
+        ...meta,
+      },
     };
   }
 
-  static error(message, code = 'INTERNAL_ERROR', details = null, statusCode = 500) {
+  static error(
+    message,
+    code = "INTERNAL_ERROR",
+    details = null,
+    statusCode = 500,
+  ) {
     return {
-      status: 'error',
+      status: "error",
       error: {
         code,
         message,
-        details
+        details,
       },
       meta: {
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
-      statusCode
+      statusCode,
     };
   }
 
   static paginated(data, pagination) {
     return {
-      status: 'success',
+      status: "success",
       data,
       meta: {
         timestamp: new Date().toISOString(),
-        pagination
-      }
+        pagination,
+      },
     };
   }
 }
