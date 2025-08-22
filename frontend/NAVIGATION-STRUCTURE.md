@@ -45,15 +45,14 @@ The sidebar navigation has been updated to reflect the actual logistics applicat
 
 ### 5. Disputes & Support
 
-- **Route**: `/disputes`
+- **Route**: `/support`
 - **Badge**: 3 (active disputes count)
 - **Purpose**: Customer support and dispute resolution
-- **Sub-items**:
-  - All Disputes (`/disputes`)
-  - Create Ticket (`/disputes/create`)
-  - Weight Disputes (`/disputes/weight`)
-  - Delivery Issues (`/disputes/delivery`)
-  - Knowledge Base (`/disputes/kb`)
+- **Features**:
+  - Action buttons for quick access
+  - Tabbed interface for disputes and support tickets
+  - Statistics dashboard
+  - Search and filtering capabilities
 
 ### 6. Platform Integration
 

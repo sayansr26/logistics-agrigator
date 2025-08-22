@@ -35,9 +35,7 @@ import {
   getPlatformColor,
   getPriorityColor,
   getPaymentStatusColor,
-  formatCurrency,
   formatDate,
-  type Order,
 } from "@/lib/mock-data";
 import {
   FileText,
@@ -54,7 +52,6 @@ import {
   Download,
   RefreshCw,
   ShoppingCart,
-  CreditCard,
   Package,
   Clock,
 } from "lucide-react";

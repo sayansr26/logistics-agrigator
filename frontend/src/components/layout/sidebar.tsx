@@ -60,24 +60,9 @@ const navigationItems: NavItem[] = [
   },
   {
     title: "Disputes & Support",
-    href: "/disputes",
+    href: "/support",
     icon: AlertTriangle,
     badge: "3",
-    children: [
-      { title: "All Disputes", href: "/disputes", icon: AlertTriangle },
-      { title: "Create Ticket", href: "/disputes/create", icon: AlertTriangle },
-      {
-        title: "Weight Disputes",
-        href: "/disputes/weight",
-        icon: AlertTriangle,
-      },
-      {
-        title: "Delivery Issues",
-        href: "/disputes/delivery",
-        icon: AlertTriangle,
-      },
-      { title: "Knowledge Base", href: "/disputes/kb", icon: HelpCircle },
-    ],
   },
   {
     title: "Platform Integration",

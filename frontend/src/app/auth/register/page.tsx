@@ -109,13 +109,11 @@ export default function RegisterPage() {
     },
   });
 
-  async function onSubmit(data: RegisterFormValues) {
+  async function onSubmit(_data: RegisterFormValues) {
     setIsLoading(true);
 
     // Simulate API call delay
     await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    console.log("Registration attempt:", data);
 
     // TODO: Replace with actual API call
     // const response = await fetch('/api/auth/register', {

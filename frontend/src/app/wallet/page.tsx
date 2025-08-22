@@ -16,7 +16,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -36,23 +35,31 @@ import {
   getInvoiceStatusColor,
   formatCurrency,
   formatDate,
-  type Transaction,
-  type Invoice,
 } from "@/lib/mock-data";
 import {
   CreditCard,
   Wallet,
-  Plus,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Calendar,
   Download,
   RefreshCw,
-  Search,
-  Filter,
+  Plus,
   MoreHorizontal,
   Eye,
-  TrendingDown,
-  DollarSign,
+  Edit,
+  Trash2,
+  Copy,
+  ExternalLink,
+  Search,
+  Filter,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  ArrowUpRight,
+  ArrowDownRight,
   FileText,
-  Clock,
 } from "lucide-react";
 
 export default function WalletPage() {

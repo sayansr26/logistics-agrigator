@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,8 +39,6 @@ import {
   getUserStatusColor,
   formatCurrency,
   formatDate,
-  type Shipment,
-  type User,
 } from "@/lib/mock-data";
 import {
   Package,
@@ -57,19 +54,19 @@ import {
 } from "lucide-react";
 
 export default function TablesDemo() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"shipments" | "users">(
-    "shipments",
-  );
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
-
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
     { title: "Demo", href: "/demo" },
-    { title: "Data Tables" },
+    { title: "Table Components" },
   ];
+
+  // Mock data for demonstration
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"shipments" | "users">(
+    "shipments",
+  );
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   // Filter data based on search term
   const filteredShipments = mockShipments.filter(
@@ -103,8 +100,6 @@ export default function TablesDemo() {
 
   const handleTabChange = (tab: "shipments" | "users") => {
     setActiveTab(tab);
-    setCurrentPage(1);
-    setSearchTerm("");
   };
 
   return (
@@ -183,14 +178,11 @@ export default function TablesDemo() {
           <CardContent>
             {activeTab === "shipments" ? (
               <ShipmentsTable
-                shipments={paginatedData as Shipment[]}
+                shipments={paginatedData}
                 searchTerm={searchTerm}
               />
             ) : (
-              <UsersTable
-                users={paginatedData as User[]}
-                searchTerm={searchTerm}
-              />
+              <UsersTable users={paginatedData} searchTerm={searchTerm} />
             )}
 
             {/* Pagination */}
@@ -320,7 +312,7 @@ function ShipmentsTable({
   shipments,
   searchTerm,
 }: {
-  shipments: Shipment[];
+  shipments: any[]; // Changed from Shipment[] to any[] as Shipment type is removed
   searchTerm: string;
 }) {
   return (
@@ -383,9 +375,7 @@ function ShipmentsTable({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/shipments/${shipment.id}`)}
-                  >
+                  <DropdownMenuItem>
                     <Eye className="mr-2 h-4 w-4" />
                     View Details
                   </DropdownMenuItem>
@@ -412,7 +402,7 @@ function UsersTable({
   users,
   searchTerm,
 }: {
-  users: User[];
+  users: any[]; // Changed from User[] to any[] as User type is removed
   searchTerm: string;
 }) {
   return (

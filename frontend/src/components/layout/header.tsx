@@ -24,20 +24,44 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
 import { cn } from "@/lib/utils";
 import {
-  Bell,
-  Menu,
+  Truck,
+  Package,
+  MapPin,
+  Calendar,
+  Clock,
+  DollarSign,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  MoreHorizontal,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
+  Copy,
+  ExternalLink,
   Search,
+  Filter,
+  Download,
+  RefreshCw,
+  HelpCircle,
+  MessageSquare,
+  Phone,
+  Mail,
   User,
+  Building,
+  ChevronRight,
+  ArrowRight,
+  Check,
+  Navigation,
+  Layers,
+  Smartphone,
+  Monitor,
+  Home,
+  ChevronDown,
+  Menu,
   Settings,
   LogOut,
-  Package,
-  Truck,
-  BarChart3,
-  Users,
-  Globe,
-  HelpCircle,
-  AlertTriangle,
-  CreditCard,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -79,7 +103,7 @@ const quickActions = [
     title: "Wallet Balance",
     href: "/wallet",
     description: "Check wallet balance and transactions",
-    icon: CreditCard,
+    icon: DollarSign,
   },
 ];
 
@@ -247,7 +271,7 @@ export function Header({ className }: HeaderProps) {
 
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-4 w-4" />
+              <MessageSquare className="h-4 w-4" />
               <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
                 3
               </Badge>

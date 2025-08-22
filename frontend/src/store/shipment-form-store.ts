@@ -1,35 +1,70 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { z } from "zod";
-import { type ShipmentFormValues } from "@/lib/validations/shipment";
 
-interface ShipmentFormState extends ShipmentFormValues {
-  currentStep: number;
-  setField: <K extends keyof ShipmentFormValues>(
-    field: K,
-    value: ShipmentFormValues[K],
-  ) => void;
-  setCurrentStep: (step: number) => void;
-  resetForm: () => void;
-  addBox: () => void;
-  removeBox: (boxId: string) => void;
-  updateBox: (
-    boxId: string,
-    field: "length" | "height" | "width",
-    value: string,
-  ) => void;
-  errors: Partial<Record<keyof ShipmentFormValues, string>>;
-  setErrors: (
-    errors: Partial<Record<keyof ShipmentFormValues, string>>,
-  ) => void;
-  validateStep: (step: number) => boolean;
+interface Box {
+  id: string;
+  length: string;
+  height: string;
+  width: string;
 }
 
-const initialState: ShipmentFormValues = {
+interface ShipmentFormState {
+  currentStep: number;
+
+  // Docket form fields
+  referenceNo: string;
+  actualWeight: string;
+  pickupAddress: string;
+  productDescription: string;
+
+  // Delivery form fields
+  phoneNumber: string;
+  alternatePhone: string;
+  email: string;
+  receiverName: string;
+  address: string;
+  landmark: string;
+  pincode: string;
+  area: string;
+  city: string;
+  state: string;
+
+  // Invoice form fields
+  eWayBillNo: string;
+  invoiceNo: string;
+  invoiceAmt: string;
+  invoiceDate: string;
+  attachment: File | null;
+
+  // Dimensions form fields
+  boxes: Box[];
+
+  // Form data (for other steps)
+  formData: Record<string, any>;
+  errors: Record<string, string>;
+
+  // Methods
+  setStep: (step: number) => void;
+  setField: (field: string, value: any) => void;
+  updateField: (field: string, value: any) => void;
+  setErrors: (errors: Record<string, string>) => void;
+  resetForm: () => void;
+
+  // Box management methods
+  addBox: () => void;
+  removeBox: (id: string) => void;
+  updateBox: (id: string, field: keyof Box, value: string) => void;
+}
+
+export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
+  currentStep: 1,
+
+  // Initialize docket form fields
   referenceNo: "",
   actualWeight: "",
   pickupAddress: "",
   productDescription: "",
+
+  // Initialize delivery form fields
   phoneNumber: "",
   alternatePhone: "",
   email: "",
@@ -40,147 +75,90 @@ const initialState: ShipmentFormValues = {
   area: "",
   city: "",
   state: "",
+
+  // Initialize invoice form fields
   eWayBillNo: "",
   invoiceNo: "",
   invoiceAmt: "",
   invoiceDate: "",
   attachment: null,
-  boxes: [
-    {
-      id: "box-1",
-      length: "",
-      height: "",
-      width: "",
-    },
-  ],
-};
 
-import { shipmentFormSchema } from "@/lib/validations/shipment";
+  // Initialize dimensions form fields
+  boxes: [],
 
-export const useShipmentFormStore = create<ShipmentFormState>()(
-  persist(
-    (set, get) => ({
-      ...initialState,
+  formData: {},
+  errors: {},
+
+  setStep: (step: number) => set({ currentStep: step }),
+
+  setField: (field: string, value: any) =>
+    set((state) => ({
+      [field]: value,
+      // Clear error for this field when value is set
+      errors: { ...state.errors, [field]: "" },
+    })),
+
+  updateField: (field: string, value: any) =>
+    set((state) => ({
+      formData: { ...state.formData, [field]: value },
+    })),
+
+  setErrors: (errors: Record<string, string>) => set({ errors }),
+
+  resetForm: () =>
+    set({
       currentStep: 1,
+      // Reset docket fields
+      referenceNo: "",
+      actualWeight: "",
+      pickupAddress: "",
+      productDescription: "",
+      // Reset delivery fields
+      phoneNumber: "",
+      alternatePhone: "",
+      email: "",
+      receiverName: "",
+      address: "",
+      landmark: "",
+      pincode: "",
+      area: "",
+      city: "",
+      state: "",
+      // Reset invoice fields
+      eWayBillNo: "",
+      invoiceNo: "",
+      invoiceAmt: "",
+      invoiceDate: "",
+      attachment: null,
+      // Reset dimensions fields
+      boxes: [],
+      formData: {},
       errors: {},
-      setField: (field, value) => {
-        set((state) => ({ ...state, [field]: value }));
-        // Clear error for this field
-        set((state) => ({
-          errors: {
-            ...state.errors,
-            [field]: undefined,
-          },
-        }));
-      },
-      setCurrentStep: (step) => set({ currentStep: step }),
-      resetForm: () => set({ ...initialState, currentStep: 1, errors: {} }),
-      addBox: () =>
-        set((state) => ({
-          boxes: [
-            ...state.boxes,
-            {
-              id: `box-${state.boxes.length + 1}`,
-              length: "",
-              height: "",
-              width: "",
-            },
-          ],
-        })),
-      removeBox: (boxId) =>
-        set((state) => ({
-          boxes:
-            state.boxes.length > 1
-              ? state.boxes.filter((box) => box.id !== boxId)
-              : state.boxes,
-        })),
-      updateBox: (boxId, field, value) =>
-        set((state) => ({
-          boxes: state.boxes.map((box) =>
-            box.id === boxId ? { ...box, [field]: value } : box,
-          ),
-        })),
-      setErrors: (errors) => set({ errors }),
-      validateStep: (step) => {
-        const state = get();
-        let fieldsToValidate: (keyof ShipmentFormValues)[] = [];
-
-        // Define which fields to validate for each step
-        switch (step) {
-          case 1: // Docket Information
-            fieldsToValidate = [
-              "referenceNo",
-              "actualWeight",
-              "pickupAddress",
-              "productDescription",
-            ];
-            break;
-          case 2: // Delivery Location
-            fieldsToValidate = [
-              "phoneNumber",
-              "receiverName",
-              "address",
-              "pincode",
-              "area",
-              "city",
-              "state",
-            ];
-            break;
-          case 3: // Invoices
-            fieldsToValidate = ["invoiceNo", "invoiceAmt", "invoiceDate"];
-            break;
-          case 4: // Dimensions
-            fieldsToValidate = ["boxes"];
-            break;
-          case 5: // Review - validate everything
-            return shipmentFormSchema.safeParse(state).success;
-        }
-
-        if (fieldsToValidate.length === 0) {
-          return true;
-        }
-
-        // Create a partial schema with only the fields for this step
-        const partialSchema = z.object(
-          Object.fromEntries(
-            fieldsToValidate.map((field) => [
-              field,
-              shipmentFormSchema.shape[field],
-            ]),
-          ),
-        );
-
-        // Validate only the fields for this step
-        const result = partialSchema.safeParse(
-          Object.fromEntries(
-            fieldsToValidate.map((field) => [field, state[field]]),
-          ),
-        );
-
-        if (!result.success) {
-          const errors = {};
-          result.error.errors.forEach((error) => {
-            errors[error.path[0]] = error.message;
-          });
-          set({ errors });
-          return false;
-        }
-
-        // Clear errors for the validated fields
-        set((state) => ({
-          errors: Object.fromEntries(
-            Object.entries(state.errors).filter(
-              ([key]) =>
-                !fieldsToValidate.includes(key as keyof ShipmentFormValues),
-            ),
-          ),
-        }));
-
-        return true;
-      },
     }),
-    {
-      name: "shipment-form-storage",
-    },
-  ),
-);
+
+  // Box management methods
+  addBox: () =>
+    set((state) => ({
+      boxes: [
+        ...state.boxes,
+        {
+          id: `box-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          length: "",
+          height: "",
+          width: "",
+        },
+      ],
+    })),
+
+  removeBox: (id: string) =>
+    set((state) => ({
+      boxes: state.boxes.filter((box) => box.id !== id),
+    })),
+
+  updateBox: (id: string, field: keyof Box, value: string) =>
+    set((state) => ({
+      boxes: state.boxes.map((box) =>
+        box.id === id ? { ...box, [field]: value } : box,
+      ),
+    })),
+}));

@@ -9,11 +9,16 @@ import { useShipmentFormStore } from "@/store/shipment-form-store";
 
 interface CreateShipmentLayoutProps {
   children: React.ReactNode;
+  currentStep: number;
+  onStepChange: (step: number) => void;
 }
 
-export function CreateShipmentLayout({ children }: CreateShipmentLayoutProps) {
+export function CreateShipmentLayout({
+  children,
+  currentStep,
+  onStepChange,
+}: CreateShipmentLayoutProps) {
   const router = useRouter();
-  const { currentStep, setCurrentStep } = useShipmentFormStore();
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
@@ -21,28 +26,18 @@ export function CreateShipmentLayout({ children }: CreateShipmentLayoutProps) {
     { title: "Create Shipment" },
   ];
 
-  const handleStepClick = (step: number) => {
-    const paths = [
-      "/shipments/create/docket",
-      "/shipments/create/delivery",
-      "/shipments/create/invoice",
-      "/shipments/create/dimensions",
-      "/shipments/create/review",
-    ];
-    router.push(paths[step - 1]);
-    setCurrentStep(step);
-  };
-
-  const handleNext = () => {
-    const isValid = useShipmentFormStore.getState().validateStep(currentStep);
-    if (isValid && currentStep < 5) {
-      handleStepClick(currentStep + 1);
+  const handleBack = () => {
+    if (currentStep > 1) {
+      onStepChange(currentStep - 1);
+    } else {
+      router.push("/shipments");
     }
   };
 
-  const handleBack = () => {
-    if (currentStep > 1) {
-      handleStepClick(currentStep - 1);
+  const handleNext = () => {
+    // In real app, this would validate the current step
+    if (currentStep < 5) {
+      onStepChange(currentStep + 1);
     }
   };
 
@@ -96,7 +91,7 @@ export function CreateShipmentLayout({ children }: CreateShipmentLayoutProps) {
         {/* Stepper */}
         <CreateShipmentStepper
           currentStep={currentStep}
-          onStepClick={handleStepClick}
+          onStepClick={onStepChange}
         />
 
         {/* Content */}

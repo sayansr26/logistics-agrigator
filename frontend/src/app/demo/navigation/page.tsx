@@ -36,13 +36,10 @@ import {
   Smartphone,
   Monitor,
   Home,
-  Package,
-  Users,
-  BarChart3,
-  Settings,
   ChevronRight,
   ArrowRight,
   Check,
+  Package,
 } from "lucide-react";
 
 const navigationFeatures = [

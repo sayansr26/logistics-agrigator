@@ -3,15 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Truck, Package, BarChart3, Shield } from "lucide-react";
+import { Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 export default function HomePage() {
   const router = useRouter();
@@ -48,6 +41,9 @@ export default function HomePage() {
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/dashboard">Dashboard</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/support">Support & Disputes</Link>
             </Button>
           </div>
         </div>

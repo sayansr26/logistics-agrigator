@@ -10,12 +10,14 @@ import { FileText, Upload } from "lucide-react";
 
 export default function InvoicesPage() {
   const {
+    currentStep,
     eWayBillNo,
     invoiceNo,
     invoiceAmt,
     invoiceDate,
     attachment,
     setField,
+    setStep,
   } = useShipmentFormStore();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -23,8 +25,15 @@ export default function InvoicesPage() {
     setField("attachment", file);
   };
 
+  const handleStepChange = (step: number) => {
+    setStep(step);
+  };
+
   return (
-    <CreateShipmentLayout>
+    <CreateShipmentLayout
+      currentStep={currentStep}
+      onStepChange={handleStepChange}
+    >
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">

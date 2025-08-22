@@ -11,19 +11,45 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   Package,
+  Truck,
   MapPin,
   Calendar,
-  Truck,
-  CheckCircle2,
   Clock,
-  AlertCircle,
-  Plus,
-  Upload,
+  DollarSign,
   AlertTriangle,
+  CheckCircle,
+  XCircle,
+  MoreHorizontal,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
   Copy,
+  ExternalLink,
+  Search,
+  Filter,
+  Download,
+  RefreshCw,
+  HelpCircle,
+  MessageSquare,
+  Phone,
+  Mail,
+  User,
+  Building,
+  ChevronRight,
+  ArrowRight,
+  Check,
+  Navigation,
+  Layers,
+  Smartphone,
+  Monitor,
+  Home,
+  ChevronDown,
+  Menu,
   Share2,
   Printer,
-  ArrowRight,
+  CheckCircle2,
+  Upload,
 } from "lucide-react";
 
 // Mock tracking data - replace with actual API call
@@ -110,22 +136,34 @@ const getStatusBadge = (status: string) => {
   );
 };
 
-export default function TrackShipmentPage() {
-  const [trackingNumber, setTrackingNumber] = useState("");
+export default function TrackPage() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [trackingResult, setTrackingResult] = useState<any>(null);
   const [isTracking, setIsTracking] = useState(false);
-
-  const handleTrack = () => {
-    if (trackingNumber) {
-      setIsTracking(true);
-      // Here you would make an API call to fetch tracking data
-    }
-  };
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
     { title: "Shipments", href: "/shipments" },
-    { title: "Track Shipment" },
+    { title: "Track" },
   ];
+
+  const handleTrack = async () => {
+    if (!searchTerm.trim()) return;
+
+    setIsTracking(true);
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Mock tracking result
+    setTrackingResult({
+      trackingNumber: searchTerm,
+      status: "in_transit",
+      location: "Mumbai, India",
+      estimatedDelivery: "2024-01-20",
+      lastUpdate: "2024-01-18 14:30",
+    });
+    setIsTracking(false);
+  };
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -181,8 +219,8 @@ export default function TrackShipmentPage() {
             <div className="flex gap-4">
               <Input
                 placeholder="Enter tracking number or order ID"
-                value={trackingNumber}
-                onChange={(e) => setTrackingNumber(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-1"
               />
               <Button onClick={handleTrack}>Track</Button>
