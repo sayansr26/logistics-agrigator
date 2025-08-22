@@ -4,6 +4,35 @@
 
 ### Git Commit Summary
 
+48ae598 refactor(frontend): fix linter issues and clean up unused code
+
+### Modified Areas
+
+**Frontend:**
+
+- frontend/src/app/auth/login/page.tsx
+- frontend/src/app/demo/navigation/page.tsx
+- frontend/src/app/layout.tsx
+- frontend/src/app/shipments/[id]/page.tsx
+- frontend/src/app/shipments/bulk/page.tsx
+- frontend/src/app/shipments/create/invoice/page.tsx
+- frontend/src/app/shipments/create/review/page.tsx
+- frontend/src/app/shipments/track/page.tsx
+- frontend/src/app/support/disputes/[id]/page.tsx
+- frontend/src/app/support/disputes/page.tsx
+- frontend/src/app/support/new-ticket/page.tsx
+- frontend/src/app/wallet/page.tsx
+- frontend/src/components/layout/dashboard-layout.tsx
+- frontend/src/components/layout/header.tsx
+- frontend/src/components/layout/sidebar.tsx
+- frontend/src/components/shipments/create/layout.tsx
+- frontend/src/components/shipments/create/stepper.tsx
+- frontend/src/store/shipment-form-store.ts
+
+## Recent Changes - August 22, 2025
+
+### Git Commit Summary
+
 f669eb2 fix: all services docker changed
 
 ### Modified Areas
