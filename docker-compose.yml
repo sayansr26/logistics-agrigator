@@ -11,7 +11,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     ports:
-      - "5432:5432"
+      - "3008:5432"
     networks:
       - logistics-network
     healthcheck:
@@ -27,7 +27,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "3009:6379"
     networks:
       - logistics-network
     healthcheck:
@@ -44,12 +44,12 @@ services:
     container_name: logistics-api-gateway
     environment:
       - NODE_ENV=development
-      - PORT=8000
+      - PORT=3001
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - CORS_ORIGIN=http://localhost:3000
     ports:
-      - "8000:8000"
+      - "3001:3001"
     volumes:
       - ./backend/api-gateway:/app
       - /app/node_modules
@@ -70,14 +70,14 @@ services:
     container_name: logistics-auth-service
     environment:
       - NODE_ENV=development
-      - PORT=8001
+      - PORT=3002
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - JWT_EXPIRES_IN=3600
       - JWT_REFRESH_EXPIRES_IN=604800
     ports:
-      - "8001:8001"
+      - "3002:3002"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/auth-service:/app
@@ -100,13 +100,13 @@ services:
     container_name: logistics-user-service
     environment:
       - NODE_ENV=development
-      - PORT=8002
+      - PORT=3003
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_users
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:8001
+      - AUTH_SERVICE_URL=http://auth-service:3002
     ports:
-      - "8002:8002"
+      - "3003:3003"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/user-service:/app
@@ -134,16 +134,17 @@ services:
     container_name: logistics-shipment-service
     environment:
       - NODE_ENV=development
-      - PORT=8003
+      - PORT=3004
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_shipments
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - USER_SERVICE_URL=http://user-service:8002
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
       - WALLET_SERVICE_URL=http://localhost:8006
-      - PARTNER_SERVICE_URL=http://localhost:8007
+      - PARTNER_SERVICE_URL=http://partner-service:3005
+      - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
     ports:
-      - "8003:8003"
+      - "3004:3004"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/shipment-service:/app
@@ -163,6 +164,47 @@ services:
       - all-services
       - shipment-service
 
+  # Partner Service (Week 2+ Development)
+  partner-service:
+    build:
+      context: .
+      dockerfile: backend/partner-service/Dockerfile
+    container_name: logistics-partner-service
+    environment:
+      - NODE_ENV=development
+      - PORT=3005
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_partners
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
+      # External courier API configurations
+      - DELHIVERY_API_URL=https://track.delhivery.com/api/cmu/push/json
+      - BLUEDART_API_URL=https://apigateway.bluedart.com
+      - DTDC_API_URL=https://blktracksvc.dtdc.com
+      - EXTERNAL_COURIER_TIMEOUT=15000
+    ports:
+      - "3005:3005"
+    # For live reload in development, uncomment these volumes:
+    # volumes:
+    #   - ./backend/partner-service:/app
+    #   - ./shared:/app/shared
+    #   - partner_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    command: pnpm run start
+    profiles:
+      - all-services
+      - partner-service
+
   # Support Service (Week 4+ Development)
   support-service:
     build:
@@ -171,14 +213,14 @@ services:
     container_name: logistics-support-service
     environment:
       - NODE_ENV=development
-      - PORT=8004
+      - PORT=3006
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_support
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - USER_SERVICE_URL=http://user-service:8002
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
     ports:
-      - "8004:8004"
+      - "3006:3006"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/support-service:/app
@@ -206,17 +248,17 @@ services:
     container_name: logistics-platform-service
     environment:
       - NODE_ENV=development
-      - PORT=8005
+      - PORT=3007
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_platforms
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - USER_SERVICE_URL=http://user-service:8002
-      - SHIPMENT_SERVICE_URL=http://shipment-service:8003
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
       - SHOPIFY_CLIENT_ID=your_shopify_client_id
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
-      - "8005:8005"
+      - "3007:3007"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/platform-service:/app
@@ -280,6 +322,7 @@ networks:
 # Extended Development:
 #   docker-compose --profile user-service up          # + user-service
 #   docker-compose --profile shipment-service up      # + shipment-service
+#   docker-compose --profile partner-service up       # + partner-service
 #   docker-compose --profile support-service up       # + support-service
 #   docker-compose --profile platform-service up      # + platform-service
 #   docker-compose --profile all-services up          # All services

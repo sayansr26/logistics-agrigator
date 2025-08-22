@@ -100,7 +100,7 @@ safe_remove "frontend/.turbo" "frontend Turbo cache"
 # Remove backend service dependencies and build artifacts
 print_status "🔧 Cleaning backend services..."
 
-backend_services=("auth-service" "user-service" "shipment-service" "support-service" "platform-service" "api-gateway")
+backend_services=("auth-service" "user-service" "shipment-service" "partner-service" "support-service" "platform-service" "api-gateway")
 
 for service in "${backend_services[@]}"; do
     service_path="backend/$service"

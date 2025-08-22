@@ -77,10 +77,10 @@ if exist "!env_example!" (
             echo # WARNING: This is a fallback .env file. Consider creating a proper .env.example
             echo.
             echo # Database
-            echo DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_!db_name!"
+            echo DATABASE_URL="postgresql://logistics:logistics123@localhost:3008/logistics_!db_name!"
             echo.
             echo # Redis
-            echo REDIS_URL="redis://localhost:6379"
+            echo REDIS_URL="redis://localhost:3009"
             echo.
             echo # JWT Configuration
             echo JWT_SECRET="your-super-secret-jwt-key-change-in-production"
@@ -91,12 +91,12 @@ if exist "!env_example!" (
             echo PORT="!port!"
             echo.
             echo # Service URLs (for inter-service communication)
-            echo AUTH_SERVICE_URL="http://localhost:8001"
-            echo USER_SERVICE_URL="http://localhost:8002"
-            echo SHIPMENT_SERVICE_URL="http://localhost:8003"
-            echo SUPPORT_SERVICE_URL="http://localhost:8004"
-            echo PLATFORM_SERVICE_URL="http://localhost:8005"
-            echo API_GATEWAY_URL="http://localhost:8000"
+            echo AUTH_SERVICE_URL="http://localhost:3002"
+            echo USER_SERVICE_URL="http://localhost:3003"
+            echo SHIPMENT_SERVICE_URL="http://localhost:3004"
+            echo SUPPORT_SERVICE_URL="http://localhost:3006"
+            echo PLATFORM_SERVICE_URL="http://localhost:3007"
+            echo API_GATEWAY_URL="http://localhost:3001"
             echo.
             echo # External Services
             echo WALLET_SERVICE_URL="http://localhost:8006"
@@ -112,10 +112,10 @@ if exist "!env_example!" (
             echo # WARNING: This is a fallback .env file. Consider creating a proper .env.example
             echo.
             echo # Database
-            echo DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_!db_name!"
+            echo DATABASE_URL="postgresql://logistics:logistics123@localhost:3008/logistics_!db_name!"
             echo.
             echo # Redis
-            echo REDIS_URL="redis://localhost:6379"
+            echo REDIS_URL="redis://localhost:3009"
             echo.
             echo # JWT Configuration
             echo JWT_SECRET="your-super-secret-jwt-key-change-in-production"
@@ -126,12 +126,12 @@ if exist "!env_example!" (
             echo PORT="!port!"
             echo.
             echo # Service URLs (for inter-service communication)
-            echo AUTH_SERVICE_URL="http://localhost:8001"
-            echo USER_SERVICE_URL="http://localhost:8002"
-            echo SHIPMENT_SERVICE_URL="http://localhost:8003"
-            echo SUPPORT_SERVICE_URL="http://localhost:8004"
-            echo PLATFORM_SERVICE_URL="http://localhost:8005"
-            echo API_GATEWAY_URL="http://localhost:8000"
+            echo AUTH_SERVICE_URL="http://localhost:3002"
+            echo USER_SERVICE_URL="http://localhost:3003"
+            echo SHIPMENT_SERVICE_URL="http://localhost:3004"
+            echo SUPPORT_SERVICE_URL="http://localhost:3006"
+            echo PLATFORM_SERVICE_URL="http://localhost:3007"
+            echo API_GATEWAY_URL="http://localhost:3001"
             echo.
             echo # External Services
             echo WALLET_SERVICE_URL="http://localhost:8006"
@@ -221,23 +221,25 @@ echo 🔧 Setting up service environments...
 
 if "%setup_type%"=="" (
     REM Setup all services
-    call :create_service_env "auth-service" "8001" "auth" "%force_flag%"
-    call :create_service_env "user-service" "8002" "users" "%force_flag%"
-    call :create_service_env "shipment-service" "8003" "shipments" "%force_flag%"
-    call :create_service_env "support-service" "8004" "support" "%force_flag%"
-    call :create_service_env "platform-service" "8005" "platforms" "%force_flag%"
-    call :create_service_env "api-gateway" "8000" "main" "%force_flag%"
+    call :create_service_env "auth-service" "3002" "auth" "%force_flag%"
+    call :create_service_env "user-service" "3003" "users" "%force_flag%"
+    call :create_service_env "shipment-service" "3004" "shipments" "%force_flag%"
+    call :create_service_env "partner-service" "3005" "partners" "%force_flag%"
+    call :create_service_env "support-service" "3006" "support" "%force_flag%"
+    call :create_service_env "platform-service" "3007" "platforms" "%force_flag%"
+    call :create_service_env "api-gateway" "3001" "main" "%force_flag%"
 ) else if "%setup_type%"=="--frontend" (
     echo 🎨 Frontend-only setup selected
     REM Frontend doesn't need .env file for basic setup
 ) else if "%setup_type%"=="--backend" (
     echo 🔧 Backend-only setup selected
-    call :create_service_env "auth-service" "8001" "auth" "%force_flag%"
-    call :create_service_env "user-service" "8002" "users" "%force_flag%"
-    call :create_service_env "shipment-service" "8003" "shipments" "%force_flag%"
-    call :create_service_env "support-service" "8004" "support" "%force_flag%"
-    call :create_service_env "platform-service" "8005" "platforms" "%force_flag%"
-    call :create_service_env "api-gateway" "8000" "main" "%force_flag%"
+    call :create_service_env "auth-service" "3002" "auth" "%force_flag%"
+    call :create_service_env "user-service" "3003" "users" "%force_flag%"
+    call :create_service_env "shipment-service" "3004" "shipments" "%force_flag%"
+    call :create_service_env "partner-service" "3005" "partners" "%force_flag%"
+    call :create_service_env "support-service" "3006" "support" "%force_flag%"
+    call :create_service_env "platform-service" "3007" "platforms" "%force_flag%"
+    call :create_service_env "api-gateway" "3001" "main" "%force_flag%"
 ) else (
     echo ❌ Unknown setup type: %setup_type%
     echo Valid options: --frontend, --backend, or none for all

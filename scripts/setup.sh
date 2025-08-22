@@ -34,11 +34,16 @@ setup_env_file() {
     local source_file="$1"
     local target_file="$2"
     local description="$3"
+    local service_name_for_replacement="$5" # New argument for service name
     
     if [ -f "$source_file" ]; then
         if [ ! -f "$target_file" ] || [ "$4" = "--force" ]; then
             print_status "Setting up $description..."
             cp "$source_file" "$target_file"
+            # Replace localhost with service names for Docker environment ONLY for service .env files
+            if [ -n "$service_name_for_replacement" ]; then
+                replace_localhost_with_service_names "$service_name_for_replacement" "$target_file"
+            fi
             print_success "✅ Created $target_file"
         else
             print_warning "⚠️  $target_file already exists, skipping (use --force to overwrite)"
@@ -47,6 +52,58 @@ setup_env_file() {
         print_error "❌ $source_file not found"
         return 1
     fi
+}
+
+# Function to replace localhost with Docker service names in .env files
+replace_localhost_with_service_names() {
+    local service_name="$1"
+    local env_file="$2"
+    
+    print_status "Adjusting $env_file for Docker environment..."
+    
+    # Replace DATABASE_URL localhost with postgres service name
+    if grep -q "DATABASE_URL=\".*@localhost:3008/" "$env_file"; then
+        sed -i '' 's/localhost:3008/postgres:5432/' "$env_file"
+        print_status "Updated DATABASE_URL in $env_file"
+    fi
+    
+    # Replace REDIS_URL localhost with redis service name
+    if grep -q "REDIS_URL=\".*@localhost:3009/" "$env_file"; then
+        sed -i '' 's/localhost:3009/redis:6379/' "$env_file"
+        print_status "Updated REDIS_URL in $env_file"
+    fi
+    
+    # Replace inter-service communication URLs
+    # This assumes that the .env.example files already contain these variables,
+    # which they should, as seen from the previous read_file calls.
+    # We will replace localhost with the service name in each URL.
+    
+    # Define services and their ports (excluding the current service itself)
+    # The ports are internal Docker ports, not external mapped ports.
+    declare -A SERVICE_PORTS
+    SERVICE_PORTS[auth-service]=3002
+    SERVICE_PORTS[user-service]=3003
+    SERVICE_PORTS[shipment-service]=3004
+    SERVICE_PORTS[partner-service]=3005
+    SERVICE_PORTS[support-service]=3006
+    SERVICE_PORTS[platform-service]=3007
+    SERVICE_PORTS[api-gateway]=3001
+    
+    for svc in "${!SERVICE_PORTS[@]}"; do
+        if [ "$svc" != "$service_name" ]; then # Don't replace own service URL if it exists
+            local uppercase_svc=$(echo "$svc" | tr '[:lower:]-' '[:upper:]_')
+            local var_name="${uppercase_svc}_SERVICE_URL"
+            local port=${SERVICE_PORTS[$svc]}
+            local pattern="^${var_name}=\".*@localhost:${port}\""
+            local replacement="${var_name}=\"http://${svc}:${port}\""
+            
+            if grep -q "$pattern" "$env_file"; then
+                # Use a different delimiter for sed to avoid issues with '/' in URLs
+                sed -i '' "s|${var_name}=\"http://localhost:${port}\"|${var_name}=\"http://${svc}:${port}\"|" "$env_file"
+                print_status "Updated ${var_name} in $env_file to use service name"
+            fi
+        fi
+    done
 }
 
 # Function to create service-specific .env files
@@ -61,7 +118,7 @@ create_service_env() {
     # Always prioritize .env.example if it exists
     if [ -f "$env_example" ]; then
         print_status "Setting up $service environment from .env.example..."
-        setup_env_file "$env_example" "$env_file" "$service environment" "$4"
+        setup_env_file "$env_example" "$env_file" "$service environment" "$4" "$service" # Pass service name for replacement
     else
         # Fallback: Create a basic .env file for the service (this should rarely happen now)
         print_warning "⚠️  No .env.example found for $service, creating basic .env file"
@@ -74,10 +131,10 @@ create_service_env() {
 # WARNING: This is a fallback .env file. Consider creating a proper .env.example
 
 # Database
-DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_$db_name"
+DATABASE_URL="postgresql://logistics:logistics123@localhost:3008/logistics_$db_name"
 
 # Redis
-REDIS_URL="redis://localhost:6379"
+REDIS_URL="redis://localhost:3009"
 
 # JWT Configuration
 JWT_SECRET="your-super-secret-jwt-key-change-in-production"
@@ -88,17 +145,18 @@ NODE_ENV="development"
 PORT="$port"
 
 # Service URLs (for inter-service communication)
-AUTH_SERVICE_URL="http://localhost:8001"
-USER_SERVICE_URL="http://localhost:8002"
-SHIPMENT_SERVICE_URL="http://localhost:8003"
-SUPPORT_SERVICE_URL="http://localhost:8004"
-PLATFORM_SERVICE_URL="http://localhost:8005"
-API_GATEWAY_URL="http://localhost:8000"
+AUTH_SERVICE_URL="http://localhost:3002"
+USER_SERVICE_URL="http://localhost:3003"
+SHIPMENT_SERVICE_URL="http://localhost:3004"
+SUPPORT_SERVICE_URL="http://localhost:3006"
+PLATFORM_SERVICE_URL="http://localhost:3007"
+PARTNER_SERVICE_URL="http://localhost:3005"
+API_GATEWAY_URL="http://localhost:3001"
 
 # External Services
 WALLET_SERVICE_URL="http://localhost:8006"
 WALLET_SERVICE_API_KEY="your_wallet_service_api_key"
-PARTNER_SERVICE_URL="http://localhost:8007"
+PARTNER_SERVICE_EXTERNAL_URL="https://calc.websiteduniya.com"
 PARTNER_SERVICE_API_KEY="your_partner_service_api_key"
 
 # Prisma
@@ -123,13 +181,13 @@ create_frontend_env() {
 # Frontend Environment Variables
 
 # API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_API_GATEWAY_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_GATEWAY_URL=http://localhost:3001
 
 # Service URLs (for direct service calls if needed)
-NEXT_PUBLIC_AUTH_SERVICE_URL=http://localhost:8001
-NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:8002
-NEXT_PUBLIC_SHIPMENT_SERVICE_URL=http://localhost:8003
+NEXT_PUBLIC_AUTH_SERVICE_URL=http://localhost:3002
+NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:3003
+NEXT_PUBLIC_SHIPMENT_SERVICE_URL=http://localhost:3004
 
 # Application Configuration
 NEXT_PUBLIC_APP_NAME="Logistics Aggregator Portal"
@@ -144,7 +202,7 @@ NEXT_PUBLIC_ENVIRONMENT=development
 
 # External Services (if frontend needs direct access)
 NEXT_PUBLIC_WALLET_SERVICE_URL=http://localhost:8006
-NEXT_PUBLIC_PARTNER_SERVICE_URL=http://localhost:8007
+NEXT_PUBLIC_PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
 EOF
         print_success "✅ Created $env_file"
     else
@@ -184,7 +242,7 @@ echo "Setup type: $SETUP_TYPE"
 # Setup root .env file
 if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
     print_status "📋 Setting up root environment..."
-    setup_env_file ".env.example" ".env" "root environment" "$FORCE_OVERWRITE"
+    setup_env_file ".env.example" ".env" "root environment" "$FORCE_OVERWRITE" "" # No service name for root .env
 fi
 
 # Setup backend services
@@ -192,7 +250,7 @@ if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
     print_status "🔧 Setting up backend services..."
     
     # Define services with their ports and database names
-    services="auth-service:8001:auth user-service:8002:users shipment-service:8003:shipments support-service:8004:support platform-service:8005:platforms api-gateway:8000:gateway"
+    services="auth-service:3002:auth user-service:3003:users shipment-service:3004:shipments partner-service:3005:partners support-service:3006:support platform-service:3007:platforms api-gateway:3001:gateway"
     
     for service_config in $services; do
         IFS=':' read -r service port db_name <<< "$service_config"
@@ -242,7 +300,7 @@ fi
 if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
     print_status "🗄️  Generating Prisma clients..."
     
-    for service in auth-service user-service shipment-service support-service platform-service; do
+    for service in auth-service user-service shipment-service partner-service support-service platform-service; do
         if [ -d "backend/$service" ] && [ -f "backend/$service/prisma/schema.prisma" ]; then
             print_status "Generating Prisma client for $service..."
             (cd "backend/$service" && npx prisma generate) || print_warning "⚠️  Failed to generate Prisma client for $service"
@@ -265,8 +323,8 @@ case $SETUP_TYPE in
         echo "   1. Review and update .env files with your specific configuration"
         echo "   2. Run 'pnpm run dev' to start all services"
         echo "   3. Access frontend at http://localhost:3000"
-        echo "   4. Access API Gateway at http://localhost:8000"
-        echo "   5. Access Auth Service Swagger at http://localhost:8001/api-docs"
+        echo "   4. Access API Gateway at http://localhost:3001"
+        echo "   5. Access Auth Service Swagger at http://localhost:3002/api-docs"
         ;;
     "frontend")
         print_success "✅ Frontend setup complete"
@@ -282,8 +340,8 @@ case $SETUP_TYPE in
         print_status "📋 Next steps:"
         echo "   1. Review .env files in each service directory"
         echo "   2. Run 'pnpm run dev:backend' to start backend services"
-        echo "   3. Access API Gateway at http://localhost:8000"
-        echo "   4. Access Auth Service Swagger at http://localhost:8001/api-docs"
+        echo "   3. Access API Gateway at http://localhost:3001"
+        echo "   4. Access Auth Service Swagger at http://localhost:3002/api-docs"
         ;;
 esac
 

@@ -158,44 +158,64 @@ Based on Product Requirements Document review and external service integration n
 
 ---
 
-### **SHIP-002: Partner Service Integration**
+### **SHIP-002: Partner Service Implementation**
 
-**Task Name**: Integrate External Partner Service for Courier Management
+**Task Name**: Create Partner Service for Courier Management and External API Integration
 
-**Status**: NOT_STARTED
+**Status**: IN_PROGRESS
 
 **Planning**:
 
-- **Objective**: Integrate the external Partner Service (Port 8007) to enable courier selection and charge calculation
-- **Scope**: Complete partner API client, charge calculation workflows, courier selection logic, serviceability checking
-- **Approach**: Create partner API client with authentication, implement charge calculation workflows, add courier selection algorithms
-- **Estimated Time**: 1 week
+- **Objective**: Create complete Partner Service microservice for managing courier partners and integrating with external courier APIs
+- **Scope**: Full Partner Service with local partner management + external courier API integration (charge calculation, serviceability)
+- **Approach**: Follow auth-service patterns, create separate microservice on port 8008, integrate with external courier APIs
+- **Estimated Time**: 1.5 weeks
 
 **Dependencies**:
 
 - [x] Auth Service operational (COMPLETED)
 - [x] User Service operational (COMPLETED)
-- [ ] Partner Service API documentation and credentials
-- [ ] Partner Service running and accessible on port 8007
+- [x] Shipment Service with wallet integration (COMPLETED)
+- [x] API documentation found in docs/API-Specifications.md (AVAILABLE)
 
 **Implementation Details**:
 
-- [ ] Create PartnerServiceClient with authentication
-- [ ] Implement charge calculation workflows
-- [ ] Add courier selection logic (cost/time/zone based)
-- [ ] Handle serviceability checking
-- [ ] Add partner-related error handling and retries
-- [ ] Create partner integration tests
-- [ ] Update Shipment Service to use partner integration
+**Phase 1: Partner Service Microservice (Week 1)**
+
+- [ ] Create partner-service directory structure following auth-service patterns
+- [ ] Set up Prisma schema for partner management (partners, rates, zones)
+- [ ] Implement partner CRUD operations with audit logging
+- [ ] Create partner authentication and authorization
+- [ ] Add health checks and monitoring endpoints
+- [ ] Create Swagger API documentation
+
+**Phase 2: External Courier API Integration (Week 1-2)**
+
+- [ ] Create ExternalCourierClient for charge calculation APIs
+- [ ] Implement charge calculation workflows (/partners/calculate)
+- [ ] Add serviceability checking (/partners/serviceability)
+- [ ] Implement partner selection algorithms (cost/time/zone based)
+- [ ] Add comprehensive error handling and retry logic
+- [ ] Create integration tests for external APIs
+
+**Phase 3: Service Integration (Week 2)**
+
+- [ ] Update API Gateway to route /api/v1/partners to partner-service:3005
+- [ ] Update Shipment Service to use Partner Service for charge calculations
+- [ ] Add partner service to Docker Compose configuration
+- [ ] Create end-to-end integration tests
 
 **Completion Criteria**:
 
-- [ ] Partner API client functional with <2s response time
-- [ ] Charge calculation working for multiple partners
-- [ ] Courier selection algorithms implemented
-- [ ] Serviceability checking operational
-- [ ] Integration tests passing
-- [ ] Documentation updated
+- [ ] Partner Service microservice operational on port 8008
+- [ ] Partner CRUD operations with audit logging functional
+- [ ] External courier API integration working (<2s response time)
+- [ ] Charge calculation for multiple partners operational
+- [ ] Serviceability checking functional
+- [ ] API Gateway routing configured
+- [ ] Shipment Service integration complete
+- [ ] Comprehensive test coverage
+- [ ] Complete API documentation
 
 ---
 
@@ -446,7 +466,7 @@ Based on Product Requirements Document review and external service integration n
 ### **Critical Dependencies**:
 
 - 🔴 **Wallet Service** (Port 8006): Required for payment processing
-- 🔴 **Partner Service** (Port 8007): Required for courier management
+- 🔴 **Partner Service** (Port 3005): Required for courier management
 - 📋 **API Documentation**: Needed for external service integration
 - 🔑 **Service Credentials**: Required for authentication with external services
 

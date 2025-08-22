@@ -157,7 +157,11 @@ WALLET_SERVICE_API_KEY="your_wallet_service_api_key"
 ### Partner Service
 
 ```bash
-PARTNER_SERVICE_URL="http://localhost:8007"
+# Internal service communication
+PARTNER_SERVICE_URL="http://localhost:3005"
+
+# External partner service for calculations
+PARTNER_SERVICE_EXTERNAL_URL="https://calc.websiteduniya.com"
 PARTNER_SERVICE_API_KEY="your_partner_service_api_key"
 ```
 

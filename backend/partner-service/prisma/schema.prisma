@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Partner {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique // e.g., "DELHIVERY", "BLUEDART"
+  displayName String // e.g., "Delhivery", "Blue Dart"
+  isActive    Boolean @default(true)
+
+  // API Configuration
+  apiUrl     String
+  apiToken   String?
+  apiVersion String?
+
+  // Service Configuration
+  supportsCOD     Boolean @default(false)
+  supportsReverse Boolean @default(false)
+  maxWeight       Float? // in kg
+  maxDimensions   Json? // {length, width, height} in cm
+
+  // Pricing Configuration
+  baseRate         Float?
+  perKgRate        Float?
+  codChargePercent Float?
+  fuelSurcharge    Float?
+
+  // Service Areas
+  servicePincodes String[] // Array of supported pincodes
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  shipments           PartnerShipment[]
+  rates               PartnerRate[]
+  serviceabilityCache ServiceabilityCache[]
+
+  @@map("partners")
+}
+
+model PartnerRate {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Zone Configuration
+  fromPincode String
+  toPincode   String
+  zone        String? // A, B, C, D, E zones
+
+  // Weight Slabs
+  minWeight Float // in kg
+  maxWeight Float // in kg
+
+  // Pricing
+  rate          Float
+  codCharge     Float?
+  fuelSurcharge Float?
+
+  // Service Type
+  serviceType String // SURFACE, AIR, EXPRESS
+
+  // Delivery Time
+  deliveryDays Int?
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([partnerId, fromPincode, toPincode, minWeight, maxWeight, serviceType])
+  @@map("partner_rates")
+}
+
+model PartnerShipment {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id])
+
+  // Shipment Reference
+  shipmentId   String  @unique // Reference to main shipment
+  partnerAwbNo String? @unique // Partner's AWB number
+
+  // Tracking
+  status      String // BOOKED, PICKED, IN_TRANSIT, DELIVERED, RTO, etc.
+  trackingUrl String?
+
+  // Charges
+  calculatedRate Float?
+  actualRate     Float?
+  codAmount      Float?
+
+  // Service Details
+  serviceType      String // SURFACE, AIR, EXPRESS
+  expectedDelivery DateTime?
+  actualDelivery   DateTime?
+
+  // Pickup/Delivery
+  pickupDate   DateTime?
+  deliveryDate DateTime?
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("partner_shipments")
+}
+
+model ServiceabilityCache {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  fromPincode String
+  toPincode   String
+
+  isServiceable Boolean
+  serviceType   String? // SURFACE, AIR, EXPRESS
+  deliveryDays  Int?
+
+  // Cache metadata
+  cachedAt  DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([partnerId, fromPincode, toPincode])
+  @@map("serviceability_cache")
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Action Details
+  action       String // RATE_CALCULATED, SHIPMENT_BOOKED, STATUS_UPDATED
+  resourceType String // PARTNER, SHIPMENT, RATE
+  resourceId   String?
+
+  // User Context
+  userId    String?
+  ipAddress String?
+  userAgent String?
+
+  // Request/Response Data
+  requestData  Json?
+  responseData Json?
+
+  // Error Information
+  errorCode    String?
+  errorMessage String?
+
+  // Metadata
+  timestamp DateTime @default(now())
+
+  @@map("audit_logs")
+}

@@ -48,23 +48,27 @@ app.get("/health", (req, res) => {
 // Service routing configuration
 const services = {
   auth: {
-    target: "http://auth-service:8001",
+    target: "http://auth-service:3002",
     pathRewrite: { "^/api/v1/auth": "" },
   },
   users: {
-    target: "http://user-service:8002",
+    target: "http://user-service:3003",
     pathRewrite: { "^/api/v1/users": "" },
   },
   shipments: {
-    target: "http://shipment-service:8003",
+    target: "http://shipment-service:3004",
     pathRewrite: { "^/api/v1/shipments": "" },
   },
+  partners: {
+    target: "http://partner-service:3005",
+    pathRewrite: { "^/api/v1/partners": "" },
+  },
   support: {
-    target: "http://support-service:8004",
+    target: "http://support-service:3006",
     pathRewrite: { "^/api/v1/support": "" },
   },
   platforms: {
-    target: "http://platform-service:8005",
+    target: "http://platform-service:3007",
     pathRewrite: { "^/api/v1/platforms": "" },
   },
 };

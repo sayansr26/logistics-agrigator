@@ -52,7 +52,7 @@ call :remove_if_exists "frontend\.turbo" "frontend Turbo cache"
 
 REM Remove backend service dependencies and build artifacts
 echo [INFO] Cleaning backend services...
-for %%s in (auth-service user-service shipment-service support-service platform-service api-gateway) do (
+for %%s in (auth-service user-service shipment-service partner-service support-service platform-service api-gateway) do (
     set "service_path=backend\%%s"
     if exist "!service_path!" (
         echo [INFO] Cleaning %%s...
