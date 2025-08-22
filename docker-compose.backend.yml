@@ -123,8 +123,8 @@ services:
   # Shipment Service (Future)
   shipment-service:
     build:
-      context: ./backend/shipment-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/shipment-service/Dockerfile
     container_name: logistics-shipment-service-dev
     environment:
       - NODE_ENV=development
@@ -134,16 +134,21 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
       - USER_SERVICE_URL=http://user-service:8002
+      - WALLET_SERVICE_URL=http://localhost:8006
+      - PARTNER_SERVICE_URL=http://localhost:8007
     ports:
       - "8003:8003"
     volumes:
       - ./backend/shipment-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      auth-service:
+        condition: service_started
     networks:
       - backend-network
     command: pnpm run dev
@@ -153,8 +158,8 @@ services:
   # Support Service (Future)
   support-service:
     build:
-      context: ./backend/support-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/support-service/Dockerfile
     container_name: logistics-support-service-dev
     environment:
       - NODE_ENV=development
@@ -163,16 +168,21 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
+      - USER_SERVICE_URL=http://user-service:8002
+      - SHIPMENT_SERVICE_URL=http://shipment-service:8003
     ports:
       - "8004:8004"
     volumes:
       - ./backend/support-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      auth-service:
+        condition: service_started
     networks:
       - backend-network
     command: pnpm run dev
@@ -182,8 +192,8 @@ services:
   # Platform Service (Future)
   platform-service:
     build:
-      context: ./backend/platform-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/platform-service/Dockerfile
     container_name: logistics-platform-service-dev
     environment:
       - NODE_ENV=development
@@ -193,16 +203,22 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:8001
       - USER_SERVICE_URL=http://user-service:8002
+      - SHIPMENT_SERVICE_URL=http://shipment-service:8003
+      - SHOPIFY_CLIENT_ID=your_shopify_client_id
+      - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
       - "8005:8005"
     volumes:
       - ./backend/platform-service:/app
+      - ./shared:/app/shared
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      auth-service:
+        condition: service_started
     networks:
       - backend-network
     command: pnpm run dev

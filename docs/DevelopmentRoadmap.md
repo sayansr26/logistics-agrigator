@@ -25,7 +25,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Repository Structure Setup** (2 days)
-
   - Create monorepo structure for all microservices
   - Setup shared configurations and utilities
   - Initialize Docker development environment
@@ -41,7 +40,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Next.js Project Setup** (2 days)
-
   - Initialize Next.js 14 with TypeScript
   - Setup Tailwind CSS and component library structure
   - Configure routing and layout components
@@ -66,7 +64,6 @@
 **Backend Team Tasks:**
 
 - [ ] **API Gateway Development** (3 days)
-
   - Express.js gateway with request routing
   - Rate limiting and request validation
   - CORS and security headers configuration
@@ -81,7 +78,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Authentication Flow** (3 days)
-
   - Login and registration forms
   - JWT token management
   - Protected routes implementation
@@ -100,7 +96,6 @@
 **Backend Team Tasks:**
 
 - [ ] **User Service API** (4 days)
-
   - User profile management
   - Client account management
   - Role and permission system
@@ -115,7 +110,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **User Management UI** (4 days)
-
   - User profile management pages
   - Client settings and configuration
   - Role management interface
@@ -140,7 +134,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Shipment Creation UI** (4 days)
-
   - Single shipment creation form
   - Address input components with validation
   - Package details form
@@ -158,7 +151,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Platform Service Foundation** (3 days)
-
   - OAuth integration framework
   - Platform-specific API clients
   - Settings and credentials management
@@ -173,7 +165,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Platform Integration UI** (3 days)
-
   - Shopify connection wizard
   - Platform settings management
   - Integration status dashboard
@@ -185,27 +176,27 @@
   - Sync status indicators
   - Manual sync triggers
 
-#### Week 6: Wallet Integration & Partner Service
+#### Week 6: Wallet Integration & Partner Service - PRIORITY UPDATED
 
 **Backend Team Tasks:**
 
-- [ ] **Wallet Service Integration** (3 days)
+- [ ] **Wallet Service Integration** (3 days) - **CRITICAL PRIORITY**
+  - API client for external wallet service (Port 8006)
+  - Balance checking and validation middleware
+  - Payment processing workflows (debit/credit/reserve)
+  - Transaction audit logging
+  - Error handling and retry logic with comprehensive testing
 
-  - API client for existing wallet service
-  - Balance checking and validation
-  - Transaction processing workflows
-  - Error handling and retry logic
-
-- [ ] **Partner Service Integration** (2 days)
-  - API client for existing partner service
-  - Charge calculation integration
-  - Courier selection logic
-  - Serviceability checking
+- [ ] **Partner Service Integration** (2 days) - **CRITICAL PRIORITY**
+  - API client for external partner service (Port 8007)
+  - Charge calculation integration with multiple partners
+  - Courier selection logic (cost/time/zone optimization)
+  - Serviceability checking and zone mapping
+  - Partner-specific error handling and retry mechanisms
 
 **Frontend Team Tasks:**
 
 - [ ] **Wallet Management UI** (3 days)
-
   - Balance display and management
   - Transaction history
   - Auto-recharge settings
@@ -224,7 +215,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Label & Manifest Generation** (3 days)
-
   - PDF generation for shipping labels
   - Manifest creation and management
   - Document storage and retrieval
@@ -239,7 +229,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Shipping Operations UI** (3 days)
-
   - Label printing interface
   - Manifest generation and download
   - Pickup scheduling form
@@ -256,21 +245,18 @@
 **Full Team Tasks:**
 
 - [ ] **Integration Testing** (2 days)
-
   - End-to-end testing of core flows
   - API integration testing
   - Database transaction testing
   - Error handling validation
 
 - [ ] **Performance Testing** (1 day)
-
   - Load testing for core APIs
   - Database query optimization
   - Frontend performance optimization
   - Memory leak detection
 
 - [ ] **Security Testing** (1 day)
-
   - Authentication and authorization testing
   - Input validation testing
   - SQL injection and XSS prevention
@@ -293,7 +279,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Real-time Tracking** (4 days)
-
   - Courier API integrations for tracking
   - Tracking event processing
   - Status standardization across couriers
@@ -308,7 +293,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Tracking Dashboard** (3 days)
-
   - Unified tracking interface
   - Real-time status updates
   - Tracking timeline visualization
@@ -325,7 +309,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Notification Service** (4 days)
-
   - SMS integration (MSG91/Twilio)
   - Email service integration
   - WhatsApp API integration
@@ -341,7 +324,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Notification Settings** (3 days)
-
   - Customer notification preferences
   - Template customization interface
   - Notification history and logs
@@ -360,7 +342,6 @@
 **Backend Team Tasks:**
 
 - [ ] **File Upload System** (3 days)
-
   - Excel/CSV file processing
   - Data validation and error reporting
   - Progress tracking for large files
@@ -375,7 +356,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Bulk Upload Interface** (3 days)
-
   - Drag-and-drop file upload
   - Template download functionality
   - Validation error display
@@ -392,7 +372,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Auto-Allocation System** (3 days)
-
   - Rule-based courier selection
   - Zone-based allocation
   - Cost optimization algorithms
@@ -407,7 +386,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Allocation Rules UI** (3 days)
-
   - Rule configuration interface
   - Zone mapping visualization
   - Performance analytics
@@ -426,7 +404,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Help & Support Service** (4 days)
-
   - Ticket system implementation
   - Dispute workflow management
   - SLA tracking and escalation
@@ -442,7 +419,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Dispute Management UI** (3 days)
-
   - Ticket creation interface
   - Dispute tracking dashboard
   - Evidence upload system
@@ -459,7 +435,6 @@
 **Backend Team Tasks:**
 
 - [ ] **NDR Processing System** (4 days)
-
   - NDR event processing
   - Action recommendation engine
   - Auto-communication workflows
@@ -474,7 +449,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **NDR Dashboard** (3 days)
-
   - Centralized NDR management
   - Action panel interface
   - Analytics and reporting
@@ -493,7 +467,6 @@
 **Backend Team Tasks:**
 
 - [ ] **WooCommerce Integration** (3 days)
-
   - WooCommerce API client
   - OAuth and API key authentication
   - Order synchronization
@@ -508,7 +481,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Platform Management UI** (3 days)
-
   - Multi-platform dashboard
   - Platform-specific settings
   - Integration health monitoring
@@ -525,7 +497,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Webhook Management System** (3 days)
-
   - Webhook registration and management
   - Event filtering and routing
   - Retry logic and dead letter queues
@@ -540,7 +511,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Advanced UI Features** (3 days)
-
   - Real-time updates via WebSocket
   - Advanced filtering and search
   - Bulk action capabilities
@@ -563,7 +533,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Automated Billing** (4 days)
-
   - Invoice generation based on shipment status
   - GST calculation and compliance
   - Multi-tier pricing support
@@ -578,7 +547,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Billing Dashboard** (3 days)
-
   - Invoice management interface
   - Payment tracking
   - Billing analytics
@@ -595,7 +563,6 @@
 **Backend Team Tasks:**
 
 - [ ] **GST Compliance** (3 days)
-
   - GSTR report generation
   - Tax calculation engine
   - Compliance validation
@@ -610,7 +577,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Tax Management** (3 days)
-
   - GST dashboard
   - Tax report generation
   - Compliance monitoring
@@ -629,7 +595,6 @@
 **Backend Team Tasks:**
 
 - [ ] **COD Settlement Tracking** (4 days)
-
   - Daily/weekly settlement calculations
   - Courier-wise reconciliation
   - Mismatch detection and alerting
@@ -644,7 +609,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Settlement Dashboard** (3 days)
-
   - COD tracking interface
   - Settlement reports
   - Reconciliation tools
@@ -661,7 +625,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Custom Settlement Rules** (3 days)
-
   - Configurable settlement cycles
   - Client-specific rules
   - Holiday and weekend handling
@@ -676,7 +639,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Settlement Configuration** (3 days)
-
   - Rule configuration interface
   - Settlement schedule management
   - Exception handling
@@ -695,7 +657,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Analytics Engine** (4 days)
-
   - Real-time analytics processing
   - Data aggregation and caching
   - Performance metrics calculation
@@ -710,7 +671,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Analytics Dashboard** (3 days)
-
   - Interactive charts and graphs
   - Key performance indicators
   - Trend visualization
@@ -727,7 +687,6 @@
 **Backend Team Tasks:**
 
 - [ ] **Data Visualization APIs** (3 days)
-
   - Chart data endpoints
   - Real-time data streaming
   - Performance optimization
@@ -742,7 +701,6 @@
 **Frontend Team Tasks:**
 
 - [ ] **Advanced Visualizations** (3 days)
-
   - Interactive maps
   - Heat maps for delivery zones
   - Time-series charts
@@ -761,7 +719,6 @@
 **Full Team Tasks:**
 
 - [ ] **End-to-End Testing** (3 days)
-
   - Complete user journey testing
   - Cross-browser compatibility
   - Mobile responsiveness testing
@@ -778,14 +735,12 @@
 **Full Team Tasks:**
 
 - [ ] **Security Audit** (2 days)
-
   - Penetration testing
   - Vulnerability assessment
   - Code security review
   - Data privacy compliance
 
 - [ ] **Production Deployment** (2 days)
-
   - Production environment setup
   - Database migration
   - SSL and domain configuration

@@ -129,8 +129,8 @@ services:
   # Shipment Service (Week 3+ Development)
   shipment-service:
     build:
-      context: ./backend/shipment-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/shipment-service/Dockerfile
     container_name: logistics-shipment-service
     environment:
       - NODE_ENV=development
@@ -144,9 +144,11 @@ services:
       - PARTNER_SERVICE_URL=http://localhost:8007
     ports:
       - "8003:8003"
-    volumes:
-      - ./backend/shipment-service:/app
-      - /app/node_modules
+    # For live reload in development, uncomment these volumes:
+    # volumes:
+    #   - ./backend/shipment-service:/app
+    #   - ./shared:/app/shared
+    #   - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,8 +166,8 @@ services:
   # Support Service (Week 4+ Development)
   support-service:
     build:
-      context: ./backend/support-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/support-service/Dockerfile
     container_name: logistics-support-service
     environment:
       - NODE_ENV=development
@@ -177,9 +179,11 @@ services:
       - USER_SERVICE_URL=http://user-service:8002
     ports:
       - "8004:8004"
-    volumes:
-      - ./backend/support-service:/app
-      - /app/node_modules
+    # For live reload in development, uncomment these volumes:
+    # volumes:
+    #   - ./backend/support-service:/app
+    #   - ./shared:/app/shared
+    #   - support_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,8 +201,8 @@ services:
   # Platform Service (Week 5+ Development)
   platform-service:
     build:
-      context: ./backend/platform-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/platform-service/Dockerfile
     container_name: logistics-platform-service
     environment:
       - NODE_ENV=development
@@ -213,9 +217,11 @@ services:
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
       - "8005:8005"
-    volumes:
-      - ./backend/platform-service:/app
-      - /app/node_modules
+    # For live reload in development, uncomment these volumes:
+    # volumes:
+    #   - ./backend/platform-service:/app
+    #   - ./shared:/app/shared
+    #   - platform_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -257,6 +263,9 @@ volumes:
   api_gateway_node_modules:
   auth_service_node_modules:
   user_node_modules:
+  shipment_node_modules:
+  support_node_modules:
+  platform_node_modules:
   frontend_node_modules:
   frontend_next:
 
