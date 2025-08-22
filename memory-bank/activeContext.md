@@ -4,6 +4,56 @@
 
 ### Git Commit Summary
 
+85ec82b fix(setup): correct docker service urls in .env files and fix setup script syntax
+5f81928 feat(partner-service): new partner service introduced
+
+### Modified Areas
+
+**Backend Services:**
+
+- backend/BACKEND_TASK.md
+- backend/ENV_CONFIGURATION_GUIDE.md
+- backend/api-gateway/.env.example
+- backend/api-gateway/server.js
+- backend/auth-service/.env.example
+- backend/partner-service/.env.example
+- backend/partner-service/Dockerfile
+- backend/partner-service/config/database.js
+- backend/partner-service/config/redis.js
+- backend/partner-service/config/swagger.js
+- backend/partner-service/middleware/auth.js
+- backend/partner-service/middleware/errorHandler.js
+- backend/partner-service/package.json
+- backend/partner-service/prisma/schema.prisma
+- backend/partner-service/routes/partners.js
+- backend/partner-service/server.js
+- backend/platform-service/.env.example
+- backend/shipment-service/.env.example
+- backend/support-service/.env.example
+- backend/user-service/.env.example
+
+**Documentation:**
+
+- memory-bank/activeContext.md
+- memory-bank/progress.md
+- memory-bank/projectIntelligence.md
+
+**Configuration:**
+
+- docker-compose.backend.yml
+- docker-compose.frontend.yml
+- docker-compose.yml
+- package.json
+- scripts/cleanup.bat
+- scripts/cleanup.sh
+- scripts/init-databases.sql
+- scripts/setup.bat
+- scripts/setup.sh
+
+## Recent Changes - August 22, 2025
+
+### Git Commit Summary
+
 5f81928 feat(partner-service): new partner service introduced
 
 ### Modified Areas

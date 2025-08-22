@@ -164,6 +164,23 @@ This is a fundamental architectural decision that affects all services and devel
 
 ---
 
+## Intelligence Update - August 22, 2025
+
+### New Patterns Identified
+
+- Backend service modifications detected\n- New middleware/controller/route patterns\n- Database schema updates
+
+### Technology Stack Updates
+
+\n- Package dependencies updated
+
+### Recent Implementation Insights
+
+- 85ec82b fix(setup): correct docker service urls in .env files and fix setup script syntax
+- 5f81928 feat(partner-service): new partner service introduced
+
+---
+
 ## Critical Implementation Paths
 
 ### Database & ORM Patterns (MANDATORY)
