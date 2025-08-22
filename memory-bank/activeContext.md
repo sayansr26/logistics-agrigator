@@ -4,6 +4,18 @@
 
 ### Git Commit Summary
 
+c67ee95 docs: add frontend code review guidelines
+
+### Modified Areas
+
+**Documentation:**
+
+- docs/FRONTEND-CODE-REVIEW-GUIDELINES.md
+
+## Recent Changes - August 22, 2025
+
+### Git Commit Summary
+
 58d752f fix: all lint issues
 
 ### Modified Areas
