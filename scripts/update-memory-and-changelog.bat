@@ -2,13 +2,16 @@
 setlocal enabledelayedexpansion
 
 REM =============================================================================
-REM Auto Memory Bank & Changelog Update Script for Windows
+REM Manual Memory Bank & Changelog Update Script for Windows
 REM =============================================================================
-REM This script automatically updates the memory bank and changelog before push
+REM This script manually updates the memory bank and changelog when needed
 REM It analyzes git changes and updates project documentation accordingly
+REM 
+REM Usage: scripts\update-memory-and-changelog.bat
+REM Note: No longer runs automatically - execute manually when desired
 REM =============================================================================
 
-echo 🔄 Starting Memory Bank and Changelog update...
+echo 🔄 Starting manual Memory Bank and Changelog update...
 
 REM Configuration
 set "MEMORY_BANK_DIR=memory-bank"

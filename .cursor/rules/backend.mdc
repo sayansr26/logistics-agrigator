@@ -1,0 +1,358 @@
+---
+description: Complete backend development standards for logistics microservices
+globs: backend/**/*.js,backend/**/*.ts,backend/**/*.prisma,backend/**/package.json,backend/**/Dockerfile,backend/**/server.js
+---
+
+# Backend Development Standards
+
+> **Reference Implementation**: [backend/auth-service/](mdc:backend/auth-service/) - ALWAYS check auth service patterns first
+
+## **CRITICAL: Service Structure**
+
+### **Mandatory Directory Structure**
+
+```
+backend/service-name/
+├── prisma/
+│   ├── schema.prisma          # Database schema with audit patterns
+│   └── migrations/            # Version-controlled migrations
+├── controllers/               # Business logic handlers (NEVER inline functions)
+├── middleware/                # Service-specific middleware
+├── routes/                    # API route definitions
+├── config/                    # Configuration modules
+│   ├── database.js           # Prisma client setup
+│   ├── redis.js              # Redis client setup
+│   └── swagger.js            # OpenAPI documentation
+├── validation/                # Joi validation schemas
+├── .env.example              # Environment template
+├── Dockerfile                # Container configuration
+├── package.json              # Dependencies and scripts
+└── server.js                 # Express app entry point
+```
+
+## **Controller Implementation**
+
+### **CRITICAL: No Inline Functions in Routes**
+
+**ALL business logic MUST be in controller methods - NEVER use inline functions in routes.**
+
+```javascript
+// ❌ FORBIDDEN: Inline functions in routes
+router.get("/users/:id", auth.authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+    });
+    // 20+ lines of business logic here - WRONG!
+    res.json({ user });
+  } catch (error) {
+    // Error handling here - WRONG!
+  }
+});
+
+// ✅ CORRECT: Controller methods only
+router.get("/users/:id", auth.authenticate, UserController.getUser);
+```
+
+### **Controller Class Pattern**
+
+```javascript
+// controllers/entityController.js
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+
+class EntityController {
+  static async create(req, res) {
+    try {
+      // 1. Input validation (handled by middleware)
+      // 2. Business logic
+      const entity = await prisma.entity.create({
+        data: req.body,
+        select: { id: true, name: true, createdAt: true },
+      });
+
+      // 3. MANDATORY: Audit logging
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user?.id,
+          action: "CREATE",
+          resource: "Entity",
+          resourceId: entity.id,
+          changes: req.body,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // 4. Standard response format
+      res.status(201).json({
+        status: "success",
+        data: { entity },
+        meta: {
+          timestamp: new Date().toISOString(),
+          service: process.env.SERVICE_NAME,
+        },
+      });
+    } catch (error) {
+      logger.error("Entity creation error:", error);
+      throw error;
+    }
+  }
+
+  static async getById(req, res) {
+    // Implementation...
+  }
+
+  // All methods MUST be static
+}
+
+module.exports = EntityController;
+```
+
+## **Database Patterns**
+
+### **Prisma Schema Requirements**
+
+**MANDATORY: Every service schema MUST include:**
+
+```prisma
+// Base fields for ALL models
+model BaseEntity {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// REQUIRED: Audit logging model for every service
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?  // User who performed action
+  action      String   // CREATE, UPDATE, DELETE, etc.
+  resource    String   // Table/model name
+  resourceId  String?  // ID of affected resource
+  changes     Json?    // What changed
+  ipAddress   String?  // Request IP
+  userAgent   String?  // Request user agent
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+```
+
+### **Database Per Service**
+
+```javascript
+// Each service MUST have its own database
+// auth-service: logistics_auth
+// user-service: logistics_users
+// partner-service: logistics_partners
+
+// Environment variable pattern
+DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_service_name"
+```
+
+## **API Standards**
+
+### **Standard Response Format**
+
+**ALL services MUST use this exact format:**
+
+```javascript
+// Success Response
+{
+  "status": "success",
+  "data": { /* response data */ },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "service": "service-name",
+    "requestId": "req-uuid"
+  }
+}
+
+// Error Response
+{
+  "status": "error",
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "details": {}
+  },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "service": "service-name"
+  }
+}
+```
+
+### **Authentication Patterns**
+
+```javascript
+// middleware/auth.js - Service-specific wrapper
+const { authMiddleware } = require("../shared/lib/auth");
+
+module.exports = {
+  authenticate: authMiddleware.authenticate,
+  requireRole: authMiddleware.requireRole,
+  adminOnly: authMiddleware.adminOnly,
+  // Service-specific extensions
+};
+
+// Usage in routes
+router.post("/entities", 
+  authMiddleware.authenticate,
+  authMiddleware.requireRole(["admin", "operations"]),
+  EntityController.create
+);
+```
+
+### **Input Validation**
+
+**MANDATORY: Joi validation for ALL endpoints**
+
+```javascript
+// validation/entitySchemas.js
+const Joi = require("joi");
+
+const createEntitySchema = Joi.object({
+  name: Joi.string().min(2).max(100).required(),
+  description: Joi.string().max(500).optional(),
+  // Service-specific fields
+});
+
+// middleware/validate.js
+const validate = (schema) => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        status: "error",
+        error: {
+          code: "VALIDATION_ERROR",
+          message: error.details[0].message,
+          details: error.details,
+        },
+      });
+    }
+    req.body = value; // Use validated data
+    next();
+  };
+};
+```
+
+## **Server Configuration**
+
+### **Standard Server.js Pattern**
+
+```javascript
+// server.js - Standard pattern from auth service
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const swaggerUi = require("swagger-ui-express");
+const logger = require("./shared/lib/logger");
+const { errorHandler } = require("./middleware/errorHandler");
+const swaggerSpecs = require("./config/swagger");
+
+const app = express();
+const PORT = process.env.PORT || 8002;
+
+// Security middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+
+// Health check endpoint - MANDATORY
+app.get("/health", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      service: process.env.SERVICE_NAME,
+      uptime: process.uptime(),
+      database: "connected",
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: "unhealthy",
+      error: error.message,
+    });
+  }
+});
+
+// Swagger documentation - MANDATORY
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
+
+// API routes
+app.use("/api/entities", require("./routes/entities"));
+
+// Error handling middleware - MANDATORY
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`${process.env.SERVICE_NAME} running on port ${PORT}`);
+});
+```
+
+## **Docker Configuration**
+
+### **Standard Dockerfile**
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+RUN apk add --no-cache openssl
+RUN npm install -g pnpm@8.15.1
+
+# Copy source code
+COPY . .
+
+# Install dependencies and generate Prisma client
+RUN pnpm install
+RUN npx prisma generate
+
+EXPOSE ${PORT:-8002}
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8002}/health || exit 1
+
+CMD ["pnpm", "start"]
+```
+
+## **Service Checklist**
+
+### **MANDATORY: Every Service Must Have**
+
+- [ ] Controller methods only (NO inline functions in routes)
+- [ ] Prisma ORM (NEVER raw SQL)
+- [ ] Audit logging for all CRUD operations
+- [ ] JWT authentication middleware
+- [ ] Input validation with Joi
+- [ ] Standard response format
+- [ ] Health check endpoint
+- [ ] Swagger API documentation
+- [ ] Error handling middleware
+- [ ] Docker configuration
+
+## **NEVER DO**
+
+- ❌ Use inline functions in routes (ALL logic in controllers)
+- ❌ Write raw SQL queries (use Prisma only)
+- ❌ Skip audit logging for CRUD operations
+- ❌ Create endpoints without authentication
+- ❌ Skip input validation
+- ❌ Use custom response formats
+- ❌ Skip error handling middleware
+
+## **ALWAYS DO**
+
+- ✅ Follow auth-service patterns exactly
+- ✅ Use controller methods for all business logic
+- ✅ Include audit logging in all CRUD operations
+- ✅ Validate all inputs with Joi schemas
+- ✅ Use standard response formats
+- ✅ Include comprehensive health checks
+- ✅ Document all endpoints with Swagger

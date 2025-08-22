@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # =============================================================================
-# Auto Memory Bank & Changelog Update Script
+# Manual Memory Bank & Changelog Update Script
 # =============================================================================
-# This script automatically updates the memory bank and changelog before push
+# This script manually updates the memory bank and changelog when needed
 # It analyzes git changes and updates project documentation accordingly
+# 
+# Usage: ./scripts/update-memory-and-changelog.sh
+# Note: No longer runs automatically - execute manually when desired
 # =============================================================================
 
 set -e  # Exit on any error
@@ -528,7 +531,7 @@ commit_updates() {
 
 # Main execution
 main() {
-    log_info "🚀 Starting automatic memory bank and changelog update..."
+    log_info "🚀 Starting manual memory bank and changelog update..."
     
     # Check if we're in a git repository
     if ! git rev-parse --git-dir > /dev/null 2>&1; then

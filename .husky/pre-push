@@ -1,11 +1,6 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-echo "📝 Updating memory bank and changelog..."
-
-# Update memory bank and changelog before other checks
-./scripts/update-memory-and-changelog.sh
-
 echo "🧪 Running tests before push..."
 
 # Run tests for all workspaces
@@ -22,3 +17,6 @@ echo "🏗️ Build check..."
 pnpm --filter "backend/*" run build --if-present
 
 echo "✅ Pre-push checks passed!"
+echo ""
+echo "💡 To manually update memory bank when needed:"
+echo "   ./scripts/update-memory-and-changelog.sh"

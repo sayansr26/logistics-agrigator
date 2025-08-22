@@ -44,9 +44,12 @@ Build a comprehensive **Logistics Aggregator Portal** that serves as a one-stop 
 
 ### Current Assets
 
-- **Existing Wallet Microservice**: Operational financial transaction management
-- **Partner Microservice**: Charges calculation and courier partner management
-- **Shopify Integration Service**: Platform connectivity (to be consumed via API)
+- **Completed Auth Service**: ✅ JWT authentication, RBAC, 2FA, audit logging (10 endpoints)
+- **Completed User Service**: ✅ Multi-tenant management, white-label branding (25+ endpoints)
+- **Wallet Integration**: ✅ Shared library implementation with payment workflows
+- **Existing Partner Microservice**: CRUD operations complete, external API integration needed
+- **Existing Shopify Integration Service**: Platform connectivity (to be consumed via API)
+- **Infrastructure**: ✅ Docker, PostgreSQL, Redis, API Gateway operational
 
 ### Target Users
 
@@ -94,73 +97,94 @@ Build a comprehensive **Logistics Aggregator Portal** that serves as a one-stop 
 
 ### Microservices Overview
 
-#### New Services to Develop
+#### Completed Services (Production Ready)
 
-**1. Auth Service**
+**1. Auth Service** ✅ **COMPLETED**
 
-- JWT token management
-- Role-based access control (RBAC)
-- 2FA implementation
-- Session management
-- Audit logging integration
+- ✅ JWT token management with refresh tokens
+- ✅ Role-based access control (RBAC) with permissions
+- ✅ 2FA implementation with QR codes and backup codes
+- ✅ Session management with Redis
+- ✅ Comprehensive audit logging integration
+- ✅ 10 production endpoints with Swagger documentation
 
-**2. User Service**
+**2. User Service** ✅ **COMPLETED**
 
-- User profile management
-- Client account management
-- Role and permission assignment
-- White-label branding configuration
+- ✅ User profile management with validation
+- ✅ Multi-tenant client account management
+- ✅ Role and permission assignment system
+- ✅ White-label branding configuration
+- ✅ User invitation system with email workflows
+- ✅ 25+ endpoints with comprehensive client settings
 
-**3. Shipment Service**
+#### Services in Development
 
-- Order creation and management
-- Tracking and status updates
-- Label and manifest generation
-- Pickup scheduling
-- NDR management
+**3. Partner Service** ⚠️ **IN PROGRESS**
 
-**4. Help & Support Service**
+- ✅ Partner CRUD operations with validation
+- ✅ Prisma schema for partners, rates, serviceability
+- ✅ Basic API endpoints with Swagger documentation
+- 🔄 **NEEDS**: External Partner Micro service integration
+- 🔄 **NEEDS**: Real-time charge calculation and serviceability
 
-- Ticket system management
-- Knowledge base
-- Live chat integration
-- SLA tracking
+**4. Shipment Service** ⚠️ **FOUNDATION EXISTS**
 
-**5. Platform Service**
+- 🔄 Order creation and management (needs partner integration)
+- 🔄 Tracking and status updates
+- 🔄 Label and manifest generation
+- 🔄 Pickup scheduling
+- 🔄 NDR management
 
-- Shopify API integration
-- WooCommerce (future)
-- Platform-specific settings storage
-- Order synchronization
-- Webhook management
+**5. Platform Service** ❌ **NOT STARTED**
 
-#### Integration with Existing Services
+- 🔄 Shopify OAuth 2.0 integration
+- 🔄 Order synchronization workflows
+- 🔄 Platform-specific settings storage
+- 🔄 Webhook management system
+- 🔄 WooCommerce integration (future)
 
-**Wallet Service Integration**
+**6. Support Service** ❌ **NOT STARTED**
+
+- 🔄 Ticket system management
+- 🔄 Knowledge base functionality
+- 🔄 SLA tracking and escalation
+- 🔄 Financial dispute management (wallet integration)
+
+#### Integration Status
+
+**Wallet Service Integration** ✅ **COMPLETED**
 
 ```javascript
-// API Consumption Pattern
-const walletAPI = {
-  endpoint: "https://wallet-service.internal",
-  methods: {
-    getBalance: "GET /wallet/balance/{userId}",
-    debitAmount: "POST /wallet/debit",
-    creditAmount: "POST /wallet/credit",
-    getTransactions: "GET /wallet/transactions/{userId}",
-  },
-};
+// IMPLEMENTED: Shared Library Pattern
+const {
+  WalletServiceClient,
+  walletMiddleware,
+} = require("../shared/lib/walletService");
+
+// Usage in services:
+const wallet = new WalletServiceClient();
+const balance = await wallet.getBalance(userId);
+const payment = await wallet.debitAmount(userId, amount, reference);
+
+// Middleware usage:
+app.use("/payments", walletMiddleware.checkBalance);
 ```
 
-**Partner Service Integration**
+**Partner Service Integration** ⚠️ **PARTIALLY COMPLETED**
 
 ```javascript
-// API Consumption Pattern
-const partnerAPI = {
-  endpoint: "https://partner-service.internal",
+// COMPLETED: Internal CRUD operations
+const partnerController = require("./controllers/partnerController");
+const partners = await partnerController.getAllPartners();
+const newPartner = await partnerController.createPartner(partnerData);
+
+// TODO: External Partner Micro service integration needed
+const externalPartnerAPI = {
+  endpoint: process.env.PARTNER_SERVICE_URL, // Port 8007
   methods: {
-    calculateCharges: "POST /partner/calculate",
-    getPartners: "GET /partner/list",
-    checkServiceability: "POST /partner/serviceability",
+    calculateCharges: "POST /partners/calculate",
+    getPartners: "GET /partners",
+    checkServiceability: "GET /partners/serviceability",
   },
 };
 ```
@@ -484,7 +508,7 @@ class WalletServiceClient {
   async getBalance(userId) {
     const response = await axios.get(
       `${this.baseURL}/wallet/balance/${userId}`,
-      { headers: { "X-API-Key": this.apiKey } }
+      { headers: { "X-API-Key": this.apiKey } },
     );
     return response.data;
   }
@@ -493,7 +517,7 @@ class WalletServiceClient {
     const response = await axios.post(
       `${this.baseURL}/wallet/debit`,
       { userId, amount, reference },
-      { headers: { "X-API-Key": this.apiKey } }
+      { headers: { "X-API-Key": this.apiKey } },
     );
     return response.data;
   }
@@ -508,7 +532,7 @@ class PartnerServiceClient {
     const response = await axios.post(
       `${this.baseURL}/partner/calculate`,
       shipmentDetails,
-      { headers: { "X-API-Key": this.apiKey } }
+      { headers: { "X-API-Key": this.apiKey } },
     );
     return response.data;
   }
@@ -545,7 +569,7 @@ const authorize = (requiredPermissions) => {
   return (req, res, next) => {
     const userPermissions = req.user.permissions;
     const hasPermission = requiredPermissions.every((permission) =>
-      userPermissions.includes(permission)
+      userPermissions.includes(permission),
     );
     if (!hasPermission) {
       return res.status(403).json({ error: "Insufficient permissions" });
@@ -803,11 +827,9 @@ const cache = {
 **High Impact**:
 
 1. **Third-party API Failures**: Courier partner API downtime
-
    - _Mitigation_: Implement retry logic, fallback partners, circuit breaker pattern
 
 2. **Database Performance**: High-volume transaction bottlenecks
-
    - _Mitigation_: Database sharding, read replicas, query optimization
 
 3. **Integration Complexity**: Existing microservice compatibility
@@ -816,7 +838,6 @@ const cache = {
 **Medium Impact**:
 
 1. **Platform API Changes**: Shopify/WooCommerce API modifications
-
    - _Mitigation_: Version management, webhook monitoring, API change notifications
 
 2. **Security Vulnerabilities**: Data breaches, unauthorized access
@@ -827,7 +848,6 @@ const cache = {
 **Market Risks**:
 
 1. **Competition**: Established players with similar offerings
-
    - _Mitigation_: Focus on unique features, superior user experience
 
 2. **Regulatory Changes**: GST or logistics compliance modifications
@@ -836,7 +856,6 @@ const cache = {
 **Operational Risks**:
 
 1. **Client Onboarding**: Complex setup reducing adoption
-
    - _Mitigation_: Streamlined onboarding, comprehensive documentation
 
 2. **Support Scalability**: Growing support requests

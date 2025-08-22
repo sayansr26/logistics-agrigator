@@ -1,8 +1,11 @@
 ---
-globs: *.md,package.json,docker-compose*.yml,.husky/*,*.config.js
+description: Development workflow, quality standards, and monorepo commands
+globs: package.json,docker-compose*.yml,.husky/*,*.config.js,scripts/**/*,*.md
 ---
 
 # Development Workflow & Quality Standards
+
+> **Package Manager**: PNPM monorepo - NEVER use npm or yarn commands
 
 ## **PNPM Monorepo Commands**
 Always use PNPM commands instead of direct Docker/npm commands:
@@ -116,6 +119,40 @@ Dockerignore files optimize builds:
 - [.dockerignore.backend](mdc:.dockerignore.backend) - Backend-specific
 - [.dockerignore.frontend](mdc:.dockerignore.frontend) - Frontend-specific
 
+## **Code Quality Standards**
+
+### **Pre-commit Quality Gates**
+Husky configuration enforces:
+1. **Smart Linting**: Only lint changed files (lint-staged)
+2. **Formatting**: Prettier auto-formatting on commit
+3. **Type Safety**: TypeScript validation for frontend
+4. **Commit Messages**: Conventional commits format
+
+### **Architecture Compliance**
+
+#### **MUST Follow**
+- ✅ **Prisma ORM**: Mandatory for all database operations
+- ✅ **PNPM Monorepo**: Use workspace commands only
+- ✅ **Controller Methods**: NO inline functions in routes
+- ✅ **Microservices**: Service isolation with own databases
+- ✅ **Conventional Commits**: Proper commit message format
+- ✅ **TypeScript**: Required for frontend development
+
+#### **MUST NOT Do**
+- ❌ **Inline Functions**: NEVER use inline functions in routes (use controller methods)
+- ❌ **Raw SQL**: Never write direct SQL queries
+- ❌ **Cross-service DB**: Services cannot access other service databases
+- ❌ **NPM Commands**: Always use PNPM in monorepo
+- ❌ **Skip Hooks**: Don't bypass pre-commit/pre-push hooks
+- ❌ **Hardcode URLs**: Use environment variables for API endpoints
+
+### **Security Standards**
+- JWT tokens with refresh token rotation
+- Role-based access control (RBAC)
+- Password hashing with bcrypt (12+ rounds)
+- Input sanitization and validation
+- No sensitive data in logs
+
 ## **Testing Strategy**
 ```bash
 # Run all tests
@@ -128,3 +165,23 @@ docker-compose exec frontend pnpm test
 # Test with coverage
 pnpm run test:coverage
 ```
+
+## **Performance Guidelines**
+
+### **Database (Prisma)**
+- Use `select` and `include` strategically to avoid over-fetching
+- Implement pagination for list endpoints
+- Use database transactions for multi-table operations
+- Index frequently queried fields in schema
+
+### **Frontend (Next.js)**
+- Use Next.js Image component for optimized images
+- Implement code splitting for large pages
+- Use React.memo for expensive components
+- Lazy load non-critical components
+
+### **API Design**
+- RESTful endpoints with consistent naming
+- Proper HTTP status codes
+- Response caching where appropriate
+- Request/response compression
