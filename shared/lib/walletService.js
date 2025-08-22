@@ -39,14 +39,14 @@ class WalletServiceClient {
     const url = `${this.baseURL}${endpoint}`;
     const requestOptions = {
       method: options.method || "GET",
+      timeout: this.timeout,
+      ...options,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
         "X-Service": "logistics-platform",
         ...options.headers,
       },
-      timeout: this.timeout,
-      ...options,
     };
 
     if (options.body && typeof options.body === "object") {

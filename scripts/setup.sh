@@ -281,7 +281,7 @@ if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
         # Shared module typically doesn't need its own .env, but we can create one if needed
         print_success "✅ Shared module ready"
     fi
-}
+fi
 
 # Install dependencies
 print_status "📦 Installing dependencies..."
