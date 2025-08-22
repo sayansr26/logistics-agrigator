@@ -132,6 +132,22 @@ This is a fundamental architectural decision that affects all services and devel
 
 ---
 
+## Intelligence Update - August 22, 2025
+
+### New Patterns Identified
+
+- Backend service modifications detected\n- New middleware/controller/route patterns
+
+### Technology Stack Updates
+
+### Recent Implementation Insights
+
+- 13b3386 feat(shipment): complete SHIP-001 wallet service integration
+- 32cfd94 fix(rules): correct cursor rule format with frontmatter
+- 000ff91 feat(rules): add shared library import patterns rule
+
+---
+
 ## Critical Implementation Paths
 
 ### Database & ORM Patterns (MANDATORY)

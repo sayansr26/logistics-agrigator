@@ -4,6 +4,24 @@
 
 ### Git Commit Summary
 
+13b3386 feat(shipment): complete SHIP-001 wallet service integration
+32cfd94 fix(rules): correct cursor rule format with frontmatter
+000ff91 feat(rules): add shared library import patterns rule
+
+### Modified Areas
+
+**Backend Services:**
+
+- backend/BACKEND_TASK.md
+- backend/shipment-service/controllers/shipmentController.js
+- backend/shipment-service/middleware/auth.js
+- backend/shipment-service/routes/shipments.js
+- backend/shipment-service/server.js
+
+## Recent Changes - August 22, 2025
+
+### Git Commit Summary
+
 c67ee95 docs: add frontend code review guidelines
 
 ### Modified Areas
