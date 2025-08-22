@@ -19,6 +19,9 @@ app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Import routes
+const shipmentRoutes = require("./routes/shipments");
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -26,16 +29,37 @@ app.get("/health", (req, res) => {
     service: "shipment-service",
     timestamp: new Date().toISOString(),
     version: "1.0.0",
+    features: {
+      walletIntegration: "enabled",
+      paymentProcessing: "enabled",
+    },
   });
 });
 
-// API routes placeholder
-app.get("/api/shipments", (req, res) => {
+// API routes
+app.use("/api/shipments", shipmentRoutes);
+
+// Root endpoint
+app.get("/", (req, res) => {
   res.json({
-    message: "Shipment Service - Shipments endpoint ready for implementation",
+    message: "🚚 Shipment Service with Wallet Integration",
+    status: "operational",
+    endpoints: {
+      health: "/health",
+      shipments: "/api/shipments",
+      walletBalance: "/api/shipments/wallet/balance",
+      walletTransactions: "/api/shipments/wallet/transactions",
+      walletHealth: "/api/shipments/wallet/health",
+    },
+    features: {
+      walletIntegration: "External Wallet Service integration enabled",
+      paymentProcessing: "Automatic payment reservation and confirmation",
+      refundProcessing: "Automatic refund processing for cancellations",
+    },
   });
 });
 
+// Legacy API routes (for backward compatibility)
 app.get("/api/tracking/:id", (req, res) => {
   res.json({
     message: "Shipment Service - Tracking endpoint ready for implementation",
