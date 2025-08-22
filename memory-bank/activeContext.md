@@ -1,5 +1,34 @@
 # Active Context - Current Work Focus & Recent Changes
 
+## Recent Changes - August 22, 2025
+
+### Git Commit Summary
+
+1800fa7 feat: user service fixed and windows support added
+
+### Modified Areas
+
+**Backend Services:**
+
+- backend/auth-service/config/swagger.js
+- backend/auth-service/server.js
+- backend/user-service/config/swagger.js
+- backend/user-service/server.js
+
+**Documentation:**
+
+- scripts/README-WINDOWS.md
+
+**Configuration:**
+
+- docker-compose.yml
+- package.json
+- scripts/check-npm-to-pnpm.bat
+- scripts/cleanup.bat
+- scripts/setup.bat
+- scripts/test-cleanup.bat
+- scripts/update-memory-and-changelog.bat
+
 ## Recent Changes - August 21, 2025
 
 ### Git Commit Summary
