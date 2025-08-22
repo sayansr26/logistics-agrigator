@@ -20,7 +20,11 @@ const options = {
     servers: [
       {
         url: "http://localhost:8001",
-        description: "Development server",
+        description: "Development server (localhost)",
+      },
+      {
+        url: `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8001}`,
+        description: "Development server (current host)",
       },
       {
         url: "https://api.logistics.com",

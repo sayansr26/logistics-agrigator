@@ -22,6 +22,18 @@ const PORT = process.env.PORT || 8001;
 app.use(helmet());
 app.use(cors());
 
+// Security headers to prevent mixed content issues
+app.use((req, res, next) => {
+  // Allow loading resources over HTTP in development
+  if (process.env.NODE_ENV !== "production") {
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: data:; img-src 'self' data: http:;",
+    );
+  }
+  next();
+});
+
 // Logging - use shared logger
 app.use(logger.httpLogger);
 
@@ -37,13 +49,49 @@ app.use(
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Logistics Auth Service API",
+    swaggerOptions: {
+      // Force HTTP protocol for development to avoid SSL errors with IP access
+      url:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8001}/openapi.json`,
+      // Disable "Try it out" HTTPS enforcement
+      supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
+      // Force HTTP scheme for development
+      schemes:
+        process.env.NODE_ENV === "production" ? ["https", "http"] : ["http"],
+    },
   }),
 );
 
-// OpenAPI JSON endpoint
+// OpenAPI JSON endpoint with dynamic server URLs
 app.get("/openapi.json", (req, res) => {
   res.setHeader("Content-Type", "application/json");
-  res.json(swaggerSpecs);
+
+  // Create dynamic swagger specs with current host
+  const dynamicSpecs = {
+    ...swaggerSpecs,
+    servers: [
+      {
+        url: `http://${req.get("host")}`,
+        description: "Current server",
+      },
+      {
+        url: "http://localhost:8001",
+        description: "Development server (localhost)",
+      },
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              url: "https://api.logistics.com",
+              description: "Production server",
+            },
+          ]
+        : []),
+    ],
+  };
+
+  res.json(dynamicSpecs);
 });
 
 // Routes

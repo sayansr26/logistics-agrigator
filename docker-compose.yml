@@ -107,9 +107,11 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8001
     ports:
       - "8002:8002"
-    volumes:
-      - ./backend/user-service:/app
-      - /app/node_modules
+    # For live reload in development, uncomment these volumes:
+    # volumes:
+    #   - ./backend/user-service:/app
+    #   - ./shared:/app/shared
+    #   - user_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -254,6 +256,7 @@ volumes:
   redis_data:
   api_gateway_node_modules:
   auth_service_node_modules:
+  user_node_modules:
   frontend_node_modules:
   frontend_next:
 

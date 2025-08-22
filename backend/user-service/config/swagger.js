@@ -20,7 +20,11 @@ const options = {
     servers: [
       {
         url: "http://localhost:8002",
-        description: "Development server",
+        description: "Development server (localhost)",
+      },
+      {
+        url: `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8002}`,
+        description: "Development server (current host)",
       },
       {
         url: "https://api.logistics.com/user",
@@ -279,7 +283,7 @@ const options = {
                 api_keys: {
                   type: "object",
                   example: {
-                    "shipping_provider": "encrypted_key_123",
+                    shipping_provider: "encrypted_key_123",
                   },
                 },
               },
@@ -650,7 +654,8 @@ const options = {
             clientId: {
               type: "string",
               nullable: true,
-              description: "Client ID for client role invitations (required for client role)",
+              description:
+                "Client ID for client role invitations (required for client role)",
               example: "CLIENT_001",
             },
           },
@@ -933,7 +938,8 @@ const options = {
       },
       {
         name: "Testing",
-        description: "Test endpoints for middleware and authentication validation",
+        description:
+          "Test endpoints for middleware and authentication validation",
       },
       {
         name: "Health",
