@@ -1,582 +1,426 @@
-# System Patterns - Architecture & Technical Decisions
+# System Patterns: Architecture & Technical Decisions
 
-## Architectural Overview
+## Microservices Architecture Patterns
 
-### Microservices Architecture Pattern
+### Service Design Principles
 
-Our system follows a **Domain-Driven Design** approach with **bounded contexts** represented as independent microservices.
-
-```
-┌─────────────────── Logistics Aggregator Portal ───────────────────┐
-│                                                                    │
-│  ┌─────────────┐    ┌─────────────────────────────────────────┐   │
-│  │ API Gateway │    │           New Services                  │   │
-│  │ (Port 8000) │───▶│ ┌─────────┐ ┌─────────┐ ┌─────────────┐ │   │
-│  │             │    │ │  Auth   │ │  User   │ │  Shipment   │ │   │
-│  │- Routing    │    │ │ (8001)  │ │ (8002)  │ │   (8003)    │ │   │
-│  │- Rate Limit │    │ └─────────┘ └─────────┘ └─────────────┘ │   │
-│  │- Security   │    │ ┌─────────┐ ┌─────────┐                │   │
-│  └─────────────┘    │ │Support  │ │Platform │                │   │
-│                     │ │ (8004)  │ │ (8005)  │                │   │
-│  ┌─────────────┐    │ └─────────┘ └─────────┘                │   │
-│  │  Frontend   │    └─────────────────────────────────────────┘   │
-│  │ (Port 3000) │                                                  │
-│  │             │    ┌─────────────────────────────────────────┐   │
-│  │- Next.js 14 │    │        Existing Services                │   │
-│  │- TypeScript │───▶│ ┌─────────┐ ┌─────────┐                │   │
-│  │- Tailwind   │    │ │ Wallet  │ │Partner  │                │   │
-│  └─────────────┘    │ │ (8006)  │ │ (8007)  │                │   │
-│                     │ └─────────┘ └─────────┘                │   │
-│                     └─────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────┘
-```
-
-## Core Design Patterns
-
-### 1. Database-Per-Service Pattern with Prisma ORM
-
-**Pattern**: Each microservice owns its data and schema
-**Implementation**: Prisma ORM for type-safe, migration-based database operations
+**1. Auth-Service Pattern (Established Standard)**
 
 ```javascript
-// Service-specific database configuration
-// backend/auth-service/config/database.js
-const { PrismaClient } = require("@prisma/client");
-
-const prisma = new PrismaClient({
-  log:
-    process.env.NODE_ENV === "development"
-      ? ["query", "info", "warn", "error"]
-      : ["error"],
-});
-
-module.exports = { prisma };
+// Consistent structure across all services
+/service-name/
+├── config/           // Database, Redis, Swagger configs
+├── controllers/      // Route handlers with proper error handling
+├── middleware/       // Auth, validation, rate limiting
+├── routes/          // API route definitions
+├── prisma/          // Database schema and migrations
+├── server.js        // Express app setup
+└── package.json     // Dependencies and scripts
 ```
 
-**Schema Pattern**:
+**2. Shared Library Integration**
+
+```javascript
+// All services use shared utilities from /shared/lib/
+const {
+  database,
+  redis,
+  auth,
+  errors,
+  logger,
+  response,
+} = require("../../shared");
+
+// Consistent error handling
+const { APIError, ValidationError, AuthenticationError } = errors;
+
+// Standardized response format
+return response.success(data, message, statusCode);
+return response.error(message, statusCode, details);
+```
+
+**3. Database-per-Service Pattern**
+
+```javascript
+// Each service has its own PostgreSQL database
+-auth_service_db - // Users, sessions, audit logs
+  user_service_db - // Clients, settings, invitations
+  shipment_service_db - // Shipments, tracking, disputes
+  platform_service_db - // Integrations, orders, webhooks
+  support_service_db; // Tickets, knowledge base
+```
+
+## Data Management Patterns
+
+### Prisma ORM Integration
+
+**1. Type-Safe Database Operations**
 
 ```prisma
-// Standard model pattern for all services
+// Schema definition with relationships
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique @db.VarChar(255)
-  role         String   @default("client")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id       String  @id @default(uuid()) @db.Uuid
+  email    String  @unique @db.VarChar(255)
+  role     Role    @default(client)
+  clientId String? @db.Uuid
 
-  // Always include audit relationships
-  auditLogs    AuditLog[]
+  client    Client?    @relation(fields: [clientId], references: [id])
+  sessions  Session[]
+  auditLogs AuditLog[]
 
   @@map("users")
 }
 ```
 
-### 2. API Gateway Pattern
+**2. Migration-First Development**
 
-**Purpose**: Single entry point for all client requests
-**Responsibilities**: Routing, authentication, rate limiting, request/response transformation
-
-```javascript
-// API Gateway routing pattern
-app.use("/api/v1/auth", proxy("http://auth-service:8001"));
-app.use("/api/v1/users", authMiddleware, proxy("http://user-service:8002"));
-app.use(
-  "/api/v1/shipments",
-  authMiddleware,
-  proxy("http://shipment-service:8003")
-);
+```bash
+# Schema changes always through migrations
+npx prisma migrate dev --name "add_user_roles"
+npx prisma generate  # Update TypeScript types
 ```
 
-**Benefits**:
-
-- **Centralized Security**: Single authentication and authorization point
-- **Rate Limiting**: Prevent abuse and ensure fair usage
-- **Request/Response Transformation**: Consistent API contracts
-- **Service Discovery**: Route requests to appropriate services
-
-### 3. Event-Driven Architecture (Future)
-
-**Current**: Synchronous REST API communication
-**Evolution Path**: Event-driven with message queues for complex workflows
+**3. Query Optimization Patterns**
 
 ```javascript
-// Future event pattern for shipment lifecycle
-const events = {
-  "shipment.created": [
-    "wallet.debit",
-    "partner.calculate",
-    "notification.send",
-  ],
-  "shipment.picked": ["tracking.update", "customer.notify"],
-  "shipment.delivered": ["wallet.settlement", "analytics.record"],
-};
-```
-
-## Data Patterns
-
-### 1. Multi-Tenant Data Isolation
-
-**Pattern**: Client data separation at application level
-**Implementation**: Client ID filtering in all queries
-
-```javascript
-// Standard multi-tenant query pattern
-const getUserShipments = async (userId, clientId) => {
-  return await prisma.shipment.findMany({
-    where: {
-      userId,
-      clientId, // Always include client isolation
-    },
-    include: {
-      tracking: true,
-      addresses: true,
-    },
-  });
-};
-```
-
-### 2. Audit Trail Pattern
-
-**Pattern**: Complete action history for compliance and debugging
-**Implementation**: Standardized audit logging across all services
-
-```javascript
-// Audit log creation pattern
-const createAuditLog = async (
-  userId,
-  action,
-  resource,
-  resourceId,
-  changes,
-  req
-) => {
-  await prisma.auditLog.create({
-    data: {
-      userId,
-      action, // 'CREATE', 'UPDATE', 'DELETE'
-      resource, // 'user', 'shipment', 'client'
-      resourceId, // UUID of affected resource
-      changes, // JSON of what changed
-      ipAddress: req.ip,
-      userAgent: req.get("User-Agent"),
-      timestamp: new Date(),
-    },
-  });
-};
-```
-
-### 3. Soft Delete Pattern
-
-**Pattern**: Logical deletion for data recovery and audit compliance
-**Implementation**: Boolean `isDeleted` field with filtered queries
-
-```javascript
-// Soft delete implementation
-const softDeleteUser = async (id) => {
-  const user = await prisma.user.update({
-    where: { id },
-    data: {
-      isDeleted: true,
-      deletedAt: new Date(),
-    },
-  });
-
-  // Audit the deletion
-  await createAuditLog(user.id, "DELETE", "user", id, { isDeleted: true });
-};
-```
-
-## Security Patterns
-
-### 1. JWT Authentication Pattern
-
-**Pattern**: Stateless authentication with refresh token rotation
-**Implementation**: Access tokens (short-lived) + Refresh tokens (long-lived)
-
-```javascript
-// JWT token generation pattern
-const generateTokens = (user) => {
-  const accessToken = jwt.sign(
-    { userId: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "15m" } // Short-lived access token
-  );
-
-  const refreshToken = jwt.sign(
-    { userId: user.id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: "7d" } // Long-lived refresh token
-  );
-
-  return { accessToken, refreshToken };
-};
-```
-
-### 2. Role-Based Access Control (RBAC)
-
-**Pattern**: Granular permissions based on user roles
-**Implementation**: Middleware-based permission checking
-
-```javascript
-// RBAC middleware pattern
-const requirePermission = (permission) => {
-  return (req, res, next) => {
-    const userPermissions = getRolePermissions(req.user.role);
-
-    if (
-      !userPermissions.includes(permission) &&
-      !userPermissions.includes("all_permissions")
-    ) {
-      return res.status(403).json({ error: "Insufficient permissions" });
-    }
-
-    next();
-  };
-};
-
-// Usage in routes
-router.get(
-  "/admin/users",
-  requirePermission("admin_user_access"),
-  getUsersController
-);
-```
-
-### 3. Input Validation Pattern
-
-**Pattern**: Centralized validation with detailed error responses
-**Implementation**: Joi-based schema validation middleware
-
-```javascript
-// Validation schema pattern
-const userRegistrationSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string()
-    .min(8)
-    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .required(),
-  role: Joi.string()
-    .valid("admin", "finance", "operations", "client", "support")
-    .optional(),
+// Use select and include strategically
+const user = await prisma.user.findUnique({
+  where: { id: userId },
+  select: { id: true, email: true, role: true },
+  include: {
+    client: { select: { name: true, branding: true } },
+    sessions: { take: 5, orderBy: { createdAt: "desc" } },
+  },
 });
+```
 
-// Validation middleware
-const validate = (schema) => {
-  return (req, res, next) => {
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      return res.status(400).json({
-        status: "error",
-        message: "Validation failed",
-        details: error.details.map((d) => ({
-          field: d.path[0],
-          message: d.message,
-        })),
-      });
-    }
-    req.body = value;
-    next();
-  };
+### Caching Strategy
+
+**1. Redis Usage Patterns**
+
+```javascript
+// Session management (Auth Service)
+await redis.setex(`session:${userId}`, 86400, JSON.stringify(sessionData));
+
+// API response caching (Partner Service)
+await redis.setex(`charges:${hash}`, 300, JSON.stringify(chargesResponse));
+
+// Rate limiting (All Services)
+const key = `ratelimit:${ip}:${endpoint}`;
+const requests = await redis.incr(key);
+```
+
+## Authentication & Authorization Patterns
+
+### JWT + Redis Session Pattern
+
+**1. Token Structure**
+
+```javascript
+// Access Token (15 minutes)
+const accessToken = jwt.sign(
+  {
+    userId: user.id,
+    role: user.role,
+    clientId: user.clientId,
+    permissions: user.permissions,
+  },
+  JWT_SECRET,
+  { expiresIn: "15m" },
+);
+
+// Refresh Token (7 days)
+const refreshToken = jwt.sign(
+  {
+    userId: user.id,
+    tokenId: uuid(),
+  },
+  JWT_REFRESH_SECRET,
+  { expiresIn: "7d" },
+);
+```
+
+**2. Middleware Integration**
+
+```javascript
+// Consistent auth middleware across all services
+router.use("/api/v1/protected", auth.verifyToken);
+router.use("/api/v1/admin", auth.authorize(["admin", "operations"]));
+
+// Permission-based authorization
+router.post("/shipments", auth.authorize(["shipment.create"]), createShipment);
+```
+
+### Role-Based Access Control (RBAC)
+
+**Roles & Permissions Matrix:**
+
+```javascript
+const ROLE_PERMISSIONS = {
+  admin: ["*"], // All permissions
+  finance: ["wallet.*", "billing.*", "reports.financial"],
+  operations: ["shipment.*", "partner.*", "tracking.*"],
+  client: ["shipment.create", "shipment.view", "wallet.view"],
+  support: ["ticket.*", "dispute.*", "knowledge.*"],
 };
+```
+
+## API Design Patterns
+
+### Standardized Response Format
+
+**1. Success Response**
+
+```javascript
+{
+  "status": "success",
+  "message": "Operation completed successfully",
+  "data": { /* response data */ },
+  "meta": {
+    "timestamp": "2024-01-10T15:30:00Z",
+    "requestId": "uuid",
+    "pagination": { /* if applicable */ }
+  }
+}
+```
+
+**2. Error Response**
+
+```javascript
+{
+  "status": "error",
+  "message": "Validation failed",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "details": [
+      {
+        "field": "email",
+        "message": "Invalid email format"
+      }
+    ]
+  },
+  "meta": {
+    "timestamp": "2024-01-10T15:30:00Z",
+    "requestId": "uuid"
+  }
+}
+```
+
+### Validation Patterns
+
+**1. Joi Schema Validation**
+
+```javascript
+const shipmentSchema = Joi.object({
+  orderId: Joi.string().required().max(100),
+  customerDetails: Joi.object({
+    name: Joi.string().required().max(255),
+    phone: Joi.string().pattern(/^\+91-[0-9]{10}$/),
+    email: Joi.string().email().optional(),
+  }),
+  pickupAddress: addressSchema.required(),
+  deliveryAddress: addressSchema.required(),
+});
+```
+
+**2. Database Constraints**
+
+```prisma
+model Shipment {
+  id          String      @id @default(uuid())
+  orderId     String      @db.VarChar(100)
+  status      Status      @default(CREATED)
+  paymentType PaymentType // COD, PREPAID
+  codAmount   Decimal?    @db.Decimal(10, 2)
+
+  // Constraints
+  @@unique([orderId, clientId])
+  @@index([status, createdAt])
+}
 ```
 
 ## Integration Patterns
 
-### 1. External Service Integration
+### External Service Integration
 
-**Pattern**: Resilient API clients with retry and fallback mechanisms
-**Implementation**: Axios-based clients with interceptors
+**1. HTTP Client Pattern**
 
 ```javascript
-// External service client pattern
-class WalletServiceClient {
-  constructor() {
+class ExternalServiceClient {
+  constructor(baseURL, apiKey, options = {}) {
     this.client = axios.create({
-      baseURL: process.env.WALLET_SERVICE_URL,
-      timeout: 10000,
-      headers: { "Content-Type": "application/json" },
+      baseURL,
+      timeout: options.timeout || 30000,
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
 
-    // Add retry interceptor
-    this.client.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status >= 500 && error.config?.retryCount < 3) {
-          error.config.retryCount = (error.config.retryCount || 0) + 1;
-          return this.client(error.config);
-        }
-        return Promise.reject(error);
-      }
-    );
+    // Request/Response interceptors
+    this.setupInterceptors();
+
+    // Circuit breaker pattern
+    this.circuitBreaker = new CircuitBreaker(this.makeRequest);
   }
 
-  async getBalance(userId) {
+  async makeRequest(config) {
     try {
-      const response = await this.client.get(`/wallet/balance/${userId}`);
+      const response = await this.client(config);
       return response.data;
     } catch (error) {
-      logger.error(`Wallet service error: ${error.message}`);
-      throw new APIError("Wallet service unavailable", 503);
+      logger.error("External API error", { error, config });
+      throw new APIError("External service unavailable");
     }
   }
 }
 ```
 
-### 2. Platform Integration Pattern (Shopify)
-
-**Pattern**: OAuth-based authentication with webhook subscriptions
-**Implementation**: Secure token management with real-time updates
+**2. Caching with Fallback**
 
 ```javascript
-// Platform integration pattern
-class ShopifyIntegration {
-  async authenticateStore(shop, code) {
-    // Exchange authorization code for access token
-    const tokenResponse = await axios.post(
-      `https://${shop}.myshopify.com/admin/oauth/access_token`,
-      {
-        client_id: process.env.SHOPIFY_CLIENT_ID,
-        client_secret: process.env.SHOPIFY_CLIENT_SECRET,
-        code,
-      }
-    );
+async getCharges(shipmentData) {
+  const cacheKey = `charges:${this.createHash(shipmentData)}`;
 
-    // Store encrypted token
-    const encryptedToken = encrypt(tokenResponse.data.access_token);
+  // Try cache first
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached);
 
-    await prisma.platformIntegration.create({
-      data: {
-        clientId: req.user.clientId,
-        platform: "shopify",
-        shopDomain: shop,
-        accessToken: encryptedToken,
-        isActive: true,
-      },
-    });
+  // Call external API
+  const charges = await this.externalClient.calculateCharges(shipmentData);
 
-    // Setup webhooks
-    await this.setupWebhooks(shop, tokenResponse.data.access_token);
-  }
+  // Cache for 5 minutes
+  await redis.setex(cacheKey, 300, JSON.stringify(charges));
+
+  return charges;
 }
+```
+
+### Inter-Service Communication
+
+**1. Service Discovery Pattern**
+
+```javascript
+// Environment-based service URLs
+const SERVICE_URLS = {
+  auth: process.env.AUTH_SERVICE_URL || "http://auth-service:8001",
+  user: process.env.USER_SERVICE_URL || "http://user-service:8002",
+  wallet: process.env.WALLET_SERVICE_URL || "http://wallet-service:8006",
+  partner: process.env.PARTNER_SERVICE_URL || "http://partner-service:8007",
+};
+```
+
+**2. Health Check Integration**
+
+```javascript
+// Standard health check endpoint
+app.get("/health", async (req, res) => {
+  const health = {
+    status: "ok",
+    service: process.env.SERVICE_NAME,
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: await checkDatabase(),
+      redis: await checkRedis(),
+      externalServices: await checkExternalServices(),
+    },
+  };
+
+  const status = Object.values(health.checks).every((check) => check === "ok")
+    ? 200
+    : 503;
+  res.status(status).json(health);
+});
 ```
 
 ## Error Handling Patterns
 
-### 1. Centralized Error Handling
+### Centralized Error Management
 
-**Pattern**: Consistent error responses across all services
-**Implementation**: Custom error classes with middleware
+**1. Custom Error Classes**
 
 ```javascript
-// Error handling pattern
 class APIError extends Error {
-  constructor(message, statusCode = 500, code = "INTERNAL_ERROR") {
+  constructor(message, statusCode = 500, code = "API_ERROR", details = null) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
-    this.name = "APIError";
+    this.details = details;
+    this.isOperational = true;
   }
 }
 
-// Global error handler middleware
-const errorHandler = (error, req, res, next) => {
-  logger.error(`Error in ${req.method} ${req.path}:`, error);
-
-  if (error instanceof APIError) {
-    return res.status(error.statusCode).json({
-      status: "error",
-      error: {
-        code: error.code,
-        message: error.message,
-      },
-    });
+class ValidationError extends APIError {
+  constructor(message, details) {
+    super(message, 400, "VALIDATION_ERROR", details);
   }
-
-  // Default error response
-  res.status(500).json({
-    status: "error",
-    error: {
-      code: "INTERNAL_ERROR",
-      message: "Internal server error",
-    },
-  });
-};
+}
 ```
 
-### 2. Prisma Error Handling
-
-**Pattern**: Transform Prisma errors into user-friendly responses
-**Implementation**: Error code mapping with detailed messages
+**2. Global Error Handler**
 
 ```javascript
-// Prisma error transformation
-const handlePrismaError = (error) => {
-  switch (error.code) {
-    case "P2002": // Unique constraint violation
-      return new APIError(
-        "A record with this data already exists",
-        409,
-        "DUPLICATE_ERROR"
-      );
+app.use((error, req, res, next) => {
+  logger.error("Unhandled error", {
+    error: error.message,
+    stack: error.stack,
+    url: req.url,
+    method: req.method,
+    userId: req.user?.id,
+  });
 
-    case "P2025": // Record not found
-      return new APIError(
-        "The requested resource was not found",
-        404,
-        "NOT_FOUND"
-      );
-
-    case "P2003": // Foreign key constraint violation
-      return new APIError(
-        "Invalid reference to related record",
-        400,
-        "INVALID_REFERENCE"
-      );
-
-    default:
-      return new APIError("Database operation failed", 500, "DATABASE_ERROR");
+  if (error.isOperational) {
+    return res
+      .status(error.statusCode)
+      .json(response.error(error.message, error.statusCode, error.details));
   }
-};
+
+  // Unknown error - don't leak details
+  return res.status(500).json(response.error("Internal server error", 500));
+});
 ```
 
 ## Performance Patterns
 
-### 1. Caching Strategy
+### Database Optimization
 
-**Pattern**: Multi-layer caching with Redis
-**Implementation**: Query result caching with smart invalidation
-
-```javascript
-// Redis caching pattern
-const getCachedOrExecute = async (key, fetchFunction, ttl = 3600) => {
-  // Try cache first
-  const cached = await redis.get(key);
-  if (cached) {
-    return JSON.parse(cached);
-  }
-
-  // Execute and cache
-  const result = await fetchFunction();
-  await redis.setex(key, ttl, JSON.stringify(result));
-
-  return result;
-};
-
-// Usage example
-const getUserProfile = async (userId) => {
-  return await getCachedOrExecute(
-    `user:profile:${userId}`,
-    () => prisma.user.findUnique({ where: { id: userId } }),
-    1800 // 30 minutes
-  );
-};
-```
-
-### 2. Database Optimization
-
-**Pattern**: Efficient queries with proper indexing
-**Implementation**: Strategic use of Prisma's `select` and `include`
+**1. Connection Pooling**
 
 ```javascript
-// Optimized query patterns
-const getShipmentsList = async (clientId, page = 1, limit = 20) => {
-  return await prisma.shipment.findMany({
-    where: { clientId },
-    select: {
-      id: true,
-      orderNumber: true,
-      status: true,
-      createdAt: true,
-      customer: {
-        select: { name: true, phone: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    skip: (page - 1) * limit,
-    take: limit,
-  });
-};
+// Prisma connection pooling
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+
+  // Connection pool settings
+  connection_limit = 20
+  pool_timeout     = 20
+  statement_timeout = "30s"
+}
 ```
 
-## Testing Patterns
-
-### 1. Service Testing Strategy
-
-**Pattern**: Unit tests for business logic, integration tests for APIs
-**Implementation**: Jest with Prisma test database
+**2. Query Optimization**
 
 ```javascript
-// Test database setup
-beforeAll(async () => {
-  await prisma.$executeRawUnsafe("TRUNCATE TABLE users CASCADE");
-});
-
-// API integration test pattern
-describe("User Registration", () => {
-  test("should create user with valid data", async () => {
-    const userData = {
-      email: "test@example.com",
-      password: "SecurePass123!",
-      role: "client",
-    };
-
-    const response = await request(app)
-      .post("/api/v1/auth/register")
-      .send(userData)
-      .expect(201);
-
-    expect(response.body.status).toBe("success");
-    expect(response.body.data.user.email).toBe(userData.email);
-  });
-});
+// Use indexes strategically
+@@index([clientId, status, createdAt]) // Composite index
+@@index([awbNumber])                   // Unique lookups
+@@index([status])                      // Filtering
+@@index([createdAt])                   // Sorting
 ```
 
-## Deployment Patterns
+### Caching Strategy
 
-### 1. Docker Container Pattern
+**1. Multi-Layer Caching**
 
-**Pattern**: Service-specific containers with shared base images
-**Implementation**: Multi-stage builds with development/production variants
+```javascript
+// 1. Application-level caching (Redis)
+const userPermissions = await cache.get(`permissions:${userId}`);
 
-```dockerfile
-# Standard Dockerfile pattern for all services
-FROM node:18-alpine AS base
-WORKDIR /app
-COPY package*.json ./
-COPY prisma ./prisma/
+// 2. Database query result caching
+const recentShipments = await cache.get(`shipments:recent:${clientId}`);
 
-FROM base AS development
-RUN npm install -g pnpm@8.15.1 && pnpm install --frozen-lockfile
-RUN npx prisma generate
-COPY . .
-CMD ["npm", "run", "dev"]
-
-FROM base AS production
-RUN npm install -g pnpm@8.15.1 && pnpm install --prod --frozen-lockfile
-RUN npx prisma generate
-COPY . .
-USER node
-CMD ["node", "server.js"]
+// 3. API response caching
+const courierCharges = await cache.get(`charges:${hashKey}`);
 ```
 
-### 2. Environment Configuration
+---
 
-**Pattern**: Environment-specific configuration with secrets management
-**Implementation**: Docker Compose with environment files
-
-```yaml
-# Docker Compose pattern
-services:
-  auth-service:
-    build:
-      context: ./backend/auth-service
-      target: development
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-    command: sh -c "npx prisma migrate deploy && pnpm run dev"
-```
-
-**Current Status**: All patterns implemented and validated in Auth Service. Ready for replication across remaining services (User, Shipment, Platform, Support).
+These patterns ensure consistency, maintainability, and scalability across all services while leveraging modern development practices and tools.

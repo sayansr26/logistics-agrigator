@@ -25,10 +25,7 @@ This project includes automated documentation updates that run every time you pu
 The automation is integrated into the git pre-push hook (`.husky/pre-push`):
 
 ```bash
-# 1. Updates memory bank and changelog
-./scripts/update-memory-and-changelog.sh
-
-# 2. Runs tests
+# 1. Runs tests
 pnpm run test
 
 # 3. Type checking
@@ -47,16 +44,6 @@ pnpm --filter "backend/*" run build --if-present
 5. **Auto-Commits** - Commits documentation updates with `[skip ci]` tag
 
 ## 🛠️ **Manual Usage**
-
-### **Update Memory Bank & Changelog Manually**
-
-```bash
-# Run the update script manually
-pnpm run update:memory
-
-# Or run directly
-./scripts/update-memory-and-changelog.sh
-```
 
 ### **When to Use Manual Updates**
 
@@ -140,20 +127,6 @@ pnpm run update:memory
 
 ## ⚙️ **Configuration**
 
-### **Script Location**
-
-```
-scripts/update-memory-and-changelog.sh
-```
-
-### **Key Variables**
-
-```bash
-MEMORY_BANK_DIR="memory-bank"     # Memory bank directory
-CHANGELOG_FILE="CHANGELOG.md"     # Changelog file location
-TEMP_DIR="/tmp/logistics-update-$$" # Temporary working directory
-```
-
 ### **Customization Options**
 
 - **Change Categories** - Modify file pattern matching in `categorize_changes()`
@@ -173,25 +146,6 @@ TEMP_DIR="/tmp/logistics-update-$$" # Temporary working directory
 ### **Troubleshooting**
 
 #### **Script Fails to Run**
-
-```bash
-# Check if script is executable
-ls -la scripts/update-memory-and-changelog.sh
-
-# Make executable if needed
-chmod +x scripts/update-memory-and-changelog.sh
-```
-
-#### **Memory Bank Files Missing**
-
-```bash
-# Ensure memory bank directory exists
-ls -la memory-bank/
-
-# Check for required files
-ls -la memory-bank/activeContext.md
-ls -la memory-bank/progress.md
-```
 
 #### **Git Issues**
 

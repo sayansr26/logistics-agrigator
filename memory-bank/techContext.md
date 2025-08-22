@@ -1,376 +1,391 @@
-# Tech Context - Technologies & Development Stack
+# Technical Context: Technology Stack & Development Environment
 
 ## Technology Stack Overview
 
 ### Backend Technologies
 
-#### **Core Runtime & Framework**
+**Runtime Environment**
 
-- **Node.js 18+**: Latest LTS with modern JavaScript features and performance optimizations
-- **Express.js 4.18+**: Minimal, flexible web application framework
-- **JavaScript/TypeScript**: Progressive adoption with TypeScript for critical services
+- **Node.js 18+**: Modern JavaScript runtime with excellent npm ecosystem
+- **PNPM 8.15.1**: Fast, disk-space efficient package manager for monorepo
+- **Express.js**: Lightweight, flexible web application framework
 
-#### **Database & ORM (CRITICAL)**
+**Database & ORM**
 
-- **PostgreSQL 15+**: Primary database with advanced features (JSONB, UUID, full-text search)
-- **Prisma ORM 5.x**: Type-safe database client with migration management ⭐ **MANDATORY**
-- **Redis 7+**: In-memory data store for sessions, caching, and real-time features
+- **PostgreSQL 15+**: Primary database for all microservices
+- **Prisma ORM**: Type-safe database client with migration management
+- **Redis 7+**: Caching, session management, and rate limiting
 
-**Prisma Benefits & Usage**:
+**Authentication & Security**
+
+- **JWT (jsonwebtoken)**: Access and refresh token authentication
+- **bcrypt**: Password hashing with configurable rounds
+- **TOTP (speakeasy)**: Two-factor authentication support
+- **Joi**: Request validation and sanitization
+
+### Frontend Technologies
+
+**Framework & Languages**
+
+- **Next.js 14**: React framework with App Router and server-side rendering
+- **TypeScript**: Type safety throughout the application
+- **Tailwind CSS**: Utility-first CSS framework with custom design system
+
+**State & Form Management**
+
+- **Zustand**: Lightweight state management for client-side state
+- **React Hook Form**: Performant forms with validation
+- **Zod**: TypeScript-first schema validation
+
+**HTTP & API Integration**
+
+- **Axios**: HTTP client with interceptors and request/response handling
+- **SWR**: Data fetching with caching, revalidation, and error recovery
+
+## Development Environment
+
+### Containerization & Orchestration
+
+**Docker Configuration**
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+RUN npm install -g pnpm@8.15.1
+COPY package*.json ./
+RUN pnpm install --prod --frozen-lockfile
+COPY . .
+EXPOSE 8001
+CMD ["node", "server.js"]
+```
+
+**Docker Compose Structure**
+
+```yaml
+services:
+  auth-service: # Port 8001
+  user-service: # Port 8002
+  shipment-service: # Port 8003
+  support-service: # Port 8004
+  platform-service: # Port 8005
+  api-gateway: # Port 8000
+  frontend: # Port 3000
+  postgres: # Port 5432
+  redis: # Port 6379
+```
+
+### Database Architecture
+
+**Service-Specific Databases**
+
+```sql
+-- Each service has its own PostgreSQL database
+CREATE DATABASE auth_service;
+CREATE DATABASE user_service;
+CREATE DATABASE shipment_service;
+CREATE DATABASE platform_service;
+CREATE DATABASE support_service;
+```
+
+**Prisma Schema Pattern**
 
 ```prisma
-// Type-safe schema definition
-model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique @db.VarChar(255)
-  passwordHash String   @map("password_hash")
-  role         UserRole
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
 
-  sessions     Session[]
-  auditLogs    AuditLog[]
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Type-safe model definitions with relationships
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  role      Role     @default(client)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
 ```
 
-```javascript
-// Type-safe operations
-const user = await prisma.user.create({
-  data: { email, passwordHash, role },
-  select: { id: true, email: true, role: true },
-});
-```
+### Development Tools
 
-#### **Authentication & Security**
+**Code Quality & Formatting**
 
-- **JWT (jsonwebtoken)**: Access and refresh token implementation
-- **bcryptjs**: Password hashing with configurable rounds (12 rounds)
-- **Joi**: Schema validation for request/response data
-- **Helmet**: Security middleware for HTTP headers
-- **Rate Limiting**: Express-rate-limit with Redis store
+- **ESLint**: Linting with custom rules for Node.js and React
+- **Prettier**: Code formatting with consistent style across team
+- **Husky**: Git hooks for pre-commit quality checks
+- **lint-staged**: Run linters only on changed files
+- **commitlint**: Conventional commit message enforcement
 
-#### **HTTP Client & Integration**
+**Development Utilities**
 
-- **Axios**: HTTP client for external service integration
-- **HTTP Proxy Middleware**: API Gateway request forwarding
-- **Multer**: File upload handling for documents and images
-
-#### **Logging & Monitoring**
-
+- **Prisma Studio**: Visual database browser and editor (Port 5555)
+- **Swagger/OpenAPI**: API documentation generation and testing
 - **Winston**: Structured logging with multiple transports
 - **Morgan**: HTTP request logging middleware
-- **Health Check Endpoints**: Custom health monitoring implementation
 
-### Frontend Technologies
+## Monorepo Structure
 
-#### **Core Framework & Language**
+### Package Management
 
-- **Next.js 14**: React framework with App Router (latest architecture)
-- **React 18**: Modern React with concurrent features and hooks
-- **TypeScript 5.x**: Static type checking for enhanced developer experience
-
-#### **Styling & UI**
-
-- **Tailwind CSS 3.x**: Utility-first CSS framework with custom design system
-- **Headless UI**: Unstyled, accessible UI components
-- **React Icons**: Comprehensive icon library
-- **Custom Design Tokens**: Consistent spacing, colors, typography
-
-#### **State Management & Forms**
-
-- **Zustand**: Lightweight state management for global app state
-- **React Hook Form**: Performant form management with minimal re-renders
-- **Zod**: TypeScript-first schema validation for forms
-- **SWR/React Query**: Data fetching and caching (to be selected)
-
-#### **Build & Development**
-
-- **Webpack 5**: Module bundler with tree shaking and optimization
-- **ESLint + Prettier**: Code linting and formatting
-- **PostCSS**: CSS processing with Tailwind plugins
-
-### Infrastructure & DevOps
-
-#### **Containerization**
-
-- **Docker 24+**: Container platform for development and production
-- **Docker Compose**: Multi-service orchestration for development
-- **Multi-stage Builds**: Optimized production images
-
-```dockerfile
-# Multi-stage Docker pattern
-FROM node:18-alpine AS base
-WORKDIR /app
-COPY package*.json ./
-COPY prisma ./prisma/
-
-FROM base AS development
-RUN npm install -g pnpm@8.15.1 && pnpm install --frozen-lockfile
-RUN npx prisma generate
-COPY . .
-CMD ["npm", "run", "dev"]
-
-FROM base AS production
-RUN npm install -g pnpm@8.15.1 && pnpm install --prod --frozen-lockfile
-RUN npx prisma generate
-COPY . .
-USER node
-CMD ["node", "server.js"]
-```
-
-#### **Development Environment**
-
-- **Hot Reloading**: Live code updates in development
-- **Volume Mounts**: Persistent development data
-- **Service Networking**: Docker internal networking for service communication
-- **Port Management**: Standardized port allocation across services
-
-#### **Database Management**
-
-- **Prisma Studio**: Visual database browser and editor
-- **Database Migrations**: Version-controlled schema evolution
-- **Connection Pooling**: Efficient database connection management
-- **Multi-Database**: Service-per-database architecture
-
-```bash
-# Standard Prisma workflow
-npx prisma migrate dev --name description  # Create migration
-npx prisma generate                        # Update client
-npx prisma studio                         # Visual database
-npx prisma migrate deploy                 # Production deployment
-```
-
-### External Service Integration
-
-#### **Existing Microservices**
-
-- **Wallet Service (Port 8006)**: Financial transactions and balance management
-- **Partner Service (Port 8007)**: Courier charge calculations and comparisons
-
-```javascript
-// Integration pattern
-class WalletServiceClient {
-  async getBalance(userId) {
-    const response = await axios.get(
-      `${WALLET_SERVICE_URL}/wallet/balance/${userId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    return response.data;
-  }
+```json
+{
+  "name": "logistics-portal",
+  "workspaces": ["backend/*", "frontend", "shared"],
+  "packageManager": "pnpm@8.15.1"
 }
 ```
 
-#### **Third-Party APIs**
-
-- **Shopify API**: E-commerce platform integration with OAuth2
-- **Courier APIs**: Delhivery, Blue Dart, DTDC integration
-- **Payment Gateways**: Razorpay, PayU (future integration)
-- **Communication**: SMS and email service providers
-
-#### **Platform Integration Architecture**
+### Shared Libraries Architecture
 
 ```javascript
-// Shopify OAuth flow
-const shopifyAuth = {
-  authorizeURL: "https://{shop}.myshopify.com/admin/oauth/authorize",
-  tokenURL: "https://{shop}.myshopify.com/admin/oauth/access_token",
-  scopes: ["read_orders", "write_orders", "read_products"],
-  webhooks: ["orders/create", "orders/updated", "orders/cancelled"],
-};
+// /shared/lib/ contains utilities used across all services
+├── auth.js        // JWT utilities, role checking
+├── database.js    // Prisma client configuration
+├── errors.js      // Custom error classes
+├── logger.js      // Winston logger configuration
+├── redis.js       // Redis client and utilities
+├── response.js    // Standardized API responses
+├── validation.js  // Common Joi schemas
+├── walletMiddleware.js  // Wallet integration helpers
+└── walletService.js     // Wallet service client
 ```
 
-### Development Tools & Utilities
+### Import Patterns
 
-#### **Code Quality & Testing**
+```javascript
+// Consistent import pattern across all services
+const {
+  database,
+  redis,
+  auth,
+  errors,
+  logger,
+  response,
+} = require("../../shared");
 
-- **ESLint**: JavaScript/TypeScript linting with custom rules
-- **Prettier**: Opinionated code formatting
-- **Husky**: Git hooks for pre-commit checks
-- **Jest**: Testing framework for unit and integration tests
-- **Supertest**: HTTP assertion library for API testing
+// Service-specific imports
+const prisma = require("./config/database");
+const { verifyToken, authorize } = require("./middleware/auth");
+```
 
-#### **Development Workflow**
+## Environment Configuration
 
-- **Git**: Version control with conventional commits
-- **VS Code**: Recommended IDE with extensions
-- **Prisma Studio**: Database visualization and management
-- **Docker Logs**: Centralized log viewing and debugging
-
-#### **Environment Management**
+### Development Setup Scripts
 
 ```bash
-# Environment variables pattern
-NODE_ENV=development
-PORT=8001
-DATABASE_URL="postgresql://user:pass@localhost:5432/db"
-REDIS_URL="redis://localhost:6379"
-JWT_SECRET="your-super-secret-jwt-key"
-JWT_EXPIRES_IN="3600"
+# Automated development setup
+pnpm run setup:dev          # Full stack setup
+pnpm run setup:backend      # Backend services only
+pnpm run setup:frontend     # Frontend only
+
+# Development execution
+pnpm run dev                # All services
+pnpm run dev:backend        # Backend services + databases
+pnpm run dev:frontend       # Frontend only
+
+# Database operations
+pnpm run prisma:studio      # Visual database browser
+pnpm run prisma:generate    # Generate Prisma clients
 ```
 
-### Security Technologies
+### Environment Variables Pattern
 
-#### **Authentication & Authorization**
+```bash
+# Service-specific environment files
+backend/auth-service/.env
+backend/user-service/.env
+backend/shipment-service/.env
+frontend/.env.local
 
-- **JWT Tokens**: Stateless authentication with short-lived access tokens
-- **Refresh Token Rotation**: Secure token renewal mechanism
-- **Session Storage**: Redis-based session management
-- **2FA Support**: TOTP (Time-based One-Time Password) implementation
+# Common environment variables
+DATABASE_URL=postgresql://user:pass@localhost:5432/service_db
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your_jwt_secret_here
+JWT_REFRESH_SECRET=your_refresh_secret_here
+```
 
-#### **Data Protection**
+## Security Implementation
 
-- **Input Validation**: Joi schemas for request validation
-- **SQL Injection Prevention**: Prisma ORM built-in protection
-- **Password Security**: bcrypt with 12 rounds
-- **Data Encryption**: AES-256 for sensitive data at rest
-
-#### **Network Security**
-
-- **HTTPS**: SSL/TLS encryption for all communications
-- **CORS**: Cross-Origin Resource Sharing configuration
-- **Rate Limiting**: API throttling and DDoS protection
-- **Security Headers**: Helmet.js for HTTP security headers
-
-### Performance & Monitoring
-
-#### **Caching Strategy**
-
-- **Redis Caching**: Query result caching with TTL
-- **Session Caching**: User session data in Redis
-- **API Response Caching**: Strategic endpoint caching
-- **Static Asset Caching**: CDN and browser caching
-
-#### **Database Optimization**
-
-- **Connection Pooling**: Prisma connection pool management
-- **Query Optimization**: Strategic use of `select` and `include`
-- **Indexing Strategy**: Database indexes for performance
-- **Migration Management**: Version-controlled schema changes
-
-#### **Monitoring & Health Checks**
+### Authentication Flow
 
 ```javascript
-// Health check implementation
+// JWT Token Generation
+const accessToken = jwt.sign(
+  {
+    userId: user.id,
+    role: user.role,
+    clientId: user.clientId,
+    permissions: user.permissions,
+  },
+  process.env.JWT_SECRET,
+  {
+    expiresIn: "15m",
+    issuer: "logistics-portal",
+    audience: "logistics-api",
+  },
+);
+```
+
+### Security Middleware Stack
+
+```javascript
+// Applied to all services
+app.use(helmet()); // Security headers
+app.use(cors(corsOptions)); // CORS configuration
+app.use(rateLimiter); // Rate limiting via Redis
+app.use(express.json({ limit: "10mb" })); // Request size limiting
+app.use(requestLogger); // Request/response logging
+```
+
+### Input Validation Strategy
+
+```javascript
+// Joi schemas for consistent validation
+const userSchema = Joi.object({
+  email: Joi.string().email().required().max(255),
+  password: Joi.string()
+    .min(8)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/),
+  role: Joi.string().valid(
+    "admin",
+    "finance",
+    "operations",
+    "client",
+    "support",
+  ),
+  clientId: Joi.string().uuid().optional(),
+});
+```
+
+## Deployment & Infrastructure
+
+### Production Deployment Stack
+
+```yaml
+# VPS deployment configuration
+Server: Ubuntu 20.04 LTS
+Reverse Proxy: Nginx with SSL termination
+Container Runtime: Docker Compose
+Database: Managed PostgreSQL with backups
+Cache: Redis with persistence
+Monitoring: Health checks + structured logging
+```
+
+### SSL & Domain Configuration
+
+```nginx
+# Nginx SSL configuration
+server {
+    listen 443 ssl http2;
+    server_name api.logistics.com;
+
+    ssl_certificate /etc/ssl/certs/logistics.crt;
+    ssl_certificate_key /etc/ssl/private/logistics.key;
+
+    location /api/ {
+        proxy_pass http://api-gateway:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+## Development Workflows
+
+### Git Workflow
+
+```bash
+# Feature development workflow
+git checkout -b feature/partner-service-integration
+# Make changes
+git add .
+git commit -m "feat: add external API integration to partner service"
+# Husky runs pre-commit hooks: lint, format, test
+git push origin feature/partner-service-integration
+# Create PR for review
+```
+
+### Testing Strategy
+
+```javascript
+// Service-level testing
+describe("Auth Service", () => {
+  it("should authenticate valid user credentials", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "test@example.com", password: "ValidPass123!" })
+      .expect(200);
+
+    expect(response.body.status).toBe("success");
+    expect(response.body.data.accessToken).toBeDefined();
+  });
+});
+
+// Integration testing
+describe("End-to-End Shipment Creation", () => {
+  it("should create shipment with partner charges and wallet payment", async () => {
+    // Multi-service integration test
+  });
+});
+```
+
+### Performance Monitoring
+
+**Database Performance**
+
+```javascript
+// Prisma query logging
+const prisma = new PrismaClient({
+  log: ["query", "info", "warn", "error"],
+  errorFormat: "pretty",
+});
+
+// Query performance tracking
+prisma.$use(async (params, next) => {
+  const before = Date.now();
+  const result = await next(params);
+  const after = Date.now();
+
+  logger.info(
+    `Query ${params.model}.${params.action} took ${after - before}ms`,
+  );
+  return result;
+});
+```
+
+**Application Metrics**
+
+```javascript
+// Health check with service dependencies
 app.get("/health", async (req, res) => {
   const checks = {
-    database: await checkDatabaseConnection(),
-    redis: await checkRedisConnection(),
-    externalServices: await checkExternalServices(),
+    database: await testDatabaseConnection(),
+    redis: await testRedisConnection(),
+    externalServices: await testExternalAPIs(),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime(),
   };
 
-  const isHealthy = Object.values(checks).every(
-    (check) => check.status === "ok"
+  const healthy = Object.values(checks).every((check) =>
+    typeof check === "object" ? check.status === "ok" : check === "ok",
   );
 
-  res.status(isHealthy ? 200 : 503).json({
-    status: isHealthy ? "healthy" : "unhealthy",
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? "ok" : "error",
     timestamp: new Date().toISOString(),
     checks,
   });
 });
 ```
 
-### India-Specific Technologies
+---
 
-#### **Compliance & Localization**
-
-- **GST Calculation**: 18% tax calculation and reporting
-- **Indian Pincode Validation**: 6-digit postal code validation
-- **Regional Language Support**: i18n framework for Hindi/English
-- **Indian Standard Time**: Timezone handling for IST
-
-#### **Payment & Financial**
-
-- **Indian Currency (INR)**: Decimal precision handling for rupees
-- **Banking Integration**: NEFT, RTGS, UPI integration patterns
-- **Financial Compliance**: RBI guidelines and reporting requirements
-
-### Development Constraints & Standards
-
-#### **Code Standards**
-
-```javascript
-// Standard service structure
-src/
-├── config/         # Configuration files
-│   ├── database.js # Prisma client setup
-│   └── redis.js    # Redis client setup
-├── controllers/    # Route handlers
-├── middleware/     # Custom middleware
-├── routes/         # API route definitions
-├── utils/          # Utility functions
-├── prisma/         # Database schema & migrations
-│   ├── schema.prisma
-│   └── migrations/
-└── server.js       # Application entry point
-```
-
-#### **Naming Conventions**
-
-- **Files**: camelCase for JavaScript, kebab-case for configs
-- **Database**: snake_case for tables and columns
-- **APIs**: RESTful with consistent naming patterns
-- **Environment**: UPPER_SNAKE_CASE for environment variables
-
-#### **Performance Requirements**
-
-- **API Response Times**: <500ms for critical operations
-- **Database Query Performance**: <100ms for standard queries
-- **Memory Usage**: <512MB per service container
-- **CPU Usage**: <80% under normal load
-
-### Future Technology Roadmap
-
-#### **Short-term Enhancements (3-6 months)**
-
-- **Message Queues**: Redis Pub/Sub or RabbitMQ for event-driven architecture
-- **GraphQL**: API consolidation layer for complex frontend queries
-- **TypeScript Migration**: Full TypeScript adoption across backend services
-- **Testing Expansion**: Comprehensive unit and integration test coverage
-
-#### **Medium-term Evolution (6-12 months)**
-
-- **Microservices Mesh**: Service mesh architecture with Istio
-- **Container Orchestration**: Kubernetes deployment for production scaling
-- **CI/CD Pipeline**: Automated testing, building, and deployment
-- **Advanced Monitoring**: Prometheus, Grafana, ELK stack implementation
-
-#### **Long-term Vision (12+ months)**
-
-- **Event Sourcing**: CQRS pattern for complex business logic
-- **Machine Learning**: Predictive analytics for demand forecasting
-- **Real-time Features**: WebSocket implementation for live updates
-- **Mobile API**: GraphQL-based API for mobile applications
-
-### Current Technology Status
-
-#### **✅ Implemented & Validated**
-
-- **Backend Infrastructure**: Node.js + Express + Prisma + PostgreSQL + Redis
-- **Authentication System**: JWT with RBAC and audit logging
-- **API Gateway**: Request routing and middleware
-- **Frontend Foundation**: Next.js 14 with TypeScript and Tailwind
-- **Development Environment**: Docker Compose with hot reloading
-- **Database Management**: Prisma migrations and studio
-
-#### **🔄 Ready for Implementation**
-
-- **User Service**: Prisma schema design and API development
-- **Frontend Integration**: Authentication forms and state management
-- **External Service Integration**: Wallet and Partner service connections
-- **Platform Integration**: Shopify OAuth and webhook handling
-
-#### **📋 Planned for Future Phases**
-
-- **Shipment Service**: Core logistics operations
-- **Support Service**: Help desk and ticketing system
-- **Advanced Features**: Analytics, reporting, mobile support
-- **Production Deployment**: VPS deployment and monitoring
-
-**Technology Decision Status**: ✅ **Stack Finalized and Validated**  
-**Current Phase**: Foundation complete, feature development ready  
-**Next Priority**: User Service development with established patterns
+This technical context provides the foundation for consistent development practices and ensures all team members understand the technology decisions and architectural patterns used throughout the project.

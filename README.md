@@ -94,6 +94,7 @@ npm install -g pnpm@8.15.1
 We provide comprehensive scripts for easy development setup and maintenance:
 
 #### 🧹 Cleanup Scripts
+
 ```bash
 # Clean all dependencies, build files, and artifacts
 pnpm run cleanup
@@ -103,6 +104,7 @@ pnpm run cleanup:deep
 ```
 
 #### 🚀 Setup Scripts
+
 ```bash
 # Full stack setup (auto-creates .env files + installs dependencies)
 pnpm run setup:dev
@@ -115,6 +117,7 @@ pnpm run setup:backend
 ```
 
 #### 🔄 Fresh Install (Cleanup + Setup)
+
 ```bash
 # Complete fresh installation
 pnpm run fresh:install
@@ -127,6 +130,7 @@ pnpm run fresh:backend
 ```
 
 **✨ What the setup scripts do:**
+
 - ✅ Auto-create `.env` files for all services
 - ✅ Install all dependencies with pnpm
 - ✅ Generate Prisma clients
@@ -194,15 +198,16 @@ docker-compose exec auth-service npx prisma migrate reset
 ```prisma
 // Example: backend/auth-service/prisma/schema.prisma
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique @db.VarChar(255)
-  role         Role
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  role      Role
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sessions     Session[]
-  auditLogs    AuditLog[]
+  sessions  Session[]
+  auditLogs AuditLog[]
+
   @@map("users")
 }
 ```
@@ -401,9 +406,9 @@ pnpm run health                 # Backend API health
 pnpm run health:frontend       # Frontend health
 
 # Direct curl commands
-curl http://localhost:8000/health   # API Gateway
-curl http://localhost:8001/health   # Auth Service
-curl http://localhost:8002/health   # User Service
+curl http://localhost:3001/health   # API Gateway
+curl http://localhost:8002/health   # Auth Service
+curl http://localhost:8003/health   # User Service
 curl http://localhost:3000/api/health  # Frontend
 ```
 

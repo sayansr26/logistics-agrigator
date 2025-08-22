@@ -179,12 +179,12 @@ if exist ".env.example" (
             echo JWT_SECRET=your-super-secret-jwt-key-change-in-production
             echo.
             echo # Service URLs
-            echo AUTH_SERVICE_URL=http://localhost:8001
-            echo USER_SERVICE_URL=http://localhost:8002
-            echo SHIPMENT_SERVICE_URL=http://localhost:8003
-            echo SUPPORT_SERVICE_URL=http://localhost:8004
-            echo PLATFORM_SERVICE_URL=http://localhost:8005
-            echo API_GATEWAY_URL=http://localhost:8000
+            echo AUTH_SERVICE_URL=http://localhost:3002
+            echo USER_SERVICE_URL=http://localhost:3003
+            echo SHIPMENT_SERVICE_URL=http://localhost:3004
+            echo SUPPORT_SERVICE_URL=http://localhost:3006
+            echo PLATFORM_SERVICE_URL=http://localhost:3007
+            echo API_GATEWAY_URL=http://localhost:3001
         ) > ".env"
         echo ✅ Created root .env file
     ) else if defined force_flag (
@@ -203,12 +203,12 @@ if exist ".env.example" (
             echo JWT_SECRET=your-super-secret-jwt-key-change-in-production
             echo.
             echo # Service URLs
-            echo AUTH_SERVICE_URL=http://localhost:8001
-            echo USER_SERVICE_URL=http://localhost:8002
-            echo SHIPMENT_SERVICE_URL=http://localhost:8003
-            echo SUPPORT_SERVICE_URL=http://localhost:8004
-            echo PLATFORM_SERVICE_URL=http://localhost:8005
-            echo API_GATEWAY_URL=http://localhost:8000
+            echo AUTH_SERVICE_URL=http://localhost:3002
+            echo USER_SERVICE_URL=http://localhost:3003
+            echo SHIPMENT_SERVICE_URL=http://localhost:3004
+            echo SUPPORT_SERVICE_URL=http://localhost:3006
+            echo PLATFORM_SERVICE_URL=http://localhost:3007
+            echo API_GATEWAY_URL=http://localhost:3001
         ) > ".env"
         echo ✅ Updated root .env file
     ) else (

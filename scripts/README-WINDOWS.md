@@ -65,8 +65,6 @@ pnpm run setup:env
 - Configures database connection strings
 - Sets up JWT secrets and service URLs
 
-### 📚 `update-memory-and-changelog.bat`
-
 **Purpose**: Updates memory bank files and changelog automatically
 
 **Usage**:
@@ -206,7 +204,6 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```bash
 ./scripts/cleanup.sh
 ./scripts/setup.sh
-./scripts/update-memory-and-changelog.sh
 ```
 
 ### After (Windows)
@@ -223,7 +220,6 @@ pnpm run update:memory:win
 # Direct script execution
 scripts\cleanup.bat
 scripts\setup.bat
-scripts\update-memory-and-changelog.bat
 ```
 
 ## Development Workflow

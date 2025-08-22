@@ -202,9 +202,9 @@ DATABASE_URL="postgresql://logistics:logistics123@localhost:5432/logistics_users
 All services are configured to communicate with each other:
 
 ```bash
-AUTH_SERVICE_URL="http://localhost:8001"
-USER_SERVICE_URL="http://localhost:8002"
-SHIPMENT_SERVICE_URL="http://localhost:8003"
+AUTH_SERVICE_URL="http://localhost:3001"
+USER_SERVICE_URL="http://localhost:3002"
+SHIPMENT_SERVICE_URL="http://localhost:3003"
 # ... etc
 ```
 

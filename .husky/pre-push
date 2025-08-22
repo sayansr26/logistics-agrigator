@@ -17,6 +17,3 @@ echo "🏗️ Build check..."
 pnpm --filter "backend/*" run build --if-present
 
 echo "✅ Pre-push checks passed!"
-echo ""
-echo "💡 To manually update memory bank when needed:"
-echo "   ./scripts/update-memory-and-changelog.sh"

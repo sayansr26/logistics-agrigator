@@ -66,8 +66,6 @@
     "fresh:frontend:win": "pnpm run cleanup:win && pnpm run setup:frontend:win",
     "fresh:backend": "pnpm run cleanup && pnpm run setup:backend",
     "fresh:backend:win": "pnpm run cleanup:win && pnpm run setup:backend:win",
-    "update:memory": "./scripts/update-memory-and-changelog.sh",
-    "update:memory:win": "scripts\\update-memory-and-changelog.bat",
     "lint:staged": "lint-staged",
     "commit": "git-cz",
     "commitlint": "commitlint --from HEAD~1 --to HEAD --verbose"
