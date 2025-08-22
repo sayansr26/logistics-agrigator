@@ -46,11 +46,41 @@ setup_env_file() {
             fi
             print_success "✅ Created $target_file"
         else
+            # Check if existing .env file needs URL fixes
+            if [ -n "$service_name_for_replacement" ]; then
+                fix_existing_env_urls "$service_name_for_replacement" "$target_file"
+            fi
             print_warning "⚠️  $target_file already exists, skipping (use --force to overwrite)"
         fi
     else
         print_error "❌ $source_file not found"
         return 1
+    fi
+}
+
+# Function to fix common URL issues in existing .env files
+fix_existing_env_urls() {
+    local service_name="$1"
+    local env_file="$2"
+    local fixed_something=false
+    
+    # Fix DATABASE_URL with wrong port (5432 instead of 3008)
+    if grep -q "DATABASE_URL=\".*@localhost:5432/" "$env_file"; then
+        sed -i '' 's/localhost:5432/localhost:3008/' "$env_file"
+        print_status "Fixed DATABASE_URL port in $env_file (5432 → 3008)"
+        fixed_something=true
+    fi
+    
+    # Fix REDIS_URL with wrong port (6379 instead of 3009)
+    if grep -q "REDIS_URL=\".*@localhost:6379\"" "$env_file"; then
+        sed -i '' 's/localhost:6379/localhost:3009/' "$env_file"
+        print_status "Fixed REDIS_URL port in $env_file (6379 → 3009)"
+        fixed_something=true
+    fi
+    
+    # Apply Docker service name replacements if any fixes were made
+    if [ "$fixed_something" = true ]; then
+        replace_localhost_with_service_names "$service_name" "$env_file"
     fi
 }
 
@@ -80,24 +110,17 @@ replace_localhost_with_service_names() {
     
     # Define services and their ports (excluding the current service itself)
     # The ports are internal Docker ports, not external mapped ports.
-    declare -A SERVICE_PORTS
-    SERVICE_PORTS[auth-service]=3002
-    SERVICE_PORTS[user-service]=3003
-    SERVICE_PORTS[shipment-service]=3004
-    SERVICE_PORTS[partner-service]=3005
-    SERVICE_PORTS[support-service]=3006
-    SERVICE_PORTS[platform-service]=3007
-    SERVICE_PORTS[api-gateway]=3001
+    local services="auth-service:3002 user-service:3003 shipment-service:3004 partner-service:3005 support-service:3006 platform-service:3007 api-gateway:3001"
     
-    for svc in "${!SERVICE_PORTS[@]}"; do
+    for svc_port in $services; do
+        local svc=$(echo "$svc_port" | cut -d':' -f1)
+        local port=$(echo "$svc_port" | cut -d':' -f2)
+        
         if [ "$svc" != "$service_name" ]; then # Don't replace own service URL if it exists
             local uppercase_svc=$(echo "$svc" | tr '[:lower:]-' '[:upper:]_')
             local var_name="${uppercase_svc}_SERVICE_URL"
-            local port=${SERVICE_PORTS[$svc]}
-            local pattern="^${var_name}=\".*@localhost:${port}\""
-            local replacement="${var_name}=\"http://${svc}:${port}\""
             
-            if grep -q "$pattern" "$env_file"; then
+            if grep -q "${var_name}=\"http://localhost:${port}\"" "$env_file"; then
                 # Use a different delimiter for sed to avoid issues with '/' in URLs
                 sed -i '' "s|${var_name}=\"http://localhost:${port}\"|${var_name}=\"http://${svc}:${port}\"|" "$env_file"
                 print_status "Updated ${var_name} in $env_file to use service name"
@@ -296,18 +319,27 @@ else
     exit 1
 fi
 
-# Generate Prisma clients for backend services
+# Generate Prisma clients and deploy migrations for backend services
 if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
-    print_status "🗄️  Generating Prisma clients..."
+    print_status "🗄️  Setting up Prisma for backend services..."
     
     for service in auth-service user-service shipment-service partner-service support-service platform-service; do
         if [ -d "backend/$service" ] && [ -f "backend/$service/prisma/schema.prisma" ]; then
-            print_status "Generating Prisma client for $service..."
+            print_status "Setting up Prisma for $service..."
+            
+            # Generate Prisma client
             (cd "backend/$service" && npx prisma generate) || print_warning "⚠️  Failed to generate Prisma client for $service"
+            
+            # Note: Migrations will be deployed automatically when containers start
+            if [ -d "backend/$service/prisma/migrations" ]; then
+                print_status "✅ Migrations found for $service (will deploy on container startup)"
+            else
+                print_status "ℹ️  No migrations directory for $service"
+            fi
         fi
     done
     
-    print_success "✅ Prisma clients generated"
+    print_success "✅ Prisma setup completed"
 fi
 
 # Summary and next steps

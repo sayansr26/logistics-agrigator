@@ -20,6 +20,10 @@ RUN npx prisma generate
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
+# Create startup script that runs migrations before starting the server
+RUN printf '#!/bin/sh\necho "Running Prisma migrations..."\nnpx prisma migrate deploy || echo "Migration failed or no migrations to apply"\necho "Starting server with auto-reload..."\nexec pnpm run dev\n' > /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Set ownership
 RUN chown -R nodejs:nodejs /app
 
@@ -34,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8002/health || exit 1
 
 # Start the application
-CMD ["pnpm", "run", "dev"]
+CMD ["/app/start.sh"]

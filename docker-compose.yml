@@ -79,10 +79,10 @@ services:
     ports:
       - "3002:3002"
     # For live reload in development, uncomment these volumes:
-    # volumes:
-    #   - ./backend/auth-service:/app
-    #   - ./shared:/app/shared
-    #   - auth_node_modules:/app/node_modules
+    volumes:
+      - ./backend/auth-service:/app
+      - ./shared:/app/shared
+      - auth_service_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,7 +90,6 @@ services:
         condition: service_healthy
     networks:
       - logistics-network
-    command: pnpm run dev
 
   # User Service (Week 2 Development)
   user-service:

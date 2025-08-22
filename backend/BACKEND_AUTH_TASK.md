@@ -531,4 +531,177 @@ The Auth Service now provides a solid foundation for all other microservices in 
 
 **Archive Completed**: August 21, 2025  
 **Total Development Time**: ~25-30 hours across 7 tasks  
-**Status**: ✅ Production Ready
+**Status**: ⚠️ **BUGS FOUND** - Requires immediate fixes
+
+---
+
+## **🚨 CRITICAL BUG FIXES REQUIRED**
+
+> **Bug Testing Completed**: August 22, 2025  
+> **Testing Method**: Comprehensive curl endpoint testing  
+> **Bugs Found**: 5 critical issues requiring immediate attention
+
+### **BUG-AUTH-001: Database Migration Not Applied** ✅ **FIXED**
+
+**Bug Description**: Auth service was running without applied Prisma migrations, causing "table does not exist" errors.
+
+**Status**: ✅ **FIXED**
+
+**What Was Fixed**:
+
+- Applied pending Prisma migration `20240101000000_init`
+- Database tables now exist and functional
+- Registration and login endpoints working
+
+**Fix Applied**: `docker exec -it logistics-auth-service npx prisma migrate deploy`
+
+---
+
+### **BUG-AUTH-002: Registration Missing Authentication Tokens** 🚨 **CRITICAL**
+
+**Bug Description**: Registration endpoint returns user data but missing `accessToken` and `refreshToken` that should be included according to Swagger documentation.
+
+**Status**: 🚨 **NEEDS FIX**
+
+**Expected Response** (per Swagger):
+
+```json
+{
+  "status": "success",
+  "data": {
+    "user": {
+      /* user data */
+    },
+    "accessToken": "jwt_token_here",
+    "refreshToken": "refresh_token_here",
+    "expiresIn": 3600
+  }
+}
+```
+
+**Actual Response**:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "user": {
+      /* user data only */
+    }
+  }
+}
+```
+
+**Impact**: Users cannot authenticate immediately after registration, must perform separate login.
+
+**Fix Required**: Update `AuthController.register` to generate and return tokens like login endpoint.
+
+---
+
+### **BUG-AUTH-003: JWT Token Expiration Time Incorrect** 🚨 **CRITICAL**
+
+**Bug Description**: Access tokens expire in 3 seconds instead of the advertised 3600 seconds (1 hour).
+
+**Status**: 🚨 **NEEDS FIX**
+
+**Evidence**: JWT payload shows `"exp":1755849176` when issued at `"iat":1755849173` (3-second difference), but response claims `"expiresIn":3600`.
+
+**Impact**: All authenticated endpoints fail immediately due to token expiration.
+
+**Fix Required**: Correct JWT expiration calculation in token generation logic.
+
+---
+
+### **BUG-AUTH-004: /auth/me Endpoint Returns 500 Error** 🚨 **CRITICAL**
+
+**Bug Description**: The `/auth/me` endpoint returns 500 "Failed to retrieve user information" even with valid tokens.
+
+**Status**: 🚨 **NEEDS FIX**
+
+**Test Result**:
+
+```bash
+HTTP Status: 500
+{"status":"error","error":{"code":"USER_INFO_ERROR","message":"Failed to retrieve user information"}}
+```
+
+**Impact**: Frontend cannot retrieve current user information for authentication state.
+
+**Fix Required**: Debug and fix `AuthController.getCurrentUser` method.
+
+---
+
+### **BUG-AUTH-005: /auth/profile Endpoint Returns 500 Error** 🚨 **CRITICAL**
+
+**Bug Description**: The `/auth/profile` endpoint returns 500 "Failed to retrieve user profile" even with valid tokens.
+
+**Status**: 🚨 **NEEDS FIX**
+
+**Test Result**:
+
+```bash
+HTTP Status: 500
+{"status":"error","error":{"code":"PROFILE_ERROR","message":"Failed to retrieve user profile"}}
+```
+
+**Impact**: Frontend cannot retrieve enhanced user profile with capabilities.
+
+**Fix Required**: Debug and fix `AuthController.getUserProfile` method.
+
+---
+
+### **BUG-AUTH-006: Admin Blacklist Token Endpoint Fails** 🚨 **CRITICAL**
+
+**Bug Description**: The `/auth/admin/blacklist-token` endpoint returns 500 "Token blacklisting failed".
+
+**Status**: 🚨 **NEEDS FIX**
+
+**Test Result**:
+
+```bash
+HTTP Status: 500
+{"status":"error","error":{"code":"BLACKLIST_FAILED","message":"Token blacklisting failed"}}
+```
+
+**Impact**: Admins cannot blacklist compromised tokens for security.
+
+**Fix Required**: Debug and fix `AuthController.blacklistToken` method.
+
+---
+
+## **✅ WORKING ENDPOINTS**
+
+**Confirmed Working**:
+
+- ✅ `/health` - Health check (200 OK)
+- ✅ `/auth/login` - User authentication (returns tokens correctly)
+- ✅ `/auth/refresh` - Token refresh (generates new tokens)
+- ✅ `/auth/logout` - User logout (200 OK)
+- ✅ `/auth/logout-all` - Logout all devices (200 OK)
+- ✅ `/auth/admin/cleanup-sessions` - Admin session cleanup (200 OK)
+- ✅ **Input Validation** - Proper 400 errors for invalid data
+- ✅ **Authentication** - Proper 401 errors for invalid credentials
+
+---
+
+## **🔧 IMMEDIATE ACTION REQUIRED**
+
+### **Priority 1: Critical Authentication Flow**
+
+1. **BUG-AUTH-003**: Fix JWT token expiration (blocks all authenticated endpoints)
+2. **BUG-AUTH-004**: Fix `/auth/me` endpoint (required for frontend auth state)
+3. **BUG-AUTH-002**: Add tokens to registration response (UX improvement)
+
+### **Priority 2: Profile and Admin Features**
+
+4. **BUG-AUTH-005**: Fix `/auth/profile` endpoint
+5. **BUG-AUTH-006**: Fix admin blacklist token functionality
+
+### **Testing Protocol**
+
+- All fixes must be tested with curl before marking complete
+- Verify JWT token expiration with actual timing tests
+- Test both success and error scenarios
+- Ensure Swagger documentation matches actual behavior
+
+**Status**: ⚠️ **REQUIRES IMMEDIATE FIXES** - 5 critical bugs blocking production readiness

@@ -60,6 +60,8 @@
     "setup:frontend:win": "scripts\\setup.bat --frontend && pnpm run dev:frontend",
     "setup:backend": "./scripts/setup.sh --backend && pnpm run dev:backend",
     "setup:backend:win": "scripts\\setup.bat --backend && pnpm run dev:backend",
+    "migrate:deploy": "docker-compose exec auth-service pnpm run migrate:deploy && docker-compose exec user-service pnpm run migrate:deploy",
+    "migrate:deploy:all": "for service in auth-service user-service shipment-service partner-service support-service platform-service; do docker-compose exec $service pnpm run migrate:deploy 2>/dev/null || echo \"Skipping $service (no migrations or not running)\"; done",
     "fresh:install": "pnpm run cleanup && pnpm run setup:dev",
     "fresh:install:win": "pnpm run cleanup:win && pnpm run setup:dev:win",
     "fresh:frontend": "pnpm run cleanup && pnpm run setup:frontend",
