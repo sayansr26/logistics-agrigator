@@ -45,6 +45,7 @@ return response.error(message, statusCode, details);
 // Each service has its own PostgreSQL database
 -auth_service_db - // Users, sessions, audit logs
   user_service_db - // Clients, settings, invitations
+  partner_service_db - // Partners, zones, charges, discounts
   shipment_service_db - // Shipments, tracking, disputes
   platform_service_db - // Integrations, orders, webhooks
   support_service_db; // Tickets, knowledge base
@@ -105,9 +106,116 @@ await redis.setex(`session:${userId}`, 86400, JSON.stringify(sessionData));
 // API response caching (Partner Service)
 await redis.setex(`charges:${hash}`, 300, JSON.stringify(chargesResponse));
 
+// Package charges caching (30 minutes)
+await redis.setex(
+  `package_charges:${partnerId}`,
+  1800,
+  JSON.stringify(charges),
+);
+
+// Customer charges caching (1 hour)
+await redis.setex(
+  `customer_charges:${customerId}:${partnerId}`,
+  3600,
+  JSON.stringify(charges),
+);
+
+// Geographical data caching (24 hours)
+await redis.setex(`geographical:${type}:${hash}`, 86400, JSON.stringify(data));
+
 // Rate limiting (All Services)
 const key = `ratelimit:${ip}:${endpoint}`;
 const requests = await redis.incr(key);
+```
+
+### Charge Management Patterns
+
+**1. Package Charge Structure**
+
+```javascript
+// Package charge configuration with external API integration
+class PackageService {
+  async getPackageCharges(filters) {
+    const cacheKey = `package_service:charges:${this.createFilterHash(filters)}`;
+
+    // Try cache first
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    // Call external API with HMAC authentication
+    const response = await this.externalClient.makeRequest({
+      method: "GET",
+      url: "/api/v1/packages/charges",
+      params: filters,
+    });
+
+    // Cache for 30 minutes
+    await redis.setex(cacheKey, 1800, JSON.stringify(response));
+    return response;
+  }
+}
+```
+
+**2. Customer Charge Types**
+
+```javascript
+// Comprehensive charge type support
+const CHARGE_TYPES = {
+  FSC: "fsc", // Fuel Surcharge
+  COD: "cod", // Cash on Delivery
+  INSURANCE: "insurance", // Insurance charges
+  HANDLING: "handling", // Handling charges
+  PICKUP: "pickup", // Pickup charges
+  DELIVERY: "delivery", // Delivery charges
+  FRAGILE: "fragile", // Fragile item charges
+  OVERSIZED: "oversized", // Oversized item charges
+  PRIORITY: "priority", // Priority delivery
+  WEEKEND: "weekend", // Weekend delivery
+  REMOTE: "remote", // Remote area charges
+  OTHER: "other", // Custom charges
+};
+
+const CALCULATION_TYPES = {
+  PERCENTAGE: "percentage", // Percentage of shipment value
+  FLAT: "flat", // Flat rate charge
+  PER_KG: "per_kg", // Per kilogram charge
+  SLAB: "slab", // Slab-based charges
+  TIERED: "tiered", // Tiered pricing
+};
+```
+
+**3. Bulk Operations Pattern**
+
+```javascript
+// Efficient bulk processing with validation
+async createBulkPackageCharges(bulkData, partnerId) {
+  // Validate bulk data structure
+  if (!bulkData.packages || !Array.isArray(bulkData.packages)) {
+    throw new ValidationError("Invalid bulk data: packages array is required");
+  }
+
+  // Validate each package in the bulk data
+  bulkData.packages.forEach((pkg, index) => {
+    try {
+      this.validatePackageData(pkg);
+    } catch (error) {
+      throw new ValidationError(`Invalid package data at index ${index}: ${error.message}`);
+    }
+  });
+
+  // Process bulk operation with external API
+  const response = await this.externalClient.makeRequest({
+    method: "POST",
+    url: "/api/v1/packages/charges/bulk",
+    data: bulkData,
+    params: { partnerId },
+  });
+
+  // Clear related cache entries
+  await this.clearPackageCache(partnerId);
+
+  return response;
+}
 ```
 
 ## Authentication & Authorization Patterns
