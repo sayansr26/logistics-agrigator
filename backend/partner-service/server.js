@@ -101,6 +101,7 @@ app.get("/openapi.json", (req, res) => {
 // Routes
 app.use("/api/partners", partnerRoutes);
 app.use("/api/geographical", require("./routes/geographical"));
+app.use("/api", require("./routes/zones"));
 
 /**
  * @swagger
@@ -256,6 +257,11 @@ app.get("/", (req, res) => {
       docs: "/api-docs",
       partners: "/api/partners",
       geographical: "/api/geographical",
+      zones: "/api/zones",
+      serviceTypes: "/api/service-types",
+      partnerZones: "/api/partner-zones",
+      comprehensiveData: "/api/partners/comprehensive-data",
+      zoneCoverage: "/api/zones/coverage/validate",
     },
     features: [
       "Partner Management",
@@ -264,6 +270,10 @@ app.get("/", (req, res) => {
       "Geographical Data Services",
       "Pincode Search and Validation",
       "City and State Information",
+      "Zone Management and Configuration",
+      "Service Type Management",
+      "Zone Coverage Validation",
+      "Comprehensive Partner Data Retrieval",
       "External Courier API Integration",
       "Charge Calculation Workflows",
     ],

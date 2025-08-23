@@ -102,10 +102,31 @@ const geographicalSearchLimiter = rateLimit({
   },
 });
 
+/**
+ * Zone Management Rate Limiter
+ * Applies to zone CRUD operations and service type management
+ * 30 requests per 15 minutes per user
+ */
+const zoneManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each user to 30 requests per windowMs
+  message: {
+    error: "Too many zone management requests",
+    retryAfter: "15 minutes",
+    limit: 30,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
   serviceabilityLimiter,
   geographicalSearchLimiter,
+  zoneManagementLimiter,
   generalLimiter,
 };
