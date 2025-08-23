@@ -83,9 +83,29 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiter for geographical data searches (moderate usage)
+const geographicalSearchLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 150, // Limit each IP to 150 geographical searches per minute
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message: "Too many geographical searches. Please try again in 1 minute.",
+      retryAfter: 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
   serviceabilityLimiter,
+  geographicalSearchLimiter,
   generalLimiter,
 };

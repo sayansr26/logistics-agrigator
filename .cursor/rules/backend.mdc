@@ -337,6 +337,32 @@ CMD ["pnpm", "start"]
 - [ ] Error handling middleware
 - [ ] Docker configuration
 
+### **🚨 MANDATORY VERIFICATION BEFORE TASK COMPLETION**
+
+**EVERY backend task MUST include these verification steps:**
+
+```bash
+# 1. Check shared library imports
+grep -r "require.*shared" backend/service-name/
+
+# 2. Restart Docker service
+docker-compose restart service-name
+
+# 3. Verify service starts without errors
+docker logs logistics-service-name --tail=20
+
+# 4. Test health endpoint
+curl http://localhost:PORT/health | jq .
+
+# 5. Test main API endpoints
+curl -X GET http://localhost:PORT/api/endpoint
+
+# 6. Check for any MODULE_NOT_FOUND errors
+docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
+```
+
+**If ANY verification step fails, the task is NOT complete!**
+
 ## **NEVER DO**
 
 - ❌ Use inline functions in routes (ALL logic in controllers)
@@ -346,6 +372,9 @@ CMD ["pnpm", "start"]
 - ❌ Skip input validation
 - ❌ Use custom response formats
 - ❌ Skip error handling middleware
+- ❌ **Mark task complete without Docker testing**
+- ❌ **Ignore MODULE_NOT_FOUND or import errors**
+- ❌ **Skip health endpoint verification**
 
 ## **ALWAYS DO**
 
@@ -356,3 +385,7 @@ CMD ["pnpm", "start"]
 - ✅ Use standard response formats
 - ✅ Include comprehensive health checks
 - ✅ Document all endpoints with Swagger
+- ✅ **Test Docker service restart after changes**
+- ✅ **Verify health endpoint responds successfully**
+- ✅ **Check Docker logs for any errors**
+- ✅ **Test API endpoints before marking complete**

@@ -100,6 +100,7 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/partners", partnerRoutes);
+app.use("/api/geographical", require("./routes/geographical"));
 
 /**
  * @swagger
@@ -193,6 +194,31 @@ app.get("/health", async (req, res) => {
     };
   }
 
+  // Check External Partner Micro Service
+  try {
+    const {
+      getExternalPartnerClient,
+    } = require("./services/externalPartnerClient");
+    const externalClient = getExternalPartnerClient();
+    const externalHealth = await externalClient.healthCheck();
+
+    healthStatus.dependencies.partnerMicroService = externalHealth;
+
+    if (externalHealth.status !== "healthy") {
+      // Don't mark overall service as unhealthy if external service is down
+      // since we have fallback mechanisms
+      console.warn(
+        "External Partner Micro Service is unhealthy, using fallback",
+      );
+    }
+  } catch (error) {
+    healthStatus.dependencies.partnerMicroService = {
+      status: "unhealthy",
+      error: error.message,
+      note: "Fallback to local rate calculation available",
+    };
+  }
+
   // Add memory and CPU usage
   const memUsage = process.memoryUsage();
   healthStatus.system = {
@@ -229,11 +255,15 @@ app.get("/", (req, res) => {
       health: "/health",
       docs: "/api-docs",
       partners: "/api/partners",
+      geographical: "/api/geographical",
     },
     features: [
       "Partner Management",
       "Rate Calculation",
       "Serviceability Checking",
+      "Geographical Data Services",
+      "Pincode Search and Validation",
+      "City and State Information",
       "External Courier API Integration",
       "Charge Calculation Workflows",
     ],

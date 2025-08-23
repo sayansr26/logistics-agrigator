@@ -1,0 +1,2176 @@
+{
+  "info": {
+    "_postman_id": "b71b310d-5c7a-46af-ae85-c9f1a3a8ae1b",
+    "name": "Partner Services - Development",
+    "description": "# Partner Services API Collection\n\nComplete collection for testing Partner Services integration.\n\n## Authentication\n\nThis collection uses HMAC SHA-256 authentication. Make sure to:\n\n1. Set up environment variables (PARTNER_ID, SECRET_KEY)\n    \n2. Use the pre-request script for automatic signature generation\n    \n\n## Base URL\n\nDevelopment: [http://localhost:3000/api/v1](http://localhost:3000/api/v1)  \nProduction: [https://partner-services.logistics.com/api/v1](https://partner-services.logistics.com/api/v1)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "11110822",
+    "_collection_link": "https://microservice-0891.postman.co/workspace/Micro-Services~801bf07a-3c68-4f6c-a4ea-ae91dbf743b2/collection/11110822-b71b310d-5c7a-46af-ae85-c9f1a3a8ae1b?action=share&source=collection_link&creator=11110822"
+  },
+  "item": [
+    {
+      "name": "System Health & Monitoring",
+      "item": [
+        {
+          "name": "CHECK HEALTH",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{API_URL}}/health",
+              "host": ["{{API_URL}}"],
+              "path": ["health"]
+            },
+            "description": "Generated from cURL: curl -X 'GET' \\\n  'http://localhost:3000/health' \\\n  -H 'accept: application/json'"
+          },
+          "response": [
+            {
+              "name": "CHECK HEALTH SUCCESS",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{API_URL}}/health",
+                  "host": ["{{API_URL}}"],
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "X-API-Version",
+                  "value": "v1.0.0"
+                },
+                {
+                  "key": "X-Microservice",
+                  "value": "partner-services"
+                },
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com;script-src 'self';img-src 'self' data: https:;connect-src 'self';object-src 'none';media-src 'self';frame-src 'none';child-src 'none';worker-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none'"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "strict-origin-when-cross-origin"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin, Accept-Encoding"
+                },
+                {
+                  "key": "Access-Control-Allow-Credentials",
+                  "value": "true"
+                },
+                {
+                  "key": "Access-Control-Expose-Headers",
+                  "value": "X-Request-ID,X-Response-Time,X-Rate-Limit-Remaining,X-Performance-Class"
+                },
+                {
+                  "key": "x-request-id",
+                  "value": "9f2eb560-f8d1-486f-93ab-47d8afe5ec34"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "920"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"398-1moq5NEZz/EpUvOf9K7bio1MX7Y\""
+                },
+                {
+                  "key": "X-Response-Time",
+                  "value": "8.615ms"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 24 Jul 2025 06:24:45 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"status\": \"healthy\",\n    \"message\": \"Partner Services Microservice is healthy\",\n    \"timestamp\": \"2025-07-24T06:24:45.693Z\",\n    \"version\": \"1.0.0\",\n    \"environment\": \"development\",\n    \"uptime\": 4441.639878772,\n    \"buildInfo\": {\n        \"nodeVersion\": \"v18.20.8\",\n        \"platform\": \"linux\",\n        \"arch\": \"arm64\"\n    },\n    \"components\": {\n        \"database\": {\n            \"status\": \"healthy\",\n            \"lastCheck\": \"2025-07-24T06:24:29.614Z\",\n            \"responseTime\": 4,\n            \"details\": {\n                \"status\": \"healthy\",\n                \"duration\": \"4ms\",\n                \"timestamp\": \"2025-07-24T06:24:29.614Z\"\n            }\n        },\n        \"redis\": {\n            \"status\": \"healthy\",\n            \"lastCheck\": \"2025-07-24T06:24:29.615Z\",\n            \"responseTime\": 1,\n            \"details\": {\n                \"status\": \"healthy\",\n                \"duration\": \"1ms\",\n                \"timestamp\": \"2025-07-24T06:24:29.615Z\",\n                \"connected\": true\n            }\n        },\n        \"memory\": {\n            \"usage\": 54920512,\n            \"percentage\": 93.89585521708683,\n            \"heapTotal\": 58490880,\n            \"heapUsed\": 54920512,\n            \"external\": 2027054,\n            \"rss\": 146137088\n        }\n    },\n    \"monitoring\": {\n        \"metricsEndpoint\": \"/metrics\",\n        \"livenessProbe\": \"/health/live\",\n        \"readinessProbe\": \"/health/ready\",\n        \"systemInfo\": \"/health/info\"\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "CHECK HEALTH READY",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{API_URL}}/health/ready",
+              "host": ["{{API_URL}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Generated from cURL: curl -X 'GET' \\\n  'http://localhost:3000/health' \\\n  -H 'accept: application/json'"
+          },
+          "response": [
+            {
+              "name": "SUCCESS",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:3000/health",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "X-API-Version",
+                  "value": "v1.0.0"
+                },
+                {
+                  "key": "X-Microservice",
+                  "value": "partner-services"
+                },
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com;script-src 'self';img-src 'self' data: https:;connect-src 'self';object-src 'none';media-src 'self';frame-src 'none';child-src 'none';worker-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none'"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "strict-origin-when-cross-origin"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin, Accept-Encoding"
+                },
+                {
+                  "key": "Access-Control-Allow-Credentials",
+                  "value": "true"
+                },
+                {
+                  "key": "Access-Control-Expose-Headers",
+                  "value": "X-Request-ID,X-Response-Time,X-Rate-Limit-Remaining,X-Performance-Class"
+                },
+                {
+                  "key": "x-request-id",
+                  "value": "req_1753271264836_u61fdlq"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "917"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"395-B5TCvKWHxkv3FjsPilOzU05m6CY\""
+                },
+                {
+                  "key": "X-Response-Time",
+                  "value": "3.476ms"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 23 Jul 2025 11:47:44 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"status\": \"healthy\",\n    \"message\": \"Partner Services Microservice is healthy\",\n    \"timestamp\": \"2025-07-23T11:47:44.870Z\",\n    \"version\": \"1.0.0\",\n    \"environment\": \"development\",\n    \"uptime\": 272.19671479,\n    \"buildInfo\": {\n        \"nodeVersion\": \"v18.20.8\",\n        \"platform\": \"linux\",\n        \"arch\": \"arm64\"\n    },\n    \"components\": {\n        \"database\": {\n            \"status\": \"healthy\",\n            \"lastCheck\": \"2025-07-23T11:47:19.020Z\",\n            \"responseTime\": 4,\n            \"details\": {\n                \"status\": \"healthy\",\n                \"duration\": \"4ms\",\n                \"timestamp\": \"2025-07-23T11:47:19.020Z\"\n            }\n        },\n        \"redis\": {\n            \"status\": \"healthy\",\n            \"lastCheck\": \"2025-07-23T11:47:19.021Z\",\n            \"responseTime\": 1,\n            \"details\": {\n                \"status\": \"healthy\",\n                \"duration\": \"1ms\",\n                \"timestamp\": \"2025-07-23T11:47:19.021Z\",\n                \"connected\": true\n            }\n        },\n        \"memory\": {\n            \"usage\": 49870408,\n            \"percentage\": 90.6379258402814,\n            \"heapTotal\": 55021568,\n            \"heapUsed\": 49870408,\n            \"external\": 4744050,\n            \"rss\": 142102528\n        }\n    },\n    \"monitoring\": {\n        \"metricsEndpoint\": \"/metrics\",\n        \"livenessProbe\": \"/health/live\",\n        \"readinessProbe\": \"/health/ready\",\n        \"systemInfo\": \"/health/info\"\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET ENDPOINTS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{API_URL}}/api/v1",
+              "host": ["{{API_URL}}"],
+              "path": ["api", "v1"]
+            },
+            "description": "Generated from cURL: curl -X 'GET' \\\n  'http://localhost:3000/api/v1' \\\n  -H 'accept: application/json'"
+          },
+          "response": [
+            {
+              "name": "SUCCESS",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:3000/api/v1",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "v1"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "X-API-Version",
+                  "value": "v1.0.0"
+                },
+                {
+                  "key": "X-Microservice",
+                  "value": "partner-services"
+                },
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com;script-src 'self';img-src 'self' data: https:;connect-src 'self';object-src 'none';media-src 'self';frame-src 'none';child-src 'none';worker-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none'"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "strict-origin-when-cross-origin"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin, Accept-Encoding"
+                },
+                {
+                  "key": "Access-Control-Allow-Credentials",
+                  "value": "true"
+                },
+                {
+                  "key": "Access-Control-Expose-Headers",
+                  "value": "X-Request-ID,X-Response-Time,X-Rate-Limit-Remaining,X-Performance-Class"
+                },
+                {
+                  "key": "x-request-id",
+                  "value": "req_1753271330583_tzy69nm"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "40"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "38"
+                },
+                {
+                  "key": "X-RateLimit-Reset",
+                  "value": "1753271391"
+                },
+                {
+                  "key": "X-RateLimit-Window",
+                  "value": "60"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"4d3-YMO6U1586408d07FpB1MtLWxBsQ\""
+                },
+                {
+                  "key": "X-Response-Time",
+                  "value": "5.230ms"
+                },
+                {
+                  "key": "Content-Encoding",
+                  "value": "br"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 23 Jul 2025 11:48:50 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                },
+                {
+                  "key": "Transfer-Encoding",
+                  "value": "chunked"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Partner Services API v1\",\n    \"version\": \"1.0.0\",\n    \"endpoints\": {\n        \"health\": \"/health\",\n        \"api\": \"/api/v1\",\n        \"swagger\": \"/api-docs\",\n        \"pincodes\": \"/api/v1/pincodes\",\n        \"serviceTypes\": \"/api/v1/service-types\",\n        \"zones\": \"/api/v1/zones\",\n        \"packages\": \"/api/v1/packages\",\n        \"discounts\": \"/api/v1/discounts\",\n        \"serviceValidation\": \"/api/v1/service-validation\",\n        \"surchargeCalculation\": \"/api/v1/surcharge-calculation\",\n        \"shipments\": \"/api/v1/shipments\",\n        \"rateLimit\": \"/api/v1/rate-limit\",\n        \"audit\": \"/api/v1/audit\",\n        \"swaggerStatistics\": \"/api/v1/swagger\",\n        \"partnerAvailability\": \"/api/v1/partners/availability\",\n        \"comprehensivePartnerData\": \"/api/v1/partners/comprehensive-data\",\n        \"zoneCoverageValidation\": \"/api/v1/zones/coverage\",\n        \"partnerCharges\": \"/api/v1/partner-charges\",\n        \"partnerDiscounts\": \"/api/v1/partner-discounts\",\n        \"bulkPartnerData\": \"/api/v1/partners/bulk-data\",\n        \"mainSystemRateLimit\": \"/api/v1/main-system-rate-limit\",\n        \"mainSystemCache\": \"/api/v1/main-system-cache\",\n        \"mainSystemInitialization\": \"/api/v1/main-system\",\n        \"shipmentAssignment\": \"/api/v1/shipment-assignment\",\n        \"partnerPerformance\": \"/api/v1/partner-performance\",\n        \"mainSystemDashboard\": \"/api/v1/main-system-dashboard\",\n        \"webhooks\": \"/api/v1/webhooks\",\n        \"partnerAssignmentWorkflow\": \"/api/v1/partner-assignment-workflow\"\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Geographical Data",
+      "item": [
+        {
+          "name": "Get all states with pincode counts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/pincodes/states",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pincodes", "states"]
+            }
+          },
+          "response": [
+            {
+              "name": "SUCCESS",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/pincodes/states",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["pincodes", "states"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "X-API-Version",
+                  "value": "v1.0.0"
+                },
+                {
+                  "key": "X-Microservice",
+                  "value": "partner-services"
+                },
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com;script-src 'self';img-src 'self' data: https:;connect-src 'self';object-src 'none';media-src 'self';frame-src 'none';child-src 'none';worker-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none'"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "strict-origin-when-cross-origin"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin, Accept-Encoding"
+                },
+                {
+                  "key": "Access-Control-Allow-Credentials",
+                  "value": "true"
+                },
+                {
+                  "key": "Access-Control-Expose-Headers",
+                  "value": "X-Request-ID,X-Response-Time,X-Rate-Limit-Remaining,X-Performance-Class"
+                },
+                {
+                  "key": "x-request-id",
+                  "value": "d8c7b299-b890-44f7-9722-e21b5f7e7dbd"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "40"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "39"
+                },
+                {
+                  "key": "X-RateLimit-Reset",
+                  "value": "1753338504"
+                },
+                {
+                  "key": "X-RateLimit-Window",
+                  "value": "60"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"e57-NN/X8n203wqGQN6BCdAT2QSkxN0\""
+                },
+                {
+                  "key": "X-Response-Time",
+                  "value": "1608.734ms"
+                },
+                {
+                  "key": "Content-Encoding",
+                  "value": "br"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 24 Jul 2025 06:27:25 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                },
+                {
+                  "key": "Transfer-Encoding",
+                  "value": "chunked"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"execution_time_ms\": 1601,\n    \"data\": [\n        {\n            \"id\": 35,\n            \"name\": \"ANDAMAN AND NICOBAR ISLANDS\",\n            \"code\": \"ANDAMANAND\",\n            \"counts\": {\n                \"cities\": 3,\n                \"areas\": 102,\n                \"pincodes\": 22\n            }\n        },\n        {\n            \"id\": 5,\n            \"name\": \"ANDHRA PRADESH\",\n            \"code\": \"ANDHRAPRAD\",\n            \"counts\": {\n                \"cities\": 26,\n                \"areas\": 12026,\n                \"pincodes\": 1247\n            }\n        },\n        {\n            \"id\": 22,\n            \"name\": \"ARUNACHAL PRADESH\",\n            \"code\": \"ARUNACHALP\",\n            \"counts\": {\n                \"cities\": 25,\n                \"areas\": 485,\n                \"pincodes\": 51\n            }\n        },\n        {\n            \"id\": 6,\n            \"name\": \"ASSAM\",\n            \"code\": \"ASSAM\",\n            \"counts\": {\n                \"cities\": 34,\n                \"areas\": 4513,\n                \"pincodes\": 575\n            }\n        },\n        {\n            \"id\": 1,\n            \"name\": \"BIHAR\",\n            \"code\": \"BIHAR\",\n            \"counts\": {\n                \"cities\": 38,\n                \"areas\": 10264,\n                \"pincodes\": 880\n            }\n        },\n        {\n            \"id\": 25,\n            \"name\": \"CHANDIGARH\",\n            \"code\": \"CHANDIGARH\",\n            \"counts\": {\n                \"cities\": 1,\n                \"areas\": 53,\n                \"pincodes\": 23\n            }\n        },\n        {\n            \"id\": 2,\n            \"name\": \"CHHATTISGARH\",\n            \"code\": \"CHHATTISGA\",\n            \"counts\": {\n                \"cities\": 28,\n                \"areas\": 3713,\n                \"pincodes\": 279\n            }\n        },\n        {\n            \"id\": 7,\n            \"name\": \"DELHI\",\n            \"code\": \"DELHI\",\n            \"counts\": {\n                \"cities\": 11,\n                \"areas\": 724,\n                \"pincodes\": 103\n            }\n        },\n        {\n            \"id\": 20,\n            \"name\": \"GOA\",\n            \"code\": \"GOA\",\n            \"counts\": {\n                \"cities\": 2,\n                \"areas\": 263,\n                \"pincodes\": 89\n            }\n        },\n        {\n            \"id\": 8,\n            \"name\": \"GUJARAT\",\n            \"code\": \"GUJARAT\",\n            \"counts\": {\n                \"cities\": 33,\n                \"areas\": 9825,\n                \"pincodes\": 1008\n            }\n        },\n        {\n            \"id\": 14,\n            \"name\": \"HARYANA\",\n            \"code\": \"HARYANA\",\n            \"counts\": {\n                \"cities\": 22,\n                \"areas\": 2915,\n                \"pincodes\": 318\n            }\n        },\n        {\n            \"id\": 15,\n            \"name\": \"HIMACHAL PRADESH\",\n            \"code\": \"HIMACHALPR\",\n            \"counts\": {\n                \"cities\": 12,\n                \"areas\": 2945,\n                \"pincodes\": 439\n            }\n        },\n        {\n            \"id\": 10,\n            \"name\": \"JAMMU AND KASHMIR\",\n            \"code\": \"JAMMUANDKA\",\n            \"counts\": {\n                \"cities\": 20,\n                \"areas\": 1929,\n                \"pincodes\": 213\n            }\n        },\n        {\n            \"id\": 11,\n            \"name\": \"JHARKHAND\",\n            \"code\": \"JHARKHAND\",\n            \"counts\": {\n                \"cities\": 24,\n                \"areas\": 4025,\n                \"pincodes\": 387\n            }\n        },\n        {\n            \"id\": 12,\n            \"name\": \"KARNATAKA\",\n            \"code\": \"KARNATAKA\",\n            \"counts\": {\n                \"cities\": 31,\n                \"areas\": 9833,\n                \"pincodes\": 1358\n            }\n        },\n        {\n            \"id\": 19,\n            \"name\": \"KERALA\",\n            \"code\": \"KERALA\",\n            \"counts\": {\n                \"cities\": 14,\n                \"areas\": 5195,\n                \"pincodes\": 1428\n            }\n        },\n        {\n            \"id\": 16,\n            \"name\": \"LADAKH\",\n            \"code\": \"LADAKH\",\n            \"counts\": {\n                \"cities\": 2,\n                \"areas\": 110,\n                \"pincodes\": 14\n            }\n        },\n        {\n            \"id\": 33,\n            \"name\": \"LAKSHADWEEP\",\n            \"code\": \"LAKSHADWEE\",\n            \"counts\": {\n                \"cities\": 1,\n                \"areas\": 10,\n                \"pincodes\": 9\n            }\n        },\n        {\n            \"id\": 18,\n            \"name\": \"MADHYA PRADESH\",\n            \"code\": \"MADHYAPRAD\",\n            \"counts\": {\n                \"cities\": 52,\n                \"areas\": 8574,\n                \"pincodes\": 778\n            }\n        },\n        {\n            \"id\": 17,\n            \"name\": \"MAHARASHTRA\",\n            \"code\": \"MAHARASHTR\",\n            \"counts\": {\n                \"cities\": 36,\n                \"areas\": 12529,\n                \"pincodes\": 1601\n            }\n        },\n        {\n            \"id\": 26,\n            \"name\": \"MANIPUR\",\n            \"code\": \"MANIPUR\",\n            \"counts\": {\n                \"cities\": 16,\n                \"areas\": 1295,\n                \"pincodes\": 55\n            }\n        },\n        {\n            \"id\": 9,\n            \"name\": \"MEGHALAYA\",\n            \"code\": \"MEGHALAYA\",\n            \"counts\": {\n                \"cities\": 11,\n                \"areas\": 683,\n                \"pincodes\": 70\n            }\n        },\n        {\n            \"id\": 27,\n            \"name\": \"MIZORAM\",\n            \"code\": \"MIZORAM\",\n            \"counts\": {\n                \"cities\": 11,\n                \"areas\": 571,\n                \"pincodes\": 44\n            }\n        },\n        {\n            \"id\": 28,\n            \"name\": \"NAGALAND\",\n            \"code\": \"NAGALAND\",\n            \"counts\": {\n                \"cities\": 12,\n                \"areas\": 481,\n                \"pincodes\": 46\n            }\n        },\n        {\n            \"id\": 21,\n            \"name\": \"ODISHA\",\n            \"code\": \"ODISHA\",\n            \"counts\": {\n                \"cities\": 30,\n                \"areas\": 8666,\n                \"pincodes\": 943\n            }\n        },\n        {\n            \"id\": 31,\n            \"name\": \"PUDUCHERRY\",\n            \"code\": \"PUDUCHERRY\",\n            \"counts\": {\n                \"cities\": 4,\n                \"areas\": 151,\n                \"pincodes\": 28\n            }\n        },\n        {\n            \"id\": 24,\n            \"name\": \"PUNJAB\",\n            \"code\": \"PUNJAB\",\n            \"counts\": {\n                \"cities\": 23,\n                \"areas\": 4090,\n                \"pincodes\": 531\n            }\n        },\n        {\n            \"id\": 29,\n            \"name\": \"RAJASTHAN\",\n            \"code\": \"RAJASTHAN\",\n            \"counts\": {\n                \"cities\": 33,\n                \"areas\": 10558,\n                \"pincodes\": 1017\n            }\n        },\n        {\n            \"id\": 36,\n            \"name\": \"SIKKIM\",\n            \"code\": \"SIKKIM\",\n            \"counts\": {\n                \"cities\": 6,\n                \"areas\": 295,\n                \"pincodes\": 19\n            }\n        },\n        {\n            \"id\": 30,\n            \"name\": \"TAMIL NADU\",\n            \"code\": \"TAMILNADU\",\n            \"counts\": {\n                \"cities\": 38,\n                \"areas\": 12864,\n                \"pincodes\": 2039\n            }\n        },\n        {\n            \"id\": 4,\n            \"name\": \"TELANGANA\",\n            \"code\": \"TELANGANA\",\n            \"counts\": {\n                \"cities\": 33,\n                \"areas\": 6764,\n                \"pincodes\": 684\n            }\n        },\n        {\n            \"id\": 13,\n            \"name\": \"THE DADRA AND NAGAR HAVELI AND DAMAN AND DIU\",\n            \"code\": \"THEDADRAAN\",\n            \"counts\": {\n                \"cities\": 3,\n                \"areas\": 70,\n                \"pincodes\": 6\n            }\n        },\n        {\n            \"id\": 23,\n            \"name\": \"TRIPURA\",\n            \"code\": \"TRIPURA\",\n            \"counts\": {\n                \"cities\": 8,\n                \"areas\": 760,\n                \"pincodes\": 79\n            }\n        },\n        {\n            \"id\": 3,\n            \"name\": \"UTTAR PRADESH\",\n            \"code\": \"UTTARPRADE\",\n            \"counts\": {\n                \"cities\": 75,\n                \"areas\": 18923,\n                \"pincodes\": 1666\n            }\n        },\n        {\n            \"id\": 32,\n            \"name\": \"UTTARAKHAND\",\n            \"code\": \"UTTARAKHAN\",\n            \"counts\": {\n                \"cities\": 13,\n                \"areas\": 2903,\n                \"pincodes\": 302\n            }\n        },\n        {\n            \"id\": 34,\n            \"name\": \"WEST BENGAL\",\n            \"code\": \"WESTBENGAL\",\n            \"counts\": {\n                \"cities\": 23,\n                \"areas\": 9658,\n                \"pincodes\": 1131\n            }\n        }\n    ],\n    \"from_cache\": false,\n    \"request_id\": \"req_1753338443705_dumagfu0x\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get cities with comprehensive filtering",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/cities",
+              "host": ["{{BASE_URL}}"],
+              "path": ["cities"],
+              "query": [
+                {
+                  "key": "stateIds",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "states",
+                  "value": "West Bengal",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "Testing",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "Name",
+                  "disabled": true
+                },
+                {
+                  "key": "searchMode",
+                  "value": "exact",
+                  "disabled": true
+                },
+                {
+                  "key": "isMetro",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "minPopulation",
+                  "value": "10000",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPopulation",
+                  "value": "111000",
+                  "disabled": true
+                },
+                {
+                  "key": "latitude",
+                  "value": "90",
+                  "disabled": true
+                },
+                {
+                  "key": "longitude",
+                  "value": "100",
+                  "disabled": true
+                },
+                {
+                  "key": "radius",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1000",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc",
+                  "disabled": true
+                },
+                {
+                  "key": "includeAreaCount",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "includeState",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "includeCoordinates",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "includeMetadata",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "fields",
+                  "value": "id,name,stateName",
+                  "disabled": true
+                },
+                {
+                  "key": "forceRefresh",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get areas with comprehensive filtering",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/areas",
+              "host": ["{{BASE_URL}}"],
+              "path": ["areas"],
+              "query": [
+                {
+                  "key": "cityIds",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "stateIds",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "states",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "searchMode",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "zone",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "minPincodeCount",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "maxPincodeCount",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "latitude",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "longitude",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "radius",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includePincodeCount",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeCity",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeState",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeCoordinates",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeMetadata",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includePincodes",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "fields",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "forceRefresh",
+                  "value": null,
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Advanced pincode search with filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/pincodes/search",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pincodes", "search"],
+              "query": [
+                {
+                  "key": "pincode",
+                  "value": "110001",
+                  "disabled": true
+                },
+                {
+                  "key": "city",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "state",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "district",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "latitude",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "longitude",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "radius",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "searchMode",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeHierarchy",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeCoordinates",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "includeMetadata",
+                  "value": null,
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get specific pincode details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/pincodes/110001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pincodes", "110001"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get geographical hierarchy for pincode",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/pincodes/110001/hierarchy",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pincodes", "110001", "hierarchy"]
+            }
+          },
+          "response": []
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [""]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [""]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Zone Management",
+      "item": [
+        {
+          "name": "Get all zones (main system access)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/zones",
+              "host": ["{{BASE_URL}}"],
+              "path": ["zones"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create new zone",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mumbai Central Zone\",\n  \"description\": \"Central Mumbai business district\",\n  \"partnerId\": \"partner_001\",\n  \"status\": true,\n  \"geographical\": {\n    \"states\": [1],\n    \"cities\": [1, 2],\n    \"areas\": [101, 102],\n    \"pincodes\": [400001, 400002, 400003]\n  },\n  \"services\": [\n    {\n      \"serviceTypeId\": 1,\n      \"isAvailable\": true,\n      \"baseCharge\": 60.0,\n      \"customCharges\": {\n        \"expressDelivery\": 25.0,\n        \"codCharge\": 15.0\n      },\n      \"additionalInfo\": {\n        \"cutoffTime\": \"18:00\",\n        \"deliveryWindow\": \"24-48 hours\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/zones",
+              "host": ["{{BASE_URL}}"],
+              "path": ["zones"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Service Type Management",
+      "item": [
+        {
+          "name": "Get all service types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/service-types",
+              "host": ["{{BASE_URL}}"],
+              "path": ["service-types"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create new service type",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"EXPRESS\",\n  \"displayName\": \"Express Delivery\",\n  \"description\": \"Express delivery service\",\n  \"category\": \"LOGISTICS\",\n  \"isChargeable\": true,\n  \"defaultCharge\": 50.0,\n  \"configuration\": {\n    \"requiresApproval\": false,\n    \"chargeCalculationMethod\": \"FIXED\",\n    \"maxWeight\": 10000,\n    \"deliveryTimeHours\": 24\n  },\n  \"status\": \"ACTIVE\",\n  \"sortOrder\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/service-types",
+              "host": ["{{BASE_URL}}"],
+              "path": ["service-types"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Package Management",
+      "item": [
+        {
+          "name": "Get package charges with filtering",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/packages/charges",
+              "host": ["{{BASE_URL}}"],
+              "path": ["packages", "charges"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create new package charge configuration",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packageName\": \"Express Package\",\n  \"baseWeight\": 2.0,\n  \"baseCharge\": 75.0,\n  \"addonWeight\": 0.5,\n  \"addonCharge\": 20.0,\n  \"fromZoneId\": 1,\n  \"toZoneId\": 1,\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/packages/charges?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["packages", "charges"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create multiple package charges",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packages\": [\n    {\n      \"packageName\": \"Standard Package\",\n      \"baseWeight\": 1.0,\n      \"baseCharge\": 50.0,\n      \"addonWeight\": 0.5,\n      \"addonCharge\": 15.0,\n      \"status\": true\n    },\n    {\n      \"packageName\": \"Express Package\",\n      \"baseWeight\": 2.0,\n      \"baseCharge\": 75.0,\n      \"addonWeight\": 0.5,\n      \"addonCharge\": 20.0,\n      \"fromZoneId\": 1,\n      \"toZoneId\": 15,\n      \"status\": true\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/packages/charges/bulk?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["packages", "charges", "bulk"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customer Charge Management",
+      "item": [
+        {
+          "name": "Get customer charge configurations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/customer-charges",
+              "host": ["{{BASE_URL}}"],
+              "path": ["customer-charges"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create new customer charge configuration",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"customer_123\",\n  \"type\": \"fsc\",\n  \"chargeType\": \"percentage\",\n  \"value\": 3.5,\n  \"minKg\": 10,\n  \"maxKg\": 15.0,\n  \"otherChargeType\": \"handling\",\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/customer-charges?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["customer-charges"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create multiple customer charges",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"charges\": [\n    {\n      \"type\": \"fsc\",\n      \"chargeType\": \"percentage\", \n      \"value\": 3.5,\n      \"minKg\": 0.5,\n      \"maxKg\": 10.0\n    },\n    {\n      \"customerId\": \"customer_123\",\n      \"type\": \"cod\", \n      \"chargeType\": \"flat\",\n      \"value\": 25.0\n    },\n    {\n      \"type\": \"insurance\",\n      \"chargeType\": \"percentage\",\n      \"value\": 0.5, \n      \"minKg\": 0.1,\n      \"maxKg\": 50.0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/customer-charges/bulk?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["customer-charges", "bulk"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Discount Management",
+      "item": [
+        {
+          "name": "Get discount configurations with filtering",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/discounts",
+              "host": ["{{BASE_URL}}"],
+              "path": ["discounts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create new discount configuration",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromWeight\": 1.0,\n  \"toWeight\": 10.0,\n  \"discountType\": \"percentage\",\n  \"discountValue\": 15.5,\n  \"description\": \"Bulk shipment discount for 1kg to 10kg - Q4 2025\",\n  \"validFrom\": \"2025-07-17T00:00:00Z\",\n  \"validTo\": \"2025-12-31T23:59:59Z\",\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/discounts?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["discounts"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update existing discount",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountValue\": 20.0,\n  \"description\": \"Updated bulk discount\",\n  \"validFrom\": \"2025-07-24T00:00:00Z\",\n  \"validTo\": \"2025-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/discounts/1?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["discounts", "1"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete discount",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/discounts/1?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["discounts", "1"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create multiple discounts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discounts\": [\n    {\n      \"fromWeight\": 0.5,\n      \"toWeight\": 2.0,\n      \"discountType\": \"percentage\",\n      \"discountValue\": 5.0,\n      \"description\": \"Light package discount\"\n    },\n    {\n      \"fromWeight\": 2.0,\n      \"toWeight\": 10.0,\n      \"discountType\": \"percentage\",\n      \"discountValue\": 10.0,\n      \"description\": \"Medium package discount\"\n    },\n    {\n      \"fromWeight\": 10.0,\n      \"toWeight\": 25.0,\n      \"discountType\": \"flat\",\n      \"discountValue\": 150.0,\n      \"description\": \"Heavy package flat discount\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/discounts/bulk?partnerId=partner_001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["discounts", "bulk"],
+              "query": [
+                {
+                  "key": "partnerId",
+                  "value": "partner_001"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Partner Data Retrieval",
+      "item": [
+        {
+          "name": "Get packages for specific partner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partner-packages/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partner-packages", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get charges for specific partner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partner-charges/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partner-charges", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get discounts for specific partner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partner-discounts/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partner-discounts", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get services for specific partner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partner-services/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partner-services", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": []
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [""]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [""]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Charge Calculation",
+      "item": [
+        {
+          "name": "Comprehensive charge calculation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weight\": 2.5,\n  \"fromZoneId\": 1,\n  \"toZoneId\": 2,\n  \"shipmentType\": \"B2C\",\n  \"paymentType\": \"COD\",\n  \"shipmentValue\": 3500,\n  \"serviceRequirements\": [\"delivery\", \"cod\"],\n  \"applyDiscounts\": true,\n  \"includeGST\": true,\n  \"customerId\": \"customer_123\",\n  \"distance\": 1400\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/surcharge-calculation/{{PARTNER_ID}}/calculate",
+              "host": ["{{BASE_URL}}"],
+              "path": ["surcharge-calculation", "{{PARTNER_ID}}", "calculate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Shipment charge calculation (service level)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partnerId\": \"partner_001\",\n  \"pickupPincode\": \"110001\", \n  \"deliveryPincode\": \"400001\",\n  \"weight\": 2500,\n  \"shipmentType\": \"B2B\",\n  \"paymentType\": \"COD\", \n  \"declaredValue\": 3500,\n  \"serviceRequirements\": [\"PICKUP\", \"DELIVERY\", \"COD\"],\n  \"customerType\": \"RETAIL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/shipments/calculate-charges",
+              "host": ["{{BASE_URL}}"],
+              "path": ["shipments", "calculate-charges"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Partner Data",
+      "item": [
+        {
+          "name": "Get partner zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partner-zones/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partner-zones", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get complete partner data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/partners/comprehensive-data/{{PARTNER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partners", "comprehensive-data", "{{PARTNER_ID}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "SUCCESS",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/partners/comprehensive-data",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["partners", "comprehensive-data"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "X-API-Version",
+                  "value": "v1.0.0"
+                },
+                {
+                  "key": "X-Microservice",
+                  "value": "partner-services"
+                },
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com;script-src 'self';img-src 'self' data: https:;connect-src 'self';object-src 'none';media-src 'self';frame-src 'none';child-src 'none';worker-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none'"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "strict-origin-when-cross-origin"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin, Accept-Encoding"
+                },
+                {
+                  "key": "Access-Control-Allow-Credentials",
+                  "value": "true"
+                },
+                {
+                  "key": "Access-Control-Expose-Headers",
+                  "value": "X-Request-ID,X-Response-Time,X-Rate-Limit-Remaining,X-Performance-Class"
+                },
+                {
+                  "key": "x-request-id",
+                  "value": "affa93a8-5e4f-4483-a478-3d280394a425"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "50"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "49"
+                },
+                {
+                  "key": "X-RateLimit-Reset",
+                  "value": "1753341803"
+                },
+                {
+                  "key": "X-RateLimit-Window",
+                  "value": "60"
+                },
+                {
+                  "key": "X-RateLimit-Tier",
+                  "value": "tier4"
+                },
+                {
+                  "key": "X-RateLimit-Priority",
+                  "value": "low"
+                },
+                {
+                  "key": "X-RateLimit-Burst-Limit",
+                  "value": "10"
+                },
+                {
+                  "key": "X-RateLimit-Burst-Remaining",
+                  "value": "9"
+                },
+                {
+                  "key": "X-RateLimit-Burst-Reset",
+                  "value": "1753341753"
+                },
+                {
+                  "key": "X-RateLimit-Daily-Limit",
+                  "value": "5000"
+                },
+                {
+                  "key": "X-RateLimit-Daily-Remaining",
+                  "value": "4931"
+                },
+                {
+                  "key": "X-RateLimit-Daily-Reset",
+                  "value": "1753428143"
+                },
+                {
+                  "key": "X-RateLimit-Partner-Type",
+                  "value": "standard"
+                },
+                {
+                  "key": "X-RateLimit-Override",
+                  "value": "false"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"184e-B0npYCUjXLXzYRhLEGn1SvyqTls\""
+                },
+                {
+                  "key": "X-Response-Time",
+                  "value": "141.484ms"
+                },
+                {
+                  "key": "Content-Encoding",
+                  "value": "br"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 24 Jul 2025 07:22:22 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                },
+                {
+                  "key": "Transfer-Encoding",
+                  "value": "chunked"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"data\": {\n        \"zones\": {\n            \"success\": true,\n            \"total\": 2,\n            \"zones\": [\n                {\n                    \"id\": 1,\n                    \"name\": \"Delhi NCR Zone\",\n                    \"description\": \"Covers Delhi and surrounding areas\",\n                    \"status\": true,\n                    \"serviceTypes\": [\n                        {\n                            \"id\": 1,\n                            \"name\": \"PICKUP\",\n                            \"displayName\": \"Pickup Service\",\n                            \"category\": \"LOGISTICS\",\n                            \"isAvailable\": true,\n                            \"baseCharge\": \"0\",\n                            \"additionalInfo\": null\n                        },\n                        {\n                            \"id\": 2,\n                            \"name\": \"DELIVERY\",\n                            \"displayName\": \"Delivery Service\",\n                            \"category\": \"LOGISTICS\",\n                            \"isAvailable\": true,\n                            \"baseCharge\": \"0\",\n                            \"additionalInfo\": null\n                        },\n                        {\n                            \"id\": 3,\n                            \"name\": \"COD\",\n                            \"displayName\": \"Cash on Delivery\",\n                            \"category\": \"PAYMENT\",\n                            \"isAvailable\": true,\n                            \"baseCharge\": \"0\",\n                            \"additionalInfo\": null\n                        },\n                        {\n                            \"id\": 4,\n                            \"name\": \"PREPAID\",\n                            \"displayName\": \"Prepaid Service\",\n                            \"category\": \"PAYMENT\",\n                            \"isAvailable\": true,\n                            \"baseCharge\": \"0\",\n                            \"additionalInfo\": null\n                        }\n                    ],\n                    \"coverage\": {\n                        \"states\": 0,\n                        \"cities\": 0,\n                        \"areas\": 0,\n                        \"pincodes\": 2\n                    },\n                    \"createdAt\": \"2025-07-19T15:44:11.524Z\",\n                    \"updatedAt\": \"2025-07-19T15:44:11.524Z\"\n                },\n                {\n                    \"id\": 15,\n                    \"name\": \"Mumbai Central Zone\",\n                    \"description\": \"Central Mumbai business district\",\n                    \"status\": true,\n                    \"serviceTypes\": [\n                        {\n                            \"id\": 1,\n                            \"name\": \"PICKUP\",\n                            \"displayName\": \"Pickup Service\",\n                            \"category\": \"LOGISTICS\",\n                            \"isAvailable\": true,\n                            \"baseCharge\": \"60\",\n                            \"additionalInfo\": {\n                                \"customCharges\": {}\n                            }\n                        }\n                    ],\n                    \"coverage\": {\n                        \"states\": 1,\n                        \"cities\": 2,\n                        \"areas\": 2,\n                        \"pincodes\": 3\n                    },\n                    \"createdAt\": \"2025-07-24T06:32:53.949Z\",\n                    \"updatedAt\": \"2025-07-24T06:32:53.949Z\"\n                }\n            ],\n            \"serviceSummary\": {\n                \"totalServices\": 5,\n                \"serviceDistribution\": {\n                    \"1\": 2,\n                    \"2\": 1,\n                    \"3\": 1,\n                    \"4\": 1\n                },\n                \"uniqueServices\": 4\n            },\n            \"statistics\": {\n                \"totalZones\": 2,\n                \"activeZones\": 2,\n                \"inactiveZones\": 0,\n                \"totalServices\": 5,\n                \"averageServicesPerZone\": 2.5\n            }\n        },\n        \"packages\": {\n            \"success\": true,\n            \"packageCharges\": {\n                \"total\": 0,\n                \"items\": []\n            },\n            \"packageWeightCharges\": {\n                \"total\": 0,\n                \"items\": []\n            },\n            \"zoneCoverage\": {\n                \"totalZones\": 2,\n                \"coverageStatistics\": {\n                    \"totalRoutes\": 4,\n                    \"coveredRoutes\": 0,\n                    \"uncoveredRoutes\": 4,\n                    \"coveragePercentage\": 0\n                }\n            },\n            \"statistics\": {\n                \"totalPackageConfigurations\": 0,\n                \"packageCharges\": 0,\n                \"packageWeightCharges\": 0,\n                \"activeConfigurations\": 0\n            }\n        },\n        \"services\": {\n            \"success\": true,\n            \"serviceTypes\": {\n                \"total\": 7,\n                \"items\": [\n                    {\n                        \"id\": 1,\n                        \"name\": \"PICKUP\",\n                        \"displayName\": \"Pickup Service\",\n                        \"description\": \"Package pickup from customer location\",\n                        \"category\": \"LOGISTICS\",\n                        \"isChargeable\": false,\n                        \"defaultCharge\": null,\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"requiresApproval\": false,\n                            \"applicableRegions\": [\n                                \"ALL\"\n                            ],\n                            \"autoAssignToZones\": true\n                        }\n                    },\n                    {\n                        \"id\": 2,\n                        \"name\": \"DELIVERY\",\n                        \"displayName\": \"Delivery Service\",\n                        \"description\": \"Package delivery to destination\",\n                        \"category\": \"LOGISTICS\",\n                        \"isChargeable\": false,\n                        \"defaultCharge\": null,\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"requiresApproval\": false,\n                            \"applicableRegions\": [\n                                \"ALL\"\n                            ],\n                            \"autoAssignToZones\": true\n                        }\n                    },\n                    {\n                        \"id\": 3,\n                        \"name\": \"COD\",\n                        \"displayName\": \"Cash on Delivery\",\n                        \"description\": \"Cash collection on delivery\",\n                        \"category\": \"PAYMENT\",\n                        \"isChargeable\": true,\n                        \"defaultCharge\": \"25\",\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"maximumCharge\": 100,\n                            \"minimumCharge\": 10,\n                            \"requiresApproval\": false,\n                            \"applicableRegions\": [\n                                \"DOMESTIC\"\n                            ],\n                            \"autoAssignToZones\": false,\n                            \"chargeCalculationMethod\": \"PERCENTAGE\"\n                        }\n                    },\n                    {\n                        \"id\": 4,\n                        \"name\": \"PREPAID\",\n                        \"displayName\": \"Prepaid Service\",\n                        \"description\": \"Prepaid shipment processing\",\n                        \"category\": \"PAYMENT\",\n                        \"isChargeable\": false,\n                        \"defaultCharge\": null,\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"requiresApproval\": false,\n                            \"applicableRegions\": [\n                                \"ALL\"\n                            ],\n                            \"autoAssignToZones\": true\n                        }\n                    },\n                    {\n                        \"id\": 5,\n                        \"name\": \"ODA\",\n                        \"displayName\": \"Out of Delivery Area\",\n                        \"description\": \"Additional service for remote locations\",\n                        \"category\": \"LOCATION\",\n                        \"isChargeable\": true,\n                        \"defaultCharge\": \"50\",\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"maximumCharge\": 200,\n                            \"minimumCharge\": 25,\n                            \"requiresApproval\": true,\n                            \"applicableRegions\": [\n                                \"REMOTE\"\n                            ],\n                            \"autoAssignToZones\": false,\n                            \"chargeCalculationMethod\": \"FIXED\"\n                        }\n                    },\n                    {\n                        \"id\": 6,\n                        \"name\": \"HILLS\",\n                        \"displayName\": \"Hill Station Delivery\",\n                        \"description\": \"Special handling for hill station deliveries\",\n                        \"category\": \"SPECIAL\",\n                        \"isChargeable\": true,\n                        \"defaultCharge\": \"75\",\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"restrictions\": {\n                                \"maxWeight\": 10,\n                                \"prohibitedItems\": [\n                                    \"FRAGILE\",\n                                    \"LIQUID\"\n                                ]\n                            },\n                            \"maximumCharge\": 150,\n                            \"minimumCharge\": 50,\n                            \"requiresApproval\": true,\n                            \"applicableRegions\": [\n                                \"HILLS\"\n                            ],\n                            \"autoAssignToZones\": false,\n                            \"chargeCalculationMethod\": \"FIXED\"\n                        }\n                    },\n                    {\n                        \"id\": 7,\n                        \"name\": \"EXPRESS\",\n                        \"displayName\": \"Express Delivery\",\n                        \"description\": \"Express delivery service\",\n                        \"category\": \"LOGISTICS\",\n                        \"isChargeable\": true,\n                        \"defaultCharge\": \"50\",\n                        \"status\": \"ACTIVE\",\n                        \"configuration\": {\n                            \"requiresApproval\": false,\n                            \"chargeCalculationMethod\": \"FIXED\"\n                        }\n                    }\n                ]\n            },\n            \"availability\": {\n                \"services\": [\n                    {\n                        \"serviceType\": {\n                            \"id\": 1,\n                            \"name\": \"PICKUP\",\n                            \"displayName\": \"Pickup Service\",\n                            \"category\": \"LOGISTICS\"\n                        },\n                        \"zones\": [\n                            {\n                                \"id\": 1,\n                                \"name\": \"Delhi NCR Zone\"\n                            },\n                            {\n                                \"id\": 15,\n                                \"name\": \"Mumbai Central Zone\"\n                            }\n                        ],\n                        \"totalZones\": 2\n                    },\n                    {\n                        \"serviceType\": {\n                            \"id\": 2,\n                            \"name\": \"DELIVERY\",\n                            \"displayName\": \"Delivery Service\",\n                            \"category\": \"LOGISTICS\"\n                        },\n                        \"zones\": [\n                            {\n                                \"id\": 1,\n                                \"name\": \"Delhi NCR Zone\"\n                            }\n                        ],\n                        \"totalZones\": 1\n                    },\n                    {\n                        \"serviceType\": {\n                            \"id\": 3,\n                            \"name\": \"COD\",\n                            \"displayName\": \"Cash on Delivery\",\n                            \"category\": \"PAYMENT\"\n                        },\n                        \"zones\": [\n                            {\n                                \"id\": 1,\n                                \"name\": \"Delhi NCR Zone\"\n                            }\n                        ],\n                        \"totalZones\": 1\n                    },\n                    {\n                        \"serviceType\": {\n                            \"id\": 4,\n                            \"name\": \"PREPAID\",\n                            \"displayName\": \"Prepaid Service\",\n                            \"category\": \"PAYMENT\"\n                        },\n                        \"zones\": [\n                            {\n                                \"id\": 1,\n                                \"name\": \"Delhi NCR Zone\"\n                            }\n                        ],\n                        \"totalZones\": 1\n                    }\n                ],\n                \"totalAvailabilityRecords\": 5\n            },\n            \"statistics\": {\n                \"totalServiceTypes\": 7,\n                \"chargeableServices\": 4,\n                \"logisticsServices\": 3,\n                \"paymentServices\": 2,\n                \"locationServices\": 1,\n                \"specialServices\": 1\n            }\n        },\n        \"charges\": {\n            \"success\": true,\n            \"customerCharges\": {\n                \"total\": 0,\n                \"items\": []\n            },\n            \"distanceCharges\": {\n                \"total\": 0,\n                \"items\": []\n            },\n            \"statistics\": {\n                \"totalChargeConfigurations\": 0,\n                \"customerChargeTypes\": [],\n                \"distanceChargeTypes\": [],\n                \"activeChargeConfigurations\": 0,\n                \"chargeServiceHealth\": {\n                    \"customerChargesSuccess\": true,\n                    \"distanceChargesSuccess\": false\n                }\n            }\n        },\n        \"discounts\": {\n            \"success\": true,\n            \"discounts\": {\n                \"total\": 0,\n                \"items\": []\n            },\n            \"statistics\": {\n                \"totalDiscounts\": 0,\n                \"discountTypes\": [],\n                \"activeDiscounts\": 0,\n                \"flatDiscounts\": 0,\n                \"percentageDiscounts\": 0\n            }\n        }\n    },\n    \"metadata\": {\n        \"requestId\": \"comp_1753341742048_5svsvkuav\",\n        \"format\": \"standard\",\n        \"modulesIncluded\": [\n            \"zones\",\n            \"packages\",\n            \"services\",\n            \"charges\",\n            \"discounts\"\n        ],\n        \"includeInactive\": false,\n        \"dataFreshness\": \"2025-07-24T07:22:22.171Z\",\n        \"aggregationEngine\": \"comprehensive-v1.0\",\n        \"executionTime\": 123\n    },\n    \"summary\": {\n        \"dataModules\": [\n            \"zones\",\n            \"packages\",\n            \"services\",\n            \"charges\",\n            \"discounts\"\n        ],\n        \"totalRecords\": 2,\n        \"hasErrors\": false,\n        \"errors\": []\n    },\n    \"partnerInfo\": {\n        \"id\": \"partner_001\",\n        \"name\": \"Partner partner_001\",\n        \"status\": \"active\",\n        \"email\": null,\n        \"createdAt\": \"2025-07-24T07:22:22.053Z\"\n    },\n    \"execution_time_ms\": 125,\n    \"from_cache\": false,\n    \"request_id\": \"comp_1753341742047_eoygb2vg0\",\n    \"timestamp\": \"2025-07-24T07:22:22.172Z\"\n}"
+            }
+          ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [
+              "// /* eslint-disable no-undef */",
+              "// /**",
+              "//  * 🔐 POSTMAN PARTNER AUTHENTICATION SCRIPT - FIXED VERSION",
+              "//  * ",
+              "//  * Use this script for ALL Partner-level API endpoints that require partner authentication.",
+              "//  * ",
+              "//  * SETUP:",
+              "//  * 1. Copy this script into your Postman request's \"Pre-request Script\" tab",
+              "//  * 2. Set these environment variables in Postman:",
+              "//  *    - HMAC_SECRET: hmac_super_secret_key_2024_partner_services",
+              "//  *    - API_SECRET_SALT: api_secret_salt_2024_partner_services",
+              "//  *    - PARTNER_ID: partner_001 (or your actual partner ID)",
+              "//  *    - BASE_URL: http://localhost:3000/api/v1",
+              "//  * ",
+              "//  * AUTHENTICATION: HMAC SHA-256 with partner-specific secret generation",
+              "//  */",
+              "",
+              "// // Get environment variables",
+              "// const HMAC_SECRET = pm.environment.get(\"HMAC_SECRET\") || pm.variables.get(\"HMAC_SECRET\");",
+              "// const API_SECRET_SALT = pm.environment.get(\"API_SECRET_SALT\") || pm.variables.get(\"API_SECRET_SALT\");",
+              "// const PARTNER_ID = pm.environment.get(\"PARTNER_ID\") || pm.variables.get(\"PARTNER_ID\");",
+              "",
+              "// // Validation",
+              "// if (!HMAC_SECRET) {",
+              "//     throw new Error(\"❌ HMAC_SECRET environment variable is required\");",
+              "// }",
+              "// if (!API_SECRET_SALT) {",
+              "//     throw new Error(\"❌ API_SECRET_SALT environment variable is required\");",
+              "// }",
+              "// if (!PARTNER_ID) {",
+              "//     throw new Error(\"❌ PARTNER_ID environment variable is required\");",
+              "// }",
+              "",
+              "// console.log(\"🔐 Generating Partner HMAC Authentication...\");",
+              "// console.log(\"Partner ID:\", PARTNER_ID);",
+              "",
+              "// /**",
+              "//  * Generate partner-specific secret key",
+              "//  */",
+              "// function generatePartnerSecret(partnerId) {",
+              "//     const data = `partner:${partnerId}:${API_SECRET_SALT}`;",
+              "//     return CryptoJS.HmacSHA256(data, HMAC_SECRET).toString(CryptoJS.enc.Hex);",
+              "// }",
+              "",
+              "// /**",
+              "//  * Generate HMAC signature for the request",
+              "//  */",
+              "// function generateSignature(secret, method, url, timestamp, body) {",
+              "//     const message = `${method}${url}${timestamp}${body}`;",
+              "//     return CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex);",
+              "// }",
+              "",
+              "// // Get request details",
+              "// const method = pm.request.method;",
+              "",
+              "// // FIXED: Better URL construction that resolves variables properly",
+              "// let url = pm.request.url.toString();",
+              "",
+              "// // If the URL contains variables, resolve them manually",
+              "// if (url.includes('{{')) {",
+              "//     // Replace common variables",
+              "//     url = url.replace(/\\{\\{BASE_URL\\}\\}/g, pm.environment.get(\"BASE_URL\") || pm.variables.get(\"BASE_URL\") || \"http://localhost:3000/api/v1\");",
+              "//     url = url.replace(/\\{\\{PARTNER_ID\\}\\}/g, PARTNER_ID);",
+              "    ",
+              "//     // Extract just the path part for signature generation",
+              "//     try {",
+              "//         const urlObj = new URL(url);",
+              "//         url = urlObj.pathname;",
+              "//         if (urlObj.search) {",
+              "//             url += urlObj.search;",
+              "//         }",
+              "//     } catch (e) {",
+              "//         // If URL parsing fails, try to extract path manually",
+              "//         const pathMatch = url.match(/\\/api\\/v1\\/[^?]*/);",
+              "//         if (pathMatch) {",
+              "//             url = pathMatch[0];",
+              "//             // Add query string if present",
+              "//             const queryMatch = url.match(/\\?.*$/);",
+              "//             if (queryMatch) {",
+              "//                 url += queryMatch[0];",
+              "//             }",
+              "//         }",
+              "//         console.error(\"❌ Failed to parse path from URL:\", e);",
+              "//     }",
+              "// } else {",
+              "//     // Handle cases where URL is already resolved",
+              "//     url = pm.request.url.getPath();",
+              "    ",
+              "//     // Ensure it starts with /api/v1/",
+              "//     if (!url.startsWith('/api/v1/')) {",
+              "//         url = '/api/v1' + url;",
+              "//     }",
+              "    ",
+              "//     // Add query parameters if present",
+              "//     if (pm.request.url.query && pm.request.url.query.count() > 0) {",
+              "//         const queryString = pm.request.url.getQueryString();",
+              "//         if (queryString) {",
+              "//             url += '?' + queryString;",
+              "//         }",
+              "//     }",
+              "// }",
+              "",
+              "// const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "",
+              "// // Get request body",
+              "// let requestBody = '';",
+              "// if (pm.request.body && pm.request.body.mode === 'raw') {",
+              "//     const rawBody = pm.request.body.raw;",
+              "//     if (rawBody && rawBody.trim() !== '') {",
+              "//         try {",
+              "//             // Ensure consistent JSON formatting",
+              "//             const parsed = JSON.parse(rawBody);",
+              "//             requestBody = JSON.stringify(parsed);",
+              "//         } catch {",
+              "//             requestBody = rawBody;",
+              "//         }",
+              "//     }",
+              "// }",
+              "",
+              "// // Generate authentication",
+              "// const partnerSecret = generatePartnerSecret(PARTNER_ID);",
+              "// const signature = generateSignature(partnerSecret, method, url, timestamp, requestBody);",
+              "",
+              "// // Remove existing auth headers",
+              "// pm.request.headers.remove('x-partner-id');",
+              "// pm.request.headers.remove('x-timestamp');",
+              "// pm.request.headers.remove('x-signature');",
+              "",
+              "// // Add authentication headers",
+              "// pm.request.headers.add({",
+              "//     key: 'x-partner-id',",
+              "//     value: PARTNER_ID",
+              "// });",
+              "// pm.request.headers.add({",
+              "//     key: 'x-timestamp',",
+              "//     value: timestamp",
+              "// });",
+              "// pm.request.headers.add({",
+              "//     key: 'x-signature',",
+              "//     value: signature",
+              "// });",
+              "",
+              "// console.log(\"✅ Partner authentication headers added\");",
+              "// console.log(\"Method:\", method);",
+              "// console.log(\"URL for signing:\", url);",
+              "// console.log(\"Headers: x-partner-id, x-timestamp, x-signature\");",
+              "// console.log(\"Partner Secret (first 16 chars):\", partnerSecret.substring(0, 16) + \"...\");",
+              "// console.log(\"Signature (first 16 chars):\", signature.substring(0, 16) + \"...\");",
+              "",
+              "// // Debug info for troubleshooting",
+              "// pm.environment.set(\"debug_partner_method\", method);",
+              "// pm.environment.set(\"debug_partner_url\", url);",
+              "// pm.environment.set(\"debug_partner_timestamp\", timestamp);",
+              "// pm.environment.set(\"debug_partner_signature\", signature.substring(0, 16) + \"...\"); "
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "exec": [""]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Partner Availability & Assignment",
+      "item": [
+        {
+          "name": "Check partner availability",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupPincode\": \"110001\",\n  \"deliveryPincode\": \"400001\",\n  \"weight\": 2500,\n  \"shipmentType\": \"B2C\",\n  \"paymentType\": \"COD\",\n  \"serviceRequirements\": [\"PICKUP\", \"DELIVERY\", \"COD\"],\n  \"urgency\": \"standard\",\n  \"declaredValue\": 3500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/partners/availability/check",
+              "host": ["{{BASE_URL}}"],
+              "path": ["partners", "availability", "check"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign shipment to partner",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipmentDetails\": {\n    \"shipmentId\": \"SH_1721123456789\",\n    \"fromPincode\": \"110001\",\n    \"toPincode\": \"400001\",\n    \"weight\": 2500,\n    \"declaredValue\": 3500,\n    \"shipmentType\": \"B2C\",\n    \"paymentType\": \"COD\",\n    \"serviceTypes\": [\"PICKUP\", \"DELIVERY\", \"EXPRESS\", \"COD\"],\n    \"urgency\": \"EXPRESS\"\n  },\n  \"assignmentPreferences\": {\n    \"assignmentStrategy\": \"BEST_MATCH\"\n  },\n  \"options\": {\n    \"includePartnerDetails\": true,\n    \"includeCostEstimate\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/shipment-assignment/assign",
+              "host": ["{{BASE_URL}}"],
+              "path": ["shipment-assignment", "assign"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "exec": [
+          "/* eslint-disable no-undef */",
+          "/**",
+          " * 🔧 POSTMAN SERVICE AUTHENTICATION SCRIPT - WORKING VERSION",
+          " * ",
+          " * Use this script for ALL Service-level API endpoints that require service authentication.",
+          " * ",
+          " * SETUP:",
+          " * 1. Copy this script into your Postman request's \"Pre-request Script\" tab",
+          " * 2. Set environment variables in Postman:",
+          " *    - HMAC_SECRET: hmac_super_secret_key_2024_partner_services",
+          " *    - API_SECRET_SALT: api_secret_salt_2024_partner_services",
+          " *    - SERVICE_ID: TESTING_1 (or your actual service ID)",
+          " *    - BASE_URL: http://localhost:3000/api/v1",
+          " * ",
+          " * AUTHENTICATION: HMAC SHA-256 with service-specific secret generation",
+          " */",
+          "",
+          "// Environment variables from Postman",
+          "const HMAC_SECRET = pm.environment.get(\"HMAC_SECRET\") || pm.variables.get(\"HMAC_SECRET\");",
+          "const API_SECRET_SALT = pm.environment.get(\"API_SECRET_SALT\") || pm.variables.get(\"API_SECRET_SALT\");",
+          "const SERVICE_ID = pm.environment.get(\"SERVICE_ID\") || pm.variables.get(\"SERVICE_ID\");",
+          "",
+          "// Validation",
+          "if (!HMAC_SECRET) {",
+          "    throw new Error(\"HMAC_SECRET environment variable is required\");",
+          "}",
+          "if (!API_SECRET_SALT) {",
+          "    throw new Error(\"API_SECRET_SALT environment variable is required\");",
+          "}",
+          "if (!SERVICE_ID) {",
+          "    throw new Error(\"SERVICE_ID environment variable is required\");",
+          "}",
+          "",
+          "console.log(\"🔐 Generating Service HMAC Authentication Headers...\");",
+          "console.log(\"Service ID:\", SERVICE_ID);",
+          "",
+          "/**",
+          " * Generate service-specific secret (matching middleware implementation)",
+          " */",
+          "function generateServiceSecret(serviceId) {",
+          "    const data = `${serviceId}:${API_SECRET_SALT}`;",
+          "    console.log(\"Secret generation data:\", data);",
+          "    const secret = CryptoJS.HmacSHA256(data, HMAC_SECRET).toString(CryptoJS.enc.Hex);",
+          "    console.log(\"Generated service secret:\", secret);",
+          "    return secret;",
+          "}",
+          "",
+          "/**",
+          " * Generate HMAC signature for request",
+          " */",
+          "function generateSignature(secret, method, url, timestamp, requestBody) {",
+          "    const message = `${method}${url}${timestamp}${requestBody}`;",
+          "    console.log(\"Signature message:\", `\"${message}\"`);",
+          "    const signature = CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex);",
+          "    console.log(\"Generated signature:\", signature);",
+          "    return signature;",
+          "}",
+          "",
+          "// Get request details",
+          "const method = pm.request.method;",
+          "",
+          "// Extract URL path properly",
+          "let fullUrl = pm.request.url.toString();",
+          "console.log(\"Original full URL:\", fullUrl);",
+          "",
+          "// Resolve {{baseUrl}} and other variables if present",
+          "if (fullUrl.includes(\"{{\")) {",
+          "    fullUrl = fullUrl.replace(/{{(\\w+)}}/g, (_, k) => pm.variables.get(k) || \"\");",
+          "    console.log(\"URL after variable resolution:\", fullUrl);",
+          "}",
+          "",
+          "// Extract path from the full URL",
+          "let url = \"/\";",
+          "try {",
+          "    const parsedUrl = new URL(fullUrl);",
+          "    url = parsedUrl.pathname;",
+          "    ",
+          "    // Add query parameters if they exist",
+          "    if (parsedUrl.search) {",
+          "        url += parsedUrl.search;",
+          "    }",
+          "} catch (err) {",
+          "    console.error(\"❌ Failed to parse path from URL:\", err);",
+          "    // Fallback to Postman's getPath method",
+          "    url = pm.request.url.getPath();",
+          "    if (pm.request.url.query && pm.request.url.query.count() > 0) {",
+          "        const queryString = pm.request.url.getQueryString();",
+          "        if (queryString) {",
+          "            url += '?' + queryString;",
+          "        }",
+          "    }",
+          "}",
+          "",
+          "console.log(\"Extracted URL path:\", url);",
+          "",
+          "const timestamp = Math.floor(Date.now() / 1000).toString();",
+          "",
+          "// Get request body (if any)",
+          "let requestBody = '';",
+          "if (pm.request.body && pm.request.body.mode) {",
+          "    if (pm.request.body.mode === 'raw') {",
+          "        const rawBody = pm.request.body.raw;",
+          "        if (rawBody && rawBody.trim() !== '') {",
+          "            try {",
+          "                // Ensure consistent JSON formatting",
+          "                const parsed = JSON.parse(rawBody);",
+          "                requestBody = JSON.stringify(parsed);",
+          "            } catch (error) {",
+          "                // Use raw body if JSON parsing fails",
+          "                requestBody = rawBody;",
+          "                console.log(\"Warning: Could not parse request body as JSON, using raw body\", error);",
+          "            }",
+          "        }",
+          "    }",
+          "}",
+          "",
+          "// Generate authentication components",
+          "const serviceSecret = generateServiceSecret(SERVICE_ID);",
+          "const signature = generateSignature(serviceSecret, method, url, timestamp, requestBody);",
+          "",
+          "// Remove existing auth headers first to avoid duplicates",
+          "pm.request.headers.remove('x-service-id');",
+          "pm.request.headers.remove('x-timestamp');",
+          "pm.request.headers.remove('x-signature');",
+          "",
+          "// Set authentication headers",
+          "pm.request.headers.add({",
+          "    key: 'x-service-id',",
+          "    value: SERVICE_ID",
+          "});",
+          "",
+          "pm.request.headers.add({",
+          "    key: 'x-timestamp', ",
+          "    value: timestamp",
+          "});",
+          "",
+          "pm.request.headers.add({",
+          "    key: 'x-signature',",
+          "    value: signature",
+          "});",
+          "",
+          "// pm.request.headers.add({",
+          "//     key: 'x-partner-id',",
+          "//     value: 'test-123'",
+          "// });",
+          "",
+          "// Debug information",
+          "console.log(\"=== DETAILED DEBUG INFO ===\");",
+          "console.log(\"Method:\", method);",
+          "console.log(\"Full URL:\", fullUrl);",
+          "console.log(\"Extracted Path:\", url);",
+          "console.log(\"Timestamp:\", timestamp);",
+          "console.log(\"Request Body:\", requestBody || '(empty)');",
+          "console.log(\"Service Secret:\", serviceSecret);",
+          "console.log(\"Final Signature:\", signature);",
+          "console.log(\"========================\");",
+          "",
+          "// Validation warnings",
+          "if (url === '/pincodes/search') {",
+          "    console.log(\"🚨 CRITICAL ERROR: URL path is '/pincodes/search'\");",
+          "    console.log(\"This means your Postman URL is probably:\");",
+          "    console.log(\"❌ http://localhost:3000/pincodes/search\");",
+          "    console.log(\"\");",
+          "    console.log(\"Change it to:\");",
+          "    console.log(\"✅ http://localhost:3000/api/v1/pincodes/search\");",
+          "    console.log(\"\");",
+          "    console.log(\"The endpoint /pincodes/search does NOT exist on the server!\");",
+          "    console.log(\"All endpoints are under /api/v1/ prefix.\");",
+          "}",
+          "",
+          "if (!url.startsWith('/api/v1/')) {",
+          "    console.log(\"⚠️ WARNING: URL does not start with /api/v1/\");",
+          "    console.log(\"Current URL path:\", url);",
+          "    console.log(\"Expected URL path should start with: /api/v1/\");",
+          "}",
+          "",
+          "console.log(\"✅ Service HMAC headers generated successfully!\");",
+          "console.log(\"Headers added: x-service-id, x-timestamp, x-signature\");",
+          "",
+          "/**",
+          " * CRITICAL SETUP INSTRUCTIONS:",
+          " * ",
+          " * 1. Postman Environment Variables:",
+          " *    HMAC_SECRET = hmac_super_secret_key_2024_partner_services",
+          " *    API_SECRET_SALT = api_secret_salt_2024_partner_services  ",
+          " *    SERVICE_ID = TESTING_1",
+          " * ",
+          " * 2. Request URL MUST be complete path:",
+          " *    ✅ CORRECT: http://localhost:3000/api/v1/pincodes/search",
+          " *    ❌ WRONG:   http://localhost:3000/pincodes/search",
+          " * ",
+          " * 3. The server does NOT have routes at /pincodes/search",
+          " *    All routes are under /api/v1/ prefix",
+          " */ "
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://calc.websiteduniya.com/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "HMAC_SECRET",
+      "value": "hmac_super_secret_key_2024_partner_services",
+      "type": "string"
+    },
+    {
+      "key": "API_SECRET_SALT",
+      "value": "api_secret_salt_2024_partner_services",
+      "type": "string"
+    },
+    {
+      "key": "SERVICE_ID",
+      "value": "TESTING_1",
+      "type": "string"
+    },
+    {
+      "key": "PARTNER_ID",
+      "value": "partner_001",
+      "type": "string"
+    },
+    {
+      "key": "API_URL",
+      "value": "https://calc.websiteduniya.com",
+      "type": "string"
+    }
+  ]
+}

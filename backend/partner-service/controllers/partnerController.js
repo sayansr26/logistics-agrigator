@@ -1,6 +1,9 @@
 const { prisma } = require("../config/database");
 const { ValidationError, NotFoundError } = require("../shared/lib/errors");
 const APIResponse = require("../shared/lib/response");
+const {
+  getExternalPartnerClient,
+} = require("../services/externalPartnerClient");
 
 /**
  * Get all partners with optional filtering
@@ -242,8 +245,15 @@ async function deletePartner(id, req = {}) {
  * @returns {Promise<Array>} Calculated rates from partners
  */
 async function calculateRates(params) {
-  const { fromPincode, toPincode, weight, serviceType, codAmount, partnerId } =
-    params;
+  const {
+    fromPincode,
+    toPincode,
+    weight,
+    serviceType,
+    codAmount,
+    partnerId,
+    dimensions,
+  } = params;
 
   // Validate required parameters
   if (!fromPincode || !toPincode || !weight) {
@@ -251,6 +261,87 @@ async function calculateRates(params) {
       "fromPincode, toPincode, and weight are required",
     );
   }
+
+  try {
+    // Get external API client
+    const externalClient = getExternalPartnerClient();
+
+    // Prepare parameters for external API
+    const externalParams = {
+      origin: fromPincode,
+      destination: toPincode,
+      weight: parseFloat(weight),
+      dimensions: dimensions || { length: 10, width: 10, height: 10 },
+      serviceType: serviceType || "standard",
+      partnerId: partnerId || "partner_001", // Use requested partner or default
+    };
+
+    // Call external Partner Micro service for real-time rates
+    const externalResponse =
+      await externalClient.calculateRates(externalParams);
+
+    if (
+      externalResponse.success &&
+      externalResponse.data &&
+      externalResponse.data.rates
+    ) {
+      let rates = externalResponse.data.rates;
+
+      // Filter by specific partner if requested
+      if (partnerId) {
+        rates = rates.filter((rate) => rate.partnerId === partnerId);
+      }
+
+      // Add COD charges if applicable
+      if (codAmount) {
+        rates = rates.map((rate) => {
+          if (rate.cod) {
+            // Add 2% COD charge (configurable)
+            const codCharge = codAmount * 0.02;
+            return {
+              ...rate,
+              rate: rate.rate + codCharge,
+              codCharge: codCharge,
+              totalAmount: rate.rate + codCharge,
+            };
+          }
+          return { ...rate, totalAmount: rate.rate };
+        });
+      } else {
+        rates = rates.map((rate) => ({ ...rate, totalAmount: rate.rate }));
+      }
+
+      // Log successful rate calculation
+      console.log("External API rate calculation successful", {
+        fromPincode,
+        toPincode,
+        weight,
+        ratesCount: rates.length,
+      });
+
+      return rates;
+    } else {
+      throw new Error("Invalid response from external Partner Micro service");
+    }
+  } catch (externalError) {
+    console.error(
+      "External API rate calculation failed, falling back to local rates:",
+      externalError.message,
+    );
+
+    // Fallback to local rate calculation if external API fails
+    return await calculateLocalRates(params);
+  }
+}
+
+/**
+ * Fallback local rate calculation (existing logic)
+ * @param {Object} params - Rate calculation parameters
+ * @returns {Promise<Array>} Calculated rates from local database
+ */
+async function calculateLocalRates(params) {
+  const { fromPincode, toPincode, weight, serviceType, codAmount, partnerId } =
+    params;
 
   const where = {
     isActive: true,
@@ -309,12 +400,128 @@ async function calculateRates(params) {
  * @returns {Promise<Array>} Serviceability results
  */
 async function checkServiceability(params) {
-  const { fromPincode, toPincode, partnerId } = params;
+  const { fromPincode, toPincode, partnerId, serviceType } = params;
 
   // Validate required parameters
   if (!fromPincode || !toPincode) {
     throw new ValidationError("fromPincode and toPincode are required");
   }
+
+  try {
+    // Get external API client
+    const externalClient = getExternalPartnerClient();
+
+    // Check serviceability for destination pincode
+    const externalResponse = await externalClient.checkServiceability({
+      pincode: toPincode,
+      serviceType: serviceType || "standard",
+    });
+
+    if (externalResponse.success && externalResponse.data) {
+      const { serviceable, partners, services, cod, prepaid } =
+        externalResponse.data;
+
+      if (!serviceable) {
+        return [
+          {
+            partnerId: null,
+            partnerName: "No Service Available",
+            isServiceable: false,
+            serviceTypes: [],
+            deliveryDays: {},
+            cod: false,
+            prepaid: false,
+          },
+        ];
+      }
+
+      // Filter by specific partner if requested
+      let availablePartners = partners;
+      if (partnerId) {
+        availablePartners = partners.filter((p) => p === partnerId);
+      }
+
+      // Map to expected format
+      const serviceabilityResults = availablePartners.map((partnerCode) => ({
+        partnerId: partnerCode,
+        partnerName: getPartnerDisplayName(partnerCode),
+        isServiceable: true,
+        serviceTypes: services || ["standard"],
+        deliveryDays: getEstimatedDeliveryDays(partnerCode, services),
+        cod,
+        prepaid,
+      }));
+
+      // Log successful serviceability check
+      console.log("External API serviceability check successful", {
+        fromPincode,
+        toPincode,
+        serviceable,
+        partnersCount: availablePartners.length,
+      });
+
+      return serviceabilityResults;
+    } else {
+      throw new Error("Invalid response from external Partner Micro service");
+    }
+  } catch (externalError) {
+    console.error(
+      "External API serviceability check failed, falling back to local check:",
+      externalError.message,
+    );
+
+    // Fallback to local serviceability check
+    return await checkLocalServiceability(params);
+  }
+}
+
+/**
+ * Get partner display name from partner code
+ */
+function getPartnerDisplayName(partnerCode) {
+  const partnerNames = {
+    delhivery: "Delhivery",
+    bluedart: "Blue Dart",
+    dtdc: "DTDC",
+    ecom: "Ecom Express",
+    xpressbees: "Xpressbees",
+  };
+  return (
+    partnerNames[partnerCode] ||
+    partnerCode.charAt(0).toUpperCase() + partnerCode.slice(1)
+  );
+}
+
+/**
+ * Get estimated delivery days for partner and service type
+ */
+function getEstimatedDeliveryDays(partnerCode, services) {
+  const deliveryEstimates = {
+    delhivery: { standard: "3-5", express: "1-2" },
+    bluedart: { standard: "2-4", express: "1-2" },
+    dtdc: { standard: "4-6", express: "2-3" },
+    ecom: { standard: "3-5", express: "1-3" },
+    xpressbees: { standard: "3-6", express: "2-4" },
+  };
+
+  const partnerEstimates = deliveryEstimates[partnerCode] || {
+    standard: "3-5",
+    express: "1-3",
+  };
+  const result = {};
+
+  services.forEach((service) => {
+    result[service] = partnerEstimates[service] || partnerEstimates["standard"];
+  });
+
+  return result;
+}
+
+/**
+ * Fallback local serviceability check
+ */
+async function checkLocalServiceability(params) {
+  const { fromPincode, toPincode, partnerId } = params;
 
   // Check cache first
   const cachedResults = await prisma.serviceabilityCache.findMany({

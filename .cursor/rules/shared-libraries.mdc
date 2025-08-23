@@ -16,9 +16,22 @@ backend/service-name/
 ├── controllers/     # Use: require("../shared/lib/module")
 ├── middleware/      # Use: require("../shared/lib/module")  
 ├── routes/          # Use: require("../shared/lib/module")
+├── services/        # Use: require("../shared/lib/module")  ⚠️ CRITICAL
+├── validation/      # Use: require("../shared/lib/module")
+├── config/          # Use: require("../shared/lib/module")
 ├── server.js        # Use: require("./shared/lib/module")
 └── shared/          # Symlinked during Docker build
 ```
+
+### **🚨 MANDATORY VERIFICATION STEPS**
+
+**BEFORE marking any task complete, you MUST:**
+
+1. **Fix import paths** - Check ALL require statements
+2. **Test Docker service** - Restart and verify logs
+3. **Test health endpoint** - Ensure service responds
+4. **Test API endpoints** - Verify functionality works
+5. **Check error logs** - No module import errors
 
 ### **Correct Import Examples**
 
@@ -35,6 +48,13 @@ const logger = require("./shared/lib/logger");
 // ❌ FORBIDDEN: Never use these paths
 const APIResponse = require("../../shared/lib/response");  // WRONG
 const { walletService } = require("../../shared");  // WRONG
+
+// ✅ CORRECT: From services/ directory (CRITICAL - often missed)
+const { logger } = require("../shared/lib/logger");
+const { getRedisClient } = require("../shared/lib/redis");
+
+// ❌ FORBIDDEN: From services/ directory
+const { logger } = require("../../shared/lib/logger");  // WRONG - causes MODULE_NOT_FOUND
 ```
 
 ### **Docker Build Context**
@@ -246,6 +266,31 @@ node -e "console.log(require('../shared'))"
 # From controllers/: ../shared (correct)
 ```
 
+## **🚨 MANDATORY TESTING WORKFLOW**
+
+**EVERY time you modify shared library imports, you MUST:**
+
+```bash
+# 1. Check import paths in ALL files
+grep -r "require.*shared" backend/service-name/
+
+# 2. Restart Docker service
+docker-compose restart service-name
+
+# 3. Check logs for errors
+docker logs logistics-service-name --tail=20
+
+# 4. Test health endpoint
+curl http://localhost:PORT/health
+
+# 5. Test API endpoints
+curl -X POST http://localhost:PORT/api/endpoint \
+  -H "Content-Type: application/json" \
+  -d '{"test": "data"}'
+```
+
+**If ANY step fails, the task is NOT complete!**
+
 ## **NEVER DO**
 
 - ❌ Use `../../shared` from any directory (always wrong)
@@ -253,12 +298,16 @@ node -e "console.log(require('../shared'))"
 - ❌ Skip creating service-specific middleware wrappers
 - ❌ Import shared middleware directly in routes (use service wrapper)
 - ❌ Modify Docker build shared library copy pattern
+- ❌ **Mark task complete without testing Docker service**
+- ❌ **Ignore Docker logs and MODULE_NOT_FOUND errors**
 
 ## **ALWAYS DO**
 
 - ✅ Check auth service patterns first: `backend/auth-service/`
-- ✅ Use `../shared` from controllers/routes/middleware directories
+- ✅ Use `../shared` from controllers/routes/middleware/services directories
 - ✅ Use `./shared` from server.js only
 - ✅ Create service-specific middleware wrappers
-- ✅ Test imports before building Docker containers
+- ✅ **Test Docker service restart after every change**
+- ✅ **Verify health endpoint responds successfully**
+- ✅ **Check Docker logs for import errors**
 - ✅ Follow established patterns exactly
