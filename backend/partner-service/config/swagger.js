@@ -19,11 +19,11 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:8008",
+        url: "http://localhost:3005",
         description: "Development server (localhost)",
       },
       {
-        url: `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8008}`,
+        url: `http://${process.env.HOST || "localhost"}:${process.env.PORT || 3005}`,
         description: "Development server (current host)",
       },
       {

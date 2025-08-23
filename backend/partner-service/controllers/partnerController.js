@@ -1,6 +1,6 @@
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const { prisma } = require("../config/database");
 const { ValidationError, NotFoundError } = require("../shared/lib/errors");
+const APIResponse = require("../shared/lib/response");
 
 /**
  * Get all partners with optional filtering
@@ -57,9 +57,10 @@ async function getPartnerById(id) {
 /**
  * Create a new partner
  * @param {Object} data - Partner data
+ * @param {Object} req - Request object for audit logging
  * @returns {Promise<Object>} Created partner
  */
-async function createPartner(data) {
+async function createPartner(data, req = {}) {
   // Validate required fields
   const requiredFields = ["name", "code", "displayName", "apiUrl"];
   const missingFields = requiredFields.filter((field) => !data[field]);
@@ -81,7 +82,7 @@ async function createPartner(data) {
     throw new ValidationError("Partner with this name or code already exists");
   }
 
-  return prisma.partner.create({
+  const partner = await prisma.partner.create({
     data,
     include: {
       _count: {
@@ -92,15 +93,40 @@ async function createPartner(data) {
       },
     },
   });
+
+  // Log partner creation
+  await prisma.auditLog.create({
+    data: {
+      action: "PARTNER_CREATED",
+      resourceType: "PARTNER",
+      resourceId: partner.id,
+      userId: req.user?.id,
+      ipAddress: req.ip,
+      userAgent: req.get?.("User-Agent"),
+      requestData: {
+        name: data.name,
+        code: data.code,
+        displayName: data.displayName,
+        isActive: data.isActive,
+      },
+      responseData: {
+        partnerId: partner.id,
+        success: true,
+      },
+    },
+  });
+
+  return partner;
 }
 
 /**
  * Update a partner
  * @param {string} id - Partner ID
  * @param {Object} data - Updated partner data
+ * @param {Object} req - Request object for audit logging
  * @returns {Promise<Object>} Updated partner
  */
-async function updatePartner(id, data) {
+async function updatePartner(id, data, req = {}) {
   const partner = await prisma.partner.findUnique({ where: { id } });
 
   if (!partner) {
@@ -126,7 +152,7 @@ async function updatePartner(id, data) {
     }
   }
 
-  return prisma.partner.update({
+  const updatedPartner = await prisma.partner.update({
     where: { id },
     data,
     include: {
@@ -138,14 +164,35 @@ async function updatePartner(id, data) {
       },
     },
   });
+
+  // Log partner update
+  await prisma.auditLog.create({
+    data: {
+      action: "PARTNER_UPDATED",
+      resourceType: "PARTNER",
+      resourceId: id,
+      userId: req.user?.id,
+      ipAddress: req.ip,
+      userAgent: req.get?.("User-Agent"),
+      requestData: data,
+      responseData: {
+        partnerId: id,
+        success: true,
+        changes: Object.keys(data),
+      },
+    },
+  });
+
+  return updatedPartner;
 }
 
 /**
  * Delete a partner
  * @param {string} id - Partner ID
+ * @param {Object} req - Request object for audit logging
  * @returns {Promise<Object>} Deleted partner
  */
-async function deletePartner(id) {
+async function deletePartner(id, req = {}) {
   const partner = await prisma.partner.findUnique({ where: { id } });
 
   if (!partner) {
@@ -166,7 +213,27 @@ async function deletePartner(id) {
     throw new ValidationError("Cannot delete partner with active shipments");
   }
 
-  return prisma.partner.delete({ where: { id } });
+  const deletedPartner = await prisma.partner.delete({ where: { id } });
+
+  // Log partner deletion
+  await prisma.auditLog.create({
+    data: {
+      action: "PARTNER_DELETED",
+      resourceType: "PARTNER",
+      resourceId: id,
+      userId: req.user?.id,
+      ipAddress: req.ip,
+      userAgent: req.get?.("User-Agent"),
+      requestData: { partnerId: id },
+      responseData: {
+        partnerId: id,
+        partnerName: partner.name,
+        success: true,
+      },
+    },
+  });
+
+  return deletedPartner;
 }
 
 /**

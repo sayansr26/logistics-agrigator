@@ -5,6 +5,11 @@ const APIResponse = require("../shared/lib/response");
 const partnerController = require("../controllers/partnerController");
 const { validateBody } = require("../middleware/validate");
 const { partnerSchema } = require("../validation/partnerSchema");
+const {
+  partnerManagementLimiter,
+  rateCalculationLimiter,
+  serviceabilityLimiter,
+} = require("../middleware/rateLimiter");
 
 /**
  * @swagger
@@ -140,11 +145,13 @@ router.get("/:id", authMiddleware.authenticate, async (req, res, next) => {
  */
 router.post(
   "/",
+  partnerManagementLimiter,
   authMiddleware.authenticate,
+  authMiddleware.adminOnly,
   validateBody(partnerSchema.create),
   async (req, res, next) => {
     try {
-      const partner = await partnerController.createPartner(req.body);
+      const partner = await partnerController.createPartner(req.body, req);
       res.status(201).json(APIResponse.success({ partner }));
     } catch (error) {
       next(error);
@@ -190,13 +197,16 @@ router.post(
  */
 router.put(
   "/:id",
+  partnerManagementLimiter,
   authMiddleware.authenticate,
+  authMiddleware.adminOnly,
   validateBody(partnerSchema.update),
   async (req, res, next) => {
     try {
       const partner = await partnerController.updatePartner(
         req.params.id,
         req.body,
+        req,
       );
       res.json(APIResponse.success({ partner }));
     } catch (error) {
@@ -233,14 +243,22 @@ router.put(
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  */
-router.delete("/:id", authMiddleware.authenticate, async (req, res, next) => {
-  try {
-    await partnerController.deletePartner(req.params.id);
-    res.json(APIResponse.success({ message: "Partner deleted successfully" }));
-  } catch (error) {
-    next(error);
-  }
-});
+router.delete(
+  "/:id",
+  partnerManagementLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.adminOnly,
+  async (req, res, next) => {
+    try {
+      await partnerController.deletePartner(req.params.id, req);
+      res.json(
+        APIResponse.success({ message: "Partner deleted successfully" }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 /**
  * @swagger
@@ -271,43 +289,11 @@ router.delete("/:id", authMiddleware.authenticate, async (req, res, next) => {
  */
 router.post(
   "/calculate",
+  rateCalculationLimiter,
   authMiddleware.authenticate,
   async (req, res, next) => {
     try {
-      const {
-        fromPincode,
-        toPincode,
-        weight,
-        serviceType,
-        codAmount,
-        partnerId,
-      } = req.body;
-
-      // TODO: Implement rate calculation logic
-      const rates = [
-        {
-          partnerId: "partner-1",
-          partnerName: "Delhivery",
-          serviceType: serviceType || "SURFACE",
-          rate: 85.5,
-          codCharge: codAmount ? 15.0 : 0,
-          fuelSurcharge: 8.55,
-          totalAmount: codAmount ? 109.05 : 94.05,
-          deliveryDays: 3,
-          isServiceable: true,
-        },
-        {
-          partnerId: "partner-2",
-          partnerName: "Blue Dart",
-          serviceType: serviceType || "SURFACE",
-          rate: 95.0,
-          codCharge: 0, // Blue Dart doesn't support COD
-          fuelSurcharge: 9.5,
-          totalAmount: 104.5,
-          deliveryDays: 2,
-          isServiceable: true,
-        },
-      ];
+      const rates = await partnerController.calculateRates(req.body);
 
       const cheapestRate = rates.reduce((prev, current) =>
         prev.totalAmount < current.totalAmount ? prev : current,
@@ -359,35 +345,13 @@ router.post(
  */
 router.post(
   "/serviceability",
+  serviceabilityLimiter,
   authMiddleware.authenticate,
   async (req, res, next) => {
     try {
-      const { fromPincode, toPincode, partnerId } = req.body;
-
-      // TODO: Implement serviceability checking logic
-      const serviceability = [
-        {
-          partnerId: "partner-1",
-          partnerName: "Delhivery",
-          isServiceable: true,
-          serviceTypes: ["SURFACE", "AIR"],
-          deliveryDays: {
-            SURFACE: 3,
-            AIR: 2,
-          },
-        },
-        {
-          partnerId: "partner-2",
-          partnerName: "Blue Dart",
-          isServiceable: true,
-          serviceTypes: ["SURFACE", "EXPRESS"],
-          deliveryDays: {
-            SURFACE: 2,
-            EXPRESS: 1,
-          },
-        },
-      ];
-
+      const serviceability = await partnerController.checkServiceability(
+        req.body,
+      );
       res.json(APIResponse.success({ serviceability }));
     } catch (error) {
       next(error);

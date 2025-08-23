@@ -14,9 +14,10 @@ const { errorHandler } = require("./middleware/errorHandler");
 const { connectDB, prisma } = require("./config/database");
 const { connectRedis, getRedisClient } = require("./config/redis");
 const swaggerSpecs = require("./config/swagger");
+const { generalLimiter } = require("./middleware/rateLimiter");
 
 const app = express();
-const PORT = process.env.PORT || 8008;
+const PORT = process.env.PORT || 3005;
 
 // Security middleware
 app.use(helmet());
@@ -33,6 +34,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Rate limiting
+app.use(generalLimiter);
 
 // Logging - use shared logger
 app.use(logger.httpLogger);
@@ -54,7 +58,7 @@ app.use(
       url:
         process.env.NODE_ENV === "production"
           ? undefined
-          : `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8008}/openapi.json`,
+          : `http://${process.env.HOST || "localhost"}:${process.env.PORT || 3005}/openapi.json`,
       // Disable "Try it out" HTTPS enforcement
       supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
       // Force HTTP scheme for development
@@ -77,7 +81,7 @@ app.get("/openapi.json", (req, res) => {
         description: "Current server",
       },
       {
-        url: "http://localhost:8008",
+        url: "http://localhost:3005",
         description: "Development server (localhost)",
       },
       ...(process.env.NODE_ENV === "production"
