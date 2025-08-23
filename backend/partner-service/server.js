@@ -102,6 +102,8 @@ app.get("/openapi.json", (req, res) => {
 app.use("/api/partners", partnerRoutes);
 app.use("/api/geographical", require("./routes/geographical"));
 app.use("/api", require("./routes/zones"));
+app.use("/api/packages", require("./routes/packages"));
+app.use("/api/customer-charges", require("./routes/customerCharges"));
 
 /**
  * @swagger
@@ -262,6 +264,11 @@ app.get("/", (req, res) => {
       partnerZones: "/api/partner-zones",
       comprehensiveData: "/api/partners/comprehensive-data",
       zoneCoverage: "/api/zones/coverage/validate",
+      packages: "/api/packages",
+      packageCharges: "/api/packages/charges",
+      customerCharges: "/api/customer-charges",
+      chargeCalculation: "/api/packages/charges/calculate",
+      customerChargeCalculation: "/api/customer-charges/calculate",
     },
     features: [
       "Partner Management",
@@ -273,9 +280,16 @@ app.get("/", (req, res) => {
       "Zone Management and Configuration",
       "Service Type Management",
       "Zone Coverage Validation",
+      "Package Charge Management",
+      "Customer Charge Configuration",
+      "Bulk Charge Operations",
+      "Charge Calculation Workflows",
+      "FSC, COD, Insurance Charges",
+      "Weight-based Charge Calculation",
+      "Zone-to-Zone Charge Mapping",
       "Comprehensive Partner Data Retrieval",
       "External Courier API Integration",
-      "Charge Calculation Workflows",
+      "Charge Preview and Validation",
     ],
   });
 });

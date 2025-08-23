@@ -415,11 +415,11 @@ All backend development MUST follow this task-based approach for proper tracking
 
 ---
 
-### **PARTNER-005: Package and Charge Management**
+### **PARTNER-005: Package and Charge Management** ✅ **COMPLETED**
 
 **Task Name**: Implement Package Charges and Customer Charge Configuration
 
-**Status**: NOT_STARTED
+**Status**: ✅ **COMPLETED**
 
 **Planning**:
 
@@ -463,12 +463,42 @@ All backend development MUST follow this task-based approach for proper tracking
 
 **Completion Criteria**:
 
-- [ ] Package charge management fully operational
-- [ ] Customer charge configuration functional
-- [ ] Bulk operations working efficiently
-- [ ] Charge calculation logic accurate
-- [ ] Comprehensive validation and error handling
-- [ ] Complete API documentation
+- [x] Package charge management fully operational
+- [x] Customer charge configuration functional
+- [x] Bulk operations working efficiently
+- [x] Charge calculation logic accurate
+- [x] Comprehensive validation and error handling
+- [x] Complete API documentation
+
+**What Was Actually Implemented**:
+
+- **Package Service Layer**: Complete `PackageService` class with external API integration for all package charge operations including CRUD, bulk operations, and charge calculations
+- **Customer Charge Service Layer**: Complete `CustomerChargeService` class with support for FSC, COD, Insurance, Handling, Pickup, Delivery, Fragile, Oversized, Priority, Weekend, Remote, and custom charges
+- **Package Charge Management**: Full CRUD operations with weight-based and zone-based charge configuration, bulk operations, and charge calculation preview
+- **Customer Charge Configuration**: Comprehensive charge type management with percentage, flat, per-kg, slab, and tiered calculation methods
+- **Bulk Operations**: Efficient bulk package and customer charge creation with validation and error handling
+- **Charge Calculation Workflows**: Real-time charge calculation with caching, preview functionality, and comprehensive validation
+- **Rate Limiting**: Dedicated rate limiters for package management (25 requests/15min) and customer charge management (30 requests/15min)
+- **Authentication & Authorization**: JWT-based authentication on all endpoints with proper role-based access control
+- **Input Validation**: Comprehensive validation schemas with detailed error messages for all charge operations
+- **Error Handling**: Graceful error handling with proper fallbacks and structured API responses using shared response utilities
+- **Swagger Documentation**: Complete API documentation with detailed schemas, examples, and security definitions for all 15+ new endpoints
+- **Controller Implementation**: Static controller methods following auth-service patterns with proper shared library usage
+- **Caching Strategy**: Redis-based caching with optimized TTL values (30 minutes for package charges, 1 hour for customer charges, 5-10 minutes for calculations)
+- **External API Integration**: Real-time integration with Partner Micro service using HMAC SHA-256 authentication for all charge operations
+- **Charge Type Support**: Full support for multiple charge types including FSC (Fuel Surcharge), COD (Cash on Delivery), Insurance, Handling, and custom charges
+- **Calculation Methods**: Support for percentage-based, flat-rate, per-kilogram, slab-based, and tiered pricing calculations
+
+**Files Modified/Created**:
+
+- `backend/partner-service/services/packageService.js` - Complete package charge service with external API integration and caching
+- `backend/partner-service/services/customerChargeService.js` - Complete customer charge service with comprehensive charge type support
+- `backend/partner-service/controllers/packageController.js` - Package charge controller with static methods and validation
+- `backend/partner-service/controllers/customerChargeController.js` - Customer charge controller with comprehensive charge management
+- `backend/partner-service/routes/packages.js` - REST API routes with comprehensive Swagger documentation for package charges
+- `backend/partner-service/routes/customerCharges.js` - REST API routes with comprehensive Swagger documentation for customer charges
+- `backend/partner-service/middleware/rateLimiter.js` - Added package and customer charge management rate limiters
+- `backend/partner-service/server.js` - Updated server with new routes and endpoint information
 
 ---
 
@@ -1054,5 +1084,5 @@ All backend development MUST follow this task-based approach for proper tracking
 6. **IMPORTANT** maintain >90% test coverage for all services
 7. **NECESSARY** follow monorepo structure consistently
 
-**Last Updated**: August 23, 2025 (PARTNER-004 completed - Zone Management Services fully operational)
-**Current Active Task**: PARTNER-005 - Package and Charge Management - Ready to start
+**Last Updated**: August 23, 2025 (PARTNER-005 completed - Package and Charge Management fully operational)
+**Current Active Task**: PARTNER-006 - Discount Management System - Ready to start

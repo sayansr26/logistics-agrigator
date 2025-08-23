@@ -122,11 +122,61 @@ const zoneManagementLimiter = rateLimit({
   },
 });
 
+/**
+ * Package Management Rate Limiter
+ * Applies to package charge CRUD operations and bulk operations
+ * 25 requests per 15 minutes per user
+ */
+const packageManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 25, // Limit each user to 25 package management operations per windowMs
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many package management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
+ * Customer Charge Management Rate Limiter
+ * Applies to customer charge CRUD operations and bulk operations
+ * 30 requests per 15 minutes per user
+ */
+const customerChargeManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each user to 30 customer charge management operations per windowMs
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many customer charge management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
   serviceabilityLimiter,
   geographicalSearchLimiter,
   zoneManagementLimiter,
+  packageManagementLimiter,
+  customerChargeManagementLimiter,
   generalLimiter,
 };
