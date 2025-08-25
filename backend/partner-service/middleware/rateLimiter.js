@@ -170,6 +170,30 @@ const customerChargeManagementLimiter = rateLimit({
   },
 });
 
+/**
+ * Discount Management Rate Limiter
+ * Applies to discount CRUD operations, bulk operations, and calculations
+ * 35 requests per 15 minutes per user (slightly higher due to calculation needs)
+ */
+const discountManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 35, // Limit each user to 35 discount management operations per windowMs
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many discount management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
@@ -178,5 +202,6 @@ module.exports = {
   zoneManagementLimiter,
   packageManagementLimiter,
   customerChargeManagementLimiter,
+  discountManagementLimiter,
   generalLimiter,
 };

@@ -4,6 +4,7 @@ const APIResponse = require("../shared/lib/response");
 const {
   getExternalPartnerClient,
 } = require("../services/externalPartnerClient");
+const { DiscountService } = require("../services/discountService");
 
 /**
  * Get all partners with optional filtering
@@ -335,6 +336,95 @@ async function calculateRates(params) {
 }
 
 /**
+ * Calculate shipping rates with discount application
+ * @param {Object} params - Rate calculation parameters
+ * @param {Object} discountParams - Discount calculation parameters
+ * @returns {Promise<Array>} Calculated rates with discounts applied
+ */
+async function calculateRatesWithDiscounts(params, discountParams = {}) {
+  try {
+    // First get the base rates using existing calculation
+    const baseRates = await calculateRates(params);
+
+    if (!baseRates || baseRates.length === 0) {
+      return baseRates;
+    }
+
+    // Initialize discount service
+    const discountService = new DiscountService();
+
+    // Process each rate with discount calculation
+    const ratesWithDiscounts = await Promise.all(
+      baseRates.map(async (rate) => {
+        try {
+          // Prepare discount calculation data
+          const calculationData = {
+            partnerId: rate.partnerId,
+            baseAmount: rate.totalAmount,
+            applicableOn: discountParams.applicableOn || "TOTAL",
+            conditions: {
+              customerType: discountParams.customerType,
+              zoneId: discountParams.zoneId,
+              orderDate: new Date().toISOString(),
+              serviceType: rate.serviceType,
+              weight: params.weight,
+              ...discountParams.conditions,
+            },
+          };
+
+          // Calculate applicable discounts
+          const discountResult =
+            await discountService.calculateDiscount(calculationData);
+
+          // Apply discount to the rate
+          const finalAmount = discountResult.finalAmount || rate.totalAmount;
+          const discountAmount = discountResult.totalDiscount || 0;
+
+          return {
+            ...rate,
+            originalAmount: rate.totalAmount,
+            discountAmount: discountAmount,
+            finalAmount: finalAmount,
+            savings: rate.totalAmount - finalAmount,
+            discountPercentage:
+              rate.totalAmount > 0
+                ? ((discountAmount / rate.totalAmount) * 100).toFixed(2)
+                : 0,
+            appliedDiscounts: discountResult.applicableDiscounts || [],
+            discountBreakdown: discountResult.discountBreakdown || {},
+          };
+        } catch (discountError) {
+          // If discount calculation fails, return original rate
+          console.warn(
+            `Discount calculation failed for partner ${rate.partnerId}:`,
+            discountError.message,
+          );
+          return {
+            ...rate,
+            originalAmount: rate.totalAmount,
+            discountAmount: 0,
+            finalAmount: rate.totalAmount,
+            savings: 0,
+            discountPercentage: 0,
+            appliedDiscounts: [],
+            discountError: discountError.message,
+          };
+        }
+      }),
+    );
+
+    // Sort by final amount (lowest first)
+    ratesWithDiscounts.sort((a, b) => a.finalAmount - b.finalAmount);
+
+    return ratesWithDiscounts;
+  } catch (error) {
+    console.error("Error in calculateRatesWithDiscounts:", error);
+    // Fallback to regular rate calculation if discount integration fails
+    return await calculateRates(params);
+  }
+}
+
+/**
  * Fallback local rate calculation (existing logic)
  * @param {Object} params - Rate calculation parameters
  * @returns {Promise<Array>} Calculated rates from local database
@@ -612,5 +702,6 @@ module.exports = {
   updatePartner,
   deletePartner,
   calculateRates,
+  calculateRatesWithDiscounts,
   checkServiceability,
 };

@@ -104,6 +104,7 @@ app.use("/api/geographical", require("./routes/geographical"));
 app.use("/api", require("./routes/zones"));
 app.use("/api/packages", require("./routes/packages"));
 app.use("/api/customer-charges", require("./routes/customerCharges"));
+app.use("/api/discounts", require("./routes/discounts"));
 
 /**
  * @swagger
@@ -269,6 +270,12 @@ app.get("/", (req, res) => {
       customerCharges: "/api/customer-charges",
       chargeCalculation: "/api/packages/charges/calculate",
       customerChargeCalculation: "/api/customer-charges/calculate",
+      discounts: "/api/discounts",
+      discountCalculation: "/api/discounts/calculate",
+      activeDiscounts: "/api/discounts/active",
+      discountAnalytics: "/api/discounts/analytics",
+      bulkDiscounts: "/api/discounts/bulk",
+      rateCalculationWithDiscounts: "/api/partners/calculate-with-discounts",
     },
     features: [
       "Partner Management",
@@ -290,6 +297,13 @@ app.get("/", (req, res) => {
       "Comprehensive Partner Data Retrieval",
       "External Courier API Integration",
       "Charge Preview and Validation",
+      "Discount Management and Configuration",
+      "Discount Calculation and Application",
+      "Time-based Discount Activation",
+      "Bulk Discount Operations",
+      "Discount Conflict Resolution",
+      "Discount Performance Analytics",
+      "Active Discount Retrieval",
     ],
   });
 });
