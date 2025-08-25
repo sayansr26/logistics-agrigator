@@ -15,6 +15,25 @@ ls memory-bank/
 #       systemPatterns.md, techContext.md, progress.md
 ```
 
+### **CRITICAL: ALWAYS CHECK DOCKER LOGS BEFORE MARKING COMPLETE**
+```bash
+# MANDATORY DOCKER TESTING SEQUENCE - NEVER SKIP THIS
+# 1. Restart Docker service
+docker-compose restart service-name
+
+# 2. Check logs for errors (CRITICAL)
+docker logs logistics-service-name --tail=30
+
+# 3. Look for MODULE_NOT_FOUND errors specifically
+docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
+
+# 4. Test health endpoint
+curl http://localhost:PORT/health | jq .
+
+# 5. Test API endpoints
+curl -X GET http://localhost:PORT/api/endpoint
+```
+
 ### **2. Check Reference Implementation**
 ```bash
 # ALWAYS check auth-service patterns first

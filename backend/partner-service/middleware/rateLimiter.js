@@ -194,6 +194,54 @@ const discountManagementLimiter = rateLimit({
   },
 });
 
+/**
+ * Charge Calculation Rate Limiter
+ * Applies to surcharge calculation, shipment charge calculation, and validation
+ * 100 requests per 5 minutes per user (high usage for calculation operations)
+ */
+const chargeCalculationLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 100, // Limit each user to 100 charge calculations per 5 minutes
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many charge calculation requests. Please try again in 5 minutes.",
+      retryAfter: 5 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
+ * Partner Assignment Rate Limiter
+ * Applies to partner availability checks, assignment operations, and workflows
+ * 50 requests per 10 minutes per user (moderate usage for assignment operations)
+ */
+const partnerAssignmentLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 50, // Limit each user to 50 assignment operations per 10 minutes
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many partner assignment requests. Please try again in 10 minutes.",
+      retryAfter: 10 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
@@ -203,5 +251,7 @@ module.exports = {
   packageManagementLimiter,
   customerChargeManagementLimiter,
   discountManagementLimiter,
+  chargeCalculationLimiter,
+  partnerAssignmentLimiter,
   generalLimiter,
 };
