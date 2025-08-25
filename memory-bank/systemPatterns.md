@@ -29,7 +29,7 @@ const {
   errors,
   logger,
   response,
-} = require("../../shared");
+} = require("../shared/lib/");
 
 // Consistent error handling
 const { APIError, ValidationError, AuthenticationError } = errors;

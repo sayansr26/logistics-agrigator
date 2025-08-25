@@ -5,7 +5,7 @@
 **Project Name**: Logistics Aggregator Portal  
 **Vision**: Comprehensive logistics management solution for e-Commerce, B2B, and B2C enterprises in India  
 **Architecture**: Modern microservices with Prisma ORM  
-**Status**: Shipment Service Integration Phase (Partner Service Complete)
+**Status**: Wallet Service Foundation Phase (Partner Service Archived, Wallet Service Required)
 
 ## Core Business Problem
 
@@ -24,18 +24,19 @@ Indian businesses struggle with logistics due to:
 ```
 ✅ Auth Service (Port 8001) - JWT, RBAC, 2FA - COMPLETED
 ✅ User Service (Port 8002) - Multi-tenant, white-label - COMPLETED
-✅ Partner Service (Port 3005) - Complete courier integration - 100% COMPLETED
-🔄 Shipment Service (Port 8003) - Order management - READY FOR INTEGRATION
+✅ Partner Service (Port 3005) - Complete courier integration - ARCHIVED (75+ endpoints)
+❌ Wallet Service (Port 8006) - Payment processing - NEEDS COMPLETE REBUILD
+🔄 Shipment Service (Port 8003) - Order management - BLOCKED (needs wallet service)
 ❌ Platform Service (Port 8005) - E-commerce integrations - NOT STARTED
 ❌ Support Service (Port 8004) - Help desk, disputes - NOT STARTED
 ✅ API Gateway (Port 8000) - Routing, security - OPERATIONAL
 ✅ Frontend (Port 3000) - Next.js with TypeScript - FOUNDATION READY
 ```
 
-### External Services (Existing)
+### External Services (Available)
 
 ```
-✅ Wallet Service (Port 8006) - Payment processing - INTEGRATED
+✅ External Wallet API - https://wapi.websiteduniya.com/api/v1 - HMAC authentication ready
 ✅ Partner Micro Service - External API integration completed with HMAC authentication
 ```
 
@@ -83,18 +84,18 @@ Indian businesses struggle with logistics due to:
 
 ## Critical Path Forward
 
-The project is currently in the **Shipment Service Integration Phase** where:
+The project is currently in the **Wallet Service Foundation Phase** where:
 
-1. **Partner Service** ✅ COMPLETED - Full external API integration with 75+ endpoints
-2. **Shipment Service** - Ready for end-to-end flow implementation with complete partner integration
-3. **Platform Service** foundation for Shopify OAuth integration
-4. **Support Service** for dispute and NDR management
+1. **Partner Service** ✅ COMPLETED & ARCHIVED - Full external API integration with 75+ endpoints
+2. **Wallet Service** ❌ CRITICAL PRIORITY - Must implement complete independent service (WALLET-001)
+3. **Shipment Service** ⚠️ BLOCKED - Cannot proceed without proper wallet service integration
+4. **Platform Service** - Planned after wallet and shipment services complete
 
 ## Budget & Timeline
 
 **Development Investment**: ₹45-65 lakhs over 6 months  
 **Team Structure**: 10 people (5 backend, 4 frontend, 1 DevOps/QA)  
-**Current Milestone**: Complete shipment service integration within 7 days  
+**Current Milestone**: Complete wallet service foundation (WALLET-001) within 5 days  
 **Production Launch**: 6 months from start
 
 ## Risk Factors

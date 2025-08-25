@@ -155,8 +155,9 @@ model User {
 ├── redis.js       // Redis client and utilities
 ├── response.js    // Standardized API responses
 ├── validation.js  // Common Joi schemas
-├── walletMiddleware.js  // Wallet integration helpers
-└── walletService.js     // Wallet service client
+// REMOVED (moved to backup-incorrect-wallet-implementation/):
+// ├── walletMiddleware.js  // INCORRECT: Was shared library client
+// └── walletService.js     // INCORRECT: Was shared library client
 ```
 
 ### Import Patterns
