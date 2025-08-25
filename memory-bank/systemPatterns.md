@@ -529,6 +529,108 @@ const recentShipments = await cache.get(`shipments:recent:${clientId}`);
 const courierCharges = await cache.get(`charges:${hashKey}`);
 ```
 
+## Rule Enforcement Patterns
+
+### Mandatory Task Verification Workflow
+
+**1. Reference Check Pattern**
+
+```bash
+# ALWAYS check auth-service patterns first
+grep -r "require.*shared" backend/auth-service/
+ls -la backend/auth-service/controllers/
+cat backend/auth-service/controllers/authController.js | head -20
+```
+
+**2. Import Path Verification**
+
+```javascript
+// ✅ CORRECT: From controllers/routes/middleware/services directories
+const APIResponse = require("../shared/lib/response");
+const { authMiddleware } = require("../shared/lib/auth");
+const logger = require("../shared/lib/logger");
+
+// ✅ CORRECT: From server.js only
+const logger = require("./shared/lib/logger");
+
+// ❌ FORBIDDEN: Never use these paths
+const APIResponse = require("../../shared/lib/response");
+```
+
+**3. Docker Testing Sequence**
+
+```bash
+# MANDATORY: Before marking any task complete
+# 1. Restart Docker service
+docker-compose restart service-name
+
+# 2. Check logs for errors
+docker logs logistics-service-name --tail=30
+
+# 3. Look for MODULE_NOT_FOUND errors
+docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
+
+# 4. Test health endpoint
+curl http://localhost:PORT/health | jq .
+
+# 5. Test API endpoints
+curl -X GET http://localhost:PORT/api/endpoint
+```
+
+**4. Controller Pattern Enforcement**
+
+```javascript
+// ✅ CORRECT: Function-based exports (like auth-service)
+async function getEntity(req, res) {
+  try {
+    // Implementation
+    res.json(APIResponse.success(data));
+  } catch (error) {
+    logger.error("Error:", error);
+    throw error;
+  }
+}
+
+module.exports = {
+  getEntity,
+  createEntity,
+  updateEntity,
+};
+
+// ❌ FORBIDDEN: Class-based exports
+class EntityController {
+  async getEntity(req, res) {}
+}
+module.exports = new EntityController();
+```
+
+### Quality Assurance Patterns
+
+**1. Task Completion Criteria**
+
+```javascript
+// Task is ONLY complete when ALL criteria pass:
+const completionCriteria = {
+  dockerService: "starts without errors",
+  healthEndpoint: "returns 200 OK",
+  importErrors: "no MODULE_NOT_FOUND in logs",
+  apiEndpoints: "respond correctly",
+  authPatterns: "follow auth-service exactly",
+  documentation: "updated with implementation details",
+};
+```
+
+**2. Rule Enforcement Files**
+
+```
+.cursor/rules/
+├── task-verification.mdc    # Mandatory verification workflow
+├── rule-enforcement.mdc     # Complete rule enforcement system
+├── backend.mdc             # Backend development standards
+├── shared-libraries.mdc    # Import patterns and usage
+└── development-workflow.mdc # Quality standards
+```
+
 ---
 
-These patterns ensure consistency, maintainability, and scalability across all services while leveraging modern development practices and tools.
+These patterns ensure consistency, maintainability, and scalability across all services while leveraging modern development practices and tools. The rule enforcement system guarantees quality standards are maintained throughout development.
