@@ -106,6 +106,10 @@ app.use("/api/packages", require("./routes/packages"));
 app.use("/api/customer-charges", require("./routes/customerCharges"));
 app.use("/api/discounts", require("./routes/discounts"));
 app.use("/api", require("./routes/partnerData"));
+app.use("/api/v1/charge-calculation", require("./routes/chargeCalculation"));
+app.use("/api/v1/partner-assignment", require("./routes/partnerAssignment"));
+app.use("/api/v1", require("./routes/partnerPerformance"));
+app.use("/api/v1", require("./routes/systemManagement"));
 
 /**
  * @swagger
@@ -286,6 +290,31 @@ app.get("/", (req, res) => {
       partnerDataExport: "/api/partners/{partnerId}/export",
       partnerCacheManagement: "/api/partners/{partnerId}/cache",
       partnerDataHealth: "/api/partners/{partnerId}/health",
+      chargeCalculationSurcharge:
+        "/api/v1/charge-calculation/{partnerId}/calculate",
+      shipmentChargeCalculation:
+        "/api/v1/charge-calculation/shipments/calculate-charges",
+      partnerAvailabilityCheck: "/api/v1/partner-assignment/availability/check",
+      shipmentAssignment: "/api/v1/partner-assignment/assign",
+      partnerPerformance: "/api/v1/partner-performance/{partnerId}",
+      systemDashboard: "/api/v1/main-system-dashboard",
+      partnerAnalytics: "/api/v1/partner-analytics/{partnerId}",
+      partnerBenchmarks: "/api/v1/partner-benchmarks/{partnerId}",
+      partnerKPIs: "/api/v1/partner-kpis/{partnerId}",
+      performanceAlerts: "/api/v1/performance-alerts",
+      performanceStatistics: "/api/v1/partner-performance/statistics",
+      performanceReport: "/api/v1/partner-performance/report",
+      systemInitialization: "/api/v1/main-system",
+      rateLimitManagement: "/api/v1/main-system-rate-limit",
+      cacheManagement: "/api/v1/main-system-cache",
+      auditTrail: "/api/v1/audit",
+      webhookManagement: "/api/v1/webhooks",
+      systemHealth: "/api/v1/system-health",
+      servicesStatus: "/api/v1/services-status",
+      systemConfiguration: "/api/v1/system-configuration",
+      systemStatistics: "/api/v1/system-statistics",
+      systemMaintenance: "/api/v1/system-maintenance",
+      systemAlerts: "/api/v1/system-alerts",
     },
     features: [
       "Partner Management",
@@ -325,6 +354,45 @@ app.get("/", (req, res) => {
       "Partner Data Health Monitoring",
       "Multi-source Data Integration",
       "Real-time Data Aggregation",
+      "Advanced Charge Calculation Services",
+      "Surcharge Calculation and Management",
+      "Shipment Charge Calculation",
+      "Charge Validation and Verification",
+      "Comprehensive Charge Breakdown",
+      "Partner Assignment Algorithms",
+      "Partner Availability Checking",
+      "Shipment Assignment Workflows",
+      "Assignment Strategy Optimization",
+      "Partner Performance Analytics",
+      "System Dashboard and Monitoring",
+      "Partner Analytics and Insights",
+      "Benchmark Comparisons",
+      "Key Performance Indicators (KPIs)",
+      "Performance Alerts and Notifications",
+      "Performance Statistics and Reporting",
+      "Comprehensive Performance Reports",
+      "System Management and Control",
+      "System Initialization and Configuration",
+      "Rate Limiting Management",
+      "Cache Management and Optimization",
+      "Audit Trail and Logging",
+      "Webhook Management and Integration",
+      "System Health Monitoring",
+      "Services Status Tracking",
+      "System Configuration Management",
+      "System Statistics and Metrics",
+      "System Maintenance Operations",
+      "System Alerts and Notifications",
+      "Advanced Analytics and Insights",
+      "Performance Benchmarking",
+      "Quality Metrics and Scoring",
+      "Cost Optimization Analysis",
+      "Delivery Efficiency Tracking",
+      "Customer Satisfaction Monitoring",
+      "Trend Analysis and Forecasting",
+      "Recommendation Engine",
+      "Smart Partner Selection",
+      "Automated Failover Mechanisms",
     ],
   });
 });

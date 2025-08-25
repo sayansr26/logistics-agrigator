@@ -575,6 +575,12 @@ curl http://localhost:PORT/health | jq .
 
 # 5. Test API endpoints
 curl -X GET http://localhost:PORT/api/endpoint
+
+# 6. Verify new endpoints are accessible
+curl -s http://localhost:PORT/ | jq '.endpoints'
+
+# 7. Test authentication on protected endpoints
+curl -X GET http://localhost:PORT/api/v1/protected-endpoint
 ```
 
 **4. Controller Pattern Enforcement**

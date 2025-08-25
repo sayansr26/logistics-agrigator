@@ -242,6 +242,54 @@ const partnerAssignmentLimiter = rateLimit({
   },
 });
 
+/**
+ * Performance Analytics Rate Limiter
+ * Applies to performance metrics, analytics, KPIs, benchmarks, and reporting
+ * 40 requests per 5 minutes per user (moderate usage for analytics operations)
+ */
+const performanceAnalyticsLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 40, // Limit each user to 40 performance analytics requests per 5 minutes
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many performance analytics requests. Please try again in 5 minutes.",
+      retryAfter: 5 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
+ * System Management Rate Limiter
+ * Applies to system initialization, cache management, rate limit config, audit, webhooks
+ * 15 requests per 15 minutes per user (restrictive for admin-only operations)
+ */
+const systemManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Limit each user to 15 system management operations per 15 minutes
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many system management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
@@ -253,5 +301,7 @@ module.exports = {
   discountManagementLimiter,
   chargeCalculationLimiter,
   partnerAssignmentLimiter,
+  performanceAnalyticsLimiter,
+  systemManagementLimiter,
   generalLimiter,
 };
