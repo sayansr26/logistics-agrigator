@@ -105,6 +105,7 @@ app.use("/api", require("./routes/zones"));
 app.use("/api/packages", require("./routes/packages"));
 app.use("/api/customer-charges", require("./routes/customerCharges"));
 app.use("/api/discounts", require("./routes/discounts"));
+app.use("/api", require("./routes/partnerData"));
 
 /**
  * @swagger
@@ -276,6 +277,15 @@ app.get("/", (req, res) => {
       discountAnalytics: "/api/discounts/analytics",
       bulkDiscounts: "/api/discounts/bulk",
       rateCalculationWithDiscounts: "/api/partners/calculate-with-discounts",
+      partnerPackages: "/api/partner-packages",
+      partnerCharges: "/api/partner-charges",
+      partnerDiscounts: "/api/partner-discounts",
+      partnerServices: "/api/partner-services",
+      comprehensivePartnerData: "/api/partners/comprehensive-data",
+      partnerMetrics: "/api/partners/{partnerId}/metrics",
+      partnerDataExport: "/api/partners/{partnerId}/export",
+      partnerCacheManagement: "/api/partners/{partnerId}/cache",
+      partnerDataHealth: "/api/partners/{partnerId}/health",
     },
     features: [
       "Partner Management",
@@ -304,6 +314,17 @@ app.get("/", (req, res) => {
       "Discount Conflict Resolution",
       "Discount Performance Analytics",
       "Active Discount Retrieval",
+      "Comprehensive Partner Data Retrieval",
+      "Partner Package Data Aggregation",
+      "Partner Charge Data Consolidation",
+      "Partner Discount Management",
+      "Partner Service Capability Analysis",
+      "Partner Performance Metrics",
+      "Partner Data Export (JSON/CSV)",
+      "Partner Data Cache Management",
+      "Partner Data Health Monitoring",
+      "Multi-source Data Integration",
+      "Real-time Data Aggregation",
     ],
   });
 });

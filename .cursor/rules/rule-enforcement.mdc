@@ -1,0 +1,223 @@
+---
+description: Rule enforcement system to ensure all project rules are followed
+globs: backend/**/*.js,backend/**/*.ts,**/*.md
+---
+
+# 🚨 RULE ENFORCEMENT SYSTEM
+
+## **MANDATORY: Before Starting ANY Task**
+
+### **1. Read Memory Bank (ALWAYS FIRST)**
+```bash
+# MUST read ALL memory bank files before starting
+ls memory-bank/
+# Read: projectbrief.md, productContext.md, activeContext.md, 
+#       systemPatterns.md, techContext.md, progress.md
+```
+
+### **2. Check Reference Implementation**
+```bash
+# ALWAYS check auth-service patterns first
+ls backend/auth-service/
+grep -r "require.*shared" backend/auth-service/
+cat backend/auth-service/controllers/authController.js
+cat backend/auth-service/middleware/auth.js
+cat backend/auth-service/server.js
+```
+
+### **3. Fetch Applicable Rules**
+```bash
+# Use fetch_rules tool to get:
+# - backend: Backend development standards
+# - development-workflow: Quality standards
+# - shared-libraries: Import patterns
+# - frontend: If applicable
+```
+
+## **DURING IMPLEMENTATION**
+
+### **Import Path Verification**
+```javascript
+// MANDATORY: Check auth-service first, then use EXACT patterns
+
+// ✅ From controllers/routes/middleware/services directories:
+const APIResponse = require("../shared/lib/response");
+const { authMiddleware } = require("../shared/lib/auth");
+const logger = require("../shared/lib/logger");
+
+// ✅ From server.js only:
+const logger = require("./shared/lib/logger");
+
+// ❌ NEVER use (common mistake):
+const APIResponse = require("../../shared/lib/response");
+```
+
+### **Controller Pattern Verification**
+```javascript
+// ✅ CORRECT: Function-based (like auth-service)
+async function getEntity(req, res) {
+  try {
+    // Implementation
+    res.json(APIResponse.success(data));
+  } catch (error) {
+    logger.error("Error:", error);
+    throw error;
+  }
+}
+
+module.exports = {
+  getEntity,
+  createEntity
+};
+
+// ❌ FORBIDDEN: Class-based exports
+module.exports = new EntityController();
+```
+
+### **Middleware Pattern Verification**
+```javascript
+// ✅ Check what auth-service middleware exports
+const authMiddleware = require("../middleware/auth");
+
+// ✅ Use in routes like auth-service
+router.get("/endpoint", authMiddleware.authenticate, controller.method);
+
+// ❌ Don't use undefined middleware
+router.get("/endpoint", verifyToken, controller.method); // Wrong if verifyToken doesn't exist
+```
+
+## **MANDATORY TESTING SEQUENCE**
+
+### **Step 1: Local Testing (Before Docker)**
+```bash
+# Test imports locally
+cd backend/service-name
+node -e "console.log(require('../shared'))"
+node -e "console.log(require('./controllers/entityController'))"
+```
+
+### **Step 2: Docker Testing (CRITICAL)**
+```bash
+# 1. Restart Docker service
+docker-compose restart service-name
+
+# 2. Check logs immediately
+docker logs logistics-service-name --tail=30
+
+# 3. Look for specific errors
+docker logs logistics-service-name | grep -E "(MODULE_NOT_FOUND|Error|Failed)"
+
+# 4. Test health endpoint
+curl http://localhost:PORT/health
+
+# 5. Test API endpoints
+curl -X GET http://localhost:PORT/api/endpoint
+```
+
+### **Step 3: Error Resolution (If Needed)**
+```bash
+# If MODULE_NOT_FOUND:
+# 1. Check container structure
+docker exec logistics-service-name ls -la /app/shared/lib/
+
+# 2. Test import in container
+docker exec logistics-service-name node -e "console.log(require('../shared'))"
+
+# 3. Fix import paths
+# 4. Restart Docker and test again
+```
+
+## **TASK COMPLETION RULES**
+
+### **NEVER Mark Complete Until:**
+- [ ] Docker service starts without errors
+- [ ] Health endpoint returns 200 OK status
+- [ ] No MODULE_NOT_FOUND errors in logs
+- [ ] API endpoints respond correctly
+- [ ] All shared library imports work
+- [ ] Follows auth-service patterns exactly
+
+### **Documentation Update Process:**
+1. ✅ Verify ALL testing criteria pass
+2. ✅ Update BACKEND_TASK.md status to COMPLETED
+3. ✅ Mark all implementation items as [x] done
+4. ✅ Add implementation summary with files created
+5. ✅ Update "Last Updated" and "Current Active Task"
+
+## **USER MEMORY INTEGRATION**
+
+### **Follow User Preferences:**
+- Memory ID 7010278: Verify service functionality by checking Docker logs before marking complete
+- Memory ID 7008909: Ask user to run tests instead of running automatically
+- Memory ID 6917093: Don't bypass verification (no --no-verify)
+- Memory ID 6826471: Use 'dev:backend' script instead of direct docker-compose
+
+### **Implementation Pattern:**
+```bash
+# Instead of running commands automatically, ask user:
+"Please run these commands to verify the implementation:
+1. pnpm run dev:backend
+2. curl http://localhost:3005/health
+3. Check Docker logs: docker logs logistics-partner-service --tail=20"
+```
+
+## **COMMON RULE VIOLATIONS TO AVOID**
+
+### **Import Path Violations**
+- ❌ Using `../../shared` from any directory
+- ❌ Not checking auth-service reference first
+- ❌ Guessing import paths without testing
+
+### **Testing Violations**
+- ❌ Marking complete without Docker restart
+- ❌ Ignoring MODULE_NOT_FOUND errors
+- ❌ Not testing health endpoint
+- ❌ Skipping API endpoint verification
+
+### **Pattern Violations**
+- ❌ Using class-based controllers instead of functions
+- ❌ Using undefined middleware (like verifyToken vs authenticate)
+- ❌ Not following auth-service patterns exactly
+
+### **Documentation Violations**
+- ❌ Updating task status before verification
+- ❌ Not asking user to test (per memory 7008909)
+- ❌ Missing implementation details in summary
+
+## **RULE ENFORCEMENT CHECKLIST**
+
+### **Before Every Task:**
+- [ ] Read memory bank files
+- [ ] Check auth-service reference patterns
+- [ ] Fetch applicable rules
+- [ ] Plan implementation following patterns
+
+### **During Implementation:**
+- [ ] Use correct import paths (check auth-service)
+- [ ] Follow controller patterns exactly
+- [ ] Test imports locally before Docker
+- [ ] Create proper middleware wrappers
+
+### **Before Marking Complete:**
+- [ ] Docker service restarts successfully
+- [ ] Health endpoint responds
+- [ ] No errors in Docker logs
+- [ ] API endpoints work
+- [ ] Ask user to verify (per memory)
+
+### **Documentation Update:**
+- [ ] Only after ALL verification passes
+- [ ] Include comprehensive implementation summary
+- [ ] Update project status correctly
+- [ ] Follow user preferences for testing
+
+## **SUCCESS METRICS**
+
+**Task is ONLY complete when:**
+1. ✅ All project rules followed exactly
+2. ✅ Auth-service patterns matched precisely  
+3. ✅ Docker testing sequence passes completely
+4. ✅ User verification requested (per memory)
+5. ✅ Documentation updated comprehensively
+
+**If ANY rule is violated, task is NOT complete!**
