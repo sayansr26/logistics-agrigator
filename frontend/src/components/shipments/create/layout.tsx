@@ -3,7 +3,7 @@
 import React from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { RefreshCcw, Save, Send } from "lucide-react";
+import { RefreshCcw, Save, Send, ArrowLeft } from "lucide-react";
 import { CreateShipmentStepper } from "./stepper";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
 
@@ -28,6 +28,12 @@ export function CreateShipmentLayout({
     // In real app, this would validate the current step
     if (currentStep < 5) {
       onStepChange(currentStep + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      onStepChange(currentStep - 1);
     }
   };
 
@@ -58,7 +64,10 @@ export function CreateShipmentLayout({
           <div className="flex items-center space-x-2">
             <Button
               variant="outline"
-              onClick={() => useShipmentFormStore.getState().resetForm()}
+              onClick={() => {
+                const { resetForm } = useShipmentFormStore.getState();
+                resetForm();
+              }}
             >
               <RefreshCcw className="h-4 w-4 mr-2" />
               Reset Form

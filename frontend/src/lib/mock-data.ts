@@ -46,6 +46,47 @@ export interface User {
   avatar?: string;
 }
 
+// User Management Interfaces
+export interface UserRole {
+  value: "admin" | "client" | "operations" | "support";
+  label: string;
+  color: string;
+  description: string;
+  permissions: string[];
+}
+
+export interface UserStatus {
+  value: "active" | "inactive" | "suspended";
+  label: string;
+  color: string;
+  description: string;
+}
+
+export interface UserPermission {
+  value: string;
+  label: string;
+  category: string;
+  description: string;
+}
+
+export interface UserFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  company: string;
+  department: string;
+  position: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  notes: string;
+  permissions: string[];
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -1981,3 +2022,496 @@ export function getRatingColor(rating: number): string {
 export function formatRating(rating: number): string {
   return rating.toFixed(1);
 }
+
+// User Management Data
+export const userRoles: UserRole[] = [
+  {
+    value: "admin",
+    label: "Admin",
+    color: "bg-red-100 text-red-800",
+    description: "Full system access with user management capabilities",
+    permissions: [
+      "shipments_view",
+      "shipments_create",
+      "shipments_edit",
+      "shipments_delete",
+      "users_view",
+      "users_create",
+      "users_edit",
+      "users_delete",
+      "reports_view",
+      "reports_create",
+      "partners_view",
+      "partners_manage",
+      "billing_view",
+      "billing_manage",
+    ],
+  },
+  {
+    value: "client",
+    label: "Client",
+    color: "bg-blue-100 text-blue-800",
+    description: "Shipment management and order tracking access",
+    permissions: [
+      "shipments_view",
+      "shipments_create",
+      "shipments_edit",
+      "reports_view",
+      "billing_view",
+    ],
+  },
+  {
+    value: "operations",
+    label: "Operations",
+    color: "bg-orange-100 text-orange-800",
+    description: "Shipment operations and partner management",
+    permissions: [
+      "shipments_view",
+      "shipments_edit",
+      "partners_view",
+      "partners_manage",
+      "reports_view",
+      "reports_create",
+    ],
+  },
+  {
+    value: "support",
+    label: "Support",
+    color: "bg-teal-100 text-teal-800",
+    description: "Customer assistance and issue resolution",
+    permissions: ["shipments_view", "users_view", "reports_view"],
+  },
+];
+
+export const userStatuses: UserStatus[] = [
+  {
+    value: "active",
+    label: "Active",
+    color: "bg-green-100 text-green-800",
+    description: "User has full access to assigned features",
+  },
+  {
+    value: "inactive",
+    label: "Inactive",
+    color: "bg-yellow-100 text-yellow-800",
+    description: "User account is temporarily disabled",
+  },
+  {
+    value: "suspended",
+    label: "Suspended",
+    color: "bg-red-100 text-red-800",
+    description: "User account is suspended due to policy violation",
+  },
+];
+
+export const userPermissions: UserPermission[] = [
+  // Shipment permissions
+  {
+    value: "shipments_view",
+    label: "View Shipments",
+    category: "Shipments",
+    description: "Can view shipment details and status",
+  },
+  {
+    value: "shipments_create",
+    label: "Create Shipments",
+    category: "Shipments",
+    description: "Can create new shipments",
+  },
+  {
+    value: "shipments_edit",
+    label: "Edit Shipments",
+    category: "Shipments",
+    description: "Can modify existing shipment details",
+  },
+  {
+    value: "shipments_delete",
+    label: "Delete Shipments",
+    category: "Shipments",
+    description: "Can delete shipments from the system",
+  },
+
+  // User management permissions
+  {
+    value: "users_view",
+    label: "View Users",
+    category: "Users",
+    description: "Can view user profiles and information",
+  },
+  {
+    value: "users_create",
+    label: "Create Users",
+    category: "Users",
+    description: "Can create new user accounts",
+  },
+  {
+    value: "users_edit",
+    label: "Edit Users",
+    category: "Users",
+    description: "Can modify user account details",
+  },
+  {
+    value: "users_delete",
+    label: "Delete Users",
+    category: "Users",
+    description: "Can delete user accounts",
+  },
+
+  // Report permissions
+  {
+    value: "reports_view",
+    label: "View Reports",
+    category: "Reports",
+    description: "Can access and view system reports",
+  },
+  {
+    value: "reports_create",
+    label: "Create Reports",
+    category: "Reports",
+    description: "Can generate custom reports",
+  },
+
+  // Partner permissions
+  {
+    value: "partners_view",
+    label: "View Partners",
+    category: "Partners",
+    description: "Can view partner information",
+  },
+  {
+    value: "partners_manage",
+    label: "Manage Partners",
+    category: "Partners",
+    description: "Can manage partner relationships and settings",
+  },
+
+  // Billing permissions
+  {
+    value: "billing_view",
+    label: "View Billing",
+    category: "Billing",
+    description: "Can view billing information and invoices",
+  },
+  {
+    value: "billing_manage",
+    label: "Manage Billing",
+    category: "Billing",
+    description: "Can manage billing settings and payment processing",
+  },
+];
+
+// User management utility functions
+export function getRoleByValue(value: string): UserRole | undefined {
+  return userRoles.find((role) => role.value === value);
+}
+
+export function getStatusByValue(value: string): UserStatus | undefined {
+  return userStatuses.find((status) => status.value === value);
+}
+
+export function getPermissionByValue(
+  value: string,
+): UserPermission | undefined {
+  return userPermissions.find((permission) => permission.value === value);
+}
+
+export function getPermissionsByCategory(category: string): UserPermission[] {
+  return userPermissions.filter(
+    (permission) => permission.category === category,
+  );
+}
+
+export function getDefaultPermissionsForRole(role: string): string[] {
+  const roleData = getRoleByValue(role);
+  return roleData ? roleData.permissions : [];
+}
+
+// Permission Management Interfaces
+export interface PermissionCategory {
+  id: string;
+  name: string;
+  icon: string; // Icon name for dynamic import
+  description: string;
+  permissions: Permission[];
+}
+
+export interface Permission {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// Permission categories data
+export const permissionCategories: PermissionCategory[] = [
+  {
+    id: "shipments",
+    name: "Shipment Management",
+    icon: "Package",
+    description: "Manage shipments, tracking, and delivery operations",
+    permissions: [
+      {
+        id: "read:shipments",
+        name: "View Shipments",
+        description: "Can view shipment details and status",
+      },
+      {
+        id: "write:shipments",
+        name: "Create Shipments",
+        description: "Can create new shipments",
+      },
+      {
+        id: "edit:shipments",
+        name: "Edit Shipments",
+        description: "Can modify existing shipments",
+      },
+      {
+        id: "delete:shipments",
+        name: "Delete Shipments",
+        description: "Can remove shipments from system",
+      },
+      {
+        id: "bulk:shipments",
+        name: "Bulk Operations",
+        description: "Can perform bulk shipment operations",
+      },
+    ],
+  },
+  {
+    id: "users",
+    name: "User Management",
+    icon: "Users",
+    description: "Manage user accounts, roles, and permissions",
+    permissions: [
+      {
+        id: "read:users",
+        name: "View Users",
+        description: "Can view user profiles and information",
+      },
+      {
+        id: "write:users",
+        name: "Create Users",
+        description: "Can create new user accounts",
+      },
+      {
+        id: "edit:users",
+        name: "Edit Users",
+        description: "Can modify user information",
+      },
+      {
+        id: "delete:users",
+        name: "Delete Users",
+        description: "Can remove user accounts",
+      },
+      {
+        id: "manage:permissions",
+        name: "Manage Permissions",
+        description: "Can assign and modify user permissions",
+      },
+    ],
+  },
+  {
+    id: "reports",
+    name: "Reports & Analytics",
+    icon: "BarChart3",
+    description: "Access to reports, analytics, and business intelligence",
+    permissions: [
+      {
+        id: "read:reports",
+        name: "View Reports",
+        description: "Can access basic reports and analytics",
+      },
+      {
+        id: "export:reports",
+        name: "Export Reports",
+        description: "Can export reports in various formats",
+      },
+      {
+        id: "create:reports",
+        name: "Create Reports",
+        description: "Can create custom reports",
+      },
+      {
+        id: "admin:reports",
+        name: "Admin Reports",
+        description: "Can access administrative reports",
+      },
+    ],
+  },
+  {
+    id: "billing",
+    name: "Billing & Finance",
+    icon: "CreditCard",
+    description: "Manage billing, invoices, and financial operations",
+    permissions: [
+      {
+        id: "read:billing",
+        name: "View Billing",
+        description: "Can view billing information and invoices",
+      },
+      {
+        id: "create:invoices",
+        name: "Create Invoices",
+        description: "Can generate invoices for customers",
+      },
+      {
+        id: "manage:payments",
+        name: "Manage Payments",
+        description: "Can process and manage payments",
+      },
+      {
+        id: "admin:finance",
+        name: "Admin Finance",
+        description: "Can access financial administration",
+      },
+    ],
+  },
+  {
+    id: "partners",
+    name: "Partner Management",
+    icon: "Globe",
+    description: "Manage courier partners and external integrations",
+    permissions: [
+      {
+        id: "read:partners",
+        name: "View Partners",
+        description: "Can view partner information",
+      },
+      {
+        id: "manage:partners",
+        name: "Manage Partners",
+        description: "Can add, edit, and remove partners",
+      },
+      {
+        id: "partner:rates",
+        name: "Partner Rates",
+        description: "Can manage partner pricing and rates",
+      },
+      {
+        id: "partner:contracts",
+        name: "Partner Contracts",
+        description: "Can manage partner agreements",
+      },
+    ],
+  },
+  {
+    id: "system",
+    name: "System Administration",
+    icon: "Server",
+    description: "System configuration and administrative functions",
+    permissions: [
+      {
+        id: "system:config",
+        name: "System Config",
+        description: "Can modify system configuration",
+      },
+      {
+        id: "system:logs",
+        name: "System Logs",
+        description: "Can access system logs and monitoring",
+      },
+      {
+        id: "system:backup",
+        name: "System Backup",
+        description: "Can manage system backups",
+      },
+      {
+        id: "system:security",
+        name: "System Security",
+        description: "Can manage security settings",
+      },
+    ],
+  },
+];
+
+// Enhanced user data with additional fields for permissions page
+export interface EnhancedUser extends User {
+  phone?: string;
+  company?: string;
+  department?: string;
+  position?: string;
+  permissions?: string[];
+}
+
+// Enhanced mock users with additional data
+export const enhancedMockUsers: EnhancedUser[] = [
+  {
+    id: "1",
+    name: "Alice Johnson",
+    email: "alice@techcorp.com",
+    role: "admin",
+    status: "active",
+    lastLogin: "2024-08-18T09:30:00Z",
+    shipmentsCount: 45,
+    phone: "+91 98765 43210",
+    company: "TechCorp Solutions",
+    department: "Engineering",
+    position: "Senior Developer",
+    permissions: [
+      "read:shipments",
+      "write:shipments",
+      "read:reports",
+      "manage:users",
+    ],
+  },
+  {
+    id: "2",
+    name: "Bob Smith",
+    email: "bob@fashionstore.com",
+    role: "client",
+    status: "active",
+    lastLogin: "2024-08-17T14:20:00Z",
+    shipmentsCount: 23,
+    phone: "+91 98765 43211",
+    company: "Fashion Store",
+    department: "Sales",
+    position: "Sales Manager",
+    permissions: ["read:shipments", "write:shipments", "read:reports"],
+  },
+  {
+    id: "3",
+    name: "Carol Davis",
+    email: "carol@logistics.com",
+    role: "operations",
+    status: "active",
+    lastLogin: "2024-08-18T08:15:00Z",
+    shipmentsCount: 156,
+    phone: "+91 98765 43212",
+    company: "Logistics Corp",
+    department: "Operations",
+    position: "Operations Manager",
+    permissions: [
+      "read:shipments",
+      "edit:shipments",
+      "read:reports",
+      "read:partners",
+    ],
+  },
+  {
+    id: "4",
+    name: "David Wilson",
+    email: "david@support.com",
+    role: "support",
+    status: "inactive",
+    lastLogin: "2024-08-15T16:45:00Z",
+    shipmentsCount: 12,
+    phone: "+91 98765 43213",
+    company: "Support Services",
+    department: "Customer Support",
+    position: "Support Specialist",
+    permissions: ["read:shipments", "read:users", "read:reports"],
+  },
+  {
+    id: "5",
+    name: "Eva Brown",
+    email: "eva@electronics.com",
+    role: "client",
+    status: "suspended",
+    lastLogin: "2024-08-10T11:30:00Z",
+    shipmentsCount: 8,
+    phone: "+91 98765 43214",
+    company: "Electronics Hub",
+    department: "E-commerce",
+    position: "E-commerce Manager",
+    permissions: ["read:shipments"],
+  },
+];
