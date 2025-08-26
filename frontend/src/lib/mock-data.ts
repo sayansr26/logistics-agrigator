@@ -1263,3 +1263,721 @@ export function getTicketStatusColor(status: SupportTicket["status"]): string {
       return "bg-gray-100 text-gray-800";
   }
 }
+
+// Shopify Platform Integration Data
+export interface ShopifyStore {
+  id: string;
+  name: string;
+  domain: string;
+  status: "connected" | "disconnected" | "error" | "pending";
+  lastSync: string;
+  ordersCount: number;
+  revenue: number;
+  apiKey: string;
+  apiSecret: string;
+  webhookUrl: string;
+  accessToken: string;
+  storeImage?: string;
+  settings: ShopifySettings;
+}
+
+export interface ShopifySettings {
+  autoSync: boolean;
+  syncInterval: number; // minutes
+  webhookEnabled: boolean;
+  orderStatusMapping: Record<string, string>;
+  inventorySync: boolean;
+  customerSync: boolean;
+  productSync: boolean;
+}
+
+export interface ShopifyOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  total: number;
+  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+  createdAt: string;
+  lastSync: string;
+  syncStatus: "synced" | "pending" | "failed";
+  platform: "shopify";
+}
+
+// Mock Shopify stores data
+export const mockShopifyStores: ShopifyStore[] = [
+  {
+    id: "shopify-1",
+    name: "TechCorp Store",
+    domain: "techcorp.myshopify.com",
+    status: "connected",
+    lastSync: "2024-08-21T10:30:00Z",
+    ordersCount: 1247,
+    revenue: 45780,
+    apiKey: "shp_1234567890abcdef",
+    apiSecret: "shp_1234567890abcdef",
+    webhookUrl: "https://api.logistics.com/webhooks/shopify",
+    accessToken: "shpat_1234567890abcdef",
+    settings: {
+      autoSync: true,
+      syncInterval: 15,
+      webhookEnabled: true,
+      orderStatusMapping: {
+        pending: "pending",
+        processing: "in_transit",
+        shipped: "delivered",
+        delivered: "delivered",
+        cancelled: "cancelled",
+      },
+      inventorySync: true,
+      customerSync: true,
+      productSync: false,
+    },
+  },
+  {
+    id: "shopify-2",
+    name: "Fashion Hub",
+    domain: "fashionhub.myshopify.com",
+    status: "pending",
+    lastSync: "2024-08-21T09:15:00Z",
+    ordersCount: 0,
+    revenue: 0,
+    apiKey: "shp_9876543210fedcba",
+    apiSecret: "shp_9876543210fedcba",
+    webhookUrl: "https://api.logistics.com/webhooks/shopify",
+    accessToken: "shpat_9876543210fedcba",
+    storeImage:
+      "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&h=300&fit=crop&auto=format",
+    settings: {
+      autoSync: false,
+      syncInterval: 30,
+      webhookEnabled: false,
+      orderStatusMapping: {},
+      inventorySync: false,
+      customerSync: false,
+      productSync: false,
+    },
+  },
+  {
+    id: "shopify-3",
+    name: "Electronics World",
+    domain: "electronics.myshopify.com",
+    status: "connected",
+    lastSync: "2024-08-21T11:45:00Z",
+    ordersCount: 892,
+    revenue: 32150,
+    apiKey: "shp_abcdef1234567890",
+    apiSecret: "shp_abcdef1234567890",
+    webhookUrl: "https://api.logistics.com/webhooks/shopify",
+    accessToken: "shpat_abcdef1234567890",
+    storeImage:
+      "https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400&h=300&fit=crop&auto=format",
+    settings: {
+      autoSync: true,
+      syncInterval: 20,
+      webhookEnabled: true,
+      orderStatusMapping: {
+        pending: "pending",
+        processing: "in_transit",
+        shipped: "delivered",
+        delivered: "delivered",
+        cancelled: "cancelled",
+      },
+      inventorySync: true,
+      customerSync: false,
+      productSync: true,
+    },
+  },
+];
+
+// Mock Shopify orders data
+export const mockShopifyOrders: ShopifyOrder[] = [
+  {
+    id: "order-1",
+    orderNumber: "#1001",
+    customerName: "John Doe",
+    total: 299.99,
+    status: "pending",
+    createdAt: "2024-08-21T10:00:00Z",
+    lastSync: "2024-08-21T10:30:00Z",
+    syncStatus: "synced",
+    platform: "shopify",
+  },
+  {
+    id: "order-2",
+    orderNumber: "#1002",
+    customerName: "Jane Smith",
+    total: 149.5,
+    status: "processing",
+    createdAt: "2024-08-21T09:30:00Z",
+    lastSync: "2024-08-21T10:15:00Z",
+    syncStatus: "synced",
+    platform: "shopify",
+  },
+  {
+    id: "order-3",
+    orderNumber: "#1003",
+    customerName: "Bob Johnson",
+    total: 89.99,
+    status: "shipped",
+    createdAt: "2024-08-21T08:00:00Z",
+    lastSync: "2024-08-21T09:45:00Z",
+    syncStatus: "synced",
+    platform: "shopify",
+  },
+  {
+    id: "order-4",
+    orderNumber: "#1004",
+    customerName: "Alice Brown",
+    total: 450.0,
+    status: "delivered",
+    createdAt: "2024-08-20T16:30:00Z",
+    lastSync: "2024-08-20T17:00:00Z",
+    syncStatus: "synced",
+    platform: "shopify",
+  },
+  {
+    id: "order-5",
+    orderNumber: "#1005",
+    customerName: "Charlie Wilson",
+    total: 199.99,
+    status: "cancelled",
+    createdAt: "2024-08-20T14:15:00Z",
+    lastSync: "2024-08-20T14:30:00Z",
+    syncStatus: "synced",
+    platform: "shopify",
+  },
+];
+
+// Platform integration utility functions
+export function getShopifyStatusColor(status: ShopifyStore["status"]): string {
+  switch (status) {
+    case "connected":
+      return "bg-green-100 text-green-800";
+    case "disconnected":
+      return "bg-gray-100 text-gray-800";
+    case "error":
+      return "bg-red-100 text-red-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getShopifyStatusIcon(status: ShopifyStore["status"]) {
+  switch (status) {
+    case "connected":
+      return "bg-green-500";
+    case "disconnected":
+      return "bg-gray-500";
+    case "error":
+      return "bg-red-500";
+    case "pending":
+      return "bg-yellow-500";
+    default:
+      return "bg-gray-500";
+  }
+}
+
+export function getShopifySyncStatusColor(
+  status: ShopifyOrder["syncStatus"],
+): string {
+  switch (status) {
+    case "synced":
+      return "bg-green-100 text-green-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "failed":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getShopifyOrderStatusColor(
+  status: ShopifyOrder["status"],
+): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "processing":
+      return "bg-blue-100 text-blue-800";
+    case "shipped":
+      return "bg-indigo-100 text-indigo-800";
+    case "delivered":
+      return "bg-green-100 text-green-800";
+    case "cancelled":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+// Partner/Courier interfaces
+export interface Partner {
+  id: string;
+  name: string;
+  logo?: string;
+  type: "courier" | "logistics" | "warehouse" | "customs";
+  status: "active" | "inactive" | "suspended" | "pending";
+  rating: number;
+  deliveryTime: string;
+  coverage: string[];
+  services: string[];
+  pricing: {
+    baseRate: number;
+    perKgRate: number;
+    fuelSurcharge: number;
+    zoneRates: Record<string, number>;
+  };
+  contact: {
+    email: string;
+    phone: string;
+    address: string;
+    website: string;
+  };
+  performance: {
+    totalShipments: number;
+    successRate: number;
+    avgDeliveryTime: number;
+    customerSatisfaction: number;
+  };
+  lastUpdated: string;
+  contractStartDate: string;
+  contractEndDate: string;
+}
+
+export interface PartnerShipment {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  trackingNumber: string;
+  status:
+    | "pending"
+    | "picked_up"
+    | "in_transit"
+    | "out_for_delivery"
+    | "delivered"
+    | "failed";
+  pickupDate: string;
+  estimatedDelivery: string;
+  actualDelivery?: string;
+  weight: number;
+  value: number;
+  origin: string;
+  destination: string;
+  customerName: string;
+  customerPhone: string;
+  paymentMode: "prepaid" | "cod";
+  charges: number;
+  commission: number;
+  createdAt: string;
+}
+
+// Mock partner data
+export const mockPartners: Partner[] = [
+  {
+    id: "partner-1",
+    name: "DHL Express",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.8,
+    deliveryTime: "2-3 days",
+    coverage: ["International", "Express", "Same Day"],
+    services: [
+      "Express Delivery",
+      "Freight",
+      "E-commerce",
+      "Customs Clearance",
+    ],
+    pricing: {
+      baseRate: 25.0,
+      perKgRate: 8.5,
+      fuelSurcharge: 2.5,
+      zoneRates: {
+        "Zone A": 15.0,
+        "Zone B": 25.0,
+        "Zone C": 35.0,
+      },
+    },
+    contact: {
+      email: "partnership@dhl.com",
+      phone: "+1-800-225-5345",
+      address: "1234 Logistics Blvd, Memphis, TN 38118",
+      website: "https://www.dhl.com",
+    },
+    performance: {
+      totalShipments: 15420,
+      successRate: 98.5,
+      avgDeliveryTime: 2.3,
+      customerSatisfaction: 4.7,
+    },
+    lastUpdated: "2024-08-21T10:30:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+  {
+    id: "partner-2",
+    name: "FedEx Corporation",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.6,
+    deliveryTime: "1-3 days",
+    coverage: ["Domestic", "International", "Express"],
+    services: ["Ground Shipping", "Express", "Freight", "Customs"],
+    pricing: {
+      baseRate: 22.0,
+      perKgRate: 7.8,
+      fuelSurcharge: 2.8,
+      zoneRates: {
+        "Zone A": 12.0,
+        "Zone B": 22.0,
+        "Zone C": 32.0,
+      },
+    },
+    contact: {
+      email: "partnership@fedex.com",
+      phone: "+1-800-463-3339",
+      address: "942 S Shady Grove Rd, Memphis, TN 38120",
+      website: "https://www.fedex.com",
+    },
+    performance: {
+      totalShipments: 12850,
+      successRate: 97.8,
+      avgDeliveryTime: 2.1,
+      customerSatisfaction: 4.5,
+    },
+    lastUpdated: "2024-08-21T09:15:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+  {
+    id: "partner-3",
+    name: "UPS Logistics",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.7,
+    deliveryTime: "1-4 days",
+    coverage: ["Domestic", "International", "Ground"],
+    services: ["Ground", "Air", "Freight", "Supply Chain"],
+    pricing: {
+      baseRate: 20.0,
+      perKgRate: 7.2,
+      fuelSurcharge: 2.2,
+      zoneRates: {
+        "Zone A": 10.0,
+        "Zone B": 20.0,
+        "Zone C": 30.0,
+      },
+    },
+    contact: {
+      email: "partnership@ups.com",
+      phone: "+1-800-742-5877",
+      address: "55 Glenlake Pkwy NE, Atlanta, GA 30328",
+      website: "https://www.ups.com",
+    },
+    performance: {
+      totalShipments: 11230,
+      successRate: 98.2,
+      avgDeliveryTime: 2.4,
+      customerSatisfaction: 4.6,
+    },
+    lastUpdated: "2024-08-21T11:45:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+  {
+    id: "partner-4",
+    name: "Aramex International",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.4,
+    deliveryTime: "3-5 days",
+    coverage: ["Middle East", "Asia", "Africa"],
+    services: ["Express", "Freight", "E-commerce", "Customs"],
+    pricing: {
+      baseRate: 18.0,
+      perKgRate: 6.5,
+      fuelSurcharge: 2.0,
+      zoneRates: {
+        "Zone A": 8.0,
+        "Zone B": 18.0,
+        "Zone C": 28.0,
+      },
+    },
+    contact: {
+      email: "partnership@aramex.com",
+      phone: "+971-4-809-0000",
+      address: "Dubai Airport Free Zone, Dubai, UAE",
+      website: "https://www.aramex.com",
+    },
+    performance: {
+      totalShipments: 8750,
+      successRate: 96.5,
+      avgDeliveryTime: 3.8,
+      customerSatisfaction: 4.3,
+    },
+    lastUpdated: "2024-08-21T08:30:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+  {
+    id: "partner-5",
+    name: "Blue Dart Express",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.5,
+    deliveryTime: "1-2 days",
+    coverage: ["Domestic", "Express", "Same Day"],
+    services: ["Express", "Ground", "Freight", "E-commerce"],
+    pricing: {
+      baseRate: 15.0,
+      perKgRate: 5.5,
+      fuelSurcharge: 1.8,
+      zoneRates: {
+        "Zone A": 5.0,
+        "Zone B": 15.0,
+        "Zone C": 25.0,
+      },
+    },
+    contact: {
+      email: "partnership@bluedart.com",
+      phone: "+91-22-6601-6601",
+      address: "Blue Dart Centre, Sahar Airport Road, Mumbai, India",
+      website: "https://www.bluedart.com",
+    },
+    performance: {
+      totalShipments: 23450,
+      successRate: 97.2,
+      avgDeliveryTime: 1.8,
+      customerSatisfaction: 4.4,
+    },
+    lastUpdated: "2024-08-21T12:15:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+  {
+    id: "partner-6",
+    name: "DTDC Express",
+    logo: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=400&h=300&fit=crop&auto=format",
+    type: "courier",
+    status: "active",
+    rating: 4.2,
+    deliveryTime: "2-4 days",
+    coverage: ["Domestic", "Express", "Economy"],
+    services: ["Express", "Ground", "Freight", "E-commerce"],
+    pricing: {
+      baseRate: 12.0,
+      perKgRate: 4.8,
+      fuelSurcharge: 1.5,
+      zoneRates: {
+        "Zone A": 3.0,
+        "Zone B": 12.0,
+        "Zone C": 22.0,
+      },
+    },
+    contact: {
+      email: "partnership@dtdc.com",
+      phone: "+91-80-2222-2222",
+      address: "DTDC House, 3rd Floor, Jeevan Bhima Nagar, Bangalore, India",
+      website: "https://www.dtdc.com",
+    },
+    performance: {
+      totalShipments: 18750,
+      successRate: 95.8,
+      avgDeliveryTime: 2.9,
+      customerSatisfaction: 4.1,
+    },
+    lastUpdated: "2024-08-21T13:45:00Z",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2024-12-31",
+  },
+];
+
+// Mock partner shipments data
+export const mockPartnerShipments: PartnerShipment[] = [
+  {
+    id: "ps-1",
+    partnerId: "partner-1",
+    partnerName: "DHL Express",
+    trackingNumber: "DHL123456789",
+    status: "delivered",
+    pickupDate: "2024-08-18T10:30:00Z",
+    estimatedDelivery: "2024-08-20T15:00:00Z",
+    actualDelivery: "2024-08-20T14:30:00Z",
+    weight: 2.5,
+    value: 1200,
+    origin: "Mumbai",
+    destination: "New York",
+    customerName: "John Smith",
+    customerPhone: "+1-555-0123",
+    paymentMode: "prepaid",
+    charges: 45.5,
+    commission: 4.55,
+    createdAt: "2024-08-18T10:00:00Z",
+  },
+  {
+    id: "ps-2",
+    partnerId: "partner-2",
+    partnerName: "FedEx Corporation",
+    trackingNumber: "FDX987654321",
+    status: "in_transit",
+    pickupDate: "2024-08-19T14:20:00Z",
+    estimatedDelivery: "2024-08-22T12:00:00Z",
+    weight: 1.8,
+    value: 850,
+    origin: "Delhi",
+    destination: "Los Angeles",
+    customerName: "Sarah Johnson",
+    customerPhone: "+1-555-0124",
+    paymentMode: "cod",
+    charges: 38.2,
+    commission: 3.82,
+    createdAt: "2024-08-19T14:00:00Z",
+  },
+  {
+    id: "ps-3",
+    partnerId: "partner-3",
+    partnerName: "UPS Logistics",
+    trackingNumber: "UPS456789123",
+    status: "out_for_delivery",
+    pickupDate: "2024-08-20T09:15:00Z",
+    estimatedDelivery: "2024-08-21T10:30:00Z",
+    weight: 3.2,
+    value: 1850,
+    origin: "Bangalore",
+    destination: "Chicago",
+    customerName: "Mike Chen",
+    customerPhone: "+1-555-0125",
+    paymentMode: "prepaid",
+    charges: 52.8,
+    commission: 5.28,
+    createdAt: "2024-08-20T09:00:00Z",
+  },
+  {
+    id: "ps-4",
+    partnerId: "partner-4",
+    partnerName: "Aramex International",
+    trackingNumber: "ARX789123456",
+    status: "picked_up",
+    pickupDate: "2024-08-21T11:45:00Z",
+    estimatedDelivery: "2024-08-24T16:45:00Z",
+    weight: 0.8,
+    value: 95,
+    origin: "Chennai",
+    destination: "Dubai",
+    customerName: "Emma Wilson",
+    customerPhone: "+1-555-0126",
+    paymentMode: "prepaid",
+    charges: 28.5,
+    commission: 2.85,
+    createdAt: "2024-08-21T11:30:00Z",
+  },
+  {
+    id: "ps-5",
+    partnerId: "partner-5",
+    partnerName: "Blue Dart Express",
+    trackingNumber: "BLD321654987",
+    status: "delivered",
+    pickupDate: "2024-08-17T16:45:00Z",
+    estimatedDelivery: "2024-08-18T11:30:00Z",
+    actualDelivery: "2024-08-18T10:45:00Z",
+    weight: 1.5,
+    value: 650,
+    origin: "Hyderabad",
+    destination: "Mumbai",
+    customerName: "David Brown",
+    customerPhone: "+1-555-0127",
+    paymentMode: "cod",
+    charges: 22.5,
+    commission: 2.25,
+    createdAt: "2024-08-17T16:30:00Z",
+  },
+  {
+    id: "ps-6",
+    partnerId: "partner-6",
+    partnerName: "DTDC Express",
+    trackingNumber: "DTD147258369",
+    status: "pending",
+    pickupDate: "2024-08-22T08:30:00Z",
+    estimatedDelivery: "2024-08-25T14:00:00Z",
+    weight: 2.1,
+    value: 420,
+    origin: "Pune",
+    destination: "Kolkata",
+    customerName: "Lisa Garcia",
+    customerPhone: "+1-555-0128",
+    paymentMode: "prepaid",
+    charges: 18.8,
+    commission: 1.88,
+    createdAt: "2024-08-22T08:00:00Z",
+  },
+];
+
+// Partner utility functions
+export function getPartnerStatusColor(status: Partner["status"]): string {
+  switch (status) {
+    case "active":
+      return "bg-green-100 text-green-800";
+    case "inactive":
+      return "bg-gray-100 text-gray-800";
+    case "suspended":
+      return "bg-red-100 text-red-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getPartnerTypeColor(type: Partner["type"]): string {
+  switch (type) {
+    case "courier":
+      return "bg-blue-100 text-blue-800";
+    case "logistics":
+      return "bg-green-100 text-green-800";
+    case "warehouse":
+      return "bg-purple-100 text-purple-800";
+    case "customs":
+      return "bg-orange-100 text-orange-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getPartnerShipmentStatusColor(
+  status: PartnerShipment["status"],
+): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "picked_up":
+      return "bg-blue-100 text-blue-800";
+    case "in_transit":
+      return "bg-indigo-100 text-indigo-800";
+    case "out_for_delivery":
+      return "bg-purple-100 text-purple-800";
+    case "delivered":
+      return "bg-green-100 text-green-800";
+    case "failed":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getRatingColor(rating: number): string {
+  if (rating >= 4.5) return "text-green-600";
+  if (rating >= 4.0) return "text-yellow-600";
+  if (rating >= 3.5) return "text-orange-600";
+  return "text-red-600";
+}
+
+export function formatRating(rating: number): string {
+  return rating.toFixed(1);
+}

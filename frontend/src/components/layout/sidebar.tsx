@@ -16,12 +16,9 @@ import {
   FileText,
   Bell,
   HelpCircle,
-  Shield,
-  Building,
   CreditCard,
   Globe,
   AlertTriangle,
-  MapPin,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -33,7 +30,6 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
-  children?: NavItem[];
 }
 
 const navigationItems: NavItem[] = [
@@ -69,59 +65,21 @@ const navigationItems: NavItem[] = [
     title: "Platform Integration",
     href: "/platforms",
     icon: Globe,
-    children: [
-      { title: "Connected Platforms", href: "/platforms", icon: Globe },
-      { title: "Shopify", href: "/platforms/shopify", icon: Building },
-      { title: "WooCommerce", href: "/platforms/woocommerce", icon: Building },
-      { title: "API Integration", href: "/platforms/api", icon: Shield },
-      { title: "Webhooks", href: "/platforms/webhooks", icon: Globe },
-    ],
   },
   {
     title: "Analytics & Reports",
-    href: "/analytics",
+    href: "/reports",
     icon: BarChart3,
-    children: [
-      { title: "Dashboard Overview", href: "/analytics", icon: BarChart3 },
-      {
-        title: "Performance Reports",
-        href: "/analytics/performance",
-        icon: BarChart3,
-      },
-      { title: "Cost Analysis", href: "/analytics/costs", icon: CreditCard },
-      {
-        title: "Partner Performance",
-        href: "/analytics/partners",
-        icon: Truck,
-      },
-      { title: "Custom Reports", href: "/analytics/custom", icon: FileText },
-    ],
   },
   {
     title: "Courier Partners",
     href: "/partners",
     icon: Truck,
-    children: [
-      { title: "All Partners", href: "/partners", icon: Truck },
-      { title: "Rate Cards", href: "/partners/rates", icon: CreditCard },
-      {
-        title: "Serviceability",
-        href: "/partners/serviceability",
-        icon: MapPin,
-      },
-      { title: "Performance", href: "/partners/performance", icon: BarChart3 },
-    ],
   },
   {
     title: "User Management",
     href: "/users",
     icon: Users,
-    children: [
-      { title: "All Users", href: "/users", icon: Users },
-      { title: "Add User", href: "/users/add", icon: Users },
-      { title: "Roles & Permissions", href: "/users/roles", icon: Shield },
-      { title: "Client Accounts", href: "/users/clients", icon: Building },
-    ],
   },
 ];
 
@@ -136,27 +94,11 @@ const bottomNavItems: NavItem[] = [
     title: "Account Settings",
     href: "/settings",
     icon: Settings,
-    children: [
-      { title: "Profile Settings", href: "/settings/profile", icon: Settings },
-      { title: "Company Settings", href: "/settings/company", icon: Building },
-      { title: "API Keys", href: "/settings/api", icon: Shield },
-      {
-        title: "Billing Settings",
-        href: "/settings/billing",
-        icon: CreditCard,
-      },
-    ],
   },
   {
     title: "Help & Support",
     href: "/support",
     icon: HelpCircle,
-    children: [
-      { title: "Contact Support", href: "/support/contact", icon: HelpCircle },
-      { title: "Documentation", href: "/support/docs", icon: FileText },
-      { title: "API Reference", href: "/support/api", icon: Shield },
-      { title: "System Status", href: "/support/status", icon: Bell },
-    ],
   },
 ];
 
@@ -184,7 +126,6 @@ export function Sidebar({ className }: SidebarProps) {
                 key={item.href}
                 item={item}
                 pathname={pathname}
-                level={0}
               />
             ))}
           </div>
@@ -200,7 +141,6 @@ export function Sidebar({ className }: SidebarProps) {
                 key={item.href}
                 item={item}
                 pathname={pathname}
-                level={0}
               />
             ))}
           </div>
@@ -213,49 +153,27 @@ export function Sidebar({ className }: SidebarProps) {
 interface NavItemComponentProps {
   item: NavItem;
   pathname: string;
-  level: number;
 }
 
-function NavItemComponent({ item, pathname, level }: NavItemComponentProps) {
+function NavItemComponent({ item, pathname }: NavItemComponentProps) {
   const isActive =
     pathname === item.href || pathname.startsWith(item.href + "/");
-  const hasChildren = item.children && item.children.length > 0;
-  const isExpanded = isActive && hasChildren;
 
   return (
-    <div>
-      <Button
-        variant={isActive ? "secondary" : "ghost"}
-        className={cn(
-          "w-full justify-start",
-          level > 0 && "ml-4 w-[calc(100%-1rem)]",
+    <Button
+      variant={isActive ? "secondary" : "ghost"}
+      className="w-full justify-start"
+      asChild
+    >
+      <Link href={item.href}>
+        <item.icon className="mr-2 h-4 w-4" />
+        {item.title}
+        {item.badge && (
+          <span className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
+            {item.badge}
+          </span>
         )}
-        asChild
-      >
-        <Link href={item.href}>
-          <item.icon className="mr-2 h-4 w-4" />
-          {item.title}
-          {item.badge && (
-            <span className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
-              {item.badge}
-            </span>
-          )}
-        </Link>
-      </Button>
-
-      {/* Render children if expanded */}
-      {isExpanded && hasChildren && (
-        <div className="mt-1 space-y-1">
-          {item.children!.map((child) => (
-            <NavItemComponent
-              key={child.href}
-              item={child}
-              pathname={pathname}
-              level={level + 1}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      </Link>
+    </Button>
   );
 }
