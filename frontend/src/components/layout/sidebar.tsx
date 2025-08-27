@@ -72,6 +72,11 @@ const navigationItems: NavItem[] = [
     icon: BarChart3,
   },
   {
+    title: "Remittance",
+    href: "/remittance",
+    icon: BarChart3,
+  },
+  {
     title: "Courier Partners",
     href: "/partners",
     icon: Truck,

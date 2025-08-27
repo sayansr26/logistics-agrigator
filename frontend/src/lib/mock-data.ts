@@ -2515,3 +2515,227 @@ export const enhancedMockUsers: EnhancedUser[] = [
     permissions: ["read:shipments"],
   },
 ];
+
+// Partner-related constants
+export const COVERAGE_OPTIONS = [
+  "North India",
+  "South India",
+  "East India",
+  "West India",
+  "Central India",
+  "Northeast India",
+  "Himalayan Region",
+  "Coastal Areas",
+  "Metro Cities",
+  "Tier 2 Cities",
+];
+
+export const SERVICE_OPTIONS = [
+  "Express Delivery",
+  "Standard Delivery",
+  "Same Day Delivery",
+  "Next Day Delivery",
+  "COD",
+  "Prepaid",
+  "Insurance",
+  "Signature Required",
+  "Fragile Handling",
+  "Temperature Controlled",
+];
+
+export const PARTNER_TYPES = [
+  { value: "courier", label: "Courier" },
+  { value: "logistics", label: "Logistics" },
+  { value: "warehouse", label: "Warehouse" },
+  { value: "customs", label: "Customs" },
+];
+
+export const PARTNER_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+];
+
+export const RATING_OPTIONS = [
+  { value: 1, label: "1 Star" },
+  { value: 2, label: "2 Stars" },
+  { value: 3, label: "3 Stars" },
+  { value: 4, label: "4 Stars" },
+  { value: 5, label: "5 Stars" },
+];
+
+// Remittance interfaces
+export interface Remittance {
+  id: string;
+  outlet: string;
+  refNo: string;
+  awbNumber: string;
+  receiver: string;
+  courier: string;
+  weight: number;
+  amount: number;
+  status: "pending" | "settled" | "cancelled";
+  createdAt: string;
+  settledAt?: string;
+  manifestDate: string;
+  deliveryDate: string;
+}
+
+export interface RemittanceFilter {
+  retailer?: string;
+  status?: Remittance["status"];
+  dateRange?: {
+    start: string;
+    end: string;
+  };
+}
+
+// Mock remittance data
+export const mockRemittances: Remittance[] = [
+  {
+    id: "1",
+    outlet: "RG ENTERPRISES",
+    refNo: "2506300237101587",
+    awbNumber: "25095210204035",
+    receiver: "Pradeep",
+    courier: "Delhivery",
+    weight: 26.4,
+    amount: 7900.0,
+    status: "pending",
+    createdAt: "2024-08-27T10:30:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-29",
+  },
+  {
+    id: "2",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507171219282397",
+    awbNumber: "25095210209576",
+    receiver: "Raneeta chatterjee",
+    courier: "Delhivery",
+    weight: 92.42,
+    amount: 15000.0,
+    status: "pending",
+    createdAt: "2024-08-27T11:15:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-30",
+  },
+  {
+    id: "3",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507180312024924",
+    awbNumber: "25095210210980",
+    receiver: "v vijaya lakshmi",
+    courier: "Delhivery",
+    weight: 179.0,
+    amount: 27710.0,
+    status: "pending",
+    createdAt: "2024-08-27T12:00:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-31",
+  },
+  {
+    id: "4",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507251145157710",
+    awbNumber: "25095210212612",
+    receiver: "Pydisri kanuri",
+    courier: "Delhivery",
+    weight: 170.14,
+    amount: 27680.0,
+    status: "pending",
+    createdAt: "2024-08-27T13:45:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-01",
+  },
+  {
+    id: "5",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508021255184695",
+    awbNumber: "25095210213824",
+    receiver: "Bhavya sri",
+    courier: "Delhivery",
+    weight: 31.68,
+    amount: 9600.0,
+    status: "pending",
+    createdAt: "2024-08-27T14:20:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-02",
+  },
+  {
+    id: "6",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508020117189573",
+    awbNumber: "25095210213780",
+    receiver: "Dr mohd akram Quresh",
+    courier: "Delhivery",
+    weight: 41.62,
+    amount: 13600.0,
+    status: "pending",
+    createdAt: "2024-08-27T15:10:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-03",
+  },
+  {
+    id: "7",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508030923451234",
+    awbNumber: "25095210214567",
+    receiver: "Priya Sharma",
+    courier: "Delhivery",
+    weight: 15.25,
+    amount: 4500.0,
+    status: "settled",
+    createdAt: "2024-08-26T09:30:00Z",
+    settledAt: "2024-08-27T10:00:00Z",
+    manifestDate: "2024-08-26",
+    deliveryDate: "2024-08-28",
+  },
+  {
+    id: "8",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508041430228765",
+    awbNumber: "25095210215678",
+    receiver: "Rajesh Kumar",
+    courier: "Delhivery",
+    weight: 28.75,
+    amount: 8200.0,
+    status: "settled",
+    createdAt: "2024-08-25T14:30:00Z",
+    settledAt: "2024-08-26T11:15:00Z",
+    manifestDate: "2024-08-25",
+    deliveryDate: "2024-08-27",
+  },
+];
+
+// Mock retailers for filter dropdown
+export const mockRetailers = [
+  "RG ENTERPRISES",
+  "ABC TRADERS",
+  "XYZ COMMERCE",
+  "PQR STORES",
+  "LMN BUSINESS",
+];
+
+// Remittance utility functions
+export function getRemittanceStatusColor(status: Remittance["status"]): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "settled":
+      return "bg-green-100 text-green-800";
+    case "cancelled":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function formatWeight(weight: number): string {
+  return `${weight.toFixed(2)}KG`;
+}
+
+export function formatAmount(amount: number): string {
+  return `₹ ${amount.toFixed(2)}`;
+}

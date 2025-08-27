@@ -3,38 +3,23 @@
 import React from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { RefreshCcw, Save, Send, ArrowLeft } from "lucide-react";
-import { CreateShipmentStepper } from "./stepper";
+import { RefreshCcw, Save, Send } from "lucide-react";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
 
 interface CreateShipmentLayoutProps {
   children: React.ReactNode;
-  currentStep: number;
-  onStepChange: (_step: number) => void;
 }
 
-export function CreateShipmentLayout({
-  children,
-  currentStep,
-  onStepChange,
-}: CreateShipmentLayoutProps) {
+export function CreateShipmentLayout({ children }: CreateShipmentLayoutProps) {
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
     { title: "Shipments", href: "/shipments" },
     { title: "Create Shipment" },
   ];
 
-  const handleNext = () => {
-    // In real app, this would validate the current step
-    if (currentStep < 5) {
-      onStepChange(currentStep + 1);
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      onStepChange(currentStep - 1);
-    }
+  const handleReset = () => {
+    const { resetForm } = useShipmentFormStore.getState();
+    resetForm();
   };
 
   return (
@@ -46,8 +31,7 @@ export function CreateShipmentLayout({
             {/* <Button
               variant="outline"
               size="sm"
-              onClick={handleBack}
-              disabled={currentStep === 1}
+              onClick={() => window.history.back()}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
@@ -62,36 +46,20 @@ export function CreateShipmentLayout({
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                const { resetForm } = useShipmentFormStore.getState();
-                resetForm();
-              }}
-            >
+            <Button variant="outline" onClick={handleReset}>
               <RefreshCcw className="h-4 w-4 mr-2" />
               Reset Form
             </Button>
-            <Button variant="outline">
+            <Button type="button" variant="outline">
               <Save className="h-4 w-4 mr-2" />
               Save Draft
             </Button>
-            {currentStep === 5 ? (
-              <Button className="bg-blue-600 hover:bg-blue-700">
-                <Send className="h-4 w-4 mr-2" />
-                Create Shipment
-              </Button>
-            ) : (
-              <Button onClick={handleNext}>Next Step</Button>
-            )}
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+              <Send className="h-4 w-4 mr-2" />
+              Create Shipment
+            </Button>
           </div>
         </div>
-
-        {/* Stepper */}
-        <CreateShipmentStepper
-          currentStep={currentStep}
-          onStepClick={onStepChange}
-        />
 
         {/* Content */}
         <div className="mt-8">{children}</div>

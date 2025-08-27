@@ -20,14 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
 import {
   Globe,
   Building,
@@ -47,14 +40,34 @@ import {
   Trash2,
   ShoppingCart,
   X,
+  Store,
+  Hash,
 } from "lucide-react";
 import { useState } from "react";
 
 // Types for platform integration
+interface Channel {
+  id: string;
+  name: string;
+  type: "online" | "offline" | "marketplace" | "social" | "api";
+  status: "active" | "inactive" | "pending" | "error";
+  ordersCount: number;
+  revenue: number;
+  lastSync: string;
+  settings: ChannelSettings;
+}
+
+interface ChannelSettings {
+  autoSync: boolean;
+  syncInterval: number; // minutes
+  orderStatusMapping: Record<string, string>;
+  customFields: Record<string, any>;
+}
+
 interface Platform {
   id: string;
   name: string;
-  type: "shopify" | "woocommerce" | "api" | "webhook";
+  type: "shopify" | "woocommerce" | "api" | "webhook" | "multi-channel";
   status: "connected" | "disconnected" | "error" | "pending";
   lastSync: string;
   ordersCount: number;
@@ -64,6 +77,7 @@ interface Platform {
   apiKey?: string;
   webhookUrl?: string;
   settings: PlatformSettings;
+  channels: Channel[];
 }
 
 interface PlatformSettings {
@@ -71,11 +85,14 @@ interface PlatformSettings {
   syncInterval: number; // minutes
   webhookEnabled: boolean;
   orderStatusMapping: Record<string, string>;
+  multiChannelEnabled: boolean;
 }
 
 interface IntegrationStats {
   totalPlatforms: number;
   connectedPlatforms: number;
+  totalChannels: number;
+  activeChannels: number;
   totalOrders: number;
   totalRevenue: number;
   lastSyncTime: string;
@@ -84,8 +101,10 @@ interface IntegrationStats {
 function getStatusColor(status: string) {
   switch (status) {
     case "connected":
+    case "active":
       return "bg-green-100 text-green-800";
     case "disconnected":
+    case "inactive":
       return "bg-gray-100 text-gray-800";
     case "error":
       return "bg-red-100 text-red-800";
@@ -99,8 +118,10 @@ function getStatusColor(status: string) {
 function getStatusIcon(status: string) {
   switch (status) {
     case "connected":
+    case "active":
       return <CheckCircle className="h-4 w-4 text-green-500" />;
     case "disconnected":
+    case "inactive":
       return <XCircle className="h-4 w-4 text-gray-500" />;
     case "error":
       return <AlertTriangle className="h-4 w-4 text-red-500" />;
@@ -121,8 +142,27 @@ function getPlatformIcon(type: string) {
       return <Key className="h-5 w-5 text-purple-600 rounded-full" />;
     case "webhook":
       return <Webhook className="h-5 w-5 text-orange-600 rounded-full" />;
+    case "multi-channel":
+      return <Store className="h-5 w-5 text-indigo-600 rounded-full" />;
     default:
       return <Globe className="h-5 w-5 text-gray-600" />;
+  }
+}
+
+function getChannelIcon(type: string) {
+  switch (type) {
+    case "online":
+      return <Globe className="h-4 w-4 text-blue-500" />;
+    case "offline":
+      return <Store className="h-4 w-4 text-green-500" />;
+    case "marketplace":
+      return <ShoppingCart className="h-4 w-4 text-orange-500" />;
+    case "social":
+      return <Hash className="h-4 w-4 text-purple-500" />;
+    case "api":
+      return <Key className="h-4 w-4 text-gray-500" />;
+    default:
+      return <Globe className="h-4 w-4 text-gray-500" />;
   }
 }
 
@@ -132,6 +172,10 @@ export default function PlatformsPage() {
     null,
   );
   const [showAddPlatform, setShowAddPlatform] = useState(false);
+  const [showAddChannel, setShowAddChannel] = useState(false);
+  const [selectedPlatformForChannel, setSelectedPlatformForChannel] = useState<
+    string | null
+  >(null);
   const [newPlatform, setNewPlatform] = useState({
     name: "",
     type: "" as Platform["type"],
@@ -140,6 +184,12 @@ export default function PlatformsPage() {
     status: "enable" as "enable" | "disable",
     apiKey: "",
     webhookUrl: "",
+    multiChannelEnabled: false,
+  });
+  const [newChannel, setNewChannel] = useState({
+    name: "",
+    type: "" as Channel["type"],
+    status: "active" as "active" | "inactive",
   });
 
   // Calculate stats dynamically
@@ -147,6 +197,11 @@ export default function PlatformsPage() {
     totalPlatforms: platforms.length,
     connectedPlatforms: platforms.filter((p) => p.status === "connected")
       .length,
+    totalChannels: platforms.reduce((sum, p) => sum + p.channels.length, 0),
+    activeChannels: platforms.reduce(
+      (sum, p) => sum + p.channels.filter((c) => c.status === "active").length,
+      0,
+    ),
     totalOrders: platforms.reduce((sum, p) => sum + p.ordersCount, 0),
     totalRevenue: platforms.reduce((sum, p) => sum + p.revenue, 0),
     lastSyncTime:
@@ -201,7 +256,9 @@ export default function PlatformsPage() {
         syncInterval: 30,
         webhookEnabled: !!newPlatform.webhookUrl,
         orderStatusMapping: {},
+        multiChannelEnabled: newPlatform.multiChannelEnabled,
       },
+      channels: [],
     };
 
     setPlatforms((prev) => [...prev, platform]);
@@ -213,8 +270,56 @@ export default function PlatformsPage() {
       status: "enable" as "enable" | "disable",
       apiKey: "",
       webhookUrl: "",
+      multiChannelEnabled: false,
     });
     setShowAddPlatform(false);
+  };
+
+  const handleAddChannel = () => {
+    if (!selectedPlatformForChannel || !newChannel.name || !newChannel.type)
+      return;
+
+    const channel: Channel = {
+      id: `${newChannel.type}-${Date.now()}`,
+      name: newChannel.name,
+      type: newChannel.type,
+      status: newChannel.status,
+      ordersCount: 0,
+      revenue: 0,
+      lastSync: new Date().toISOString(),
+      settings: {
+        autoSync: false,
+        syncInterval: 30,
+        orderStatusMapping: {},
+        customFields: {},
+      },
+    };
+
+    setPlatforms((prev) =>
+      prev.map((p) =>
+        p.id === selectedPlatformForChannel
+          ? { ...p, channels: [...p.channels, channel] }
+          : p,
+      ),
+    );
+
+    setNewChannel({
+      name: "",
+      type: "" as Channel["type"],
+      status: "active" as "active" | "inactive",
+    });
+    setShowAddChannel(false);
+    setSelectedPlatformForChannel(null);
+  };
+
+  const handleRemoveChannel = (platformId: string, channelId: string) => {
+    setPlatforms((prev) =>
+      prev.map((p) =>
+        p.id === platformId
+          ? { ...p, channels: p.channels.filter((c) => c.id !== channelId) }
+          : p,
+      ),
+    );
   };
 
   const resetNewPlatform = () => {
@@ -226,6 +331,15 @@ export default function PlatformsPage() {
       status: "enable" as "enable" | "disable",
       apiKey: "",
       webhookUrl: "",
+      multiChannelEnabled: false,
+    });
+  };
+
+  const resetNewChannel = () => {
+    setNewChannel({
+      name: "",
+      type: "" as Channel["type"],
+      status: "active" as "active" | "inactive",
     });
   };
 
@@ -244,7 +358,7 @@ export default function PlatformsPage() {
             </h1>
             <p className="text-muted-foreground">
               Connect and manage your e-commerce platforms, APIs, and webhooks
-              for seamless order synchronization.
+              for seamless order synchronization with multi-channel support.
             </p>
           </div>
           <div className="flex items-center space-x-2">
@@ -274,6 +388,23 @@ export default function PlatformsPage() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {integrationStats.connectedPlatforms} connected
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total Channels
+              </CardTitle>
+              <Store className="h-5 w-5 text-muted-foreground text-blue-500 rounded-full" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {integrationStats.totalChannels}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {integrationStats.activeChannels} active
               </p>
             </CardContent>
           </Card>
@@ -311,25 +442,6 @@ export default function PlatformsPage() {
               </p>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Last Sync</CardTitle>
-              <Clock className="h-5 w-5 text-muted-foreground text-red-500 rounded-full" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm font-bold">
-                {platforms.length > 0
-                  ? new Date(integrationStats.lastSyncTime).toLocaleTimeString()
-                  : "No platforms"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {platforms.length > 0
-                  ? new Date(integrationStats.lastSyncTime).toLocaleDateString()
-                  : "Add a platform to start"}
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Add Platform Modal */}
@@ -350,15 +462,15 @@ export default function PlatformsPage() {
                 </Button>
               </div>
               <CardDescription>
-                Configure a new platform integration
+                Configure a new platform integration with multi-channel support
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="platform-name">Platform Name</Label>
+                <Label htmlFor="platform-name">Channel</Label>
                 <Input
                   id="platform-name"
-                  placeholder="Enter platform name"
+                  placeholder="Enter channel name"
                   value={newPlatform.name}
                   onChange={(e) =>
                     setNewPlatform((prev) => ({
@@ -403,6 +515,12 @@ export default function PlatformsPage() {
                       <div className="flex items-center space-x-2">
                         <Webhook className="h-4 w-4 text-orange-600" />
                         <span>Webhooks</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="multi-channel">
+                      <div className="flex items-center space-x-2">
+                        <Store className="h-4 w-4 text-indigo-600" />
+                        <span>Multi-Channel Platform</span>
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -476,6 +594,26 @@ export default function PlatformsPage() {
                     </Select>
                   </div>
 
+                  {newPlatform.type === "multi-channel" && (
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="multi-channel-enabled"
+                        checked={newPlatform.multiChannelEnabled}
+                        onChange={(e) =>
+                          setNewPlatform((prev) => ({
+                            ...prev,
+                            multiChannelEnabled: e.target.checked,
+                          }))
+                        }
+                        className="rounded"
+                      />
+                      <Label htmlFor="multi-channel-enabled">
+                        Enable Multi-Channel Support
+                      </Label>
+                    </div>
+                  )}
+
                   {newPlatform.type === "api" && (
                     <div>
                       <Label htmlFor="api-key">API Key (Optional)</Label>
@@ -544,6 +682,142 @@ export default function PlatformsPage() {
           </Card>
         )}
 
+        {/* Add Channel Modal */}
+        {showAddChannel && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Add New Channel</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setShowAddChannel(false);
+                    resetNewChannel();
+                    setSelectedPlatformForChannel(null);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <CardDescription>
+                Add a new sales channel to your platform
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="channel-name">Channel Name</Label>
+                <Input
+                  id="channel-name"
+                  placeholder="Enter channel name"
+                  value={newChannel.name}
+                  onChange={(e) =>
+                    setNewChannel((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="channel-type">Channel Type</Label>
+                <Select
+                  value={newChannel.type}
+                  onValueChange={(value: Channel["type"]) =>
+                    setNewChannel((prev) => ({ ...prev, type: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select channel type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="online">
+                      <div className="flex items-center space-x-2">
+                        <Globe className="h-4 w-4 text-blue-500" />
+                        <span>Online Store</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="offline">
+                      <div className="flex items-center space-x-2">
+                        <Store className="h-4 w-4 text-green-500" />
+                        <span>Offline Store</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="marketplace">
+                      <div className="flex items-center space-x-2">
+                        <ShoppingCart className="h-4 w-4 text-orange-500" />
+                        <span>Marketplace</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="social">
+                      <div className="flex items-center space-x-2">
+                        <Hash className="h-4 w-4 text-purple-500" />
+                        <span>Social Media</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="api">
+                      <div className="flex items-center space-x-2">
+                        <Key className="h-4 w-4 text-gray-500" />
+                        <span>API Integration</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="channel-status">Status</Label>
+                <Select
+                  value={newChannel.status}
+                  onValueChange={(value: "active" | "inactive") =>
+                    setNewChannel((prev) => ({ ...prev, status: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span>Active</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="inactive">
+                      <div className="flex items-center space-x-2">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <span>Inactive</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex space-x-2 pt-4">
+                <Button
+                  className="flex-1"
+                  onClick={handleAddChannel}
+                  disabled={!newChannel.name || !newChannel.type}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Channel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddChannel(false);
+                    resetNewChannel();
+                    setSelectedPlatformForChannel(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Platforms List */}
           <Card className="lg:col-span-2">
@@ -582,91 +856,146 @@ export default function PlatformsPage() {
                   </Button>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Platform</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Sync</TableHead>
-                      <TableHead>Orders</TableHead>
-                      <TableHead>Revenue</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {platforms.map((platform) => (
-                      <TableRow
-                        key={platform.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handlePlatformSelect(platform)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
-                              {getPlatformIcon(platform.type)}
-                            </div>
-                            <div>
-                              <div className="font-medium">{platform.name}</div>
-                              <div className="text-sm text-muted-foreground capitalize">
-                                {platform.type}
-                              </div>
+                <div className="space-y-4">
+                  {platforms.map((platform) => (
+                    <div key={platform.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
+                            {getPlatformIcon(platform.type)}
+                          </div>
+                          <div>
+                            <div className="font-medium">{platform.name}</div>
+                            <div className="text-sm text-muted-foreground capitalize">
+                              {platform.type} • {platform.channels.length}{" "}
+                              channels
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
+                        </div>
+                        <div className="flex items-center space-x-2">
                           <div className="flex items-center space-x-2">
                             {getStatusIcon(platform.status)}
                             <Badge className={getStatusColor(platform.status)}>
                               {platform.status}
                             </Badge>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handlePlatformSelect(platform)}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemovePlatform(platform.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Channels List */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-medium">Channels</h4>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedPlatformForChannel(platform.id);
+                              setShowAddChannel(true);
+                            }}
+                          >
+                            <Plus className="mr-2 h-3 w-3" />
+                            Add Channel
+                          </Button>
+                        </div>
+
+                        {platform.channels.length === 0 ? (
+                          <div className="text-center py-4 text-muted-foreground border rounded">
+                            <p className="text-sm">No channels configured</p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedPlatformForChannel(platform.id);
+                                setShowAddChannel(true);
+                              }}
+                            >
+                              Add First Channel
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {platform.channels.map((channel) => (
+                              <div
+                                key={channel.id}
+                                className="flex items-center justify-between p-3 border rounded-lg bg-muted/30"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  {getChannelIcon(channel.type)}
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      {channel.name}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground capitalize">
+                                      {channel.type}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Badge
+                                    className={getStatusColor(channel.status)}
+                                  >
+                                    {channel.status}
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleRemoveChannel(
+                                        platform.id,
+                                        channel.id,
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Platform Stats */}
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <div className="flex items-center space-x-4 text-sm">
+                          <span>
+                            Orders: {platform.ordersCount.toLocaleString()}
+                          </span>
+                          <span>
+                            Revenue: ${platform.revenue.toLocaleString()}
+                          </span>
+                          <span>
+                            Last Sync:{" "}
                             {new Date(platform.lastSync).toLocaleTimeString()}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(platform.lastSync).toLocaleDateString()}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            {platform.ordersCount.toLocaleString()}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            ${platform.revenue.toLocaleString()}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSyncPlatform(platform.id);
-                              }}
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemovePlatform(platform.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSyncPlatform(platform.id)}
+                        >
+                          <RefreshCw className="mr-2 h-3 w-3" />
+                          Sync
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -707,6 +1036,23 @@ export default function PlatformsPage() {
                           className={getStatusColor(selectedPlatform.status)}
                         >
                           {selectedPlatform.status}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-medium">Channels</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Badge variant="outline">
+                          {selectedPlatform.channels.length} channels
+                        </Badge>
+                        <Badge variant="outline">
+                          {
+                            selectedPlatform.channels.filter(
+                              (c) => c.status === "active",
+                            ).length
+                          }{" "}
+                          active
                         </Badge>
                       </div>
                     </div>
@@ -827,6 +1173,20 @@ export default function PlatformsPage() {
                           }
                         >
                           {selectedPlatform.settings.webhookEnabled
+                            ? "Enabled"
+                            : "Disabled"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">Multi-Channel</span>
+                        <Badge
+                          variant={
+                            selectedPlatform.settings.multiChannelEnabled
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {selectedPlatform.settings.multiChannelEnabled
                             ? "Enabled"
                             : "Disabled"}
                         </Badge>

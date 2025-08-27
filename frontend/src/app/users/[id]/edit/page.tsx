@@ -180,11 +180,13 @@ export default function EditUserPage() {
       };
 
       // In a real app, you would make an API call here
+      // eslint-disable-next-line no-console
       console.log("Saving user:", updatedUser);
 
       // Redirect to user profile with success message
       router.push(`/users/${userId}?success=user-updated`);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Error saving user:", error);
       setErrors({ general: "Failed to save user. Please try again." });
     } finally {

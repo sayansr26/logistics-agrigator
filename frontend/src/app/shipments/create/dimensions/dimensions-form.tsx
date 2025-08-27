@@ -41,7 +41,7 @@ export function DimensionsForm() {
           <div className="text-center py-8 text-muted-foreground">
             <Box className="h-12 w-12 mx-auto mb-2 opacity-50" />
             <p>No packages added yet</p>
-            <p className="text-sm">Click "Add Box" to get started</p>
+            <p className="text-sm">Click &quot;Add Box&quot; to get started</p>
           </div>
         ) : (
           <div className="space-y-4">

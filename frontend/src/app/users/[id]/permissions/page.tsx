@@ -153,11 +153,13 @@ export default function ManagePermissionsPage() {
       setHasChanges(false);
 
       // In a real app, you would make an API call here
+      // eslint-disable-next-line no-console
       console.log("Saving permissions:", Array.from(userPermissions));
 
       // Show success message
       // You could add a toast notification here
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Error saving permissions:", error);
     } finally {
       setIsSaving(false);
