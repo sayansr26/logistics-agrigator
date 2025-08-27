@@ -1,5 +1,58 @@
 # System Patterns: Architecture & Technical Decisions
 
+## Task Management Patterns
+
+### Service Implementation Strategy
+
+**1. Partner Service Pattern (Proven Success)**
+
+Breaking large service implementations into focused, manageable tasks:
+
+```
+PARTNER-001: Service Foundation (2 days)
+PARTNER-002: External API Integration (2 days)
+PARTNER-003: Geographical Data Services (1 day)
+PARTNER-004: Zone Management Services (1 day)
+PARTNER-005: Package and Charge Management (1.5 days)
+PARTNER-006: Discount Management System (1 day)
+PARTNER-007: Partner Data Retrieval Services (1 day)
+PARTNER-008: Charge Calculation and Assignment (1 day)
+PARTNER-009: Advanced Features and Analytics (1.5 days)
+```
+
+**Result**: 75+ endpoints delivered across 9 service areas in 16 days
+
+**2. Shipment Service Pattern (Following Partner Success)**
+
+```
+SHIP-001: Shipment Service Foundation (2 days)
+SHIP-002: Partner Service Integration (2 days)
+SHIP-003: Wallet Service Integration (2 days)
+SHIP-004: Tracking and Status Management (2 days)
+SHIP-005: Bulk Operations and Advanced Features (2 days)
+```
+
+**Benefits**:
+
+- Manageable scope per task (2 days max)
+- Clear dependencies and sequential progress
+- Incremental value delivery
+- Easier testing and debugging
+- Consistent with proven patterns
+
+**3. Task Structure Template**
+
+```markdown
+### SERVICE-XXX: Task Name
+
+**Status**: NOT_STARTED | IN_PROGRESS | COMPLETED
+**Planning**: Objective, Scope, Approach, Estimated Time
+**Dependencies**: Clear prerequisite tasks
+**Implementation Details**: Phase-by-phase breakdown
+**Completion Criteria**: Specific, measurable outcomes
+**API Endpoints**: Specific endpoints to implement
+```
+
 ## Microservices Architecture Patterns
 
 ### Service Design Principles
@@ -46,9 +99,10 @@ return response.error(message, statusCode, details);
 -auth_service_db - // Users, sessions, audit logs
   user_service_db - // Clients, settings, invitations
   partner_service_db - // Partners, zones, charges, discounts
+  wallet_service_db - // Wallets, transactions, payment gateways
   shipment_service_db - // Shipments, tracking, disputes
-  platform_service_db - // Integrations, orders, webhooks
-  support_service_db; // Tickets, knowledge base
+  platform_service_db; // Integrations, orders, webhooks
+support_service_db; // Tickets, knowledge base
 ```
 
 ## Data Management Patterns
