@@ -1,5 +1,4 @@
 const express = require("express");
-const { walletMiddleware } = require("../shared");
 const authMiddleware = require("../middleware/auth");
 const shipmentController = require("../controllers/shipmentController");
 
@@ -88,34 +87,6 @@ const router = express.Router();
 router.post(
   "/",
   authMiddleware.authenticate,
-  // Calculate shipment cost and check balance
-  walletMiddleware.requireSufficientBalance((req) => {
-    const {
-      pickup,
-      delivery,
-      packageDetails,
-      serviceType = "standard",
-    } = req.body;
-
-    // Mock cost calculation - in real implementation, call Partner Service
-    let cost = 100;
-    if (packageDetails?.weight > 1) {
-      cost += (packageDetails.weight - 1) * 20;
-    }
-
-    const serviceMultipliers = { express: 1.5, standard: 1.0, economy: 0.8 };
-    cost *= serviceMultipliers[serviceType] || 1.0;
-
-    return Math.round(cost);
-  }),
-  // Reserve payment amount
-  walletMiddleware.reserveWalletAmount(
-    (req) => req.walletInfo.checkedAmount, // Use the amount from balance check
-    "INR",
-    (req) => `shipment-${Date.now()}-${req.user.id}`, // Generate reference ID
-  ),
-  // Error handler for wallet operations
-  walletMiddleware.walletErrorHandler(),
   shipmentController.createShipment,
 );
 
@@ -271,9 +242,11 @@ router.get(
  */
 router.get("/wallet/health", async (req, res) => {
   try {
-    const { walletService } = require("../shared");
-    const walletClient = walletService.getWalletServiceClient();
-    const healthResult = await walletClient.healthCheck();
+    // TODO: Replace with HTTP call to wallet service health endpoint
+    // const { walletService } = require("../shared");
+    // const walletClient = walletService.getWalletServiceClient();
+    // const healthResult = await walletClient.healthCheck();
+    const healthResult = { success: true, data: { status: "healthy" } }; // Mock for now
 
     if (healthResult.success) {
       return res.json({

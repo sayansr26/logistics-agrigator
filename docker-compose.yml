@@ -11,7 +11,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     ports:
-      - "3008:5432"
+      - "3009:5432"
     networks:
       - logistics-network
     healthcheck:
@@ -27,7 +27,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "3009:6379"
+      - "3010:6379"
     networks:
       - logistics-network
     healthcheck:
@@ -139,7 +139,7 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
-      - WALLET_SERVICE_URL=http://localhost:8006
+      - WALLET_SERVICE_URL=http://wallet-service:3006
       - PARTNER_SERVICE_URL=http://partner-service:3005
       - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
     ports:
@@ -178,11 +178,21 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
       - SHIPMENT_SERVICE_URL=http://shipment-service:3004
+      # External Partner Micro Service Configuration
+      - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
+      - PARTNER_SERVICE_API_KEY=your_super_secret_hmac_key_minimum_32_characters
+      - EXTERNAL_COURIER_TIMEOUT=15000
+      # Partner Micro Service Authentication (HMAC SHA-256)
+      - SERVICE_ID=TESTING_1
+      - HMAC_SECRET=hmac_super_secret_key_2024_partner_services
+      - API_SECRET_SALT=api_secret_salt_2024_partner_services
+      - PARTNER_SERVICE_TIMEOUT=5000
+      - PARTNER_SERVICE_RETRY_ATTEMPTS=3
+      - PARTNER_SERVICE_CACHE_TTL=300
       # External courier API configurations
       - DELHIVERY_API_URL=https://track.delhivery.com/api/cmu/push/json
       - BLUEDART_API_URL=https://apigateway.bluedart.com
       - DTDC_API_URL=https://blktracksvc.dtdc.com
-      - EXTERNAL_COURIER_TIMEOUT=15000
     ports:
       - "3005:3005"
     # For live reload in development, uncomment these volumes:
@@ -204,6 +214,68 @@ services:
       - all-services
       - partner-service
 
+  # Wallet Service (CRITICAL - Required for Shipment Service)
+  wallet-service:
+    build:
+      context: .
+      dockerfile: backend/wallet-service/Dockerfile
+    container_name: logistics-wallet-service
+    environment:
+      - NODE_ENV=development
+      - PORT=3006
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_wallet
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+      - PARTNER_SERVICE_URL=http://partner-service:3005
+      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
+      # External Wallet API Configuration
+      - EXTERNAL_WALLET_API_URL=https://wapi.websiteduniya.com/api/v1
+      - EXTERNAL_WALLET_SECRET_KEY=production-hmac-secret-key-256-bit-minimum-ultra-secure-change-me
+      - EXTERNAL_WALLET_USER_ID=wallet-service
+      - EXTERNAL_WALLET_JWT_TOKEN=
+      # JWT Configuration
+      - JWT_EXPIRES_IN=3600
+      - JWT_REFRESH_EXPIRES_IN=2592000
+      # Default Client Configuration
+      - DEFAULT_CLIENT_CODE=DEFAULT
+      # Cache Configuration
+      - CACHE_WALLET_TTL=600
+      - CACHE_BALANCE_TTL=300
+      - CACHE_TRANSACTIONS_TTL=60
+      # Circuit Breaker Configuration
+      - CIRCUIT_BREAKER_TIMEOUT=30000
+      - CIRCUIT_BREAKER_ERROR_THRESHOLD=50
+      - CIRCUIT_BREAKER_RESET_TIMEOUT=60000
+      # Rate Limiting Configuration
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX=1000
+      - RATE_LIMIT_STRICT_MAX=50
+      - RATE_LIMIT_BALANCE_MAX=100
+      - RATE_LIMIT_TRANSACTION_MAX=30
+    ports:
+      - "3006:3006"
+    # For live reload in development, enable these volumes:
+    volumes:
+      - ./backend/wallet-service:/app
+      - ./shared:/app/shared
+      - wallet_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    command: pnpm run dev
+    profiles:
+      - all-services
+      - wallet-service
+      - future-services
+
   # Support Service (Week 4+ Development)
   support-service:
     build:
@@ -212,14 +284,14 @@ services:
     container_name: logistics-support-service
     environment:
       - NODE_ENV=development
-      - PORT=3006
+      - PORT=3007
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_support
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
     ports:
-      - "3006:3006"
+      - "3007:3007"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/support-service:/app
@@ -247,7 +319,7 @@ services:
     container_name: logistics-platform-service
     environment:
       - NODE_ENV=development
-      - PORT=3007
+      - PORT=3008
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_platforms
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
@@ -257,7 +329,7 @@ services:
       - SHOPIFY_CLIENT_ID=your_shopify_client_id
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
     ports:
-      - "3007:3007"
+      - "3008:3008"
     # For live reload in development, uncomment these volumes:
     # volumes:
     #   - ./backend/platform-service:/app
@@ -306,6 +378,7 @@ volumes:
   user_node_modules:
   shipment_node_modules:
   partner_node_modules:
+  wallet_node_modules:
   support_node_modules:
   platform_node_modules:
   frontend_node_modules:
@@ -323,6 +396,7 @@ networks:
 #   docker-compose --profile user-service up          # + user-service
 #   docker-compose --profile shipment-service up      # + shipment-service
 #   docker-compose --profile partner-service up       # + partner-service
+#   docker-compose --profile wallet-service up        # + wallet-service
 #   docker-compose --profile support-service up       # + support-service
 #   docker-compose --profile platform-service up      # + platform-service
 #   docker-compose --profile all-services up          # All services

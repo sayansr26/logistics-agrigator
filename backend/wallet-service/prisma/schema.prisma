@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WalletStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BLOCKED
+
+  @@map("wallet_status")
+}
+
+enum TransactionType {
+  DEBIT
+  CREDIT
+  REFUND
+  LOAD_BALANCE
+  ADJUSTMENT
+
+  @@map("transaction_type")
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  PROCESSING
+
+  @@map("transaction_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+
+  @@map("payment_status")
+}
+
+model Wallet {
+  id               String       @id @default(uuid()) @db.Uuid
+  userId           String       @unique @db.Uuid
+  balance          Decimal      @default(0) @db.Decimal(15, 2)
+  externalWalletId String?      @db.VarChar(255) // External wallet service ID
+  clientCode       String       @default("DEFAULT") @db.VarChar(50)
+  status           WalletStatus @default(ACTIVE)
+  metadata         Json? // Additional wallet metadata
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+
+  // Relations
+  transactions    Transaction[]
+  paymentGateways PaymentGateway[]
+  auditLogs       AuditLog[]
+
+  // Indexes
+  @@index([userId])
+  @@index([status])
+  @@index([clientCode])
+  @@index([createdAt])
+  @@map("wallets")
+}
+
+model Transaction {
+  id          String            @id @default(uuid()) @db.Uuid
+  walletId    String            @db.Uuid
+  type        TransactionType
+  amount      Decimal           @db.Decimal(15, 2)
+  description String?           @db.Text
+  reference   String?           @db.VarChar(255) // Shipment ID, Order ID, etc
+  status      TransactionStatus @default(PENDING)
+  metadata    Json? // Additional transaction metadata
+  createdAt   DateTime          @default(now()) @db.Timestamptz
+  updatedAt   DateTime          @updatedAt @db.Timestamptz
+
+  // Relations
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([walletId])
+  @@index([type])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model PaymentGateway {
+  id          String        @id @default(uuid()) @db.Uuid
+  walletId    String        @db.Uuid
+  provider    String        @db.VarChar(50) // "razorpay", "payu", "stripe", etc
+  paymentId   String        @db.VarChar(255) // Gateway payment ID
+  orderId     String?       @db.VarChar(255) // Gateway order ID
+  amount      Decimal       @db.Decimal(15, 2)
+  currency    String        @default("INR") @db.VarChar(3)
+  status      PaymentStatus @default(PENDING)
+  gatewayData Json? // Gateway-specific data
+  webhookData Json? // Webhook response data
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @db.Timestamptz
+
+  // Relations
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([walletId])
+  @@index([provider])
+  @@index([paymentId])
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payment_gateways")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  walletId   String?  @db.Uuid
+  userId     String?  @db.Uuid
+  action     String   @db.VarChar(100) // CREATE_WALLET, DEBIT, CREDIT, etc
+  resource   String   @db.VarChar(50) // "Wallet", "Transaction", etc
+  resourceId String?  @db.Uuid
+  details    Json? // Additional audit details
+  ipAddress  String?  @db.VarChar(45)
+  userAgent  String?  @db.Text
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  wallet Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  // Indexes
+  @@index([walletId])
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

@@ -207,19 +207,6 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ---
 
-### **SHIP-001: Complete Shipment Service Foundation**
-
-**Task Name**: Create Complete Shipment Management Service with Full Integration
-
-**Status**: NOT_STARTED
-
-**Planning**:
-
-- **Objective**: Create a complete shipment management service integrating with Auth, User, Partner, and Wallet services
-- **Scope**: End-to-end shipment creation, partner selection, payment processing, tracking, label generation, NDR management
-- **Approach**: Follow auth-service monorepo structure, integrate with all existing services, prepare for platform integration
-- **Estimated Time**: 7 days
-
 **Dependencies**:
 
 - [ ] WALLET-001 completed (Complete Wallet Service)

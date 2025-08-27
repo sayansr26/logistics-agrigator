@@ -16,6 +16,9 @@ CREATE DATABASE logistics_shipments;
 -- Partner Service Database
 CREATE DATABASE logistics_partners;
 
+-- Wallet Service Database
+CREATE DATABASE logistics_wallet;
+
 -- Support Service Database
 CREATE DATABASE logistics_support;
 
@@ -28,6 +31,7 @@ GRANT ALL PRIVILEGES ON DATABASE logistics_auth TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_users TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_shipments TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_partners TO logistics;
+GRANT ALL PRIVILEGES ON DATABASE logistics_wallet TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_support TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_platforms TO logistics;
 

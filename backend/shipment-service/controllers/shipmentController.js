@@ -1,4 +1,3 @@
-const { walletService, walletMiddleware } = require("../shared");
 const logger = require("../shared/lib/logger");
 const APIResponse = require("../shared/lib/response");
 
@@ -81,15 +80,17 @@ async function createShipment(req, res) {
 
     // Confirm payment reservation
     try {
-      const confirmationResult =
-        await walletMiddleware.confirmWalletReservation(
-          walletReservation.reservationId,
-          {
-            shipmentId: shipment.id,
-            serviceType,
-            confirmedBy: "shipment-service",
-          },
-        );
+      // TODO: Replace with HTTP call to wallet service
+      // const confirmationResult =
+      //   await walletMiddleware.confirmWalletReservation(
+      //     walletReservation.reservationId,
+      //     {
+      //       shipmentId: shipment.id,
+      //       serviceType,
+      //       confirmedBy: "shipment-service",
+      //     },
+      //   );
+      const confirmationResult = { success: true }; // Mock for now
 
       if (confirmationResult.success) {
         shipment.paymentStatus = "confirmed";
@@ -193,18 +194,20 @@ async function cancelShipment(req, res) {
     if (refundAmount > 0) {
       try {
         // Process refund
-        const refundResult = await walletMiddleware.creditWalletAmount(
-          userId,
-          refundAmount,
-          "INR",
-          `refund-${shipmentId}`,
-          {
-            shipmentId,
-            originalTransactionId: shipment.transactionId,
-            cancellationReason: reason,
-            refundType: "shipment_cancellation",
-          },
-        );
+        // TODO: Replace with HTTP call to wallet service
+        // const refundResult = await walletMiddleware.creditWalletAmount(
+        //   userId,
+        //   refundAmount,
+        //   "INR",
+        //   `refund-${shipmentId}`,
+        //   {
+        //     shipmentId,
+        //     originalTransactionId: shipment.transactionId,
+        //     cancellationReason: reason,
+        //     refundType: "shipment_cancellation",
+        //   },
+        // );
+        const refundResult = { success: true }; // Mock for now
 
         if (refundResult.success) {
           logger.info("Refund processed successfully", {
@@ -294,8 +297,13 @@ async function getWalletBalance(req, res) {
       currency,
     });
 
-    const walletClient = walletService.getWalletServiceClient();
-    const balanceResult = await walletClient.getBalance(userId, currency);
+    // TODO: Replace with HTTP call to wallet service
+    // const walletClient = walletService.getWalletServiceClient();
+    // const balanceResult = await walletClient.getBalance(userId, currency);
+    const balanceResult = {
+      success: true,
+      data: { balance: 1000, currency: "INR" },
+    }; // Mock for now
 
     if (!balanceResult.success) {
       return res
@@ -318,11 +326,12 @@ async function getWalletBalance(req, res) {
       error: error.message,
     });
 
-    if (error instanceof walletService.WalletServiceError) {
-      return res
-        .status(error.statusCode || 503)
-        .json(APIResponse.error(error.message, "WALLET_SERVICE_ERROR"));
-    }
+    // TODO: Handle wallet service errors when HTTP client is implemented
+    // if (error instanceof walletService.WalletServiceError) {
+    //   return res
+    //     .status(error.statusCode || 503)
+    //     .json(APIResponse.error(error.message, "WALLET_SERVICE_ERROR"));
+    // }
 
     return res
       .status(500)
@@ -338,7 +347,7 @@ async function getWalletBalance(req, res) {
 async function getTransactionHistory(req, res) {
   try {
     const userId = req.user.id;
-    const { limit = 50, offset = 0, dateFrom, dateTo } = req.query;
+    const { limit = 50, offset = 0 } = req.query;
 
     logger.info("Getting transaction history", {
       service: "shipment-service",
@@ -347,13 +356,18 @@ async function getTransactionHistory(req, res) {
       offset,
     });
 
-    const walletClient = walletService.getWalletServiceClient();
-    const historyResult = await walletClient.getTransactionHistory(userId, {
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      dateFrom,
-      dateTo,
-    });
+    // TODO: Replace with HTTP call to wallet service
+    // const walletClient = walletService.getWalletServiceClient();
+    // const historyResult = await walletClient.getTransactionHistory(userId, {
+    //   limit: parseInt(limit),
+    //   offset: parseInt(offset),
+    //   dateFrom,
+    //   dateTo,
+    // });
+    const historyResult = {
+      success: true,
+      data: { transactions: [], total: 0 },
+    }; // Mock for now
 
     if (!historyResult.success) {
       return res
@@ -431,7 +445,7 @@ function calculateShipmentCost(pickup, delivery, packageDetails, serviceType) {
  * @param {Object} delivery - Delivery location
  * @returns {number} Distance in kilometers
  */
-function calculateDistance(pickup, delivery) {
+function calculateDistance(_pickup, _delivery) {
   // Mock distance calculation
   return Math.random() * 50 + 10; // 10-60 km
 }
@@ -461,7 +475,7 @@ function calculateEstimatedDelivery(serviceType) {
  * @param {string} reason - Cancellation reason
  * @returns {number} Refund amount
  */
-function calculateRefundAmount(shipment, reason) {
+function calculateRefundAmount(shipment, _reason) {
   const { cost, createdAt } = shipment;
   const hoursElapsed =
     (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);

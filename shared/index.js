@@ -6,8 +6,6 @@ const database = require("./lib/database");
 const redis = require("./lib/redis");
 const response = require("./lib/response");
 const errors = require("./lib/errors");
-const walletService = require("./lib/walletService");
-const walletMiddleware = require("./lib/walletMiddleware");
 
 module.exports = {
   auth,
@@ -17,6 +15,4 @@ module.exports = {
   redis,
   response,
   errors,
-  walletService,
-  walletMiddleware,
 };

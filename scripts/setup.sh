@@ -64,19 +64,22 @@ fix_existing_env_urls() {
     local env_file="$2"
     local fixed_something=false
     
-    # Fix DATABASE_URL with wrong port (5432 instead of 3008)
-    if grep -q "DATABASE_URL=\".*@localhost:5432/" "$env_file"; then
-        sed -i '' 's/localhost:5432/localhost:3008/' "$env_file"
-        print_status "Fixed DATABASE_URL port in $env_file (5432 → 3008)"
+    # Fix DATABASE_URL with wrong port (5432 instead of 3009) - CORRECTED
+    if grep -q "DATABASE_URL.*@localhost:5432/" "$env_file"; then
+        sed -i.bak 's/localhost:5432/localhost:3009/' "$env_file"
+        print_status "Fixed DATABASE_URL port in $env_file (5432 → 3009)"
         fixed_something=true
     fi
     
-    # Fix REDIS_URL with wrong port (6379 instead of 3009)
-    if grep -q "REDIS_URL=\".*@localhost:6379\"" "$env_file"; then
-        sed -i '' 's/localhost:6379/localhost:3009/' "$env_file"
-        print_status "Fixed REDIS_URL port in $env_file (6379 → 3009)"
+    # Fix REDIS_URL with wrong port (6379 instead of 3010) - CORRECTED
+    if grep -q "REDIS_URL.*localhost:6379" "$env_file"; then
+        sed -i.bak 's/localhost:6379/localhost:3010/' "$env_file"
+        print_status "Fixed REDIS_URL port in $env_file (6379 → 3010)"
         fixed_something=true
     fi
+    
+    # Clean up backup file
+    rm -f "$env_file.bak"
     
     # Apply Docker service name replacements if any fixes were made
     if [ "$fixed_something" = true ]; then
@@ -91,17 +94,61 @@ replace_localhost_with_service_names() {
     
     print_status "Adjusting $env_file for Docker environment..."
     
-    # Replace DATABASE_URL localhost with postgres service name
-    if grep -q "DATABASE_URL=\".*@localhost:3008/" "$env_file"; then
-        sed -i '' 's/localhost:3008/postgres:5432/' "$env_file"
+    # Replace DATABASE_URL localhost with postgres service name (CORRECTED PORT)
+    if grep -q "DATABASE_URL.*@localhost:3009/" "$env_file"; then
+        sed -i.bak 's/localhost:3009/postgres:5432/' "$env_file"
         print_status "Updated DATABASE_URL in $env_file"
     fi
     
-    # Replace REDIS_URL localhost with redis service name
-    if grep -q "REDIS_URL=\".*@localhost:3009/" "$env_file"; then
-        sed -i '' 's/localhost:3009/redis:6379/' "$env_file"
+    # Replace REDIS_URL localhost with redis service name (CORRECTED PORT)  
+    if grep -q "REDIS_URL.*localhost:3010" "$env_file"; then
+        sed -i.bak 's/localhost:3010/redis:6379/' "$env_file"
         print_status "Updated REDIS_URL in $env_file"
     fi
+    
+    # Replace service URLs with Docker service names
+    if grep -q "http://localhost:3001" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3001/http:\/\/api-gateway:3001/' "$env_file"
+        print_status "Updated API Gateway URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3002" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3002/http:\/\/auth-service:3002/' "$env_file"
+        print_status "Updated Auth Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3003" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3003/http:\/\/user-service:3003/' "$env_file"
+        print_status "Updated User Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3004" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3004/http:\/\/shipment-service:3004/' "$env_file"
+        print_status "Updated Shipment Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3005" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3005/http:\/\/partner-service:3005/' "$env_file"
+        print_status "Updated Partner Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3006" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3006/http:\/\/wallet-service:3006/' "$env_file"
+        print_status "Updated Wallet Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3007" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3007/http:\/\/support-service:3007/' "$env_file"
+        print_status "Updated Support Service URL in $env_file"
+    fi
+    
+    if grep -q "http://localhost:3008" "$env_file"; then
+        sed -i.bak 's/http:\/\/localhost:3008/http:\/\/platform-service:3008/' "$env_file"
+        print_status "Updated Platform Service URL in $env_file"
+    fi
+    
+    # Clean up backup files
+    rm -f "$env_file.bak"
     
     # Replace inter-service communication URLs
     # This assumes that the .env.example files already contain these variables,
@@ -137,6 +184,15 @@ create_service_env() {
     
     local env_file="backend/$service/.env"
     local env_example="backend/$service/.env.example"
+    local root_env_example=".env.example"
+    
+    # Create service-specific .env.example from root if it doesn't exist
+    if [ ! -f "$env_example" ] && [ -f "$root_env_example" ]; then
+        print_status "Creating $service/.env.example from root .env.example..."
+        mkdir -p "backend/$service"
+        cp "$root_env_example" "$env_example"
+        print_success "✅ Created $env_example from root template"
+    fi
     
     # Always prioritize .env.example if it exists
     if [ -f "$env_example" ]; then
@@ -175,12 +231,13 @@ SUPPORT_SERVICE_URL="http://localhost:3006"
 PLATFORM_SERVICE_URL="http://localhost:3007"
 PARTNER_SERVICE_URL="http://localhost:3005"
 API_GATEWAY_URL="http://localhost:3001"
-
-# External Services
 WALLET_SERVICE_URL="http://localhost:8006"
-WALLET_SERVICE_API_KEY="your_wallet_service_api_key"
-PARTNER_SERVICE_EXTERNAL_URL="https://calc.websiteduniya.com"
-PARTNER_SERVICE_API_KEY="your_partner_service_api_key"
+
+# External Wallet API Configuration
+EXTERNAL_WALLET_API_URL=https://wapi.websiteduniya.com/api/v1
+EXTERNAL_WALLET_SECRET_KEY=production-hmac-secret-key-256-bit-minimum-ultra-secure-change-me
+EXTERNAL_WALLET_USER_ID=wallet-service
+EXTERNAL_WALLET_JWT_TOKEN=
 
 # Prisma
 PRISMA_QUERY_ENGINE_BINARY=""
@@ -199,8 +256,8 @@ create_frontend_env() {
     
     if [ ! -f "$env_file" ] || [ "$1" = "--force" ]; then
         print_status "Creating frontend environment file..."
-        
-        cat > "$env_file" << EOF
+    
+    cat > "$env_file" << EOF
 # Frontend Environment Variables
 
 # API Configuration
@@ -272,8 +329,8 @@ fi
 if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
     print_status "🔧 Setting up backend services..."
     
-    # Define services with their ports and database names
-    services="auth-service:3002:auth user-service:3003:users shipment-service:3004:shipments partner-service:3005:partners support-service:3006:support platform-service:3007:platforms api-gateway:3001:gateway"
+    # Define services with their ports and database names (CORRECTED SEQUENCE)
+    services="api-gateway:3001:gateway auth-service:3002:auth user-service:3003:users shipment-service:3004:shipments partner-service:3005:partners wallet-service:3006:wallet support-service:3007:support platform-service:3008:platforms"
     
     for service_config in $services; do
         IFS=':' read -r service port db_name <<< "$service_config"
@@ -343,14 +400,14 @@ if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
 fi
 
 # Summary and next steps
-echo ""
+    echo ""
 echo "🎉 Setup completed successfully!"
-echo ""
-
+    echo ""
+    
 case $SETUP_TYPE in
     "full")
         print_success "✅ Full stack setup complete"
-        echo ""
+    echo ""
         print_status "📋 Next steps:"
         echo "   1. Review and update .env files with your specific configuration"
         echo "   2. Run 'pnpm run dev' to start all services"
@@ -374,12 +431,12 @@ case $SETUP_TYPE in
         echo "   2. Run 'pnpm run dev:backend' to start backend services"
         echo "   3. Access API Gateway at http://localhost:3001"
         echo "   4. Access Auth Service Swagger at http://localhost:3002/api-docs"
-        ;;
-esac
-
-echo ""
+            ;;
+    esac
+    
+    echo ""
 print_warning "⚠️  Important:"
 echo "   - Update JWT_SECRET in production"
 echo "   - Configure external service API keys"
 echo "   - Set up proper database credentials for production"
-echo ""
+    echo ""
