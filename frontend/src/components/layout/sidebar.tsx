@@ -19,6 +19,7 @@ import {
   CreditCard,
   Globe,
   AlertTriangle,
+  Store,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -72,9 +73,14 @@ const navigationItems: NavItem[] = [
     icon: BarChart3,
   },
   {
+    title: "Outlets",
+    href: "/outlets",
+    icon: Store,
+  },
+  {
     title: "Remittance",
     href: "/remittance",
-    icon: BarChart3,
+    icon: CreditCard,
   },
   {
     title: "Courier Partners",
