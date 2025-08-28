@@ -46,6 +46,47 @@ export interface User {
   avatar?: string;
 }
 
+// User Management Interfaces
+export interface UserRole {
+  value: "admin" | "client" | "operations" | "support";
+  label: string;
+  color: string;
+  description: string;
+  permissions: string[];
+}
+
+export interface UserStatus {
+  value: "active" | "inactive" | "suspended";
+  label: string;
+  color: string;
+  description: string;
+}
+
+export interface UserPermission {
+  value: string;
+  label: string;
+  category: string;
+  description: string;
+}
+
+export interface UserFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  company: string;
+  department: string;
+  position: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  notes: string;
+  permissions: string[];
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -1981,3 +2022,1106 @@ export function getRatingColor(rating: number): string {
 export function formatRating(rating: number): string {
   return rating.toFixed(1);
 }
+
+// User Management Data
+export const userRoles: UserRole[] = [
+  {
+    value: "admin",
+    label: "Admin",
+    color: "bg-red-100 text-red-800",
+    description: "Full system access with user management capabilities",
+    permissions: [
+      "shipments_view",
+      "shipments_create",
+      "shipments_edit",
+      "shipments_delete",
+      "users_view",
+      "users_create",
+      "users_edit",
+      "users_delete",
+      "reports_view",
+      "reports_create",
+      "partners_view",
+      "partners_manage",
+      "billing_view",
+      "billing_manage",
+    ],
+  },
+  {
+    value: "client",
+    label: "Client",
+    color: "bg-blue-100 text-blue-800",
+    description: "Shipment management and order tracking access",
+    permissions: [
+      "shipments_view",
+      "shipments_create",
+      "shipments_edit",
+      "reports_view",
+      "billing_view",
+    ],
+  },
+  {
+    value: "operations",
+    label: "Operations",
+    color: "bg-orange-100 text-orange-800",
+    description: "Shipment operations and partner management",
+    permissions: [
+      "shipments_view",
+      "shipments_edit",
+      "partners_view",
+      "partners_manage",
+      "reports_view",
+      "reports_create",
+    ],
+  },
+  {
+    value: "support",
+    label: "Support",
+    color: "bg-teal-100 text-teal-800",
+    description: "Customer assistance and issue resolution",
+    permissions: ["shipments_view", "users_view", "reports_view"],
+  },
+];
+
+export const userStatuses: UserStatus[] = [
+  {
+    value: "active",
+    label: "Active",
+    color: "bg-green-100 text-green-800",
+    description: "User has full access to assigned features",
+  },
+  {
+    value: "inactive",
+    label: "Inactive",
+    color: "bg-yellow-100 text-yellow-800",
+    description: "User account is temporarily disabled",
+  },
+  {
+    value: "suspended",
+    label: "Suspended",
+    color: "bg-red-100 text-red-800",
+    description: "User account is suspended due to policy violation",
+  },
+];
+
+export const userPermissions: UserPermission[] = [
+  // Shipment permissions
+  {
+    value: "shipments_view",
+    label: "View Shipments",
+    category: "Shipments",
+    description: "Can view shipment details and status",
+  },
+  {
+    value: "shipments_create",
+    label: "Create Shipments",
+    category: "Shipments",
+    description: "Can create new shipments",
+  },
+  {
+    value: "shipments_edit",
+    label: "Edit Shipments",
+    category: "Shipments",
+    description: "Can modify existing shipment details",
+  },
+  {
+    value: "shipments_delete",
+    label: "Delete Shipments",
+    category: "Shipments",
+    description: "Can delete shipments from the system",
+  },
+
+  // User management permissions
+  {
+    value: "users_view",
+    label: "View Users",
+    category: "Users",
+    description: "Can view user profiles and information",
+  },
+  {
+    value: "users_create",
+    label: "Create Users",
+    category: "Users",
+    description: "Can create new user accounts",
+  },
+  {
+    value: "users_edit",
+    label: "Edit Users",
+    category: "Users",
+    description: "Can modify user account details",
+  },
+  {
+    value: "users_delete",
+    label: "Delete Users",
+    category: "Users",
+    description: "Can delete user accounts",
+  },
+
+  // Report permissions
+  {
+    value: "reports_view",
+    label: "View Reports",
+    category: "Reports",
+    description: "Can access and view system reports",
+  },
+  {
+    value: "reports_create",
+    label: "Create Reports",
+    category: "Reports",
+    description: "Can generate custom reports",
+  },
+
+  // Partner permissions
+  {
+    value: "partners_view",
+    label: "View Partners",
+    category: "Partners",
+    description: "Can view partner information",
+  },
+  {
+    value: "partners_manage",
+    label: "Manage Partners",
+    category: "Partners",
+    description: "Can manage partner relationships and settings",
+  },
+
+  // Billing permissions
+  {
+    value: "billing_view",
+    label: "View Billing",
+    category: "Billing",
+    description: "Can view billing information and invoices",
+  },
+  {
+    value: "billing_manage",
+    label: "Manage Billing",
+    category: "Billing",
+    description: "Can manage billing settings and payment processing",
+  },
+];
+
+// User management utility functions
+export function getRoleByValue(value: string): UserRole | undefined {
+  return userRoles.find((role) => role.value === value);
+}
+
+export function getStatusByValue(value: string): UserStatus | undefined {
+  return userStatuses.find((status) => status.value === value);
+}
+
+export function getPermissionByValue(
+  value: string,
+): UserPermission | undefined {
+  return userPermissions.find((permission) => permission.value === value);
+}
+
+export function getPermissionsByCategory(category: string): UserPermission[] {
+  return userPermissions.filter(
+    (permission) => permission.category === category,
+  );
+}
+
+export function getDefaultPermissionsForRole(role: string): string[] {
+  const roleData = getRoleByValue(role);
+  return roleData ? roleData.permissions : [];
+}
+
+// Permission Management Interfaces
+export interface PermissionCategory {
+  id: string;
+  name: string;
+  icon: string; // Icon name for dynamic import
+  description: string;
+  permissions: Permission[];
+}
+
+export interface Permission {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// Permission categories data
+export const permissionCategories: PermissionCategory[] = [
+  {
+    id: "shipments",
+    name: "Shipment Management",
+    icon: "Package",
+    description: "Manage shipments, tracking, and delivery operations",
+    permissions: [
+      {
+        id: "read:shipments",
+        name: "View Shipments",
+        description: "Can view shipment details and status",
+      },
+      {
+        id: "write:shipments",
+        name: "Create Shipments",
+        description: "Can create new shipments",
+      },
+      {
+        id: "edit:shipments",
+        name: "Edit Shipments",
+        description: "Can modify existing shipments",
+      },
+      {
+        id: "delete:shipments",
+        name: "Delete Shipments",
+        description: "Can remove shipments from system",
+      },
+      {
+        id: "bulk:shipments",
+        name: "Bulk Operations",
+        description: "Can perform bulk shipment operations",
+      },
+    ],
+  },
+  {
+    id: "users",
+    name: "User Management",
+    icon: "Users",
+    description: "Manage user accounts, roles, and permissions",
+    permissions: [
+      {
+        id: "read:users",
+        name: "View Users",
+        description: "Can view user profiles and information",
+      },
+      {
+        id: "write:users",
+        name: "Create Users",
+        description: "Can create new user accounts",
+      },
+      {
+        id: "edit:users",
+        name: "Edit Users",
+        description: "Can modify user information",
+      },
+      {
+        id: "delete:users",
+        name: "Delete Users",
+        description: "Can remove user accounts",
+      },
+      {
+        id: "manage:permissions",
+        name: "Manage Permissions",
+        description: "Can assign and modify user permissions",
+      },
+    ],
+  },
+  {
+    id: "reports",
+    name: "Reports & Analytics",
+    icon: "BarChart3",
+    description: "Access to reports, analytics, and business intelligence",
+    permissions: [
+      {
+        id: "read:reports",
+        name: "View Reports",
+        description: "Can access basic reports and analytics",
+      },
+      {
+        id: "export:reports",
+        name: "Export Reports",
+        description: "Can export reports in various formats",
+      },
+      {
+        id: "create:reports",
+        name: "Create Reports",
+        description: "Can create custom reports",
+      },
+      {
+        id: "admin:reports",
+        name: "Admin Reports",
+        description: "Can access administrative reports",
+      },
+    ],
+  },
+  {
+    id: "billing",
+    name: "Billing & Finance",
+    icon: "CreditCard",
+    description: "Manage billing, invoices, and financial operations",
+    permissions: [
+      {
+        id: "read:billing",
+        name: "View Billing",
+        description: "Can view billing information and invoices",
+      },
+      {
+        id: "create:invoices",
+        name: "Create Invoices",
+        description: "Can generate invoices for customers",
+      },
+      {
+        id: "manage:payments",
+        name: "Manage Payments",
+        description: "Can process and manage payments",
+      },
+      {
+        id: "admin:finance",
+        name: "Admin Finance",
+        description: "Can access financial administration",
+      },
+    ],
+  },
+  {
+    id: "partners",
+    name: "Partner Management",
+    icon: "Globe",
+    description: "Manage courier partners and external integrations",
+    permissions: [
+      {
+        id: "read:partners",
+        name: "View Partners",
+        description: "Can view partner information",
+      },
+      {
+        id: "manage:partners",
+        name: "Manage Partners",
+        description: "Can add, edit, and remove partners",
+      },
+      {
+        id: "partner:rates",
+        name: "Partner Rates",
+        description: "Can manage partner pricing and rates",
+      },
+      {
+        id: "partner:contracts",
+        name: "Partner Contracts",
+        description: "Can manage partner agreements",
+      },
+    ],
+  },
+  {
+    id: "system",
+    name: "System Administration",
+    icon: "Server",
+    description: "System configuration and administrative functions",
+    permissions: [
+      {
+        id: "system:config",
+        name: "System Config",
+        description: "Can modify system configuration",
+      },
+      {
+        id: "system:logs",
+        name: "System Logs",
+        description: "Can access system logs and monitoring",
+      },
+      {
+        id: "system:backup",
+        name: "System Backup",
+        description: "Can manage system backups",
+      },
+      {
+        id: "system:security",
+        name: "System Security",
+        description: "Can manage security settings",
+      },
+    ],
+  },
+];
+
+// Enhanced user data with additional fields for permissions page
+export interface EnhancedUser extends User {
+  phone?: string;
+  company?: string;
+  department?: string;
+  position?: string;
+  permissions?: string[];
+}
+
+// Enhanced mock users with additional data
+export const enhancedMockUsers: EnhancedUser[] = [
+  {
+    id: "1",
+    name: "Alice Johnson",
+    email: "alice@techcorp.com",
+    role: "admin",
+    status: "active",
+    lastLogin: "2024-08-18T09:30:00Z",
+    shipmentsCount: 45,
+    phone: "+91 98765 43210",
+    company: "TechCorp Solutions",
+    department: "Engineering",
+    position: "Senior Developer",
+    permissions: [
+      "read:shipments",
+      "write:shipments",
+      "read:reports",
+      "manage:users",
+    ],
+  },
+  {
+    id: "2",
+    name: "Bob Smith",
+    email: "bob@fashionstore.com",
+    role: "client",
+    status: "active",
+    lastLogin: "2024-08-17T14:20:00Z",
+    shipmentsCount: 23,
+    phone: "+91 98765 43211",
+    company: "Fashion Store",
+    department: "Sales",
+    position: "Sales Manager",
+    permissions: ["read:shipments", "write:shipments", "read:reports"],
+  },
+  {
+    id: "3",
+    name: "Carol Davis",
+    email: "carol@logistics.com",
+    role: "operations",
+    status: "active",
+    lastLogin: "2024-08-18T08:15:00Z",
+    shipmentsCount: 156,
+    phone: "+91 98765 43212",
+    company: "Logistics Corp",
+    department: "Operations",
+    position: "Operations Manager",
+    permissions: [
+      "read:shipments",
+      "edit:shipments",
+      "read:reports",
+      "read:partners",
+    ],
+  },
+  {
+    id: "4",
+    name: "David Wilson",
+    email: "david@support.com",
+    role: "support",
+    status: "inactive",
+    lastLogin: "2024-08-15T16:45:00Z",
+    shipmentsCount: 12,
+    phone: "+91 98765 43213",
+    company: "Support Services",
+    department: "Customer Support",
+    position: "Support Specialist",
+    permissions: ["read:shipments", "read:users", "read:reports"],
+  },
+  {
+    id: "5",
+    name: "Eva Brown",
+    email: "eva@electronics.com",
+    role: "client",
+    status: "suspended",
+    lastLogin: "2024-08-10T11:30:00Z",
+    shipmentsCount: 8,
+    phone: "+91 98765 43214",
+    company: "Electronics Hub",
+    department: "E-commerce",
+    position: "E-commerce Manager",
+    permissions: ["read:shipments"],
+  },
+];
+
+// Partner-related constants
+export const COVERAGE_OPTIONS = [
+  "North India",
+  "South India",
+  "East India",
+  "West India",
+  "Central India",
+  "Northeast India",
+  "Himalayan Region",
+  "Coastal Areas",
+  "Metro Cities",
+  "Tier 2 Cities",
+];
+
+export const SERVICE_OPTIONS = [
+  "Express Delivery",
+  "Standard Delivery",
+  "Same Day Delivery",
+  "Next Day Delivery",
+  "COD",
+  "Prepaid",
+  "Insurance",
+  "Signature Required",
+  "Fragile Handling",
+  "Temperature Controlled",
+];
+
+export const PARTNER_TYPES = [
+  { value: "courier", label: "Courier" },
+  { value: "logistics", label: "Logistics" },
+  { value: "warehouse", label: "Warehouse" },
+  { value: "customs", label: "Customs" },
+];
+
+export const PARTNER_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+];
+
+export const RATING_OPTIONS = [
+  { value: 1, label: "1 Star" },
+  { value: 2, label: "2 Stars" },
+  { value: 3, label: "3 Stars" },
+  { value: 4, label: "4 Stars" },
+  { value: 5, label: "5 Stars" },
+];
+
+// Remittance interfaces
+export interface Remittance {
+  id: string;
+  outlet: string;
+  refNo: string;
+  awbNumber: string;
+  receiver: string;
+  courier: string;
+  weight: number;
+  amount: number;
+  status: "pending" | "settled" | "cancelled";
+  createdAt: string;
+  settledAt?: string;
+  manifestDate: string;
+  deliveryDate: string;
+}
+
+export interface RemittanceFilter {
+  retailer?: string;
+  status?: Remittance["status"];
+  dateRange?: {
+    start: string;
+    end: string;
+  };
+}
+
+// Mock remittance data
+export const mockRemittances: Remittance[] = [
+  {
+    id: "1",
+    outlet: "RG ENTERPRISES",
+    refNo: "2506300237101587",
+    awbNumber: "25095210204035",
+    receiver: "Pradeep",
+    courier: "Delhivery",
+    weight: 26.4,
+    amount: 7900.0,
+    status: "pending",
+    createdAt: "2024-08-27T10:30:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-29",
+  },
+  {
+    id: "2",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507171219282397",
+    awbNumber: "25095210209576",
+    receiver: "Raneeta chatterjee",
+    courier: "Delhivery",
+    weight: 92.42,
+    amount: 15000.0,
+    status: "pending",
+    createdAt: "2024-08-27T11:15:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-30",
+  },
+  {
+    id: "3",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507180312024924",
+    awbNumber: "25095210210980",
+    receiver: "v vijaya lakshmi",
+    courier: "Delhivery",
+    weight: 179.0,
+    amount: 27710.0,
+    status: "pending",
+    createdAt: "2024-08-27T12:00:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-08-31",
+  },
+  {
+    id: "4",
+    outlet: "RG ENTERPRISES",
+    refNo: "2507251145157710",
+    awbNumber: "25095210212612",
+    receiver: "Pydisri kanuri",
+    courier: "Delhivery",
+    weight: 170.14,
+    amount: 27680.0,
+    status: "pending",
+    createdAt: "2024-08-27T13:45:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-01",
+  },
+  {
+    id: "5",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508021255184695",
+    awbNumber: "25095210213824",
+    receiver: "Bhavya sri",
+    courier: "Delhivery",
+    weight: 31.68,
+    amount: 9600.0,
+    status: "pending",
+    createdAt: "2024-08-27T14:20:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-02",
+  },
+  {
+    id: "6",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508020117189573",
+    awbNumber: "25095210213780",
+    receiver: "Dr mohd akram Quresh",
+    courier: "Delhivery",
+    weight: 41.62,
+    amount: 13600.0,
+    status: "pending",
+    createdAt: "2024-08-27T15:10:00Z",
+    manifestDate: "2024-08-27",
+    deliveryDate: "2024-09-03",
+  },
+  {
+    id: "7",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508030923451234",
+    awbNumber: "25095210214567",
+    receiver: "Priya Sharma",
+    courier: "Delhivery",
+    weight: 15.25,
+    amount: 4500.0,
+    status: "settled",
+    createdAt: "2024-08-26T09:30:00Z",
+    settledAt: "2024-08-27T10:00:00Z",
+    manifestDate: "2024-08-26",
+    deliveryDate: "2024-08-28",
+  },
+  {
+    id: "8",
+    outlet: "RG ENTERPRISES",
+    refNo: "2508041430228765",
+    awbNumber: "25095210215678",
+    receiver: "Rajesh Kumar",
+    courier: "Delhivery",
+    weight: 28.75,
+    amount: 8200.0,
+    status: "settled",
+    createdAt: "2024-08-25T14:30:00Z",
+    settledAt: "2024-08-26T11:15:00Z",
+    manifestDate: "2024-08-25",
+    deliveryDate: "2024-08-27",
+  },
+];
+
+// Mock retailers for filter dropdown
+export const mockRetailers = [
+  "RG ENTERPRISES",
+  "ABC TRADERS",
+  "XYZ COMMERCE",
+  "PQR STORES",
+  "LMN BUSINESS",
+];
+
+// Remittance utility functions
+export function getRemittanceStatusColor(status: Remittance["status"]): string {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    case "settled":
+      return "bg-green-100 text-green-800";
+    case "cancelled":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function formatWeight(weight: number): string {
+  return `${weight.toFixed(2)}KG`;
+}
+
+export function formatAmount(amount: number): string {
+  return `₹ ${amount.toFixed(2)}`;
+}
+
+// Outlet interfaces
+export interface Outlet {
+  id: string;
+  outletCode: string;
+  outletName: string;
+  retailerName: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  status: "active" | "inactive" | "suspended" | "pending";
+  type: "retail" | "wholesale" | "ecommerce" | "franchise";
+  businessHours: string;
+  gstNumber?: string;
+  panNumber?: string;
+  bankDetails?: {
+    accountNumber: string;
+    ifscCode: string;
+    bankName: string;
+  };
+  performance: {
+    totalShipments: number;
+    monthlyRevenue: number;
+    successRate: number;
+    avgDeliveryTime: number;
+  };
+  createdAt: string;
+  lastUpdated: string;
+  assignedCouriers: string[];
+  serviceAreas: string[];
+}
+
+export interface OutletShipment {
+  id: string;
+  outletId: string;
+  outletName: string;
+  trackingNumber: string;
+  referenceNumber: string;
+  customerName: string;
+  destination: string;
+  status: "pending" | "in_transit" | "delivered" | "cancelled" | "delayed";
+  weight: number;
+  value: number;
+  courierPartner: string;
+  createdAt: string;
+  estimatedDelivery: string;
+  actualDelivery?: string;
+}
+
+// Mock outlet data
+export const mockOutlets: Outlet[] = [
+  {
+    id: "outlet-1",
+    outletCode: "OUT001",
+    outletName: "RG ENTERPRISES - Main Branch",
+    retailerName: "RG ENTERPRISES",
+    contactPerson: "Rajesh Gupta",
+    phone: "+91 98765 43210",
+    email: "rajesh@rgenterprises.com",
+    address: "123 Main Street, Sector 15",
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "400001",
+    status: "active",
+    type: "retail",
+    businessHours: "9:00 AM - 8:00 PM",
+    gstNumber: "27AABFR1234M1Z5",
+    panNumber: "AABFR1234M",
+    bankDetails: {
+      accountNumber: "1234567890",
+      ifscCode: "SBIN0001234",
+      bankName: "State Bank of India",
+    },
+    performance: {
+      totalShipments: 1247,
+      monthlyRevenue: 45780,
+      successRate: 94.2,
+      avgDeliveryTime: 2.3,
+    },
+    createdAt: "2024-01-15T10:30:00Z",
+    lastUpdated: "2024-08-21T14:20:00Z",
+    assignedCouriers: ["Delhivery", "Blue Dart", "DTDC"],
+    serviceAreas: ["Mumbai", "Thane", "Navi Mumbai"],
+  },
+  {
+    id: "outlet-2",
+    outletCode: "OUT002",
+    outletName: "RG ENTERPRISES - Andheri",
+    retailerName: "RG ENTERPRISES",
+    contactPerson: "Priya Sharma",
+    phone: "+91 98765 43211",
+    email: "priya@rgenterprises.com",
+    address: "456 Andheri West, Near Station",
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "400058",
+    status: "active",
+    type: "retail",
+    businessHours: "8:30 AM - 7:30 PM",
+    gstNumber: "27AABFR1234M1Z6",
+    panNumber: "AABFR1234N",
+    bankDetails: {
+      accountNumber: "0987654321",
+      ifscCode: "HDFC0001234",
+      bankName: "HDFC Bank",
+    },
+    performance: {
+      totalShipments: 892,
+      monthlyRevenue: 32150,
+      successRate: 96.8,
+      avgDeliveryTime: 2.1,
+    },
+    createdAt: "2024-02-20T11:15:00Z",
+    lastUpdated: "2024-08-21T13:45:00Z",
+    assignedCouriers: ["Delhivery", "FedEx", "Aramex"],
+    serviceAreas: ["Andheri", "Bandra", "Juhu"],
+  },
+  {
+    id: "outlet-3",
+    outletCode: "OUT003",
+    outletName: "ABC TRADERS - Central",
+    retailerName: "ABC TRADERS",
+    contactPerson: "Amit Patel",
+    phone: "+91 98765 43212",
+    email: "amit@abctraders.com",
+    address: "789 Central Plaza, MG Road",
+    city: "Delhi",
+    state: "Delhi",
+    pincode: "110001",
+    status: "active",
+    type: "wholesale",
+    businessHours: "8:00 AM - 9:00 PM",
+    gstNumber: "07AABCA1234M1Z7",
+    panNumber: "AABCA1234P",
+    performance: {
+      totalShipments: 1567,
+      monthlyRevenue: 67890,
+      successRate: 92.5,
+      avgDeliveryTime: 2.8,
+    },
+    createdAt: "2024-01-10T09:45:00Z",
+    lastUpdated: "2024-08-21T12:30:00Z",
+    assignedCouriers: ["Blue Dart", "DTDC", "UPS"],
+    serviceAreas: ["Delhi", "Noida", "Gurgaon"],
+  },
+  {
+    id: "outlet-4",
+    outletCode: "OUT004",
+    outletName: "XYZ COMMERCE - Online Hub",
+    retailerName: "XYZ COMMERCE",
+    contactPerson: "Sneha Reddy",
+    phone: "+91 98765 43213",
+    email: "sneha@xyzcommerce.com",
+    address: "321 Tech Park, Electronic City",
+    city: "Bangalore",
+    state: "Karnataka",
+    pincode: "560100",
+    status: "active",
+    type: "ecommerce",
+    businessHours: "24/7",
+    gstNumber: "29AABXY1234M1Z8",
+    panNumber: "AABXY1234R",
+    performance: {
+      totalShipments: 2341,
+      monthlyRevenue: 89250,
+      successRate: 97.1,
+      avgDeliveryTime: 1.9,
+    },
+    createdAt: "2024-03-05T14:20:00Z",
+    lastUpdated: "2024-08-21T15:10:00Z",
+    assignedCouriers: ["Delhivery", "Blue Dart", "FedEx", "DHL"],
+    serviceAreas: ["Bangalore", "Mysore", "Mangalore"],
+  },
+  {
+    id: "outlet-5",
+    outletCode: "OUT005",
+    outletName: "PQR STORES - Franchise",
+    retailerName: "PQR STORES",
+    contactPerson: "Kumar Singh",
+    phone: "+91 98765 43214",
+    email: "kumar@pqrstores.com",
+    address: "654 Mall Road, Sector 22",
+    city: "Chandigarh",
+    state: "Punjab",
+    pincode: "160022",
+    status: "pending",
+    type: "franchise",
+    businessHours: "10:00 AM - 6:00 PM",
+    gstNumber: "04AABPQ1234M1Z9",
+    panNumber: "AABPQ1234S",
+    performance: {
+      totalShipments: 0,
+      monthlyRevenue: 0,
+      successRate: 0,
+      avgDeliveryTime: 0,
+    },
+    createdAt: "2024-08-15T16:30:00Z",
+    lastUpdated: "2024-08-21T10:45:00Z",
+    assignedCouriers: ["Blue Dart", "DTDC"],
+    serviceAreas: ["Chandigarh", "Mohali", "Panchkula"],
+  },
+  {
+    id: "outlet-6",
+    outletCode: "OUT006",
+    outletName: "LMN BUSINESS - Warehouse",
+    retailerName: "LMN BUSINESS",
+    contactPerson: "Lakshmi Devi",
+    phone: "+91 98765 43215",
+    email: "lakshmi@lmnbusiness.com",
+    address: "987 Industrial Area, Phase 2",
+    city: "Chennai",
+    state: "Tamil Nadu",
+    pincode: "600032",
+    status: "inactive",
+    type: "wholesale",
+    businessHours: "6:00 AM - 4:00 PM",
+    gstNumber: "33AABLM1234M1Z0",
+    panNumber: "AABLM1234D",
+    performance: {
+      totalShipments: 445,
+      monthlyRevenue: 15670,
+      successRate: 89.3,
+      avgDeliveryTime: 3.2,
+    },
+    createdAt: "2024-04-12T08:15:00Z",
+    lastUpdated: "2024-08-20T17:20:00Z",
+    assignedCouriers: ["DTDC", "Aramex"],
+    serviceAreas: ["Chennai", "Vellore", "Salem"],
+  },
+];
+
+// Mock outlet shipments data
+export const mockOutletShipments: OutletShipment[] = [
+  {
+    id: "os-1",
+    outletId: "outlet-1",
+    outletName: "RG ENTERPRISES - Main Branch",
+    trackingNumber: "LOG2024001",
+    referenceNumber: "REF001234",
+    customerName: "John Smith",
+    destination: "New York, USA",
+    status: "in_transit",
+    weight: 2.5,
+    value: 1200,
+    courierPartner: "DHL Express",
+    createdAt: "2024-08-15T10:30:00Z",
+    estimatedDelivery: "2024-08-20T15:00:00Z",
+  },
+  {
+    id: "os-2",
+    outletId: "outlet-1",
+    outletName: "RG ENTERPRISES - Main Branch",
+    trackingNumber: "LOG2024002",
+    referenceNumber: "REF001235",
+    customerName: "Sarah Johnson",
+    destination: "London, UK",
+    status: "delivered",
+    weight: 1.2,
+    value: 450,
+    courierPartner: "FedEx",
+    createdAt: "2024-08-14T14:20:00Z",
+    estimatedDelivery: "2024-08-18T12:00:00Z",
+    actualDelivery: "2024-08-18T11:30:00Z",
+  },
+  {
+    id: "os-3",
+    outletId: "outlet-2",
+    outletName: "RG ENTERPRISES - Andheri",
+    trackingNumber: "LOG2024003",
+    referenceNumber: "REF001236",
+    customerName: "Mike Chen",
+    destination: "Toronto, Canada",
+    status: "pending",
+    weight: 5.8,
+    value: 2800,
+    courierPartner: "UPS",
+    createdAt: "2024-08-16T09:15:00Z",
+    estimatedDelivery: "2024-08-22T10:30:00Z",
+  },
+  {
+    id: "os-4",
+    outletId: "outlet-3",
+    outletName: "ABC TRADERS - Central",
+    trackingNumber: "LOG2024004",
+    referenceNumber: "REF001237",
+    customerName: "Emma Wilson",
+    destination: "Sydney, Australia",
+    status: "delayed",
+    weight: 0.8,
+    value: 85,
+    courierPartner: "Aramex",
+    createdAt: "2024-08-13T16:45:00Z",
+    estimatedDelivery: "2024-08-19T14:20:00Z",
+  },
+  {
+    id: "os-5",
+    outletId: "outlet-4",
+    outletName: "XYZ COMMERCE - Online Hub",
+    trackingNumber: "LOG2024005",
+    referenceNumber: "REF001238",
+    customerName: "David Brown",
+    destination: "Berlin, Germany",
+    status: "cancelled",
+    weight: 3.2,
+    value: 1850,
+    courierPartner: "DHL Express",
+    createdAt: "2024-08-12T11:30:00Z",
+    estimatedDelivery: "2024-08-17T09:00:00Z",
+  },
+];
+
+// Outlet utility functions
+export function getOutletStatusColor(status: Outlet["status"]): string {
+  switch (status) {
+    case "active":
+      return "bg-green-100 text-green-800";
+    case "inactive":
+      return "bg-gray-100 text-gray-800";
+    case "suspended":
+      return "bg-red-100 text-red-800";
+    case "pending":
+      return "bg-yellow-100 text-yellow-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getOutletTypeColor(type: Outlet["type"]): string {
+  switch (type) {
+    case "retail":
+      return "bg-blue-100 text-blue-800";
+    case "wholesale":
+      return "bg-green-100 text-green-800";
+    case "ecommerce":
+      return "bg-purple-100 text-purple-800";
+    case "franchise":
+      return "bg-orange-100 text-orange-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export function getOutletTypeIcon(type: Outlet["type"]) {
+  switch (type) {
+    case "retail":
+      return "Store";
+    case "wholesale":
+      return "Warehouse";
+    case "ecommerce":
+      return "ShoppingCart";
+    case "franchise":
+      return "Building2";
+    default:
+      return "Store";
+  }
+}
+
+// Outlet constants
+export const OUTLET_TYPES = [
+  { value: "retail", label: "Retail Store" },
+  { value: "wholesale", label: "Wholesale" },
+  { value: "ecommerce", label: "E-commerce" },
+  { value: "franchise", label: "Franchise" },
+];
+
+export const OUTLET_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+];
+
+export const COURIER_OPTIONS = [
+  "Delhivery",
+  "Blue Dart",
+  "DTDC",
+  "FedEx",
+  "DHL Express",
+  "UPS",
+  "Aramex",
+  "Ecom Express",
+];

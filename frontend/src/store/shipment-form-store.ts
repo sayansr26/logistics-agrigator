@@ -28,12 +28,45 @@ interface ShipmentFormState {
   city: string;
   state: string;
 
+  // RTO and Return Address fields
+  isRTO: boolean;
+  returnAddress: string;
+  returnPincode: string;
+  returnCity: string;
+  returnState: string;
+
   // Invoice form fields
   eWayBillNo: string;
   invoiceNo: string;
   invoiceAmt: string;
   invoiceDate: string;
   attachment: File | null;
+  // Additional invoice fields
+  invoiceType: string;
+  paymentTerms: string;
+  currency: string;
+  taxAmount: string;
+  discountAmount: string;
+  totalAmount: string;
+  sellerGSTIN: string;
+  buyerGSTIN: string;
+  hsnCode: string;
+  sacCode: string;
+
+  // Multiple invoices support
+  invoices: Array<{
+    id: string;
+    invoiceType: string;
+    invoiceNo: string;
+    invoiceDate: string;
+    invoiceAmt: string;
+    currency: string;
+    taxAmount: string;
+    discountAmount: string;
+    totalAmount: string;
+    eWayBillNo: string;
+    attachment: File | null;
+  }>;
 
   // Dimensions form fields
   boxes: Box[];
@@ -53,6 +86,11 @@ interface ShipmentFormState {
   addBox: () => void;
   removeBox: (_id: string) => void;
   updateBox: (_id: string, _field: keyof Box, _value: string) => void;
+
+  // Invoice management methods
+  addInvoice: () => void;
+  removeInvoice: (_id: string) => void;
+  updateInvoice: (_id: string, _field: string, _value: any) => void;
 }
 
 export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
@@ -76,12 +114,33 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
   city: "",
   state: "",
 
+  // Initialize RTO and return address fields
+  isRTO: true,
+  returnAddress: "",
+  returnPincode: "",
+  returnCity: "",
+  returnState: "",
+
   // Initialize invoice form fields
   eWayBillNo: "",
   invoiceNo: "",
   invoiceAmt: "",
   invoiceDate: "",
   attachment: null,
+  // Initialize additional invoice fields
+  invoiceType: "",
+  paymentTerms: "",
+  currency: "INR",
+  taxAmount: "",
+  discountAmount: "",
+  totalAmount: "",
+  sellerGSTIN: "",
+  buyerGSTIN: "",
+  hsnCode: "",
+  sacCode: "",
+
+  // Initialize multiple invoices
+  invoices: [],
 
   // Initialize dimensions form fields
   boxes: [],
@@ -124,12 +183,31 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
       area: "",
       city: "",
       state: "",
+      // Reset RTO and return address fields
+      isRTO: true,
+      returnAddress: "",
+      returnPincode: "",
+      returnCity: "",
+      returnState: "",
       // Reset invoice fields
       eWayBillNo: "",
       invoiceNo: "",
       invoiceAmt: "",
       invoiceDate: "",
       attachment: null,
+      // Reset additional invoice fields
+      invoiceType: "",
+      paymentTerms: "",
+      currency: "INR",
+      taxAmount: "",
+      discountAmount: "",
+      totalAmount: "",
+      sellerGSTIN: "",
+      buyerGSTIN: "",
+      hsnCode: "",
+      sacCode: "",
+      // Reset multiple invoices
+      invoices: [],
       // Reset dimensions fields
       boxes: [],
       formData: {},
@@ -159,6 +237,39 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
     set((state) => ({
       boxes: state.boxes.map((box) =>
         box.id === id ? { ...box, [field]: value } : box,
+      ),
+    })),
+
+  // Invoice management methods
+  addInvoice: () =>
+    set((state) => ({
+      invoices: [
+        ...state.invoices,
+        {
+          id: `invoice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          invoiceType: "",
+          invoiceNo: "",
+          invoiceDate: "",
+          invoiceAmt: "",
+          currency: "INR",
+          taxAmount: "",
+          discountAmount: "",
+          totalAmount: "",
+          eWayBillNo: "",
+          attachment: null,
+        },
+      ],
+    })),
+
+  removeInvoice: (id: string) =>
+    set((state) => ({
+      invoices: state.invoices.filter((invoice) => invoice.id !== id),
+    })),
+
+  updateInvoice: (id: string, field: string, value: any) =>
+    set((state) => ({
+      invoices: state.invoices.map((invoice) =>
+        invoice.id === id ? { ...invoice, [field]: value } : invoice,
       ),
     })),
 }));

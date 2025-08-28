@@ -20,6 +20,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCaption,
@@ -31,7 +38,6 @@ import {
 import {
   mockTransactions,
   mockInvoices,
-  getTransactionStatusColor,
   getInvoiceStatusColor,
   formatCurrency,
   formatDate,
@@ -49,6 +55,8 @@ import {
   Search,
   Filter,
   FileText,
+  X,
+  Calendar,
 } from "lucide-react";
 
 export default function WalletPage() {
@@ -56,22 +64,89 @@ export default function WalletPage() {
     "transactions",
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filter states
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [transactionTypeFilter, setTransactionTypeFilter] =
+    useState<string>("all");
+  const [zoneFilter, setZoneFilter] = useState<string>("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
     { title: "Wallet & Billing" },
   ];
 
-  // Filter transactions based on search term
-  const filteredTransactions = mockTransactions.filter(
-    (transaction) =>
-      // transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Get unique accounts, zones, and transaction types for filters
+  const uniqueAccounts = Array.from(
+    new Set(mockTransactions.map((t) => t.accountDetails.accountNumber)),
+  );
+  const uniqueZones = Array.from(
+    new Set(
+      mockTransactions.map((t) => t.weightZone.zone).filter((zone) => zone),
+    ),
+  );
+  // const uniqueTransactionTypes = ["credit", "debit", "both"];
+
+  // Filter transactions based on all filters
+  const filteredTransactions = mockTransactions.filter((transaction) => {
+    // Search term filter
+    const matchesSearch =
       transaction.transactionDetails.reference
         .toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
       transaction.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.awbLrn.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+      transaction.awbLrn.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Account filter
+    const matchesAccount =
+      accountFilter === "all" ||
+      transaction.accountDetails.accountNumber === accountFilter;
+
+    // Transaction type filter
+    const matchesTransactionType = (() => {
+      if (transactionTypeFilter === "all") return true;
+      if (transactionTypeFilter === "credit") return transaction.credit > 0;
+      if (transactionTypeFilter === "debit") return transaction.debit > 0;
+      if (transactionTypeFilter === "both")
+        return transaction.credit > 0 && transaction.debit > 0;
+      return true;
+    })();
+
+    // Zone filter
+    const matchesZone =
+      zoneFilter === "all" || transaction.weightZone.zone === zoneFilter;
+
+    // Date range filter
+    const transactionDate = new Date(transaction.transactionDetails.date);
+    const matchesDateRange = (() => {
+      if (!startDate && !endDate) return true;
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        return transactionDate >= start && transactionDate <= end;
+      }
+      if (startDate) {
+        const start = new Date(startDate);
+        return transactionDate >= start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        return transactionDate <= end;
+      }
+      return true;
+    })();
+
+    return (
+      matchesSearch &&
+      matchesAccount &&
+      matchesTransactionType &&
+      matchesZone &&
+      matchesDateRange
+    );
+  });
 
   // Filter invoices based on search term
   const filteredInvoices = mockInvoices.filter(
@@ -88,6 +163,45 @@ export default function WalletPage() {
   const pendingAmount = mockTransactions
     .filter((t) => t.transactionDetails.status === "pending")
     .reduce((sum, t) => sum + (t.credit > 0 ? t.credit : -t.debit), 0);
+
+  // Calculate closing account balance (current balance + pending transactions)
+  const closingAccountBalance = walletBalance + pendingAmount;
+
+  // Calculate running balance for each transaction
+  const calculateRunningBalance = (transactions: typeof mockTransactions) => {
+    let runningBalance = walletBalance;
+    return transactions
+      .map((transaction, _index) => {
+        // For display purposes, we'll calculate backwards from current balance
+        // This gives a more realistic view of the balance at each point in time
+        const transactionImpact = transaction.credit - transaction.debit;
+        runningBalance -= transactionImpact; // Subtract because we're going backwards
+        return {
+          ...transaction,
+          runningBalance: runningBalance,
+        };
+      })
+      .reverse(); // Reverse to show chronological order with correct balances
+  };
+
+  const transactionsWithBalance = calculateRunningBalance(filteredTransactions);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setAccountFilter("all");
+    setTransactionTypeFilter("all");
+    setZoneFilter("all");
+    setStartDate("");
+    setEndDate("");
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters =
+    accountFilter !== "all" ||
+    transactionTypeFilter !== "all" ||
+    zoneFilter !== "all" ||
+    startDate ||
+    endDate;
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -145,8 +259,26 @@ export default function WalletPage() {
                 className="pl-10 w-64"
               />
             </div>
-            <Button variant="outline" size="sm">
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
               <Filter className="h-4 w-4" />
+              Filters
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                  {
+                    [
+                      accountFilter,
+                      transactionTypeFilter,
+                      zoneFilter,
+                      startDate,
+                      endDate,
+                    ].filter((f) => f !== "all" && f).length
+                  }
+                </Badge>
+              )}
             </Button>
             <Button variant="outline" size="sm">
               <RefreshCw className="h-4 w-4" />
@@ -154,8 +286,117 @@ export default function WalletPage() {
           </div>
         </div>
 
+        {/* Filters Section */}
+        {showFilters && activeTab === "transactions" && (
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Filters</CardTitle>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Account Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Account</label>
+                  <Select
+                    value={accountFilter}
+                    onValueChange={setAccountFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Accounts</SelectItem>
+                      {uniqueAccounts.map((account) => (
+                        <SelectItem key={account} value={account}>
+                          {account}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Transaction Type Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Transaction Type
+                  </label>
+                  <Select
+                    value={transactionTypeFilter}
+                    onValueChange={setTransactionTypeFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="credit">Credit Only</SelectItem>
+                      <SelectItem value="debit">Debit Only</SelectItem>
+                      <SelectItem value="both">Credit & Debit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Zone Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Zone</label>
+                  <Select value={zoneFilter} onValueChange={setZoneFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select zone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Zones</SelectItem>
+                      {uniqueZones.map((zone) => (
+                        <SelectItem key={zone} value={zone}>
+                          Zone {zone}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Start Date */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Start Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                {/* End Date */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">End Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Wallet Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          {/* Wallet Balance */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
@@ -174,6 +415,26 @@ export default function WalletPage() {
             </CardContent>
           </Card>
 
+          {/* Closing Account Balance */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Wallet className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Closing Account
+                  </p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatCurrency(closingAccountBalance)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Spent */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
@@ -192,6 +453,7 @@ export default function WalletPage() {
             </CardContent>
           </Card>
 
+          {/* Pending Amount */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
@@ -210,17 +472,18 @@ export default function WalletPage() {
             </CardContent>
           </Card>
 
+          {/* Pending Invoices */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-blue-600" />
+                <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Pending Invoices
                   </p>
-                  <p className="text-2xl font-bold text-blue-600">
+                  <p className="text-2xl font-bold text-purple-600">
                     {mockInvoices.filter((i) => i.status !== "paid").length}
                   </p>
                 </div>
@@ -238,6 +501,11 @@ export default function WalletPage() {
                   <>
                     <CreditCard className="h-5 w-5" />
                     <span>Transaction History</span>
+                    {hasActiveFilters && (
+                      <Badge variant="secondary" className="ml-2">
+                        {filteredTransactions.length} results
+                      </Badge>
+                    )}
                   </>
                 ) : (
                   <>
@@ -257,26 +525,32 @@ export default function WalletPage() {
             {activeTab === "transactions" ? (
               <Table>
                 <TableCaption>
-                  {searchTerm
-                    ? `Filtered transactions for "${searchTerm}"`
+                  {searchTerm || hasActiveFilters
+                    ? `Filtered transactions${searchTerm ? ` for "${searchTerm}"` : ""}`
                     : "Recent wallet transactions"}
                 </TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Transcation ID</TableHead>
-                    <TableHead>ACCOUNT DETAILS</TableHead>
-                    <TableHead>ORDER ID</TableHead>
+                    <TableHead>Transcation</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Order ID / Reference</TableHead>
                     <TableHead>AWB / LRN</TableHead>
-                    <TableHead>WEIGHT & ZONE</TableHead>
-                    {/* <TableHead>Description</TableHead> */}
-                    <TableHead>CREDIT</TableHead>
-                    <TableHead>DEBIT</TableHead>
+                    <TableHead>Weight & Zone</TableHead>
+                    <TableHead>Credit</TableHead>
+                    <TableHead>Debit</TableHead>
+                    <TableHead>Closing Amount</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
+                  {transactionsWithBalance.map((transaction) => (
+                    <TableRow
+                      key={transaction.id}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() =>
+                        (window.location.href = `/wallet/transactions/${transaction.id}`)
+                      }
+                    >
                       <TableCell>
                         <div className="text-sm">
                           <div className="font-medium">
@@ -284,18 +558,6 @@ export default function WalletPage() {
                           </div>
                           <div className="text-muted-foreground">
                             {transaction.transactionDetails.time}
-                          </div>
-                          <div className="mt-1">
-                            <Badge
-                              className={getTransactionStatusColor(
-                                transaction.transactionDetails.status,
-                              )}
-                            >
-                              {transaction.transactionDetails.status}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Ref: {transaction.transactionDetails.reference}
                           </div>
                         </div>
                       </TableCell>
@@ -307,7 +569,9 @@ export default function WalletPage() {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
-                        {transaction.orderId || "-"}
+                        {transaction.orderId ||
+                          transaction.transactionDetails.reference ||
+                          "-"}
                       </TableCell>
                       <TableCell className="font-medium">
                         {transaction.awbLrn || "-"}
@@ -328,11 +592,6 @@ export default function WalletPage() {
                           )}
                         </div>
                       </TableCell>
-                      {/* <TableCell>
-                        <div className="text-sm max-w-xs">
-                          {transaction.description}
-                        </div>
-                      </TableCell> */}
                       <TableCell>
                         {transaction.credit > 0 ? (
                           <div className="font-medium text-green-600">
@@ -351,20 +610,36 @@ export default function WalletPage() {
                           "-"
                         )}
                       </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-gray-900">
+                          {formatCurrency(transaction.runningBalance)}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = `/wallet/transactions/${transaction.id}`;
+                              }}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Download className="mr-2 h-4 w-4" />
                               Download Receipt
                             </DropdownMenuItem>
@@ -394,7 +669,13 @@ export default function WalletPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
+                    <TableRow
+                      key={invoice.id}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() =>
+                        (window.location.href = `/wallet/invoices/${invoice.id}`)
+                      }
+                    >
                       <TableCell className="font-medium">
                         {invoice.invoiceNumber}
                       </TableCell>
@@ -424,22 +705,35 @@ export default function WalletPage() {
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = `/wallet/invoices/${invoice.id}`;
+                              }}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               View Invoice
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Download className="mr-2 h-4 w-4" />
                               Download PDF
                             </DropdownMenuItem>
                             {invoice.status !== "paid" && (
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <CreditCard className="mr-2 h-4 w-4" />
                                 Pay Now
                               </DropdownMenuItem>

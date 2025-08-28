@@ -43,9 +43,10 @@ export function CreateShipmentStepper({
       <div className="flex items-center justify-between">
         {steps.map((step, index) => {
           const Icon = step.icon;
-          const isActive = currentStep === index + 1;
-          const isCompleted = currentStep > index + 1;
-          const isClickable = onStepClick && isCompleted;
+          const stepNumber = index + 1;
+          const isActive = currentStep === stepNumber;
+          const isCompleted = currentStep > stepNumber;
+          const isClickable = onStepClick && (isCompleted || stepNumber === 1);
 
           return (
             <div
@@ -60,7 +61,7 @@ export function CreateShipmentStepper({
                   !isActive && !isCompleted && "bg-gray-200 text-gray-500",
                   isClickable && "cursor-pointer hover:opacity-80",
                 )}
-                onClick={() => isClickable && onStepClick(index + 1)}
+                onClick={() => isClickable && onStepClick(stepNumber)}
               >
                 <Icon className="w-5 h-5" />
               </div>

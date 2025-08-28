@@ -58,6 +58,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Plus,
+  RefreshCw,
 } from "lucide-react";
 import {
   mockShipments,
@@ -78,7 +80,7 @@ import {
 
 export default function ReportsPage() {
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "Reports & Analytics" },
   ];
 
@@ -145,56 +147,77 @@ export default function ReportsPage() {
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold text-foreground">
-            Reports & Analytics
-          </h1>
-          <p className="text-muted-foreground">
-            Comprehensive insights into your logistics operations and
-            performance metrics
-          </p>
+        {/* Header - Updated to match other pages */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center space-x-2">
+              <BarChart3 className="h-8 w-8 text-blue-600" />
+              <span>Reports & Analytics</span>
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Comprehensive insights into your logistics operations and
+              performance metrics
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+            <Button size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Generate Report
+            </Button>
+          </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex justify-center space-x-4">
+        {/* Tab Navigation - Updated styling */}
+        <div className="flex justify-center space-x-1 bg-muted p-1 rounded-lg">
           <Button
-            variant={activeTab === "overview" ? "default" : "outline"}
+            variant={activeTab === "overview" ? "default" : "ghost"}
             onClick={() => handleTabChange("overview")}
             className="flex items-center space-x-2"
+            size="sm"
           >
             <BarChart3 className="h-4 w-4" />
             <span>Overview</span>
           </Button>
           <Button
-            variant={activeTab === "shipments" ? "default" : "outline"}
+            variant={activeTab === "shipments" ? "default" : "ghost"}
             onClick={() => handleTabChange("shipments")}
             className="flex items-center space-x-2"
+            size="sm"
           >
             <Package className="h-4 w-4" />
             <span>Shipments</span>
           </Button>
           <Button
-            variant={activeTab === "financial" ? "default" : "outline"}
+            variant={activeTab === "financial" ? "default" : "ghost"}
             onClick={() => handleTabChange("financial")}
             className="flex items-center space-x-2"
+            size="sm"
           >
             <DollarSign className="h-4 w-4" />
             <span>Financial</span>
           </Button>
           <Button
-            variant={activeTab === "performance" ? "default" : "outline"}
+            variant={activeTab === "performance" ? "default" : "ghost"}
             onClick={() => handleTabChange("performance")}
             className="flex items-center space-x-2"
+            size="sm"
           >
             <Activity className="h-4 w-4" />
             <span>Performance</span>
           </Button>
         </div>
 
-        {/* Date Range Selector */}
+        {/* Date Range Selector - Updated styling */}
         <div className="flex justify-center">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 bg-background border rounded-lg p-3">
             <span className="text-sm font-medium text-muted-foreground">
               Date Range:
             </span>
@@ -204,7 +227,7 @@ export default function ReportsPage() {
                 setDateRange(value)
               }
             >
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -224,13 +247,15 @@ export default function ReportsPage() {
         {/* Overview Dashboard */}
         {activeTab === "overview" && (
           <div className="space-y-6">
-            {/* Key Metrics Cards */}
+            {/* Key Metrics Cards - Updated spacing and layout */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Package className="h-8 w-8 text-blue-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Package className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Total Shipments
                       </p>
@@ -246,11 +271,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="h-8 w-8 text-green-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <DollarSign className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Total Revenue
                       </p>
@@ -266,11 +293,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-8 w-8 text-purple-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Users className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Active Users
                       </p>
@@ -286,11 +315,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Target className="h-8 w-8 text-orange-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Target className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Delivery Rate
                       </p>
@@ -307,12 +338,12 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Performance Metrics */}
+            {/* Performance Metrics - Updated layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <Clock className="h-5 w-5" />
+                    <Clock className="h-5 w-5 text-blue-600" />
                     <span>Delivery Performance</span>
                   </CardTitle>
                   <CardDescription>
@@ -320,37 +351,45 @@ export default function ReportsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Average Delivery Time</span>
-                    <span className="text-lg font-semibold">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium">
+                      Average Delivery Time
+                    </span>
+                    <span className="text-lg font-semibold text-blue-600">
                       {analyticsData.avgDeliveryTime} days
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Top Performing Courier</span>
-                    <span className="text-lg font-semibold">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium">
+                      Top Performing Courier
+                    </span>
+                    <span className="text-lg font-semibold text-green-600">
                       {analyticsData.topCourier}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Most Active Origin</span>
-                    <span className="text-lg font-semibold">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium">
+                      Most Active Origin
+                    </span>
+                    <span className="text-lg font-semibold text-purple-600">
                       {analyticsData.topOrigin}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Most Popular Destination</span>
-                    <span className="text-lg font-semibold">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium">
+                      Most Popular Destination
+                    </span>
+                    <span className="text-lg font-semibold text-orange-600">
                       {analyticsData.topDestination}
                     </span>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <PieChart className="h-5 w-5" />
+                    <PieChart className="h-5 w-5 text-purple-600" />
                     <span>Shipment Status Distribution</span>
                   </CardTitle>
                   <CardDescription>
@@ -391,61 +430,59 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Courier Performance Chart */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Activity className="h-5 w-5" />
-                    <span>Recent Activity</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Latest shipments and updates
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {mockShipments.slice(0, 5).map((shipment) => (
-                      <div
-                        key={shipment.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Package className="h-5 w-5 text-blue-600" />
-                          <div>
-                            <p className="font-medium">
-                              {shipment.trackingNumber}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {shipment.senderName} → {shipment.receiverName}
-                            </p>
-                          </div>
+            {/* Recent Activity - Updated styling */}
+            <Card className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Activity className="h-5 w-5 text-green-600" />
+                  <span>Recent Activity</span>
+                </CardTitle>
+                <CardDescription>Latest shipments and updates</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {mockShipments.slice(0, 5).map((shipment) => (
+                    <div
+                      key={shipment.id}
+                      className="flex items-center justify-between p-4 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <Package className="h-4 w-4 text-blue-600" />
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge className={getStatusColor(shipment.status)}>
-                            {shipment.status.replace("_", " ")}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            {formatDate(shipment.createdAt)}
-                          </span>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {shipment.trackingNumber}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {shipment.senderName} → {shipment.receiverName}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                      <div className="flex items-center space-x-3">
+                        <Badge className={getStatusColor(shipment.status)}>
+                          {shipment.status.replace("_", " ")}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate(shipment.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
-        {/* Shipments Analytics */}
+        {/* Shipments Analytics - Updated header layout */}
         {activeTab === "shipments" && (
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center space-x-2">
-                    <Package className="h-5 w-5" />
+                    <Package className="h-5 w-5 text-blue-600" />
                     <span>Shipments Analytics</span>
                   </CardTitle>
                   <CardDescription>
@@ -462,8 +499,9 @@ export default function ReportsPage() {
                       className="pl-10 w-64"
                     />
                   </div>
-                  <Button variant="outline" size="icon">
-                    <Filter className="h-4 w-4" />
+                  <Button variant="outline" size="sm">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filters
                   </Button>
                   <Button variant="outline" size="sm">
                     <Download className="mr-2 h-4 w-4" />
@@ -478,9 +516,9 @@ export default function ReportsPage() {
                 searchTerm={searchTerm}
               />
 
-              {/* Pagination */}
+              {/* Pagination - Updated styling */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6">
+                <div className="flex items-center justify-between mt-6 pt-6 border-t">
                   <div className="text-sm text-muted-foreground">
                     Showing {startIndex + 1} to{" "}
                     {Math.min(endIndex, currentData.length)} of{" "}
@@ -526,16 +564,18 @@ export default function ReportsPage() {
           </Card>
         )}
 
-        {/* Financial Analytics */}
+        {/* Financial Analytics - Updated layout and styling */}
         {activeTab === "financial" && (
           <div className="space-y-6">
-            {/* Financial Overview Cards */}
+            {/* Financial Overview Cards - Updated styling */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="h-8 w-8 text-green-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <DollarSign className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Total Revenue
                       </p>
@@ -551,11 +591,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Package className="h-8 w-8 text-blue-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Package className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         COD Shipments
                       </p>
@@ -574,11 +616,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Clock className="h-8 w-8 text-orange-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Clock className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Pending Invoices
                       </p>
@@ -598,11 +642,11 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Financial Charts */}
-            <Card>
+            {/* Financial Charts - Updated styling */}
+            <Card className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <BarChart3 className="h-5 w-5" />
+                  <BarChart3 className="h-5 w-5 text-blue-600" />
                   <span>Payment Mode Distribution</span>
                 </CardTitle>
                 <CardDescription>
@@ -640,12 +684,12 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
 
-            {/* Financial Tables */}
+            {/* Financial Tables - Updated styling */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <FileText className="h-5 w-5" />
+                    <FileText className="h-5 w-5 text-green-600" />
                     <span>Recent Transactions</span>
                   </CardTitle>
                   <CardDescription>
@@ -653,11 +697,11 @@ export default function ReportsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {mockTransactions.slice(0, 5).map((transaction) => (
                       <div
                         key={transaction.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors"
                       >
                         <div className="flex items-center space-x-3">
                           <div
@@ -696,10 +740,10 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <FileText className="h-5 w-5" />
+                    <FileText className="h-5 w-5 text-blue-600" />
                     <span>Invoice Status</span>
                   </CardTitle>
                   <CardDescription>
@@ -707,11 +751,11 @@ export default function ReportsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {mockInvoices.map((invoice) => (
                       <div
                         key={invoice.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors"
                       >
                         <div>
                           <p className="font-medium text-sm">
@@ -740,16 +784,18 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Performance Analytics */}
+        {/* Performance Analytics - Updated styling */}
         {activeTab === "performance" && (
           <div className="space-y-6">
-            {/* Performance Metrics */}
+            {/* Performance Metrics - Updated styling */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Target className="h-8 w-8 text-green-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Target className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Delivery Success Rate
                       </p>
@@ -765,11 +811,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Clock className="h-8 w-8 text-blue-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Clock className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Avg Delivery Time
                       </p>
@@ -785,11 +833,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-8 w-8 text-purple-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Users className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         Customer Satisfaction
                       </p>
@@ -803,11 +853,13 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-2">
-                    <Activity className="h-8 w-8 text-orange-600" />
-                    <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Activity className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground">
                         On-Time Performance
                       </p>
@@ -822,11 +874,11 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Performance Tables */}
-            <Card>
+            {/* Performance Tables - Updated styling */}
+            <Card className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <BarChart3 className="h-5 w-5" />
+                  <BarChart3 className="h-5 w-5 text-blue-600" />
                   <span>Platform Performance</span>
                 </CardTitle>
                 <CardDescription>
@@ -875,7 +927,7 @@ export default function ReportsPage() {
                         >,
                       ),
                     ).map(([platform, data]) => (
-                      <TableRow key={platform}>
+                      <TableRow key={platform} className="hover:bg-muted/50">
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <Badge
@@ -885,7 +937,9 @@ export default function ReportsPage() {
                             </Badge>
                           </div>
                         </TableCell>
-                        <TableCell>{data.orders}</TableCell>
+                        <TableCell className="font-medium">
+                          {data.orders}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <span className="font-medium">
@@ -902,7 +956,9 @@ export default function ReportsPage() {
                           </div>
                         </TableCell>
                         <TableCell>2.3 days</TableCell>
-                        <TableCell>{formatCurrency(data.revenue)}</TableCell>
+                        <TableCell className="font-medium">
+                          {formatCurrency(data.revenue)}
+                        </TableCell>
                         <TableCell>
                           <Badge className="bg-green-100 text-green-800">
                             Active
@@ -949,7 +1005,7 @@ function ShipmentsAnalyticsTable({
       </TableHeader>
       <TableBody>
         {shipments.map((shipment) => (
-          <TableRow key={shipment.id}>
+          <TableRow key={shipment.id} className="hover:bg-muted/50">
             <TableCell className="font-medium">
               <div className="text-sm">
                 <div>{shipment.trackingNumber}</div>
@@ -1002,7 +1058,9 @@ function ShipmentsAnalyticsTable({
                 {shipment.paymentMode.toUpperCase()}
               </Badge>
             </TableCell>
-            <TableCell>{formatCurrency(shipment.value)}</TableCell>
+            <TableCell className="font-medium">
+              {formatCurrency(shipment.value)}
+            </TableCell>
             <TableCell>
               <Badge
                 variant="outline"

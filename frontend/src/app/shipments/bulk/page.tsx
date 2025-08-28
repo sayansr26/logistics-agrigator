@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { mockBulkUploads, getBulkUploadStatusColor } from "@/lib/mock-data";
+import { BulkUploadModal } from "@/components/shipments/BulkUploadModal";
 import {
   Upload,
   Download,
@@ -47,6 +48,7 @@ import {
 export default function BulkShipmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const itemsPerPage = 5;
 
   const customBreadcrumbs = [
@@ -73,6 +75,20 @@ export default function BulkShipmentsPage() {
     setCurrentPage(page);
   };
 
+  const handleUpload = async (file: File, pickupAddress: string) => {
+    // TODO: Implement actual file upload logic
+    // eslint-disable-next-line no-console
+    console.log("Uploading file:", file.name);
+    // eslint-disable-next-line no-console
+    console.log("Pickup address:", pickupAddress);
+
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Return success - the modal will handle the success message
+    return Promise.resolve();
+  };
+
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="max-w-7xl mx-auto space-y-8">
@@ -92,7 +108,11 @@ export default function BulkShipmentsPage() {
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Download Template
             </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => setIsUploadModalOpen(true)}
+            >
               <Upload className="h-3.5 w-3.5 mr-1.5" />
               Upload Shipments
             </Button>
@@ -309,6 +329,13 @@ export default function BulkShipmentsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUpload={handleUpload}
+      />
     </DashboardLayout>
   );
 }
