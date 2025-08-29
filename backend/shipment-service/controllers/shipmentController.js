@@ -1,5 +1,4 @@
 const { prisma } = require("../config/database");
-const { getRedisClient } = require("../config/redis");
 const logger = require("../shared/lib/logger");
 const APIResponse = require("../shared/lib/response");
 const {
@@ -7,6 +6,7 @@ const {
   ValidationError,
   NotFoundError,
 } = require("../shared/lib/errors");
+const partnerIntegrationService = require("../services/partnerIntegrationService");
 
 /**
  * Shipment Controller with Real Database Operations
@@ -60,11 +60,48 @@ async function createShipment(req, res) {
       );
     }
 
-    // TODO: Calculate shipping cost using Partner Service
-    // For now, use mock calculation
-    const totalCost = calculateShipmentCost(packageDetails, serviceType);
+    // Calculate shipping rates and select partner using Partner Service
+    const rateCalculationParams = {
+      fromPincode: pickupAddress.pincode,
+      toPincode: deliveryAddress.pincode,
+      weight: packageDetails.weight,
+      serviceType: serviceType.toUpperCase(),
+      dimensions: packageDetails.dimensions,
+      codAmount: paymentType === "COD" ? codAmount : null,
+      strategy: "cheapest", // Can be 'cheapest', 'fastest', or 'balanced'
+    };
 
-    // TODO: Validate payment with Wallet Service for PREPAID
+    logger.info("Calculating rates using Partner Service", {
+      service: "shipment-service",
+      userId,
+      rateParams: rateCalculationParams,
+    });
+
+    const { selectedCourier, alternativeOptions } =
+      await partnerIntegrationService.selectOptimalCourier(
+        rateCalculationParams,
+      );
+
+    // Use the selected partner's rate as total cost
+    const totalCost = selectedCourier.totalAmount;
+    const estimatedDelivery = new Date();
+    estimatedDelivery.setDate(
+      estimatedDelivery.getDate() + selectedCourier.deliveryDays,
+    );
+
+    logger.info("Partner selected for shipment", {
+      service: "shipment-service",
+      userId,
+      selectedPartner: {
+        partnerId: selectedCourier.partnerId,
+        partnerName: selectedCourier.partnerName,
+        totalAmount: selectedCourier.totalAmount,
+        deliveryDays: selectedCourier.deliveryDays,
+      },
+      alternatives: alternativeOptions.length,
+    });
+
+    // TODO: Validate payment with Wallet Service for PREPAID (SHIP-003)
     // For now, proceed with creation
 
     // Create shipment with real database operation
@@ -117,8 +154,12 @@ async function createShipment(req, res) {
         serviceType,
         specialInstructions,
 
-        // Set estimated delivery (mock for now)
-        estimatedDelivery: calculateEstimatedDelivery(serviceType),
+        // Partner assignment from Partner Service
+        partnerId: selectedCourier.partnerId,
+        partnerName: selectedCourier.partnerName,
+
+        // Real estimated delivery from Partner Service
+        estimatedDelivery,
       },
       select: {
         id: true,
@@ -929,49 +970,303 @@ async function addTrackingEvent(req, res) {
   }
 }
 
-// Helper functions
-
 /**
- * Calculate shipment cost (mock implementation)
- * TODO: Replace with Partner Service integration
+ * Calculate shipping rates using Partner Service
  */
-function calculateShipmentCost(packageDetails, serviceType) {
-  let baseCost = 100;
+async function calculateRates(req, res) {
+  try {
+    const userId = req.user.userId;
+    const {
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType = "STANDARD",
+      dimensions = { length: 10, width: 10, height: 10 },
+      codAmount,
+    } = req.body;
 
-  // Weight-based pricing
-  const weight = parseFloat(packageDetails.weight);
-  if (weight > 1) {
-    baseCost += (weight - 1) * 20;
+    logger.info("Calculating shipping rates", {
+      service: "shipment-service",
+      userId,
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType,
+    });
+
+    // Prepare rate calculation parameters
+    const rateParams = {
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType: serviceType.toUpperCase(),
+      dimensions,
+      codAmount,
+    };
+
+    // Calculate rates using Partner Service
+    const rateData = await partnerIntegrationService.calculateRates(rateParams);
+
+    // Audit logging
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "CALCULATE_RATES",
+        resource: "Shipment",
+        resourceId: null,
+        changes: rateParams,
+        metadata: {
+          resultCount: rateData.rates?.length || 0,
+          cheapestRate: rateData.cheapestRate?.totalAmount,
+          fastestRate: rateData.fastestRate?.deliveryDays,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          rates: rateData.rates,
+          cheapestRate: rateData.cheapestRate,
+          fastestRate: rateData.fastestRate,
+          calculation: {
+            fromPincode,
+            toPincode,
+            weight,
+            serviceType,
+            totalOptions: rateData.rates?.length || 0,
+          },
+        },
+        "Shipping rates calculated successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Rate calculation failed", {
+      service: "shipment-service",
+      userId: req.user?.userId,
+      error: error.message,
+      body: req.body,
+    });
+
+    if (error instanceof ValidationError) {
+      const errorResponse = APIResponse.error(
+        error.message,
+        "VALIDATION_ERROR",
+      );
+      return res.status(400).json(errorResponse);
+    }
+
+    const errorResponse = APIResponse.error(
+      "Failed to calculate shipping rates",
+      "RATE_CALCULATION_FAILED",
+    );
+    res.status(500).json(errorResponse);
   }
-
-  // Service type multiplier
-  const serviceMultipliers = {
-    EXPRESS: 1.5,
-    STANDARD: 1.0,
-    ECONOMY: 0.8,
-  };
-
-  baseCost *= serviceMultipliers[serviceType] || 1.0;
-
-  return parseFloat(baseCost.toFixed(2));
 }
 
 /**
- * Calculate estimated delivery date
+ * Select optimal courier partner
  */
-function calculateEstimatedDelivery(serviceType) {
-  const now = new Date();
-  const deliveryDays = {
-    EXPRESS: 1,
-    STANDARD: 3,
-    ECONOMY: 7,
-  };
+async function selectPartner(req, res) {
+  try {
+    const userId = req.user.userId;
+    const {
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType = "STANDARD",
+      dimensions = { length: 10, width: 10, height: 10 },
+      codAmount,
+      strategy = "cheapest", // cheapest, fastest, balanced
+    } = req.body;
 
-  const days = deliveryDays[serviceType] || 3;
-  now.setDate(now.getDate() + days);
+    logger.info("Selecting courier partner", {
+      service: "shipment-service",
+      userId,
+      fromPincode,
+      toPincode,
+      strategy,
+    });
 
-  return now;
+    // Prepare selection parameters
+    const selectionParams = {
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType: serviceType.toUpperCase(),
+      dimensions,
+      codAmount,
+      strategy,
+    };
+
+    // Select optimal courier using Partner Service
+    const { selectedCourier, alternativeOptions, selectionReason } =
+      await partnerIntegrationService.selectOptimalCourier(selectionParams);
+
+    // Audit logging
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "SELECT_PARTNER",
+        resource: "Shipment",
+        resourceId: null,
+        changes: selectionParams,
+        metadata: {
+          selectedPartnerId: selectedCourier.partnerId,
+          selectedPartnerName: selectedCourier.partnerName,
+          totalAmount: selectedCourier.totalAmount,
+          deliveryDays: selectedCourier.deliveryDays,
+          strategy,
+          alternativesCount: alternativeOptions.length,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          selectedCourier,
+          alternativeOptions,
+          selectionReason,
+          selection: {
+            fromPincode,
+            toPincode,
+            weight,
+            serviceType,
+            strategy,
+            totalAlternatives: alternativeOptions.length,
+          },
+        },
+        "Courier partner selected successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Partner selection failed", {
+      service: "shipment-service",
+      userId: req.user?.userId,
+      error: error.message,
+      body: req.body,
+    });
+
+    if (error instanceof ValidationError) {
+      const errorResponse = APIResponse.error(
+        error.message,
+        "VALIDATION_ERROR",
+      );
+      return res.status(400).json(errorResponse);
+    }
+
+    const errorResponse = APIResponse.error(
+      "Failed to select courier partner",
+      "PARTNER_SELECTION_FAILED",
+    );
+    res.status(500).json(errorResponse);
+  }
 }
+
+/**
+ * Check serviceability using Partner Service
+ */
+async function checkServiceability(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { fromPincode, toPincode, serviceType = "STANDARD" } = req.body;
+
+    logger.info("Checking serviceability", {
+      service: "shipment-service",
+      userId,
+      fromPincode,
+      toPincode,
+      serviceType,
+    });
+
+    // Prepare serviceability parameters
+    const serviceabilityParams = {
+      fromPincode,
+      toPincode,
+      serviceType: serviceType.toUpperCase(),
+    };
+
+    // Check serviceability using Partner Service
+    const serviceabilityData =
+      await partnerIntegrationService.checkServiceability(serviceabilityParams);
+
+    // Count serviceable partners
+    const serviceableCount = serviceabilityData.filter(
+      (s) => s.serviceable,
+    ).length;
+    const totalPartners = serviceabilityData.length;
+
+    // Audit logging
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "CHECK_SERVICEABILITY",
+        resource: "Shipment",
+        resourceId: null,
+        changes: serviceabilityParams,
+        metadata: {
+          serviceablePartners: serviceableCount,
+          totalPartners,
+          serviceabilityPercentage:
+            totalPartners > 0 ? (serviceableCount / totalPartners) * 100 : 0,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          serviceability: serviceabilityData,
+          summary: {
+            fromPincode,
+            toPincode,
+            serviceType,
+            serviceablePartners: serviceableCount,
+            totalPartners,
+            isServiceable: serviceableCount > 0,
+            serviceabilityPercentage:
+              totalPartners > 0
+                ? parseFloat(
+                    ((serviceableCount / totalPartners) * 100).toFixed(2),
+                  )
+                : 0,
+          },
+        },
+        "Serviceability check completed successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Serviceability check failed", {
+      service: "shipment-service",
+      userId: req.user?.userId,
+      error: error.message,
+      body: req.body,
+    });
+
+    if (error instanceof ValidationError) {
+      const errorResponse = APIResponse.error(
+        error.message,
+        "VALIDATION_ERROR",
+      );
+      return res.status(400).json(errorResponse);
+    }
+
+    const errorResponse = APIResponse.error(
+      "Failed to check serviceability",
+      "SERVICEABILITY_CHECK_FAILED",
+    );
+    res.status(500).json(errorResponse);
+  }
+}
+
+// Helper functions
 
 /**
  * Calculate refund amount based on cancellation policy
@@ -1003,4 +1298,7 @@ module.exports = {
   cancelShipment,
   getShipmentTracking,
   addTrackingEvent,
+  calculateRates,
+  selectPartner,
+  checkServiceability,
 };

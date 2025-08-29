@@ -19,6 +19,9 @@ const {
   cancelShipment,
   getShipmentTracking,
   addTrackingEvent,
+  calculateRates,
+  selectPartner,
+  checkServiceability,
 } = require("../controllers/shipmentController");
 
 // Import validation schemas
@@ -27,6 +30,9 @@ const {
   updateShipmentSchema,
   trackingEventSchema,
   getShipmentsQuerySchema,
+  rateCalculationSchema,
+  partnerSelectionSchema,
+  serviceabilitySchema,
 } = require("../validation/shipmentSchemas");
 
 /**
@@ -535,6 +541,292 @@ router.post(
   authMiddleware.operationsOrHigher,
   validate(trackingEventSchema),
   addTrackingEvent,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/calculate-rates:
+ *   post:
+ *     tags: [Partner Integration]
+ *     summary: Calculate shipping rates
+ *     description: Calculate shipping rates from all available partners via Partner Service
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromPincode
+ *               - toPincode
+ *               - weight
+ *             properties:
+ *               fromPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Origin pincode
+ *                 example: "110001"
+ *               toPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Destination pincode
+ *                 example: "400001"
+ *               weight:
+ *                 type: number
+ *                 format: float
+ *                 minimum: 0.001
+ *                 maximum: 50
+ *                 description: Package weight in kg
+ *                 example: 2.5
+ *               serviceType:
+ *                 type: string
+ *                 enum: [STANDARD, EXPRESS, ECONOMY]
+ *                 default: STANDARD
+ *                 description: Service type
+ *               dimensions:
+ *                 type: object
+ *                 properties:
+ *                   length:
+ *                     type: number
+ *                     example: 20
+ *                   width:
+ *                     type: number
+ *                     example: 15
+ *                   height:
+ *                     type: number
+ *                     example: 10
+ *               codAmount:
+ *                 type: number
+ *                 format: float
+ *                 description: COD amount if applicable
+ *                 example: 1500.0
+ *     responses:
+ *       200:
+ *         description: Rate calculation results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/APIResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         rates:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               partnerId:
+ *                                 type: string
+ *                               partnerName:
+ *                                 type: string
+ *                               totalAmount:
+ *                                 type: number
+ *                               deliveryDays:
+ *                                 type: integer
+ *                         cheapestRate:
+ *                           type: object
+ *                         fastestRate:
+ *                           type: object
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post(
+  "/calculate-rates",
+  generalLimiter,
+  authMiddleware.authenticate,
+  validate(rateCalculationSchema),
+  calculateRates,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/select-partner:
+ *   post:
+ *     tags: [Partner Integration]
+ *     summary: Select optimal courier partner
+ *     description: Select the best courier partner based on specified strategy
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromPincode
+ *               - toPincode
+ *               - weight
+ *             properties:
+ *               fromPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Origin pincode
+ *                 example: "110001"
+ *               toPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Destination pincode
+ *                 example: "400001"
+ *               weight:
+ *                 type: number
+ *                 format: float
+ *                 minimum: 0.001
+ *                 maximum: 50
+ *                 description: Package weight in kg
+ *                 example: 2.5
+ *               serviceType:
+ *                 type: string
+ *                 enum: [STANDARD, EXPRESS, ECONOMY]
+ *                 default: STANDARD
+ *                 description: Service type
+ *               dimensions:
+ *                 type: object
+ *                 properties:
+ *                   length:
+ *                     type: number
+ *                     example: 20
+ *                   width:
+ *                     type: number
+ *                     example: 15
+ *                   height:
+ *                     type: number
+ *                     example: 10
+ *               codAmount:
+ *                 type: number
+ *                 format: float
+ *                 description: COD amount if applicable
+ *                 example: 1500.0
+ *               strategy:
+ *                 type: string
+ *                 enum: [cheapest, fastest, balanced]
+ *                 default: cheapest
+ *                 description: Selection strategy
+ *     responses:
+ *       200:
+ *         description: Partner selection results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/APIResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         selectedCourier:
+ *                           type: object
+ *                         alternativeOptions:
+ *                           type: array
+ *                         selectionReason:
+ *                           type: string
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post(
+  "/select-partner",
+  generalLimiter,
+  authMiddleware.authenticate,
+  validate(partnerSelectionSchema),
+  selectPartner,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/serviceability:
+ *   post:
+ *     tags: [Partner Integration]
+ *     summary: Check serviceability
+ *     description: Check if partners can service a route via Partner Service
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromPincode
+ *               - toPincode
+ *             properties:
+ *               fromPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Origin pincode
+ *                 example: "110001"
+ *               toPincode:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: Destination pincode
+ *                 example: "400001"
+ *               serviceType:
+ *                 type: string
+ *                 enum: [STANDARD, EXPRESS, ECONOMY]
+ *                 default: STANDARD
+ *                 description: Service type
+ *     responses:
+ *       200:
+ *         description: Serviceability check results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/APIResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         serviceability:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               partnerId:
+ *                                 type: string
+ *                               partnerName:
+ *                                 type: string
+ *                               serviceable:
+ *                                 type: boolean
+ *                         summary:
+ *                           type: object
+ *                           properties:
+ *                             serviceablePartners:
+ *                               type: integer
+ *                             totalPartners:
+ *                               type: integer
+ *                             isServiceable:
+ *                               type: boolean
+ *                             serviceabilityPercentage:
+ *                               type: number
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post(
+  "/serviceability",
+  generalLimiter,
+  authMiddleware.authenticate,
+  validate(serviceabilitySchema),
+  checkServiceability,
 );
 
 module.exports = router;

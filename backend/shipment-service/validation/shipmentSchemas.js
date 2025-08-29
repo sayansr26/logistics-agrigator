@@ -284,11 +284,147 @@ const getShipmentsQuerySchema = Joi.object({
     }),
 });
 
+// Rate calculation validation schema
+const rateCalculationSchema = Joi.object({
+  fromPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "From pincode is required",
+      "string.pattern.base": "From pincode must be exactly 6 digits",
+    }),
+
+  toPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "To pincode is required",
+      "string.pattern.base": "To pincode must be exactly 6 digits",
+    }),
+
+  weight: Joi.number().positive().precision(3).max(50).required().messages({
+    "number.base": "Weight must be a valid number",
+    "number.positive": "Weight must be positive",
+    "number.max": "Weight cannot exceed 50 kg",
+  }),
+
+  serviceType: Joi.string()
+    .valid("STANDARD", "EXPRESS", "ECONOMY")
+    .default("STANDARD")
+    .messages({
+      "any.only": "Service type must be STANDARD, EXPRESS, or ECONOMY",
+    }),
+
+  dimensions: dimensionsSchema.optional().default({
+    length: 10,
+    width: 10,
+    height: 10,
+  }),
+
+  codAmount: Joi.number()
+    .positive()
+    .precision(2)
+    .max(100000)
+    .optional()
+    .allow(null)
+    .messages({
+      "number.base": "COD amount must be a valid number",
+      "number.positive": "COD amount must be positive",
+      "number.max": "COD amount cannot exceed ₹1,00,000",
+    }),
+});
+
+// Partner selection validation schema
+const partnerSelectionSchema = Joi.object({
+  fromPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "From pincode is required",
+      "string.pattern.base": "From pincode must be exactly 6 digits",
+    }),
+
+  toPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "To pincode is required",
+      "string.pattern.base": "To pincode must be exactly 6 digits",
+    }),
+
+  weight: Joi.number().positive().precision(3).max(50).required().messages({
+    "number.base": "Weight must be a valid number",
+    "number.positive": "Weight must be positive",
+    "number.max": "Weight cannot exceed 50 kg",
+  }),
+
+  serviceType: Joi.string()
+    .valid("STANDARD", "EXPRESS", "ECONOMY")
+    .default("STANDARD")
+    .messages({
+      "any.only": "Service type must be STANDARD, EXPRESS, or ECONOMY",
+    }),
+
+  dimensions: dimensionsSchema.optional().default({
+    length: 10,
+    width: 10,
+    height: 10,
+  }),
+
+  codAmount: Joi.number()
+    .positive()
+    .precision(2)
+    .max(100000)
+    .optional()
+    .allow(null)
+    .messages({
+      "number.base": "COD amount must be a valid number",
+      "number.positive": "COD amount must be positive",
+      "number.max": "COD amount cannot exceed ₹1,00,000",
+    }),
+
+  strategy: Joi.string()
+    .valid("cheapest", "fastest", "balanced")
+    .default("cheapest")
+    .messages({
+      "any.only": "Strategy must be cheapest, fastest, or balanced",
+    }),
+});
+
+// Serviceability check validation schema
+const serviceabilitySchema = Joi.object({
+  fromPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "From pincode is required",
+      "string.pattern.base": "From pincode must be exactly 6 digits",
+    }),
+
+  toPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "To pincode is required",
+      "string.pattern.base": "To pincode must be exactly 6 digits",
+    }),
+
+  serviceType: Joi.string()
+    .valid("STANDARD", "EXPRESS", "ECONOMY")
+    .default("STANDARD")
+    .messages({
+      "any.only": "Service type must be STANDARD, EXPRESS, or ECONOMY",
+    }),
+});
+
 module.exports = {
   createShipmentSchema,
   updateShipmentSchema,
   trackingEventSchema,
   getShipmentsQuerySchema,
+  rateCalculationSchema,
+  partnerSelectionSchema,
+  serviceabilitySchema,
   addressSchema,
   packageSchema,
   dimensionsSchema,

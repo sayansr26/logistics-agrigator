@@ -145,10 +145,10 @@ services:
     ports:
       - "3004:3004"
     # For live reload in development, uncomment these volumes:
-    # volumes:
-    #   - ./backend/shipment-service:/app
-    #   - ./shared:/app/shared
-    #   - shipment_node_modules:/app/node_modules
+    volumes:
+      - ./backend/shipment-service:/app
+      - ./shared:/app/shared
+      - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
