@@ -246,6 +246,139 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 
 ## **ACTIVE TASKS**
 
+### **LOG-001: Enhanced Logging Infrastructure Foundation**
+
+**Task Name**: Implement Comprehensive Logging System with Service-Specific Daily Log Files
+
+**Status**: IN_PROGRESS
+
+**Planning**:
+
+- **Objective**: Create enterprise-grade logging infrastructure with service-specific directories, daily log rotation, and comprehensive audit logging
+- **Scope**: Enhanced shared logger, service-specific log directories, daily file rotation, sensitive data handling, project root storage
+- **Approach**: Upgrade shared logger library, implement service-specific logging, ensure project root storage (not Docker volumes)
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] Auth Service operational (COMPLETED)
+- [x] User Service operational (COMPLETED)
+- [x] Partner Service operational (COMPLETED)
+- [x] Wallet Service operational (COMPLETED)
+- [x] Shipment Service operational (COMPLETED)
+- [x] Shared library structure established (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Enhanced Shared Logger (Day 1)**
+
+- [ ] **Upgrade `shared/lib/logger.js`** - Add daily log rotation with winston-daily-rotate-file
+- [ ] **Service-Specific Logging** - Create service-specific log directories: `logs/auth-service/`, `logs/user-service/`, etc.
+- [ ] **Daily Log Files** - Implement `logs/service-name/YYYY-MM-DD.log` format
+- [ ] **Sensitive Data Handling** - Add local file logging with sensitive data, sanitized API responses
+- [ ] **Project Root Storage** - Configure logs to store in project root `/logs/` directory (not Docker volumes)
+- [ ] **Log Level Configuration** - Implement environment-based log levels with proper filtering
+
+**Phase 2: Service Integration (Day 2)**
+
+- [ ] **Update All Services** - Integrate enhanced logger into all 7 services (auth, user, partner, wallet, shipment, platform, support)
+- [ ] **Audit Logging Enhancement** - Replace database audit logs with comprehensive file-based audit logging
+- [ ] **Docker Configuration** - Update docker-compose.yml to mount project root logs directory
+- [ ] **Log Testing** - Verify log creation, rotation, and service-specific separation
+- [ ] **Performance Testing** - Ensure logging doesn't impact service performance (< 5ms overhead)
+- [ ] **Documentation Update** - Update shared library documentation and service usage examples
+
+**Completion Criteria**:
+
+- [ ] All services create daily log files in service-specific directories
+- [ ] Log files follow `logs/service-name/YYYY-MM-DD.log` naming convention
+- [ ] Sensitive data logged locally, sanitized in API responses
+- [ ] Project root log storage working (not Docker volumes)
+- [ ] Log rotation working automatically at midnight
+- [ ] All CRUD operations logged with comprehensive audit trails
+- [ ] Performance impact < 5ms per request
+- [ ] Docker services restart successfully with new logging
+
+**API Endpoints Created**: None (infrastructure task)
+
+**Files to Create/Modify**:
+
+- `shared/lib/logger.js` - Enhanced with daily rotation and service-specific logging
+- `package.json` - Add winston-daily-rotate-file dependency
+- `docker-compose.yml` - Add log directory volume mapping
+- `logs/` - Create directory structure for all services
+- All service `server.js` files - Update logger initialization
+
+---
+
+### **LOG-002: API Gateway Log Management System**
+
+**Task Name**: Implement Admin-Only Log Retrieval APIs with Date and Service Filtering
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create comprehensive log management API endpoints accessible only by admin users
+- **Scope**: Log retrieval endpoints, date/service filtering, admin authentication, 30-day retention for API Gateway
+- **Approach**: Add new endpoints to API Gateway with admin-only middleware, implement log reading and filtering
+- **Estimated Time**: 1 day
+
+**Dependencies**:
+
+- [x] LOG-001 completed (Enhanced Logging Infrastructure)
+- [x] Auth Service admin roles operational (COMPLETED)
+- [x] API Gateway authentication middleware available (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Log Retrieval API Implementation**
+
+- [ ] **Create Log Controller** - `backend/api-gateway/controllers/logController.js`
+- [ ] **Admin Authentication** - Implement admin-only middleware for log endpoints
+- [ ] **Log Reading Service** - Create service to read and filter log files from project root
+- [ ] **Date Filtering** - Implement `?date=YYYY-MM-DD` parameter filtering
+- [ ] **Service Filtering** - Implement `?service=service-name` parameter filtering
+- [ ] **Pagination Support** - Add `?page=1&limit=100` for large log files
+- [ ] **Log Search** - Add `?search=keyword` functionality for log content search
+
+**Phase 2: API Gateway Log Retention**
+
+- [ ] **30-Day Retention** - Implement automatic cleanup for API Gateway logs only (other services: lifetime)
+- [ ] **Cleanup Service** - Create automated cleanup service running daily
+- [ ] **Retention Configuration** - Environment-based retention policy configuration
+- [ ] **Admin Notifications** - Log cleanup notifications for admin users
+
+**Completion Criteria**:
+
+- [ ] `GET /api/logs/audit?date=2024-12-19&service=auth-service` endpoint working
+- [ ] Admin-only access enforced (401 for non-admin users)
+- [ ] Date and service filtering working correctly
+- [ ] Pagination support for large log files
+- [ ] API Gateway logs automatically cleaned after 30 days
+- [ ] Other service logs retained indefinitely (manual cleanup)
+- [ ] Comprehensive Swagger documentation for log endpoints
+- [ ] Error handling for missing files, invalid dates, unauthorized access
+
+**API Endpoints to Implement**:
+
+1. `GET /api/logs/audit` - Get audit logs with filtering (admin-only)
+   - Query parameters: `date`, `service`, `page`, `limit`, `search`
+   - Response: Paginated log entries with metadata
+2. `GET /api/logs/services` - List available services with log dates (admin-only)
+3. `GET /api/logs/stats` - Get log statistics and storage usage (admin-only)
+4. `DELETE /api/logs/cleanup` - Manually trigger API Gateway log cleanup (admin-only)
+
+**Files to Create**:
+
+- `backend/api-gateway/controllers/logController.js`
+- `backend/api-gateway/services/logService.js`
+- `backend/api-gateway/middleware/adminAuth.js`
+- `backend/api-gateway/routes/logs.js`
+- `backend/api-gateway/services/logCleanupService.js`
+
+---
+
 ### **PLAT-001: Platform Service Foundation**
 
 **Task Name**: Complete Platform Service Foundation with Auth-Service Patterns
@@ -913,32 +1046,34 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 
 ## **NEXT STEPS**
 
-**Current Priority**: Complete Wallet Service Foundation First
+**Current Priority**: Complete Enhanced Logging Infrastructure (Critical for Production Readiness)
 
-### **Phase 1: Wallet Service Foundation (Week 1)**
+### **Phase 1: Enhanced Logging Infrastructure (Week 1)**
 
-1. **WALLET-001** - Complete Wallet Service with External API Integration (CRITICAL - Week 1)
+1. **LOG-001** - Enhanced Logging Infrastructure Foundation (CRITICAL - 2 days)
+2. **LOG-002** - API Gateway Log Management System (HIGH - 1 day)
 
-### **Phase 2: Shipment Service Implementation (Week 2-3)**
+### **Phase 2: Platform Service Implementation (Week 2)**
 
-2. **✅ SHIP-001 to SHIP-005** - All Shipment Service tasks completed (archived to BACKEND_SHIPMENT_TASK.md)
+3. **PLAT-001** - Platform Service Implementation (MEDIUM - 3 days)
 
-### **Phase 3: Platform and Support Services (Week 4-5)**
+### **Phase 3: Support and Enhancement Services (Week 3)**
 
-7. **PLAT-001** - Platform Service Implementation (Week 4)
-8. **SUPP-001** - Support Service Implementation (Week 5)
-
-### **Phase 4: Production Enhancement (Week 5)**
-
-9. **API-001** - API Gateway Enhancement (Week 5)
+4. **SUPP-001** - Support Service Implementation (LOW - 2 days)
+5. **API-001** - API Gateway Enhancement (OPTIONAL - 2 days)
 
 ### **Implementation Priority Order**:
 
-1. **✅ WALLET-001 (Week 1)**: Complete independent wallet service with external API integration ✅ COMPLETED
-2. **✅ SHIP-001 to SHIP-005**: All shipment service tasks ✅ COMPLETED (archived to BACKEND_SHIPMENT_TASK.md)
-3. **🎯 PLAT-001 (Week 4)**: Platform service for e-commerce integration
-4. **SUPP-001 (Week 5)**: Support service for customer operations
-5. **API-001 (Week 5)**: API Gateway production enhancements
+1. **🎯 LOG-001 (CURRENT)**: Enhanced logging infrastructure with service-specific daily files ⚡ **IN_PROGRESS**
+2. **LOG-002 (Next)**: API Gateway log management with admin-only access
+3. **PLAT-001 (Week 2)**: Platform service for e-commerce integration
+4. **SUPP-001 (Week 3)**: Support service for customer operations
+5. **API-001 (Optional)**: API Gateway production enhancements
+
+### **Completed Foundation Services**:
+
+- **✅ WALLET-001**: Complete independent wallet service with external API integration ✅ COMPLETED
+- **✅ SHIP-001 to SHIP-005**: All shipment service tasks ✅ COMPLETED (archived to BACKEND_SHIPMENT_TASK.md)
 
 ### **Current Foundation Status**:
 
@@ -976,5 +1111,5 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 6. **IMPORTANT** maintain >90% test coverage for all services
 7. **NECESSARY** follow monorepo structure consistently
 
-**Last Updated**: August 2024 (All SHIP tasks archived to BACKEND_SHIPMENT_TASK.md, shipment service production-ready with 40+ endpoints, API Gateway production-ready)
-**Current Active Task**: PLAT-001 - Platform Service Foundation (Ready to start - all dependencies completed)
+**Last Updated**: December 2024 (Added comprehensive logging infrastructure tasks LOG-001 and LOG-002 as highest priority - enterprise logging system with service-specific daily files and admin-only log retrieval APIs)
+**Current Active Task**: LOG-001 - Enhanced Logging Infrastructure Foundation (IN_PROGRESS - implementing service-specific daily log files and comprehensive audit logging)
