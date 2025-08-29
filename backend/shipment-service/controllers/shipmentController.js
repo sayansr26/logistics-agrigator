@@ -10,6 +10,10 @@ const {
 const partnerIntegrationService = require("../services/partnerIntegrationService");
 const paymentProcessingService = require("../services/paymentProcessingService");
 const trackingService = require("../services/trackingService");
+const bulkProcessingService = require("../services/bulkProcessingService");
+const ndrService = require("../services/ndrService");
+const labelGenerationService = require("../services/labelGenerationService");
+const pickupSchedulingService = require("../services/pickupSchedulingService");
 
 /**
  * Shipment Controller with Real Database Operations
@@ -1575,6 +1579,477 @@ async function getTrackingAnalytics(req, res) {
   }
 }
 
+/**
+ * SHIP-005: Bulk Operations and Advanced Features
+ */
+
+/**
+ * Process bulk shipments from CSV/Excel data
+ */
+async function processBulkShipments(req, res) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const { bulkData, options = {} } = req.body;
+
+    logger.info("Processing bulk shipments", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      totalRecords: bulkData.length,
+    });
+
+    // Validate bulk data
+    if (!Array.isArray(bulkData) || bulkData.length === 0) {
+      throw new ValidationError("Bulk data must be a non-empty array");
+    }
+
+    if (bulkData.length > 1000) {
+      throw new ValidationError(
+        "Maximum 1000 shipments allowed per bulk operation",
+      );
+    }
+
+    // Process bulk shipments
+    const result = await bulkProcessingService.processBulkShipments(
+      bulkData,
+      userId,
+      clientId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          result,
+          "Bulk shipments processed successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Bulk shipments processing error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get bulk job status
+ */
+async function getBulkJobStatus(req, res) {
+  try {
+    const { jobId } = req.params;
+
+    logger.info("Getting bulk job status", {
+      service: "shipment-service",
+      jobId,
+      userId: req.user.userId,
+    });
+
+    const jobStatus = await bulkProcessingService.getBulkJobStatus(jobId);
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          jobStatus,
+          "Bulk job status retrieved successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Get bulk job status error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Create NDR case
+ */
+async function createNDRCase(req, res) {
+  try {
+    const { shipmentId } = req.params;
+    const userId = req.user.userId;
+    const ndrData = req.body;
+
+    logger.info("Creating NDR case", {
+      service: "shipment-service",
+      shipmentId,
+      userId,
+      reason: ndrData.reason,
+    });
+
+    const ndrCase = await ndrService.createNDRCase(shipmentId, ndrData, userId);
+
+    res
+      .status(201)
+      .json(APIResponse.success(ndrCase, "NDR case created successfully", 201));
+  } catch (error) {
+    logger.error("Create NDR case error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get NDR cases with filtering
+ */
+async function getNDRCases(req, res) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const filters = { ...req.query };
+
+    // Add client filter for multi-tenant support
+    if (clientId && req.user.role !== "admin") {
+      filters.clientId = clientId;
+    }
+
+    const pagination = {
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 20,
+      sortBy: req.query.sortBy || "createdAt",
+      sortOrder: req.query.sortOrder || "desc",
+    };
+
+    logger.info("Getting NDR cases", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      filters,
+    });
+
+    const result = await ndrService.getNDRCases(filters, pagination);
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(result, "NDR cases retrieved successfully", 200),
+      );
+  } catch (error) {
+    logger.error("Get NDR cases error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Take action on NDR case
+ */
+async function takeNDRAction(req, res) {
+  try {
+    const { ndrCaseId } = req.params;
+    const userId = req.user.userId;
+    const actionData = req.body;
+
+    logger.info("Taking NDR action", {
+      service: "shipment-service",
+      ndrCaseId,
+      action: actionData.action,
+      userId,
+    });
+
+    const updatedCase = await ndrService.takeNDRAction(
+      ndrCaseId,
+      actionData,
+      userId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          updatedCase,
+          `NDR action '${actionData.action}' completed successfully`,
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Take NDR action error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate shipping label
+ */
+async function generateShippingLabel(req, res) {
+  try {
+    const { shipmentId } = req.params;
+    const userId = req.user.userId;
+    const labelOptions = req.body;
+
+    logger.info("Generating shipping label", {
+      service: "shipment-service",
+      shipmentId,
+      userId,
+      format: labelOptions.format,
+    });
+
+    const result = await labelGenerationService.generateShippingLabel(
+      shipmentId,
+      labelOptions,
+      userId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          result,
+          "Shipping label generated successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Generate shipping label error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate bulk labels
+ */
+async function generateBulkLabels(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { shipmentIds, labelOptions = {} } = req.body;
+
+    logger.info("Generating bulk labels", {
+      service: "shipment-service",
+      userId,
+      shipmentCount: shipmentIds.length,
+    });
+
+    if (!Array.isArray(shipmentIds) || shipmentIds.length === 0) {
+      throw new ValidationError("shipmentIds must be a non-empty array");
+    }
+
+    const result = await labelGenerationService.generateBulkLabels(
+      shipmentIds,
+      labelOptions,
+      userId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(result, "Bulk labels generated successfully", 200),
+      );
+  } catch (error) {
+    logger.error("Generate bulk labels error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Create manifest
+ */
+async function createManifest(req, res) {
+  try {
+    const userId = req.user.userId;
+    const manifestData = req.body;
+
+    logger.info("Creating manifest", {
+      service: "shipment-service",
+      userId,
+      partnerId: manifestData.partnerId,
+      shipmentCount: manifestData.shipmentIds.length,
+    });
+
+    const result = await labelGenerationService.createManifest(
+      manifestData,
+      userId,
+    );
+
+    res
+      .status(201)
+      .json(APIResponse.success(result, "Manifest created successfully", 201));
+  } catch (error) {
+    logger.error("Create manifest error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Schedule pickup
+ */
+async function schedulePickup(req, res) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const pickupData = req.body;
+
+    logger.info("Scheduling pickup", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      partnerId: pickupData.partnerId,
+      shipmentCount: pickupData.shipmentIds?.length || 0,
+    });
+
+    const result = await pickupSchedulingService.schedulePickup(
+      pickupData,
+      userId,
+      clientId,
+    );
+
+    res
+      .status(201)
+      .json(APIResponse.success(result, "Pickup scheduled successfully", 201));
+  } catch (error) {
+    logger.error("Schedule pickup error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get pickup schedules
+ */
+async function getPickupSchedules(req, res) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const filters = { ...req.query };
+
+    // Add client filter for multi-tenant support
+    if (clientId && req.user.role !== "admin") {
+      filters.clientId = clientId;
+    }
+
+    const pagination = {
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 20,
+      sortBy: req.query.sortBy || "scheduledDate",
+      sortOrder: req.query.sortOrder || "asc",
+    };
+
+    logger.info("Getting pickup schedules", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      filters,
+    });
+
+    const result = await pickupSchedulingService.getPickupSchedules(
+      filters,
+      pagination,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          result,
+          "Pickup schedules retrieved successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Get pickup schedules error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update pickup status
+ */
+async function updatePickupStatus(req, res) {
+  try {
+    const { pickupScheduleId } = req.params;
+    const userId = req.user.userId;
+    const statusData = req.body;
+
+    logger.info("Updating pickup status", {
+      service: "shipment-service",
+      pickupScheduleId,
+      newStatus: statusData.status,
+      userId,
+    });
+
+    const result = await pickupSchedulingService.updatePickupStatus(
+      pickupScheduleId,
+      statusData,
+      userId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(result, "Pickup status updated successfully", 200),
+      );
+  } catch (error) {
+    logger.error("Update pickup status error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Cancel pickup
+ */
+async function cancelPickup(req, res) {
+  try {
+    const { pickupScheduleId } = req.params;
+    const userId = req.user.userId;
+    const { cancellationReason } = req.body;
+
+    logger.info("Cancelling pickup", {
+      service: "shipment-service",
+      pickupScheduleId,
+      cancellationReason,
+      userId,
+    });
+
+    const result = await pickupSchedulingService.cancelPickup(
+      pickupScheduleId,
+      cancellationReason,
+      userId,
+    );
+
+    res
+      .status(200)
+      .json(APIResponse.success(result, "Pickup cancelled successfully", 200));
+  } catch (error) {
+    logger.error("Cancel pickup error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get available time slots
+ */
+async function getAvailableTimeSlots(req, res) {
+  try {
+    const { date, partnerId } = req.query;
+
+    if (!date) {
+      throw new ValidationError("Date parameter is required");
+    }
+
+    logger.info("Getting available time slots", {
+      service: "shipment-service",
+      date,
+      partnerId,
+      userId: req.user.userId,
+    });
+
+    const result = await pickupSchedulingService.getAvailableTimeSlots(
+      date,
+      partnerId,
+    );
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          result,
+          "Available time slots retrieved successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Get available time slots error:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createShipment,
   getShipments,
@@ -1586,8 +2061,22 @@ module.exports = {
   calculateRates,
   selectPartner,
   checkServiceability,
-  // New SHIP-004 endpoints
+  // SHIP-004 endpoints
   trackByAwbNumber,
   recordDeliveryConfirmation,
   getTrackingAnalytics,
+  // SHIP-005: Bulk Operations and Advanced Features
+  processBulkShipments,
+  getBulkJobStatus,
+  createNDRCase,
+  getNDRCases,
+  takeNDRAction,
+  generateShippingLabel,
+  generateBulkLabels,
+  createManifest,
+  schedulePickup,
+  getPickupSchedules,
+  updatePickupStatus,
+  cancelPickup,
+  getAvailableTimeSlots,
 };

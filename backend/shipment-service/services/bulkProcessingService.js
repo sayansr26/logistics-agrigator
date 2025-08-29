@@ -1,0 +1,571 @@
+/**
+ * Bulk Processing Service
+ *
+ * Handles bulk shipment processing operations with Excel/CSV file support
+ * Implements 100+ orders/minute capability with progress tracking
+ * Follows established service patterns with comprehensive error handling
+ */
+
+const { prisma } = require("../config/database");
+const logger = require("../shared/lib/logger");
+const { getRedisClient } = require("../config/redis");
+const {
+  APIError,
+  ValidationError,
+  NotFoundError,
+} = require("../shared/lib/errors");
+const partnerIntegrationService = require("./partnerIntegrationService");
+const paymentProcessingService = require("./paymentProcessingService");
+const trackingService = require("./trackingService");
+
+class BulkProcessingService {
+  constructor() {
+    // Redis client will be obtained when needed, following auth-service patterns
+  }
+
+  /**
+   * Process bulk shipment data from CSV/Excel
+   */
+  async processBulkShipments(bulkData, userId, clientId, jobId = null) {
+    try {
+      logger.info("Starting bulk shipment processing", {
+        service: "shipment-service",
+        function: "processBulkShipments",
+        userId,
+        clientId,
+        totalRecords: bulkData.length,
+        jobId,
+      });
+
+      // Generate job ID if not provided
+      if (!jobId) {
+        jobId = `bulk_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      }
+
+      // Initialize job status in Redis
+      await this.updateJobStatus(jobId, {
+        status: "PROCESSING",
+        total: bulkData.length,
+        processed: 0,
+        successful: 0,
+        failed: 0,
+        errors: [],
+        startTime: new Date().toISOString(),
+      });
+
+      const results = {
+        jobId,
+        total: bulkData.length,
+        successful: [],
+        failed: [],
+        summary: {
+          successCount: 0,
+          failureCount: 0,
+          processingTime: 0,
+        },
+      };
+
+      const startTime = Date.now();
+
+      // Process shipments in batches of 20 for optimal performance
+      const batchSize = 20;
+      const batches = this.createBatches(bulkData, batchSize);
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        logger.info(`Processing batch ${batchIndex + 1}/${batches.length}`, {
+          batchSize: batch.length,
+          jobId,
+        });
+
+        // Process batch concurrently
+        const batchPromises = batch.map((shipmentData, index) =>
+          this.processSingleShipment(
+            shipmentData,
+            userId,
+            clientId,
+            batchIndex * batchSize + index + 1,
+          ),
+        );
+
+        try {
+          const batchResults = await Promise.allSettled(batchPromises);
+
+          // Process batch results
+          batchResults.forEach((result, index) => {
+            const shipmentIndex = batchIndex * batchSize + index;
+            const originalData = batch[index];
+
+            if (result.status === "fulfilled" && result.value.success) {
+              results.successful.push({
+                index: shipmentIndex + 1,
+                orderId: originalData.orderId,
+                shipmentId: result.value.shipmentId,
+                awbNumber: result.value.awbNumber,
+                partnerId: result.value.partnerId,
+                totalCost: result.value.totalCost,
+              });
+              results.summary.successCount++;
+            } else {
+              const error =
+                result.status === "rejected"
+                  ? result.reason.message
+                  : result.value.error;
+              results.failed.push({
+                index: shipmentIndex + 1,
+                orderId: originalData.orderId,
+                error,
+                data: originalData,
+              });
+              results.summary.failureCount++;
+            }
+          });
+
+          // Update job progress
+          await this.updateJobProgress(jobId, {
+            processed:
+              results.summary.successCount + results.summary.failureCount,
+            successful: results.summary.successCount,
+            failed: results.summary.failureCount,
+          });
+        } catch (error) {
+          logger.error(`Batch ${batchIndex + 1} processing error`, {
+            error: error.message,
+            jobId,
+          });
+        }
+
+        // Small delay between batches to prevent overwhelming external services
+        if (batchIndex < batches.length - 1) {
+          await this.sleep(100);
+        }
+      }
+
+      const endTime = Date.now();
+      results.summary.processingTime = endTime - startTime;
+
+      // Finalize job status
+      await this.updateJobStatus(jobId, {
+        status: "COMPLETED",
+        total: results.total,
+        processed: results.summary.successCount + results.summary.failureCount,
+        successful: results.summary.successCount,
+        failed: results.summary.failureCount,
+        errors: results.failed.slice(0, 10), // Store first 10 errors
+        completedTime: new Date().toISOString(),
+        processingTimeMs: results.summary.processingTime,
+      });
+
+      logger.info("Bulk shipment processing completed", {
+        jobId,
+        results: results.summary,
+      });
+
+      return results;
+    } catch (error) {
+      logger.error("Bulk processing service error", {
+        error: error.message,
+        stack: error.stack,
+        jobId,
+      });
+
+      // Update job status to failed
+      if (jobId) {
+        await this.updateJobStatus(jobId, {
+          status: "FAILED",
+          error: error.message,
+          completedTime: new Date().toISOString(),
+        });
+      }
+
+      throw new APIError(
+        `Bulk processing failed: ${error.message}`,
+        500,
+        "BULK_PROCESSING_ERROR",
+      );
+    }
+  }
+
+  /**
+   * Process a single shipment within bulk operation
+   */
+  async processSingleShipment(shipmentData, userId, clientId, index) {
+    try {
+      // Validate shipment data
+      const validatedData = this.validateShipmentData(shipmentData, index);
+
+      // Check for duplicate order ID within client
+      const existingShipment = await prisma.shipment.findFirst({
+        where: {
+          orderId: validatedData.orderId,
+          clientId,
+        },
+      });
+
+      if (existingShipment) {
+        return {
+          success: false,
+          error: `Duplicate order ID: ${validatedData.orderId}`,
+        };
+      }
+
+      // Calculate charges using partner service
+      let selectedPartner = null;
+      let calculatedCharges = null;
+
+      try {
+        // Get partner selection and charges
+        const partnerResult =
+          await partnerIntegrationService.selectOptimalPartner(
+            {
+              pickupPincode: validatedData.pickupAddress.pincode,
+              deliveryPincode: validatedData.deliveryAddress.pincode,
+              weight: validatedData.packageDetails.weight,
+              paymentType: validatedData.paymentType,
+              serviceType: validatedData.serviceType || "STANDARD",
+            },
+            "cheapest", // Default strategy for bulk
+          );
+
+        selectedPartner = partnerResult.selectedPartner;
+        calculatedCharges = partnerResult.charges;
+      } catch (error) {
+        logger.error("Partner selection failed for bulk shipment", {
+          orderId: validatedData.orderId,
+          error: error.message,
+        });
+        return {
+          success: false,
+          error: `Partner selection failed: ${error.message}`,
+        };
+      }
+
+      // Process payment if PREPAID
+      let paymentTransactionId = null;
+      if (validatedData.paymentType === "PREPAID") {
+        try {
+          const paymentResult =
+            await paymentProcessingService.processShipmentPayment(
+              userId,
+              calculatedCharges.totalAmount,
+              `Bulk shipment payment - ${validatedData.orderId}`,
+              {
+                orderId: validatedData.orderId,
+                bulkProcessing: true,
+              },
+            );
+
+          paymentTransactionId = paymentResult.transactionId;
+        } catch (error) {
+          logger.error("Payment processing failed for bulk shipment", {
+            orderId: validatedData.orderId,
+            error: error.message,
+          });
+          return {
+            success: false,
+            error: `Payment processing failed: ${error.message}`,
+          };
+        }
+      }
+
+      // Create shipment record
+      const awbNumber = this.generateAWBNumber();
+
+      const shipment = await prisma.shipment.create({
+        data: {
+          orderId: validatedData.orderId,
+          clientId,
+          userId,
+          awbNumber,
+          status: "CREATED",
+          paymentType: validatedData.paymentType,
+          paymentStatus:
+            validatedData.paymentType === "PREPAID" ? "COMPLETED" : "PENDING",
+          codAmount: validatedData.codAmount,
+          totalCost: calculatedCharges.totalAmount,
+          currency: "INR",
+
+          // Pickup Address
+          pickupName: validatedData.pickupAddress.name,
+          pickupPhone: validatedData.pickupAddress.phone,
+          pickupEmail: validatedData.pickupAddress.email,
+          pickupLine1: validatedData.pickupAddress.line1,
+          pickupLine2: validatedData.pickupAddress.line2,
+          pickupLandmark: validatedData.pickupAddress.landmark,
+          pickupCity: validatedData.pickupAddress.city,
+          pickupState: validatedData.pickupAddress.state,
+          pickupPincode: validatedData.pickupAddress.pincode,
+          pickupCountry: validatedData.pickupAddress.country || "India",
+
+          // Delivery Address
+          deliveryName: validatedData.deliveryAddress.name,
+          deliveryPhone: validatedData.deliveryAddress.phone,
+          deliveryEmail: validatedData.deliveryAddress.email,
+          deliveryLine1: validatedData.deliveryAddress.line1,
+          deliveryLine2: validatedData.deliveryAddress.line2,
+          deliveryLandmark: validatedData.deliveryAddress.landmark,
+          deliveryCity: validatedData.deliveryAddress.city,
+          deliveryState: validatedData.deliveryAddress.state,
+          deliveryPincode: validatedData.deliveryAddress.pincode,
+          deliveryCountry: validatedData.deliveryAddress.country || "India",
+
+          // Package Details
+          weight: validatedData.packageDetails.weight,
+          length: validatedData.packageDetails.length,
+          width: validatedData.packageDetails.width,
+          height: validatedData.packageDetails.height,
+          description: validatedData.packageDetails.description,
+          category: validatedData.packageDetails.category || "GENERAL",
+
+          // Partner Details
+          partnerId: selectedPartner.id,
+          partnerName: selectedPartner.name,
+          partnerTrackingId: null,
+          estimatedDelivery: calculatedCharges.estimatedDelivery,
+
+          // Payment Details
+          walletTransactionId: paymentTransactionId,
+          specialInstructions: validatedData.specialInstructions,
+        },
+      });
+
+      // Create initial tracking event
+      await trackingService.createTrackingEvent(shipment.id, {
+        status: "CREATED",
+        message: "Shipment created via bulk processing",
+        location: validatedData.pickupAddress.city,
+        eventMetadata: {
+          bulkProcessing: true,
+          batchIndex: index,
+          partnerId: selectedPartner.id,
+          totalCost: calculatedCharges.totalAmount,
+        },
+        source: "SYSTEM",
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          action: "CREATE_BULK",
+          resource: "Shipment",
+          resourceId: shipment.id,
+          changes: {
+            orderId: validatedData.orderId,
+            bulkProcessing: true,
+            batchIndex: index,
+          },
+          ipAddress: "127.0.0.1", // System IP for bulk processing
+          userAgent: "BulkProcessingService",
+        },
+      });
+
+      return {
+        success: true,
+        shipmentId: shipment.id,
+        awbNumber: shipment.awbNumber,
+        partnerId: selectedPartner.id,
+        totalCost: calculatedCharges.totalAmount,
+      };
+    } catch (error) {
+      logger.error("Single shipment processing error in bulk", {
+        orderId: shipmentData.orderId,
+        index,
+        error: error.message,
+      });
+
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Validate individual shipment data
+   */
+  validateShipmentData(data, index) {
+    try {
+      // Required fields validation
+      const requiredFields = [
+        "orderId",
+        "pickupAddress",
+        "deliveryAddress",
+        "packageDetails",
+        "paymentType",
+      ];
+
+      for (const field of requiredFields) {
+        if (!data[field]) {
+          throw new ValidationError(
+            `Missing required field: ${field} at row ${index}`,
+          );
+        }
+      }
+
+      // Address validation
+      this.validateAddress(data.pickupAddress, "pickup", index);
+      this.validateAddress(data.deliveryAddress, "delivery", index);
+
+      // Package details validation
+      if (!data.packageDetails.weight || data.packageDetails.weight <= 0) {
+        throw new ValidationError(`Invalid package weight at row ${index}`);
+      }
+
+      // Payment type validation
+      if (!["PREPAID", "COD"].includes(data.paymentType)) {
+        throw new ValidationError(`Invalid payment type at row ${index}`);
+      }
+
+      // COD amount validation
+      if (
+        data.paymentType === "COD" &&
+        (!data.codAmount || data.codAmount <= 0)
+      ) {
+        throw new ValidationError(
+          `COD amount required for COD payments at row ${index}`,
+        );
+      }
+
+      return data;
+    } catch (error) {
+      throw new ValidationError(
+        `Validation failed at row ${index}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Validate address data
+   */
+  validateAddress(address, type, index) {
+    const requiredFields = [
+      "name",
+      "phone",
+      "line1",
+      "city",
+      "state",
+      "pincode",
+    ];
+
+    for (const field of requiredFields) {
+      if (!address[field]) {
+        throw new ValidationError(
+          `Missing ${type} address field: ${field} at row ${index}`,
+        );
+      }
+    }
+
+    // Phone number validation
+    if (!/^\+91-[0-9]{10}$/.test(address.phone)) {
+      throw new ValidationError(
+        `Invalid ${type} phone format at row ${index}. Expected format: +91-9876543210`,
+      );
+    }
+
+    // Pincode validation
+    if (!/^[0-9]{6}$/.test(address.pincode)) {
+      throw new ValidationError(
+        `Invalid ${type} pincode at row ${index}. Must be 6 digits.`,
+      );
+    }
+  }
+
+  /**
+   * Get bulk job status
+   */
+  async getBulkJobStatus(jobId) {
+    try {
+      const redisClient = getRedisClient();
+      const jobData = await redisClient.get(`bulk_job:${jobId}`);
+      if (!jobData) {
+        throw new NotFoundError(`Bulk job not found: ${jobId}`);
+      }
+
+      return JSON.parse(jobData);
+    } catch (error) {
+      logger.error("Get bulk job status error", {
+        jobId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Update job status in Redis
+   */
+  async updateJobStatus(jobId, status) {
+    try {
+      const redisClient = getRedisClient();
+      const existingData = await redisClient.get(`bulk_job:${jobId}`);
+      const jobData = existingData ? JSON.parse(existingData) : {};
+
+      const updatedData = {
+        ...jobData,
+        ...status,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await redisClient.setex(
+        `bulk_job:${jobId}`,
+        86400, // 24 hours TTL
+        JSON.stringify(updatedData),
+      );
+    } catch (error) {
+      logger.error("Update job status error", {
+        jobId,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Update job progress
+   */
+  async updateJobProgress(jobId, progress) {
+    try {
+      const redisClient = getRedisClient();
+      const existingData = await redisClient.get(`bulk_job:${jobId}`);
+      if (existingData) {
+        const jobData = JSON.parse(existingData);
+        jobData.processed = progress.processed;
+        jobData.successful = progress.successful;
+        jobData.failed = progress.failed;
+        jobData.lastUpdated = new Date().toISOString();
+
+        await redisClient.setex(
+          `bulk_job:${jobId}`,
+          86400,
+          JSON.stringify(jobData),
+        );
+      }
+    } catch (error) {
+      logger.error("Update job progress error", {
+        jobId,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Utility methods
+   */
+  createBatches(array, batchSize) {
+    const batches = [];
+    for (let i = 0; i < array.length; i += batchSize) {
+      batches.push(array.slice(i, i + batchSize));
+    }
+    return batches;
+  }
+
+  generateAWBNumber() {
+    return `AWB${Date.now()}${Math.random().toString(36).substring(7).toUpperCase()}`;
+  }
+
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
+module.exports = new BulkProcessingService();

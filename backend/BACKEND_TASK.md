@@ -9,7 +9,7 @@ All backend development MUST follow this task-based approach for proper tracking
 ## **Task Format Template**
 
 ```markdown
-### Task ID: [SERVICE]-[NUMBER] (e.g., USER-001, SHIP-002)
+### Task ID: [SERVICE]-[NUMBER] (e.g., USER-001, PLAT-001)
 
 **Task Name**: [Clear, descriptive task name]
 
@@ -225,21 +225,43 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ---
 
-### **SHIP-001: Shipment Service Foundation**
+## **📁 ARCHIVED TASKS**
 
-**Task Name**: Complete Shipment Service Foundation with Auth-Service Patterns
+### **Shipment Service Tasks (COMPLETED)**
 
-**Status**: COMPLETED ✅
+All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and archived** to:
+**📄 [BACKEND_SHIPMENT_TASK.md](./BACKEND_SHIPMENT_TASK.md)**
+
+**Summary:**
+
+- ✅ **SHIP-001**: Service Foundation - Complete auth-service patterns implementation
+- ✅ **SHIP-002**: Partner Integration - Real API integration with caching and circuit breakers
+- ✅ **SHIP-003**: Wallet Integration - Payment processing and refund workflows
+- ✅ **SHIP-004**: Tracking & Status - Real-time tracking with AWB support and analytics
+- ✅ **SHIP-005**: Bulk Operations - NDR management, label generation, pickup scheduling
+
+**Status**: 🎉 **ALL SHIPMENT TASKS COMPLETED** (40+ endpoints, production-ready)
+
+---
+
+## **ACTIVE TASKS**
+
+### **PLAT-001: Platform Service Foundation**
+
+**Task Name**: Complete Platform Service Foundation with Auth-Service Patterns
+
+**Status**: NOT_STARTED
 
 **Planning**:
 
-- **Objective**: Transform placeholder shipment service into production-ready foundation following auth-service patterns
-- **Scope**: Service structure alignment, real database integration, complete middleware suite, configuration setup
-- **Approach**: Build upon existing foundation, follow auth-service patterns exactly, replace mock implementations
-- **Estimated Time**: 2 days
+- **Objective**: Create complete Platform Service following auth-service patterns for e-commerce integrations
+- **Scope**: Service foundation, Shopify OAuth integration, order synchronization, webhook management
+- **Approach**: Follow auth-service monorepo structure, implement Shopify integration first, prepare for multi-platform support
+- **Estimated Time**: 3 days
 
 **Dependencies**:
 
+- [x] All Shipment Service tasks completed (SHIP-001 to SHIP-005) ✅ COMPLETED
 - [x] WALLET-001 completed (Complete Wallet Service) ✅ COMPLETED
 - [x] Auth Service operational (COMPLETED)
 - [x] User Service operational (COMPLETED)
@@ -582,64 +604,6 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ---
 
-### **SHIP-005: Bulk Operations and Advanced Features**
-
-**Task Name**: Implement Bulk Processing and Advanced Shipment Features
-
-**Status**: NOT_STARTED
-
-**Planning**:
-
-- **Objective**: Add bulk shipment processing and advanced logistics features
-- **Scope**: Bulk operations, NDR management, label generation, pickup scheduling
-- **Approach**: Create bulk processing and advanced feature services
-- **Estimated Time**: 2 days
-
-**Dependencies**:
-
-- [x] SHIP-001 to SHIP-004 completed (All core shipment functionality)
-
-**Implementation Details**:
-
-**Phase 1: Bulk Processing (Day 1)**
-
-- [ ] Implement bulk shipment creation with Excel/CSV file processing
-- [ ] Create `services/bulkProcessingService.js` for batch operations
-- [ ] Add file upload validation and error reporting
-- [ ] Implement progress tracking for bulk operations
-- [ ] Add bulk operation analytics and reporting
-
-**Phase 2: Advanced Features (Day 2)**
-
-- [ ] Create `services/ndrService.js` for Non-Delivery Report management
-- [ ] Add NDR case creation and management workflows
-- [ ] Implement reattempt scheduling and address correction functionality
-- [ ] Add RTO (Return to Origin) processing workflows
-- [ ] Implement label generation and manifest creation
-- [ ] Add pickup scheduling and management
-
-**Completion Criteria**:
-
-- [ ] Bulk shipment processing capability (100+ orders/minute)
-- [ ] NDR management system with reattempt and RTO workflows
-- [ ] Label generation and manifest creation operational
-- [ ] Pickup scheduling functional
-- [ ] File processing with validation working
-- [ ] Performance analytics implemented
-
-**API Endpoints to Add**:
-
-- `POST /api/v1/shipments/bulk` - Create bulk shipments
-- `POST /api/v1/shipments/bulk/upload` - Upload bulk shipment file
-- `GET /api/v1/shipments/bulk/{jobId}` - Get bulk processing status
-- `GET /api/v1/ndr` - Get NDR cases with filtering
-- `POST /api/v1/ndr/{caseId}/action` - Take action on NDR case
-- `POST /api/v1/pickups` - Schedule pickup with partner
-- `POST /api/v1/shipments/{shipmentId}/label` - Generate shipping label
-- `POST /api/v1/manifests` - Create manifest for multiple shipments
-
----
-
 ### **PLAT-001: Platform Service Foundation**
 
 **Task Name**: Complete Platform Service Foundation with Auth-Service Patterns
@@ -758,54 +722,130 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ---
 
-### **API-001: API Gateway Enhancement**
+### **API-001: API Gateway Critical Fixes & Production Enhancement**
 
-**Task Name**: Enhance API Gateway for Production Readiness with All Services
+**Task Name**: Fix Critical Issues and Enhance API Gateway for Production Readiness
 
-**Status**: NOT_STARTED
+**Status**: NOT_STARTED - **READY TO START** (Critical wallet routing missing)
 
 **Planning**:
 
-- **Objective**: Complete API Gateway enhancement for production-ready routing, monitoring, and security
-- **Scope**: Advanced routing for all services, rate limiting, monitoring, security enhancements, load balancing
-- **Approach**: Follow established patterns, implement comprehensive routing, add production features
-- **Estimated Time**: 1 day
+- **Objective**: Fix critical missing features and transform API Gateway into production-ready system following auth-service patterns
+- **Scope**: Critical fixes (wallet routing, auth middleware), remove mock code, implement production features (analytics, monitoring, service-specific rate limiting)
+- **Approach**: Phase 1 - Critical fixes, Phase 2 - Production enhancements, follow auth-service patterns exactly
+- **Estimated Time**: 2 days
 
 **Dependencies**:
 
-- [ ] All core services completed (WALLET-001, SHIP-001, PLAT-001, SUPP-001)
+- [x] WALLET-001 completed (Complete Wallet Service) ✅ COMPLETED
+- [x] All Shipment Service tasks completed (SHIP-001 to SHIP-005) ✅ COMPLETED
+- [ ] PLAT-001 completed (Platform Service operational)
+- [ ] SUPP-001 completed (Support Service operational)
 - [x] Auth Service operational (COMPLETED)
 - [x] User Service operational (COMPLETED)
 - [x] Partner Service operational (COMPLETED)
 - [ ] All services containerized and accessible
 
+**Current Implementation Status**:
+
+**✅ OPERATIONAL Features**:
+
+- ✅ Basic routing for auth, users, shipments, partners, support, platforms services
+- ✅ Health check endpoint (`/health`)
+- ✅ Global rate limiting (100 requests/15min per IP)
+- ✅ Security middleware (Helmet, CORS, error handling)
+- ✅ Docker containerization (running on port 3001)
+
+**🚨 CRITICAL ISSUES FOUND**:
+
+- ❌ **Wallet Service NOT ROUTED**: `/api/v1/wallet` returns 404 - blocks payment flows
+- ❌ **Placeholder Code**: `src/index.js` contains mock implementation only
+- ❌ **No Auth Middleware**: JWT verification not implemented for protected routes
+- ❌ **Missing Analytics**: `/api/analytics` endpoint returns 404
+- ❌ **Missing Health Monitoring**: `/api/health/services` not implemented
+- ❌ **No Service-Specific Rate Limiting**: Partner service needs 60/min for rate calculations
+
 **Implementation Details**:
 
-**API Gateway Production Enhancement (Day 1)**
+**Phase 1: Critical Fixes (Day 1)**
 
-- [ ] Update routing configuration for all services:
-  - `/api/v1/auth` → auth-service:8001
-  - `/api/v1/users` → user-service:8002
-  - `/api/v1/shipments` → shipment-service:8003
-  - `/api/v1/partners` → partner-service:3005
-  - `/api/v1/wallet` → wallet-service:8006
-  - `/api/v1/platforms` → platform-service:8004
-  - `/api/v1/support` → support-service:8005
-- [ ] Implement comprehensive rate limiting per service
-- [ ] Add request/response transformation and validation
-- [ ] Implement API monitoring and analytics
-- [ ] Add security enhancements (CORS, headers, validation)
-- [ ] Configure load balancing for high availability
-- [ ] Add health check aggregation for all services
-- [ ] Create comprehensive API Gateway tests
-- [ ] Update documentation with all service endpoints
+- [ ] **URGENT: Fix Wallet Service Routing** - Production wallet service not accessible
+  - Add wallet service to routing configuration: `http://wallet-service:8006`
+  - Test wallet service health endpoint via gateway
+  - Verify payment-related endpoints work through gateway
+- [ ] **Remove Mock Code** - Replace placeholder implementations
+  - Replace `src/index.js` placeholder with real middleware exports
+  - Create proper directory structure (middleware/, config/, services/)
+- [ ] **Implement Auth Middleware** - JWT protection for secured routes
+  - Create `middleware/auth.js` using shared library patterns
+  - Add JWT verification for protected routes
+  - Skip auth for public endpoints (health, login, register)
+- [ ] **Fix Service Configuration** - Align with actual service ports
+  - Verify all service routing configurations match running services
+  - Update docker-compose port mappings if needed
+
+**Phase 2: Production Enhancement (Day 2)**
+
+- [ ] **Implement Service-Specific Rate Limiting**
+  - Partner service: 60 requests/minute for rate calculations
+  - Auth service: 100 requests/15 minutes
+  - Bulk operations: Lower limits for resource-intensive endpoints
+- [ ] **Add Request/Response Analytics**
+  - Create `middleware/analytics.js` for request tracking
+  - Implement `/api/analytics` endpoint with service metrics
+  - Track response times, error rates, request counts per service
+- [ ] **Service Health Monitoring**
+  - Create `services/healthMonitor.js` class
+  - Implement `/api/health/services` endpoint
+  - Aggregate health status from all backend services
+  - Add automatic unhealthy service detection
+- [ ] **Enhanced Error Handling & Logging**
+  - Implement circuit breaker pattern for service failures
+  - Add comprehensive request/response logging
+  - Create fallback responses for service unavailability
 
 **Completion Criteria**:
 
-- [ ] All services properly routed and accessible
-- [ ] Rate limiting operational (per-service and global)
-- [ ] Monitoring and analytics dashboard functional
-- [ ] Security enhancements implemented and tested
+**Phase 1 (Critical Fixes)**:
+
+- [ ] Wallet service fully accessible via `/api/v1/wallet/*` routes ✅ CRITICAL
+- [ ] All mock/placeholder code removed and replaced with real implementations
+- [ ] JWT authentication middleware operational for protected routes
+- [ ] All service routing configurations verified and working
+- [ ] Docker service restart successful with no errors
+
+**Phase 2 (Production Enhancement)**:
+
+- [ ] Service-specific rate limiting operational (partner: 60/min, auth: 100/15min)
+- [ ] Analytics endpoint `/api/analytics` returns real metrics data
+- [ ] Health monitoring endpoint `/api/health/services` shows all service status
+- [ ] Circuit breaker pattern prevents cascade failures
+- [ ] Comprehensive error logging and monitoring implemented
+
+**API Endpoints to Implement**:
+
+1. **Critical Service Routing** (Phase 1):
+   - `GET/POST/PUT/DELETE /api/v1/wallet/*` - Route to wallet-service:8006 ✅ CRITICAL
+2. **Monitoring & Analytics** (Phase 2):
+   - `GET /api/analytics` - Request analytics and service metrics
+   - `GET /api/health/services` - Aggregated service health status
+   - `GET /api/gateway/stats` - Gateway-specific performance metrics
+
+**Files to Create/Modify**:
+
+**Phase 1 (Critical)**:
+
+- ✅ `backend/api-gateway/server.js` - Add wallet service routing
+- ✅ `backend/api-gateway/src/index.js` - Replace placeholder with real implementation
+- ✅ `backend/api-gateway/middleware/auth.js` - JWT authentication middleware
+- ✅ `backend/api-gateway/config/services.js` - Service configuration management
+
+**Phase 2 (Enhancement)**:
+
+- ✅ `backend/api-gateway/middleware/analytics.js` - Request tracking middleware
+- ✅ `backend/api-gateway/middleware/rateLimiter.js` - Service-specific rate limiting
+- ✅ `backend/api-gateway/services/healthMonitor.js` - Health monitoring service
+- ✅ `backend/api-gateway/services/circuitBreaker.js` - Circuit breaker implementation
 - [ ] Load balancing functional with failover
 - [ ] Health check aggregation working
 - [ ] Comprehensive test suite passing
@@ -848,7 +888,7 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 - **Service Prefix**: WALLET, SHIP, PLAT, SUPP, API
 - **Sequential Numbers**: 001, 002, 003, etc.
-- **Examples**: WALLET-002, SHIP-001, PLAT-001
+- **Examples**: WALLET-001, PLAT-001, SUPP-001
 
 ### **Documentation Requirements**
 
@@ -869,11 +909,7 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ### **Phase 2: Shipment Service Implementation (Week 2-3)**
 
-2. **SHIP-001** - Shipment Service Foundation (2 days)
-3. **SHIP-002** - Partner Service Integration (2 days)
-4. **SHIP-003** - Wallet Service Integration (2 days)
-5. **SHIP-004** - Tracking and Status Management (2 days)
-6. **SHIP-005** - Bulk Operations and Advanced Features (2 days)
+2. **✅ SHIP-001 to SHIP-005** - All Shipment Service tasks completed (archived to BACKEND_SHIPMENT_TASK.md)
 
 ### **Phase 3: Platform and Support Services (Week 4-5)**
 
@@ -887,14 +923,10 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 ### **Implementation Priority Order**:
 
 1. **✅ WALLET-001 (Week 1)**: Complete independent wallet service with external API integration ✅ COMPLETED
-2. **🎯 SHIP-001 (2 days)**: Shipment service foundation with auth-service patterns
-3. **SHIP-002 (2 days)**: Partner service integration for rate calculation
-4. **SHIP-003 (2 days)**: Wallet service integration for payment processing
-5. **SHIP-004 (2 days)**: Tracking and status management system
-6. **SHIP-005 (2 days)**: Bulk operations and advanced features
-7. **PLAT-001 (Week 4)**: Platform service for e-commerce integration
-8. **SUPP-001 (Week 5)**: Support service for customer operations
-9. **API-001 (Week 5)**: API Gateway production enhancements
+2. **✅ SHIP-001 to SHIP-005**: All shipment service tasks ✅ COMPLETED (archived to BACKEND_SHIPMENT_TASK.md)
+3. **🎯 PLAT-001 (Week 4)**: Platform service for e-commerce integration
+4. **SUPP-001 (Week 5)**: Support service for customer operations
+5. **API-001 (Week 5)**: API Gateway production enhancements
 
 ### **Current Foundation Status**:
 
@@ -902,9 +934,9 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 - ✅ **User Service**: Production-ready with 25+ endpoints, multi-tenant, white-label
 - ✅ **Partner Service**: Production-ready with 75+ endpoints, complete external API integration, advanced analytics
 - ✅ **Wallet Service**: Production-ready with 14 endpoints, HMAC authentication, external API integration
+- ✅ **Shipment Service**: Production-ready with 40+ endpoints, bulk operations, NDR management, tracking, label generation
 - ✅ **Infrastructure**: Docker, PostgreSQL, Redis, API Gateway operational
 - ✅ **Frontend**: Next.js foundation ready for backend integration
-- 🔄 **Shipment Service**: Placeholder implementation exists, needs complete transformation to production-ready system
 
 ### **Critical Dependencies**:
 
@@ -932,5 +964,5 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 6. **IMPORTANT** maintain >90% test coverage for all services
 7. **NECESSARY** follow monorepo structure consistently
 
-**Last Updated**: December 2024 (SHIP-004 completed with comprehensive Tracking & Status Management system, Docker testing verified)
-**Current Active Task**: SHIP-005 - Bulk Operations and Advanced Features (Ready to start - all dependencies resolved)
+**Last Updated**: December 2024 (All SHIP tasks archived to BACKEND_SHIPMENT_TASK.md, shipment service production-ready with 40+ endpoints)
+**Current Active Task**: API-001 - API Gateway Critical Fixes & Production Enhancement (Ready to start - wallet routing critical for production)

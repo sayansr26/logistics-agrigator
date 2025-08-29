@@ -83,6 +83,11 @@ model Shipment {
 
   // Relations
   trackingEvents TrackingEvent[]
+  ndrCases       NDRCase[]
+
+  // Pickup schedule relation
+  pickupScheduleId String?         @map("pickup_schedule_id") @db.Uuid
+  pickupSchedule   PickupSchedule? @relation(fields: [pickupScheduleId], references: [id])
 
   @@unique([orderId, clientId])
   // Indexes for performance
@@ -92,6 +97,7 @@ model Shipment {
   @@index([awbNumber])
   @@index([status])
   @@index([partnerId])
+  @@index([pickupScheduleId])
   @@map("shipments")
 }
 
@@ -180,6 +186,7 @@ enum ShipmentStatus {
   DELIVERED
   CANCELLED
   RTO
+  NDR
 }
 
 enum PaymentType {
@@ -200,4 +207,218 @@ enum ServiceType {
   STANDARD
   EXPRESS
   ECONOMY
+}
+
+// NDR (Non-Delivery Report) Case Management
+model NDRCase {
+  id          String    @id @default(uuid()) @db.Uuid
+  shipmentId  String    @map("shipment_id") @db.Uuid
+  reason      String    @db.VarChar(50) // DELIVERY_FAILED, ADDRESS_ISSUE, CUSTOMER_UNAVAILABLE, etc.
+  description String?   @db.Text
+  status      NDRStatus @default(OPEN)
+  priority    Priority  @default(MEDIUM)
+
+  // Delivery attempt details
+  deliveryAttemptDate DateTime @map("delivery_attempt_date")
+  customerFeedback    String?  @map("customer_feedback") @db.Text
+  deliveryPersonNotes String?  @map("delivery_person_notes") @db.Text
+  addressIssue        Boolean  @default(false) @map("address_issue")
+  customerUnavailable Boolean  @default(false) @map("customer_unavailable")
+
+  // Reattempt management
+  reattemptRequested     Boolean   @default(true) @map("reattempt_requested")
+  reattemptDate          DateTime? @map("reattempt_date")
+  reattemptNotes         String?   @map("reattempt_notes") @db.Text
+  reattemptScheduledAt   DateTime? @map("reattempt_scheduled_at")
+  reattemptScheduledById String?   @map("reattempt_scheduled_by_id") @db.Uuid
+  preferredReattemptDate DateTime? @map("preferred_reattempt_date")
+
+  // Address update management
+  addressUpdateNotes String?   @map("address_update_notes") @db.Text
+  addressUpdatedAt   DateTime? @map("address_updated_at")
+  addressUpdatedById String?   @map("address_updated_by_id") @db.Uuid
+
+  // RTO management
+  rtoInitiatedAt   DateTime? @map("rto_initiated_at")
+  rtoInitiatedById String?   @map("rto_initiated_by_id") @db.Uuid
+  rtoNotes         String?   @map("rto_notes") @db.Text
+
+  // Case management
+  assignedToId String?   @map("assigned_to_id") @db.Uuid
+  assignedAt   DateTime? @map("assigned_at")
+  createdById  String?   @map("created_by_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolution   String?   @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([shipmentId])
+  @@index([status, priority])
+  @@index([reason])
+  @@index([createdAt])
+  @@index([assignedToId])
+  @@map("ndr_cases")
+}
+
+// Bulk Operation Job Management
+model BulkJob {
+  id     String    @id @default(uuid()) @db.Uuid
+  type   JobType   @default(BULK_SHIPMENT)
+  status JobStatus @default(PENDING)
+
+  // Job details
+  totalRecords      Int @map("total_records")
+  processedRecords  Int @default(0) @map("processed_records")
+  successfulRecords Int @default(0) @map("successful_records")
+  failedRecords     Int @default(0) @map("failed_records")
+
+  // File information
+  fileName String? @map("file_name") @db.VarChar(255)
+  fileSize Int?    @map("file_size")
+  filePath String? @map("file_path") @db.VarChar(500)
+
+  // Processing details
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  errorMessage     String?   @map("error_message") @db.Text
+  processingTimeMs Int?      @map("processing_time_ms")
+
+  // User and client context
+  createdById String  @map("created_by_id") @db.Uuid
+  clientId    String? @map("client_id") @db.Uuid
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Indexes
+  @@index([createdById, type])
+  @@index([status, type])
+  @@index([createdAt])
+  @@index([clientId])
+  @@map("bulk_jobs")
+}
+
+// Pickup Scheduling
+model PickupSchedule {
+  id          String  @id @default(uuid()) @db.Uuid
+  clientId    String? @map("client_id") @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  partnerId   String  @map("partner_id") @db.VarChar(100)
+  partnerName String  @map("partner_name") @db.VarChar(100)
+
+  // Schedule details
+  scheduledDate DateTime     @map("scheduled_date")
+  timeSlot      String       @map("time_slot") @db.VarChar(20) // "10:00-12:00", "14:00-16:00", etc.
+  status        PickupStatus @default(SCHEDULED)
+
+  // Address details
+  pickupName     String  @map("pickup_name") @db.VarChar(100)
+  pickupPhone    String  @map("pickup_phone") @db.VarChar(15)
+  pickupEmail    String? @map("pickup_email") @db.VarChar(255)
+  pickupLine1    String  @map("pickup_line1") @db.VarChar(255)
+  pickupLine2    String? @map("pickup_line2") @db.VarChar(255)
+  pickupLandmark String? @map("pickup_landmark") @db.VarChar(100)
+  pickupCity     String  @map("pickup_city") @db.VarChar(50)
+  pickupState    String  @map("pickup_state") @db.VarChar(50)
+  pickupPincode  String  @map("pickup_pincode") @db.VarChar(6)
+  pickupCountry  String  @default("India") @map("pickup_country") @db.VarChar(50)
+
+  // Pickup details
+  totalShipments      Int     @default(0) @map("total_shipments")
+  totalWeight         Decimal @default(0) @map("total_weight") @db.Decimal(8, 3)
+  specialInstructions String? @map("special_instructions") @db.Text
+
+  // Partner communication
+  partnerRequestId String? @map("partner_request_id") @db.VarChar(100)
+  partnerResponse  Json?   @map("partner_response")
+  confirmationCode String? @map("confirmation_code") @db.VarChar(20)
+
+  // Pickup execution
+  pickedUpAt      DateTime? @map("picked_up_at")
+  pickedUpBy      String?   @map("picked_up_by") @db.VarChar(100)
+  actualWeight    Decimal?  @map("actual_weight") @db.Decimal(8, 3)
+  actualShipments Int?      @map("actual_shipments")
+  pickupNotes     String?   @map("pickup_notes") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shipments Shipment[]
+
+  // Indexes
+  @@index([scheduledDate, status])
+  @@index([partnerId])
+  @@index([userId, clientId])
+  @@index([status])
+  @@map("pickup_schedules")
+}
+
+// Additional Enums
+
+// NDR Status
+enum NDRStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  REATTEMPT_SCHEDULED
+  ADDRESS_UPDATED
+  RTO_INITIATED
+  RESOLVED
+  CLOSED
+
+  @@map("ndr_status")
+}
+
+// Priority levels
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("priority")
+}
+
+// Job Types
+enum JobType {
+  BULK_SHIPMENT
+  BULK_UPDATE
+  BULK_CANCEL
+  DATA_EXPORT
+  DATA_IMPORT
+
+  @@map("job_type")
+}
+
+// Job Status
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("job_status")
+}
+
+// Pickup Status
+enum PickupStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FAILED
+
+  @@map("pickup_status")
 }

@@ -26,6 +26,20 @@ const {
   trackByAwbNumber,
   recordDeliveryConfirmation,
   getTrackingAnalytics,
+  // SHIP-005: Bulk Operations and Advanced Features
+  processBulkShipments,
+  getBulkJobStatus,
+  createNDRCase,
+  getNDRCases,
+  takeNDRAction,
+  generateShippingLabel,
+  generateBulkLabels,
+  createManifest,
+  schedulePickup,
+  getPickupSchedules,
+  updatePickupStatus,
+  cancelPickup,
+  getAvailableTimeSlots,
 } = require("../controllers/shipmentController");
 
 // Import validation schemas
@@ -40,6 +54,15 @@ const {
   // New SHIP-004 validation schemas
   deliveryConfirmationSchema,
   analyticsQuerySchema,
+  // SHIP-005 validation schemas
+  processBulkShipmentsSchema,
+  createNDRCaseSchema,
+  takeNDRActionSchema,
+  generateShippingLabelSchema,
+  generateBulkLabelsSchema,
+  createManifestSchema,
+  schedulePickupSchema,
+  updatePickupStatusSchema,
 } = require("../validation/shipmentSchemas");
 
 /**
@@ -1131,5 +1154,464 @@ router.get(
   validate(analyticsQuerySchema, "query"),
   getTrackingAnalytics,
 );
+
+// SHIP-005: Bulk Operations and Advanced Features
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk:
+ *   post:
+ *     tags: [Bulk Operations]
+ *     summary: Process bulk shipments from CSV/Excel file
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or Excel file containing shipment data
+ *               clientId:
+ *                 type: string
+ *                 description: Client ID for multi-tenant support
+ *     responses:
+ *       202:
+ *         description: Bulk processing started
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/bulk",
+  authMiddleware.authenticate,
+  validate(processBulkShipmentsSchema),
+  processBulkShipments,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/{jobId}/status:
+ *   get:
+ *     tags: [Bulk Operations]
+ *     summary: Get bulk job status
+ *     parameters:
+ *       - name: jobId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job status retrieved
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.get(
+  "/bulk/:jobId/status",
+  authMiddleware.authenticate,
+  getBulkJobStatus,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/{shipmentId}/ndr:
+ *   post:
+ *     tags: [NDR Management]
+ *     summary: Create NDR case for failed delivery
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: shipmentId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 enum: [ADDRESS_INCORRECT, CONSIGNEE_UNAVAILABLE, REFUSED_BY_CONSIGNEE, DAMAGE_DURING_TRANSIT, OTHER]
+ *               description:
+ *                 type: string
+ *               priority:
+ *                 type: string
+ *                 enum: [LOW, MEDIUM, HIGH, URGENT]
+ *     responses:
+ *       201:
+ *         description: NDR case created successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/:shipmentId/ndr",
+  authMiddleware.authenticate,
+  validate(createNDRCaseSchema),
+  createNDRCase,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/ndr:
+ *   get:
+ *     tags: [NDR Management]
+ *     summary: Get NDR cases with filtering
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [CREATED, IN_PROGRESS, RESOLVED, CLOSED]
+ *       - name: priority
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [LOW, MEDIUM, HIGH, URGENT]
+ *     responses:
+ *       200:
+ *         description: NDR cases retrieved
+ */
+router.get("/ndr", authMiddleware.authenticate, getNDRCases);
+
+/**
+ * @swagger
+ * /api/v1/shipments/ndr/{ndrCaseId}/action:
+ *   post:
+ *     tags: [NDR Management]
+ *     summary: Take action on NDR case
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: ndrCaseId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [REATTEMPT_DELIVERY, RETURN_TO_ORIGIN, MARK_RESOLVED]
+ *               notes:
+ *                 type: string
+ *               preferredDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: NDR action completed
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/ndr/:ndrCaseId/action",
+  authMiddleware.authenticate,
+  validate(takeNDRActionSchema),
+  takeNDRAction,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/{shipmentId}/label:
+ *   post:
+ *     tags: [Label Generation]
+ *     summary: Generate shipping label
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: shipmentId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               format:
+ *                 type: string
+ *                 enum: [A4, A4_4, "4x6", "6x4"]
+ *               copies:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 10
+ *     responses:
+ *       201:
+ *         description: Label generated successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/:shipmentId/label",
+  authMiddleware.authenticate,
+  validate(generateShippingLabelSchema),
+  generateShippingLabel,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/labels/bulk:
+ *   post:
+ *     tags: [Label Generation]
+ *     summary: Generate bulk shipping labels
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               shipmentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               format:
+ *                 type: string
+ *                 enum: [A4, A4_4, "4x6", "6x4"]
+ *     responses:
+ *       200:
+ *         description: Bulk labels generated
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/labels/bulk",
+  authMiddleware.authenticate,
+  validate(generateBulkLabelsSchema),
+  generateBulkLabels,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/manifest:
+ *   post:
+ *     tags: [Label Generation]
+ *     summary: Create manifest for multiple shipments
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               partnerId:
+ *                 type: string
+ *               shipmentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Manifest created successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/manifest",
+  authMiddleware.authenticate,
+  validate(createManifestSchema),
+  createManifest,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/pickup/schedule:
+ *   post:
+ *     tags: [Pickup Scheduling]
+ *     summary: Schedule pickup for shipments
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               partnerId:
+ *                 type: string
+ *               shipmentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               scheduledDate:
+ *                 type: string
+ *                 format: date
+ *               timeSlot:
+ *                 type: string
+ *                 enum: ["09:00-12:00", "10:00-13:00", "11:00-14:00", "12:00-15:00", "14:00-17:00", "15:00-18:00"]
+ *               pickupAddress:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Pickup scheduled successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/pickup/schedule",
+  authMiddleware.authenticate,
+  validate(schedulePickupSchema),
+  schedulePickup,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/pickup/schedules:
+ *   get:
+ *     tags: [Pickup Scheduling]
+ *     summary: Get pickup schedules
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED]
+ *       - name: partnerId
+ *         in: query
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Pickup schedules retrieved
+ */
+router.get(
+  "/pickup/schedules",
+  authMiddleware.authenticate,
+  getPickupSchedules,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/pickup/{pickupScheduleId}:
+ *   put:
+ *     tags: [Pickup Scheduling]
+ *     summary: Update pickup status
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: pickupScheduleId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED]
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Pickup status updated
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.put(
+  "/pickup/:pickupScheduleId",
+  authMiddleware.authenticate,
+  validate(updatePickupStatusSchema),
+  updatePickupStatus,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/pickup/{pickupScheduleId}:
+ *   delete:
+ *     tags: [Pickup Scheduling]
+ *     summary: Cancel pickup
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: pickupScheduleId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Pickup cancelled
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.delete(
+  "/pickup/:pickupScheduleId",
+  authMiddleware.authenticate,
+  cancelPickup,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/pickup/slots:
+ *   get:
+ *     tags: [Pickup Scheduling]
+ *     summary: Get available time slots for pickup
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: date
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: partnerId
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Available time slots retrieved
+ */
+router.get("/pickup/slots", authMiddleware.authenticate, getAvailableTimeSlots);
 
 module.exports = router;

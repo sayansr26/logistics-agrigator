@@ -474,6 +474,149 @@ const analyticsQuerySchema = Joi.object({
     }),
 });
 
+// SHIP-005: Bulk Operations and Advanced Features validation schemas
+
+const processBulkShipmentsSchema = Joi.object({
+  file: Joi.any()
+    .required()
+    .description("CSV or Excel file containing shipment data"),
+  clientId: Joi.string()
+    .optional()
+    .description("Client ID for multi-tenant support"),
+});
+
+const createNDRCaseSchema = Joi.object({
+  reason: Joi.string()
+    .valid(
+      "ADDRESS_INCORRECT",
+      "CONSIGNEE_UNAVAILABLE",
+      "REFUSED_BY_CONSIGNEE",
+      "DAMAGE_DURING_TRANSIT",
+      "OTHER",
+    )
+    .required()
+    .description("NDR failure reason"),
+
+  description: Joi.string()
+    .max(500)
+    .optional()
+    .description("Detailed description of the issue"),
+
+  priority: Joi.string()
+    .valid("LOW", "MEDIUM", "HIGH", "URGENT")
+    .default("MEDIUM")
+    .description("Priority level for NDR case"),
+});
+
+const takeNDRActionSchema = Joi.object({
+  action: Joi.string()
+    .valid("REATTEMPT_DELIVERY", "RETURN_TO_ORIGIN", "MARK_RESOLVED")
+    .required()
+    .description("Action to take on NDR case"),
+
+  notes: Joi.string()
+    .max(500)
+    .optional()
+    .description("Additional notes for the action"),
+
+  preferredDate: Joi.date()
+    .iso()
+    .min("now")
+    .optional()
+    .description("Preferred date for reattempt (if applicable)"),
+});
+
+const generateShippingLabelSchema = Joi.object({
+  format: Joi.string()
+    .valid("A4", "A4_4", "4x6", "6x4")
+    .default("4x6")
+    .description("Label format/size"),
+
+  copies: Joi.number()
+    .integer()
+    .min(1)
+    .max(10)
+    .default(1)
+    .description("Number of label copies"),
+});
+
+const generateBulkLabelsSchema = Joi.object({
+  shipmentIds: Joi.array()
+    .items(Joi.string().required())
+    .min(1)
+    .max(100)
+    .required()
+    .description("Array of shipment IDs to generate labels for"),
+
+  format: Joi.string()
+    .valid("A4", "A4_4", "4x6", "6x4")
+    .default("4x6")
+    .description("Label format/size"),
+});
+
+const createManifestSchema = Joi.object({
+  partnerId: Joi.string().required().description("Partner ID for the manifest"),
+
+  shipmentIds: Joi.array()
+    .items(Joi.string().required())
+    .min(1)
+    .max(500)
+    .required()
+    .description("Array of shipment IDs to include in manifest"),
+});
+
+const schedulePickupSchema = Joi.object({
+  partnerId: Joi.string()
+    .required()
+    .description("Partner ID for pickup coordination"),
+
+  shipmentIds: Joi.array()
+    .items(Joi.string().required())
+    .min(1)
+    .max(100)
+    .required()
+    .description("Array of shipment IDs for pickup"),
+
+  scheduledDate: Joi.date()
+    .iso()
+    .min("now")
+    .required()
+    .description("Preferred pickup date"),
+
+  timeSlot: Joi.string()
+    .valid(
+      "09:00-12:00",
+      "10:00-13:00",
+      "11:00-14:00",
+      "12:00-15:00",
+      "14:00-17:00",
+      "15:00-18:00",
+    )
+    .required()
+    .description("Preferred pickup time slot"),
+
+  pickupAddress: addressSchema.required().description("Pickup address details"),
+
+  specialInstructions: Joi.string()
+    .max(500)
+    .optional()
+    .description("Special pickup instructions"),
+});
+
+const updatePickupStatusSchema = Joi.object({
+  status: Joi.string()
+    .valid("CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED")
+    .required()
+    .description("New pickup status"),
+
+  notes: Joi.string().max(500).optional().description("Status update notes"),
+
+  actualPickupTime: Joi.date()
+    .iso()
+    .optional()
+    .description("Actual pickup timestamp"),
+});
+
 module.exports = {
   createShipmentSchema,
   updateShipmentSchema,
@@ -488,4 +631,13 @@ module.exports = {
   // New SHIP-004 schemas
   deliveryConfirmationSchema,
   analyticsQuerySchema,
+  // SHIP-005 validation schemas
+  processBulkShipmentsSchema,
+  createNDRCaseSchema,
+  takeNDRActionSchema,
+  generateShippingLabelSchema,
+  generateBulkLabelsSchema,
+  createManifestSchema,
+  schedulePickupSchema,
+  updatePickupStatusSchema,
 };
