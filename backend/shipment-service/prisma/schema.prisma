@@ -1,6 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
+// Shipment Service Prisma Schema
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,103 +9,195 @@ datasource db {
 }
 
 model Shipment {
-  id                String             @id @default(cuid())
-  trackingNumber    String             @unique
-  userId            String             // References auth service
-  status            ShipmentStatus     @default(PENDING)
-  priority          Priority           @default(STANDARD)
-  serviceType       String             // express, standard, economy
-  
-  // Origin and destination
-  originAddress     Json
-  destinationAddress Json
-  
-  // Package details
-  weight            Decimal?           @db.Decimal(8, 2)
-  dimensions        Json?              // {length, width, height, unit}
-  packageType       String?            // document, parcel, freight
-  description       String?
-  value             Decimal?           @db.Decimal(10, 2)
-  
-  // Pricing
-  estimatedCost     Decimal            @db.Decimal(10, 2)
-  actualCost        Decimal?           @db.Decimal(10, 2)
-  currency          String             @default("INR")
-  
-  // Dates
-  scheduledPickup   DateTime?
-  actualPickup      DateTime?
-  estimatedDelivery DateTime?
-  actualDelivery    DateTime?
-  
-  // Metadata
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  notes             String?
-  
-  // External integrations
-  partnerShipmentId String?            // Partner service reference
-  walletTransactionId String?          // Wallet service reference
-  
-  // Relationships
-  trackingEvents    TrackingEvent[]
+  id            String         @id @default(uuid()) @db.Uuid
+  orderId       String         @map("order_id") @db.VarChar(100)
+  clientId      String?        @map("client_id") @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  status        ShipmentStatus @default(CREATED)
+  paymentType   PaymentType    @default(PREPAID) @map("payment_type")
+  paymentStatus PaymentStatus  @default(PENDING) @map("payment_status")
+  codAmount     Decimal?       @map("cod_amount") @db.Decimal(10, 2)
+  totalCost     Decimal        @map("total_cost") @db.Decimal(10, 2)
+  currency      String         @default("INR") @db.VarChar(3)
 
+  // Pickup Address (JSON for flexibility)
+  pickupName     String  @map("pickup_name") @db.VarChar(100)
+  pickupPhone    String  @map("pickup_phone") @db.VarChar(15)
+  pickupEmail    String? @map("pickup_email") @db.VarChar(255)
+  pickupLine1    String  @map("pickup_line1") @db.VarChar(255)
+  pickupLine2    String? @map("pickup_line2") @db.VarChar(255)
+  pickupLandmark String? @map("pickup_landmark") @db.VarChar(100)
+  pickupCity     String  @map("pickup_city") @db.VarChar(50)
+  pickupState    String  @map("pickup_state") @db.VarChar(50)
+  pickupPincode  String  @map("pickup_pincode") @db.VarChar(6)
+  pickupCountry  String  @default("India") @map("pickup_country") @db.VarChar(50)
+
+  // Delivery Address
+  deliveryName     String  @map("delivery_name") @db.VarChar(100)
+  deliveryPhone    String  @map("delivery_phone") @db.VarChar(15)
+  deliveryEmail    String? @map("delivery_email") @db.VarChar(255)
+  deliveryLine1    String  @map("delivery_line1") @db.VarChar(255)
+  deliveryLine2    String? @map("delivery_line2") @db.VarChar(255)
+  deliveryLandmark String? @map("delivery_landmark") @db.VarChar(100)
+  deliveryCity     String  @map("delivery_city") @db.VarChar(50)
+  deliveryState    String  @map("delivery_state") @db.VarChar(50)
+  deliveryPincode  String  @map("delivery_pincode") @db.VarChar(6)
+  deliveryCountry  String  @default("India") @map("delivery_country") @db.VarChar(50)
+
+  // Package Details
+  weight      Decimal  @db.Decimal(8, 3) // kg with 3 decimal places
+  length      Decimal  @db.Decimal(8, 2) // cm
+  width       Decimal  @db.Decimal(8, 2) // cm
+  height      Decimal  @db.Decimal(8, 2) // cm
+  description String?  @db.VarChar(500)
+  value       Decimal? @db.Decimal(12, 2) // package value for insurance
+  fragile     Boolean  @default(false)
+
+  // Service Details
+  serviceType         ServiceType @default(STANDARD) @map("service_type")
+  specialInstructions String?     @map("special_instructions") @db.VarChar(500)
+
+  // Partner Integration
+  partnerId         String? @map("partner_id") @db.VarChar(50)
+  partnerName       String? @map("partner_name") @db.VarChar(100)
+  awbNumber         String? @map("awb_number") @db.VarChar(50)
+  partnerShipmentId String? @map("partner_shipment_id") @db.VarChar(100)
+
+  // Wallet Integration
+  walletTransactionId String?  @map("wallet_transaction_id") @db.VarChar(100)
+  paymentReference    String?  @map("payment_reference") @db.VarChar(100)
+  refundTransactionId String?  @map("refund_transaction_id") @db.VarChar(100)
+  refundAmount        Decimal? @map("refund_amount") @db.Decimal(10, 2)
+
+  // Dates
+  estimatedPickup    DateTime? @map("estimated_pickup")
+  actualPickup       DateTime? @map("actual_pickup")
+  estimatedDelivery  DateTime? @map("estimated_delivery")
+  actualDelivery     DateTime? @map("actual_delivery")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason") @db.VarChar(500)
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  trackingEvents TrackingEvent[]
+
+  @@unique([orderId, clientId])
+  // Indexes for performance
+  @@index([clientId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderId, clientId])
+  @@index([awbNumber])
+  @@index([status])
+  @@index([partnerId])
   @@map("shipments")
 }
 
 model TrackingEvent {
-  id            String     @id @default(cuid())
-  shipmentId    String
-  status        String
-  location      Json?      // Address object
-  description   String
-  timestamp     DateTime   @default(now())
-  eventType     EventType  @default(STATUS_UPDATE)
-  
-  // Relationships
-  shipment      Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(uuid()) @db.Uuid
+  shipmentId String   @map("shipment_id") @db.Uuid
+  status     String   @db.VarChar(50)
+  message    String   @db.VarChar(500)
+  location   String?  @db.VarChar(100)
+  eventData  Json?    @map("event_data") // Additional event metadata
+  source     String   @default("SYSTEM") @db.VarChar(50) // SYSTEM, PARTNER, MANUAL
+  timestamp  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, timestamp])
+  @@index([status])
   @@map("tracking_events")
 }
 
-model RateCard {
-  id            String   @id @default(cuid())
-  serviceType   String   // express, standard, economy  
-  fromZone      String   // postal code or zone
-  toZone        String   // postal code or zone
-  weightMin     Decimal  @db.Decimal(8, 2)
-  weightMax     Decimal  @db.Decimal(8, 2)
-  baseRate      Decimal  @db.Decimal(10, 2)
-  additionalRate Decimal @db.Decimal(10, 2) // per kg after base
-  currency      String   @default("INR")
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  @@map("rate_cards")
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  resource   String   @db.VarChar(100)
+  resourceId String?  @map("resource_id") @db.Uuid
+  changes    Json? // What changed - before/after values
+  metadata   Json? // Additional context
+  ipAddress  String?  @map("ip_address") @db.Inet
+  userAgent  String?  @map("user_agent")
+  clientId   String?  @map("client_id") @db.Uuid // For multi-tenant audit trails
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([clientId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 
+model RateCache {
+  id          String      @id @default(uuid()) @db.Uuid
+  cacheKey    String      @unique @map("cache_key") @db.VarChar(255)
+  fromPincode String      @map("from_pincode") @db.VarChar(6)
+  toPincode   String      @map("to_pincode") @db.VarChar(6)
+  weight      Decimal     @db.Decimal(8, 3)
+  serviceType ServiceType @map("service_type")
+  partnerId   String?     @map("partner_id") @db.VarChar(50)
+  rateData    Json        @map("rate_data") // Cached rate calculation response
+  expiresAt   DateTime    @map("expires_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([cacheKey])
+  @@index([fromPincode, toPincode])
+  @@index([expiresAt])
+  @@map("rate_cache")
+}
+
+model ServiceabilityCache {
+  id           String      @id @default(uuid()) @db.Uuid
+  cacheKey     String      @unique @map("cache_key") @db.VarChar(255)
+  fromPincode  String      @map("from_pincode") @db.VarChar(6)
+  toPincode    String      @map("to_pincode") @db.VarChar(6)
+  serviceType  ServiceType @map("service_type")
+  partnerId    String?     @map("partner_id") @db.VarChar(50)
+  serviceable  Boolean
+  responseData Json?       @map("response_data") // Partner response
+  expiresAt    DateTime    @map("expires_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  @@index([cacheKey])
+  @@index([fromPincode, toPincode])
+  @@index([expiresAt])
+  @@map("serviceability_cache")
+}
+
+// Enums
 enum ShipmentStatus {
-  PENDING
-  CONFIRMED
+  CREATED
+  BOOKED
   PICKED_UP
   IN_TRANSIT
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
-  RETURNED
+  RTO
 }
 
-enum Priority {
-  LOW
+enum PaymentType {
+  PREPAID
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+  RESERVED
+  CONFIRMED
+  FAILED
+  REFUNDED
+  NO_REFUND
+}
+
+enum ServiceType {
   STANDARD
-  HIGH
-  URGENT
-}
-
-enum EventType {
-  STATUS_UPDATE
-  LOCATION_UPDATE
-  EXCEPTION
-  DELIVERY_ATTEMPT
+  EXPRESS
+  ECONOMY
 }
