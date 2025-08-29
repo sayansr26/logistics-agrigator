@@ -36,11 +36,11 @@ services:
       timeout: 5s
       retries: 3
 
-  # API Gateway
+  # API Gateway Service
   api-gateway:
     build:
-      context: ./backend/api-gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/api-gateway/Dockerfile
     container_name: logistics-api-gateway
     environment:
       - NODE_ENV=development
@@ -48,11 +48,13 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - CORS_ORIGIN=http://localhost:3000
+      - SERVICE_NAME=api-gateway
     ports:
       - "3001:3001"
     volumes:
       - ./backend/api-gateway:/app
-      - /app/node_modules
+      - ./shared:/app/shared
+      - api_gateway_node_modules:/app/node_modules
     depends_on:
       redis:
         condition: service_healthy

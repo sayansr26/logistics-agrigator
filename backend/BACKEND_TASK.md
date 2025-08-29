@@ -726,7 +726,7 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 
 **Task Name**: Fix Critical Issues and Enhance API Gateway for Production Readiness
 
-**Status**: NOT_STARTED - **READY TO START** (Critical wallet routing missing)
+**Status**: COMPLETED ✅
 
 **Planning**:
 
@@ -770,7 +770,7 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 **Phase 1: Critical Fixes (Day 1)**
 
 - [ ] **URGENT: Fix Wallet Service Routing** - Production wallet service not accessible
-  - Add wallet service to routing configuration: `http://wallet-service:8006`
+  - Add wallet service to routing configuration: `http://wallet-service:3001`
   - Test wallet service health endpoint via gateway
   - Verify payment-related endpoints work through gateway
 - [ ] **Remove Mock Code** - Replace placeholder implementations
@@ -803,6 +803,12 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
   - Implement circuit breaker pattern for service failures
   - Add comprehensive request/response logging
   - Create fallback responses for service unavailability
+- [ ] **Comprehensive API Documentation** - Following auth-service patterns
+  - Install swagger dependencies (swagger-jsdoc, swagger-ui-express)
+  - Create `config/swagger.js` following auth-service pattern
+  - Implement `/api-docs` endpoint with full OpenAPI 3.0 specification
+  - Document all routes, security schemes, and response schemas
+  - Add gateway-specific endpoints (analytics, health monitoring)
 
 **Completion Criteria**:
 
@@ -821,6 +827,7 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 - [ ] Health monitoring endpoint `/api/health/services` shows all service status
 - [ ] Circuit breaker pattern prevents cascade failures
 - [ ] Comprehensive error logging and monitoring implemented
+- [ ] Swagger API documentation accessible at `/api-docs` ✅ ESSENTIAL
 
 **API Endpoints to Implement**:
 
@@ -830,6 +837,9 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
    - `GET /api/analytics` - Request analytics and service metrics
    - `GET /api/health/services` - Aggregated service health status
    - `GET /api/gateway/stats` - Gateway-specific performance metrics
+
+3. **API Documentation** (Phase 2):
+   - `GET /api-docs` - Comprehensive Swagger UI for all routes ✅ ESSENTIAL
 
 **Files to Create/Modify**:
 
@@ -846,6 +856,8 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 - ✅ `backend/api-gateway/middleware/rateLimiter.js` - Service-specific rate limiting
 - ✅ `backend/api-gateway/services/healthMonitor.js` - Health monitoring service
 - ✅ `backend/api-gateway/services/circuitBreaker.js` - Circuit breaker implementation
+- ✅ `backend/api-gateway/config/swagger.js` - API documentation following auth-service patterns
+- ✅ `backend/api-gateway/package.json` - Add swagger-jsdoc and swagger-ui-express dependencies
 - [ ] Load balancing functional with failover
 - [ ] Health check aggregation working
 - [ ] Comprehensive test suite passing
@@ -964,5 +976,5 @@ All shipment service tasks (SHIP-001 to SHIP-005) have been **completed and arch
 6. **IMPORTANT** maintain >90% test coverage for all services
 7. **NECESSARY** follow monorepo structure consistently
 
-**Last Updated**: December 2024 (All SHIP tasks archived to BACKEND_SHIPMENT_TASK.md, shipment service production-ready with 40+ endpoints)
-**Current Active Task**: API-001 - API Gateway Critical Fixes & Production Enhancement (Ready to start - wallet routing critical for production)
+**Last Updated**: August 2024 (All SHIP tasks archived to BACKEND_SHIPMENT_TASK.md, shipment service production-ready with 40+ endpoints, API Gateway production-ready)
+**Current Active Task**: PLAT-001 - Platform Service Foundation (Ready to start - all dependencies completed)

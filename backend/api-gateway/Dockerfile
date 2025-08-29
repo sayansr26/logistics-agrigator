@@ -5,8 +5,11 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm@8.15.1
 
-# Copy source code first
-COPY . .
+# Copy shared library first (from build context root)
+COPY shared ./shared
+
+# Copy service source code
+COPY backend/api-gateway .
 
 # Install dependencies after copying source
 RUN pnpm install
@@ -23,6 +26,6 @@ RUN chown -R nodejs:nodejs /app
 
 USER nodejs
 
-EXPOSE 8000
+EXPOSE 3001
 
 CMD ["node", "server.js"]
