@@ -5,8 +5,11 @@ const {
   ConflictError,
   ValidationError,
   NotFoundError,
+  APIError,
 } = require("../shared/lib/errors");
 const partnerIntegrationService = require("../services/partnerIntegrationService");
+const paymentProcessingService = require("../services/paymentProcessingService");
+const trackingService = require("../services/trackingService");
 
 /**
  * Shipment Controller with Real Database Operations
@@ -101,8 +104,66 @@ async function createShipment(req, res) {
       alternatives: alternativeOptions.length,
     });
 
-    // TODO: Validate payment with Wallet Service for PREPAID (SHIP-003)
-    // For now, proceed with creation
+    // SHIP-003: Real Wallet Service Integration for PREPAID payments
+    let walletTransactionId = null;
+    let paymentReference = null;
+
+    if (paymentType === "PREPAID") {
+      logger.info("Processing PREPAID payment via Wallet Service", {
+        service: "shipment-service",
+        userId,
+        shipmentAmount: totalCost,
+        orderId,
+      });
+
+      try {
+        // Get auth token from request headers for wallet service
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+        // Process payment through Wallet Service (validation + debit)
+        const paymentResult =
+          await paymentProcessingService.processShipmentPayment(
+            userId,
+            totalCost,
+            orderId, // Using orderId as temporary reference until shipment ID is available
+            `Shipment charge for order ${orderId} - ${packageDetails.description || "Package"}`,
+            authToken,
+          );
+
+        walletTransactionId = paymentResult.walletTransactionId;
+        paymentReference = paymentResult.paymentReference;
+
+        logger.info("Wallet payment processed successfully", {
+          service: "shipment-service",
+          userId,
+          walletTransactionId,
+          paymentReference,
+          amount: totalCost,
+        });
+      } catch (paymentError) {
+        logger.error("Wallet payment failed", {
+          service: "shipment-service",
+          userId,
+          orderId,
+          amount: totalCost,
+          error: paymentError.message,
+        });
+
+        // Re-throw the error to prevent shipment creation
+        if (paymentError instanceof ConflictError) {
+          throw new ConflictError(
+            `Payment failed: ${paymentError.message}`,
+            paymentError.details,
+          );
+        }
+
+        throw new APIError(
+          "Payment processing failed. Please try again or contact support.",
+          500,
+          { originalError: paymentError.message },
+        );
+      }
+    }
 
     // Create shipment with real database operation
     const shipment = await prisma.shipment.create({
@@ -112,7 +173,12 @@ async function createShipment(req, res) {
         userId,
         status: "CREATED",
         paymentType,
-        paymentStatus: paymentType === "COD" ? "CONFIRMED" : "PENDING",
+        paymentStatus:
+          paymentType === "COD"
+            ? "CONFIRMED"
+            : walletTransactionId
+              ? "CONFIRMED"
+              : "PENDING",
         codAmount: paymentType === "COD" ? codAmount : null,
         totalCost,
         currency: "INR",
@@ -160,6 +226,10 @@ async function createShipment(req, res) {
 
         // Real estimated delivery from Partner Service
         estimatedDelivery,
+
+        // Wallet Integration (SHIP-003: Real integration implemented)
+        walletTransactionId, // Real wallet transaction ID from payment processing
+        paymentReference, // Real payment reference from Wallet Service
       },
       select: {
         id: true,
@@ -176,15 +246,24 @@ async function createShipment(req, res) {
       },
     });
 
-    // Create initial tracking event
-    await prisma.trackingEvent.create({
-      data: {
-        shipmentId: shipment.id,
+    // Create initial tracking event using tracking service
+    await trackingService.createTrackingEvent(
+      shipment.id,
+      {
         status: "CREATED",
-        message: "Shipment created successfully",
-        source: "SYSTEM",
+        message: `Shipment created successfully with order ID ${orderId}`,
+        eventMetadata: {
+          orderId,
+          paymentType,
+          totalCost: totalCost.toString(),
+          serviceType,
+          partnerId: selectedCourier.partnerId,
+          partnerName: selectedCourier.partnerName,
+        },
+        source: trackingService.EVENT_SOURCES.SYSTEM,
       },
-    });
+      userId,
+    );
 
     // Audit log
     await prisma.auditLog.create({
@@ -554,16 +633,18 @@ async function updateShipment(req, res) {
       },
     });
 
-    // Create tracking event if status changed
+    // Create tracking event if status changed using tracking service
     if (prismaUpdateData.status) {
-      await prisma.trackingEvent.create({
-        data: {
-          shipmentId: id,
-          status: prismaUpdateData.status,
-          message: `Shipment status updated to ${prismaUpdateData.status}`,
-          source: "MANUAL",
+      await trackingService.updateShipmentStatus(
+        id,
+        prismaUpdateData.status,
+        `Shipment status updated to ${prismaUpdateData.status}`,
+        {
+          updateReason: "Manual update via API",
+          updatedFields: Object.keys(prismaUpdateData),
         },
-      });
+        userId,
+      );
     }
 
     // Audit log
@@ -694,18 +775,88 @@ async function cancelShipment(req, res) {
       },
     });
 
-    // Create tracking event
-    await prisma.trackingEvent.create({
-      data: {
-        shipmentId: id,
-        status: "CANCELLED",
-        message: `Shipment cancelled: ${reason}`,
-        source: "MANUAL",
+    // Create tracking event using tracking service
+    await trackingService.updateShipmentStatus(
+      id,
+      "CANCELLED",
+      `Shipment cancelled: ${reason}`,
+      {
+        cancellationReason: reason,
+        refundAmount: refundAmount > 0 ? refundAmount.toString() : null,
+        refundProcessed: refundTransactionId ? true : false,
+        refundTransactionId,
       },
-    });
+      userId,
+    );
 
-    // TODO: Process refund via Wallet Service
-    // For now, just log the refund requirement
+    // SHIP-003: Real Wallet Service Integration for Refunds
+    let refundTransactionId = null;
+
+    if (
+      refundAmount > 0 &&
+      shipment.paymentType === "PREPAID" &&
+      shipment.walletTransactionId
+    ) {
+      logger.info("Processing refund via Wallet Service", {
+        service: "shipment-service",
+        shipmentId: id,
+        userId: shipment.userId || userId,
+        refundAmount,
+        originalWalletTransactionId: shipment.walletTransactionId,
+      });
+
+      try {
+        // Get auth token from request headers for wallet service
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+        // Process refund through Wallet Service
+        const refundResult =
+          await paymentProcessingService.processShipmentRefund(
+            shipment.userId || userId,
+            refundAmount,
+            shipment.id,
+            reason,
+            authToken,
+          );
+
+        refundTransactionId = refundResult.refundTransactionId;
+
+        // Update shipment with refund transaction ID
+        await prisma.shipment.update({
+          where: { id },
+          data: {
+            refundTransactionId,
+          },
+        });
+
+        logger.info("Wallet refund processed successfully", {
+          service: "shipment-service",
+          shipmentId: id,
+          userId: shipment.userId || userId,
+          refundTransactionId,
+          refundAmount,
+        });
+      } catch (refundError) {
+        logger.error("Wallet refund failed", {
+          service: "shipment-service",
+          shipmentId: id,
+          userId: shipment.userId || userId,
+          refundAmount,
+          error: refundError.message,
+        });
+
+        // Don't fail the cancellation if refund fails - admin can handle manually
+        logger.warn(
+          "Shipment cancelled but refund processing failed - requires manual intervention",
+          {
+            service: "shipment-service",
+            shipmentId: id,
+            refundAmount,
+            walletTransactionId: shipment.walletTransactionId,
+          },
+        );
+      }
+    }
 
     // Audit log
     await prisma.auditLog.create({
@@ -788,33 +939,8 @@ async function getShipmentTracking(req, res) {
     const userId = req.user?.userId;
     const { id } = req.params;
 
-    // Get shipment with tracking events
-    const shipment = await prisma.shipment.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        orderId: true,
-        status: true,
-        awbNumber: true,
-        partnerId: true,
-        partnerName: true,
-        estimatedDelivery: true,
-        actualDelivery: true,
-        trackingEvents: {
-          select: {
-            id: true,
-            status: true,
-            message: true,
-            location: true,
-            source: true,
-            timestamp: true,
-          },
-          orderBy: {
-            timestamp: "asc",
-          },
-        },
-      },
-    });
+    // Use tracking service to get comprehensive tracking data
+    const shipment = await trackingService.getTrackingEvents(id, true);
 
     if (!shipment) {
       throw new NotFoundError("Shipment not found");
@@ -831,6 +957,7 @@ async function getShipmentTracking(req, res) {
           metadata: {
             source: "shipment-service",
             endpoint: "/api/v1/shipments/:id/tracking",
+            eventsCount: shipment.trackingEvents?.length || 0,
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
@@ -884,32 +1011,18 @@ async function addTrackingEvent(req, res) {
       throw new NotFoundError("Shipment not found");
     }
 
-    // Create tracking event
-    const trackingEvent = await prisma.trackingEvent.create({
-      data: {
-        shipmentId: id,
+    // Create tracking event using tracking service (handles status update automatically)
+    const trackingEvent = await trackingService.createTrackingEvent(
+      id,
+      {
         status,
         message,
         location,
-        source: "MANUAL",
+        eventMetadata: {},
+        source: trackingService.EVENT_SOURCES.MANUAL,
       },
-      select: {
-        id: true,
-        status: true,
-        message: true,
-        location: true,
-        source: true,
-        timestamp: true,
-      },
-    });
-
-    // Update shipment status if different
-    if (status !== shipment.status) {
-      await prisma.shipment.update({
-        where: { id },
-        data: { status },
-      });
-    }
+      userId,
+    );
 
     // Audit log
     await prisma.auditLog.create({
@@ -1290,6 +1403,178 @@ function calculateRefundAmount(shipment, _reason) {
   }
 }
 
+/**
+ * Track shipment by AWB number (Public endpoint)
+ * SHIP-004: New endpoint for public tracking
+ */
+async function trackByAwbNumber(req, res) {
+  try {
+    const { awbNumber } = req.params;
+
+    logger.info("Public tracking by AWB", {
+      service: "shipment-service",
+      awbNumber,
+    });
+
+    // Use tracking service for AWB tracking
+    const trackingData = await trackingService.trackByAwbNumber(awbNumber);
+
+    res.json(
+      APIResponse.success(
+        trackingData,
+        "Shipment tracking retrieved successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to track by AWB", {
+      service: "shipment-service",
+      awbNumber: req.params.awbNumber,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError) {
+      const errorResponse = APIResponse.error(error.message, "NOT_FOUND");
+      return res.status(404).json(errorResponse);
+    }
+
+    const errorResponse = APIResponse.error(
+      "Failed to retrieve tracking information",
+      "AWB_TRACKING_FAILED",
+    );
+    res.status(500).json(errorResponse);
+  }
+}
+
+/**
+ * Record delivery confirmation with POD
+ * SHIP-004: New endpoint for delivery confirmation
+ */
+async function recordDeliveryConfirmation(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const deliveryData = req.body;
+
+    logger.info("Recording delivery confirmation", {
+      service: "shipment-service",
+      shipmentId: id,
+      userId,
+      recipientName: deliveryData.recipientName,
+    });
+
+    // Use tracking service for delivery confirmation
+    const deliveryEvent = await trackingService.recordDeliveryConfirmation(
+      id,
+      deliveryData,
+      userId,
+    );
+
+    res
+      .status(201)
+      .json(
+        APIResponse.success(
+          { deliveryEvent },
+          "Delivery confirmation recorded successfully",
+        ),
+      );
+  } catch (error) {
+    logger.error("Failed to record delivery confirmation", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      userId: req.user?.userId,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError) {
+      const errorResponse = APIResponse.error(error.message, "NOT_FOUND");
+      return res.status(404).json(errorResponse);
+    }
+
+    if (error instanceof ValidationError) {
+      const errorResponse = APIResponse.error(
+        error.message,
+        "VALIDATION_ERROR",
+      );
+      return res.status(400).json(errorResponse);
+    }
+
+    const errorResponse = APIResponse.error(
+      "Failed to record delivery confirmation",
+      "DELIVERY_CONFIRMATION_FAILED",
+    );
+    res.status(500).json(errorResponse);
+  }
+}
+
+/**
+ * Get tracking analytics and performance metrics
+ * SHIP-004: New endpoint for tracking analytics
+ */
+async function getTrackingAnalytics(req, res) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const isAdmin = req.user.isAdmin;
+    const { timeRange = "7d" } = req.query;
+
+    logger.info("Generating tracking analytics", {
+      service: "shipment-service",
+      timeRange,
+      userId,
+      clientId,
+      isAdmin,
+    });
+
+    // Admin can see all analytics, clients see only their own
+    const analyticsClientId = isAdmin ? null : clientId;
+
+    // Use tracking service for analytics
+    const analytics = await trackingService.getTrackingAnalytics(
+      timeRange,
+      analyticsClientId,
+    );
+
+    // Audit log for analytics access
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "VIEW_ANALYTICS",
+        resource: "TrackingAnalytics",
+        changes: {
+          timeRange,
+          scope: isAdmin ? "global" : "client",
+        },
+        metadata: {
+          source: "shipment-service",
+          endpoint: "/api/v1/shipments/analytics/tracking",
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        clientId,
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        analytics,
+        "Tracking analytics generated successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to generate tracking analytics", {
+      service: "shipment-service",
+      userId: req.user?.userId,
+      error: error.message,
+    });
+
+    const errorResponse = APIResponse.error(
+      "Failed to generate tracking analytics",
+      "ANALYTICS_GENERATION_FAILED",
+    );
+    res.status(500).json(errorResponse);
+  }
+}
+
 module.exports = {
   createShipment,
   getShipments,
@@ -1301,4 +1586,8 @@ module.exports = {
   calculateRates,
   selectPartner,
   checkServiceability,
+  // New SHIP-004 endpoints
+  trackByAwbNumber,
+  recordDeliveryConfirmation,
+  getTrackingAnalytics,
 };

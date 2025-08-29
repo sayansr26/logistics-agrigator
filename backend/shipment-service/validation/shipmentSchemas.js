@@ -417,6 +417,63 @@ const serviceabilitySchema = Joi.object({
     }),
 });
 
+// SHIP-004: New validation schemas for tracking features
+
+/**
+ * Delivery confirmation validation schema
+ */
+const deliveryConfirmationSchema = Joi.object({
+  recipientName: Joi.string().min(2).max(100).required().messages({
+    "string.base": "Recipient name must be a string",
+    "string.empty": "Recipient name is required",
+    "string.min": "Recipient name must be at least 2 characters long",
+    "string.max": "Recipient name cannot exceed 100 characters",
+    "any.required": "Recipient name is required",
+  }),
+
+  recipientSignature: Joi.string().uri().optional().messages({
+    "string.uri": "Recipient signature must be a valid URL",
+  }),
+
+  deliveryImage: Joi.string().uri().optional().messages({
+    "string.uri": "Delivery image must be a valid URL",
+  }),
+
+  otp: Joi.string()
+    .length(6)
+    .pattern(/^\d{6}$/)
+    .optional()
+    .messages({
+      "string.length": "OTP must be exactly 6 digits",
+      "string.pattern.base": "OTP must contain only numeric digits",
+    }),
+
+  notes: Joi.string().max(500).optional().messages({
+    "string.max": "Notes cannot exceed 500 characters",
+  }),
+
+  deliveryPersonName: Joi.string().min(2).max(100).optional().messages({
+    "string.min": "Delivery person name must be at least 2 characters long",
+    "string.max": "Delivery person name cannot exceed 100 characters",
+  }),
+
+  deliveryTime: Joi.date().iso().optional().messages({
+    "date.format": "Delivery time must be a valid ISO date",
+  }),
+});
+
+/**
+ * Analytics query validation schema
+ */
+const analyticsQuerySchema = Joi.object({
+  timeRange: Joi.string()
+    .valid("1d", "7d", "30d", "90d")
+    .default("7d")
+    .messages({
+      "any.only": "Time range must be one of: 1d, 7d, 30d, 90d",
+    }),
+});
+
 module.exports = {
   createShipmentSchema,
   updateShipmentSchema,
@@ -428,4 +485,7 @@ module.exports = {
   addressSchema,
   packageSchema,
   dimensionsSchema,
+  // New SHIP-004 schemas
+  deliveryConfirmationSchema,
+  analyticsQuerySchema,
 };

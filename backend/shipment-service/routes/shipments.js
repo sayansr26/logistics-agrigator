@@ -22,6 +22,10 @@ const {
   calculateRates,
   selectPartner,
   checkServiceability,
+  // New SHIP-004 endpoints
+  trackByAwbNumber,
+  recordDeliveryConfirmation,
+  getTrackingAnalytics,
 } = require("../controllers/shipmentController");
 
 // Import validation schemas
@@ -33,6 +37,9 @@ const {
   rateCalculationSchema,
   partnerSelectionSchema,
   serviceabilitySchema,
+  // New SHIP-004 validation schemas
+  deliveryConfirmationSchema,
+  analyticsQuerySchema,
 } = require("../validation/shipmentSchemas");
 
 /**
@@ -827,6 +834,302 @@ router.post(
   authMiddleware.authenticate,
   validate(serviceabilitySchema),
   checkServiceability,
+);
+
+// SHIP-004: New tracking endpoints
+
+/**
+ * @swagger
+ * /api/v1/shipments/track/{awbNumber}:
+ *   get:
+ *     tags: [Public Tracking]
+ *     summary: Track shipment by AWB number (Public)
+ *     description: |
+ *       Public endpoint to track shipment by AWB number.
+ *       No authentication required - designed for customer tracking pages.
+ *       Returns sanitized tracking information without sensitive data.
+ *     parameters:
+ *       - in: path
+ *         name: awbNumber
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[A-Z0-9]{10,20}$'
+ *         description: AWB number to track
+ *         example: "ABC123456789"
+ *     responses:
+ *       200:
+ *         description: Tracking information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "success"
+ *                 message:
+ *                   type: string
+ *                   example: "Shipment tracking retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     awbNumber:
+ *                       type: string
+ *                       example: "ABC123456789"
+ *                     status:
+ *                       type: string
+ *                       example: "IN_TRANSIT"
+ *                     partnerName:
+ *                       type: string
+ *                       example: "Blue Dart"
+ *                     estimatedDelivery:
+ *                       type: string
+ *                       format: date-time
+ *                     actualDelivery:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                     destination:
+ *                       type: object
+ *                       properties:
+ *                         city:
+ *                           type: string
+ *                           example: "Mumbai"
+ *                         state:
+ *                           type: string
+ *                           example: "Maharashtra"
+ *                         pincode:
+ *                           type: string
+ *                           example: "400001"
+ *                     events:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           status:
+ *                             type: string
+ *                             example: "IN_TRANSIT"
+ *                           message:
+ *                             type: string
+ *                             example: "Package is in transit"
+ *                           location:
+ *                             type: string
+ *                             nullable: true
+ *                             example: "Mumbai Hub"
+ *                           timestamp:
+ *                             type: string
+ *                             format: date-time
+ *       404:
+ *         description: Shipment not found with this AWB number
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get("/track/:awbNumber", trackingLimiter, trackByAwbNumber);
+
+/**
+ * @swagger
+ * /api/v1/shipments/{id}/delivery-confirmation:
+ *   post:
+ *     tags: [Tracking]
+ *     summary: Record delivery confirmation with POD
+ *     description: |
+ *       Record delivery confirmation with Proof of Delivery (POD) information.
+ *       Admin and operations roles only. Creates DELIVERED tracking event.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Shipment ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - recipientName
+ *             properties:
+ *               recipientName:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 100
+ *                 description: Name of person who received the package
+ *                 example: "John Smith"
+ *               recipientSignature:
+ *                 type: string
+ *                 format: uri
+ *                 description: URL to recipient signature image
+ *                 example: "https://storage.example.com/signatures/abc123.png"
+ *               deliveryImage:
+ *                 type: string
+ *                 format: uri
+ *                 description: URL to delivery confirmation image
+ *                 example: "https://storage.example.com/deliveries/def456.jpg"
+ *               otp:
+ *                 type: string
+ *                 pattern: '^[0-9]{6}$'
+ *                 description: OTP provided by recipient
+ *                 example: "123456"
+ *               notes:
+ *                 type: string
+ *                 maxLength: 500
+ *                 description: Additional delivery notes
+ *                 example: "Package delivered to security guard"
+ *               deliveryPersonName:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 100
+ *                 description: Name of delivery person
+ *                 example: "Delivery Partner"
+ *               deliveryTime:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Actual delivery time (if different from current time)
+ *     responses:
+ *       201:
+ *         description: Delivery confirmation recorded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "success"
+ *                 message:
+ *                   type: string
+ *                   example: "Delivery confirmation recorded successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deliveryEvent:
+ *                       $ref: '#/components/schemas/TrackingEvent'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       404:
+ *         description: Shipment not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post(
+  "/:id/delivery-confirmation",
+  trackingLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.authorize(["admin", "operations"]),
+  validate(deliveryConfirmationSchema),
+  recordDeliveryConfirmation,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/analytics/tracking:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get tracking analytics and performance metrics
+ *     description: |
+ *       Get comprehensive tracking analytics including status distribution,
+ *       delivery performance, event statistics, and NDR analysis.
+ *       Admin users see global analytics, clients see their own data only.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeRange
+ *         schema:
+ *           type: string
+ *           enum: [1d, 7d, 30d, 90d]
+ *           default: 7d
+ *         description: Time range for analytics
+ *         example: "7d"
+ *     responses:
+ *       200:
+ *         description: Tracking analytics generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "success"
+ *                 message:
+ *                   type: string
+ *                   example: "Tracking analytics generated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     timeRange:
+ *                       type: string
+ *                       example: "7d"
+ *                     generatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     statusDistribution:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           status:
+ *                             type: string
+ *                             example: "DELIVERED"
+ *                           count:
+ *                             type: number
+ *                             example: 150
+ *                     deliveryPerformance:
+ *                       type: object
+ *                       properties:
+ *                         totalDelivered:
+ *                           type: number
+ *                           example: 150
+ *                     eventsBySource:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           source:
+ *                             type: string
+ *                             example: "PARTNER"
+ *                           count:
+ *                             type: number
+ *                             example: 245
+ *                     ndrStats:
+ *                       type: object
+ *                       properties:
+ *                         totalNDRs:
+ *                           type: number
+ *                           example: 12
+ *                         breakdown:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               status:
+ *                                 type: string
+ *                                 example: "NDR"
+ *                               count:
+ *                                 type: number
+ *                                 example: 12
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get(
+  "/analytics/tracking",
+  generalLimiter,
+  authMiddleware.authenticate,
+  validate(analyticsQuerySchema, "query"),
+  getTrackingAnalytics,
 );
 
 module.exports = router;

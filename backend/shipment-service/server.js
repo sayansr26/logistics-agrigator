@@ -223,19 +223,14 @@ app.get("/health", async (req, res) => {
     };
   }
 
-  // Check Wallet Service
+  // Check Wallet Service (SHIP-003: Real integration implemented)
   try {
-    const axios = require("axios");
-    const walletStart = Date.now();
-    const walletResponse = await axios.get("http://localhost:3006/health", {
-      timeout: 5000,
-    });
-    const walletTime = Date.now() - walletStart;
+    const paymentProcessingService = require("./services/paymentProcessingService");
+    const walletHealth = await paymentProcessingService.healthCheck();
 
     healthStatus.dependencies.walletService = {
-      status: walletResponse.status === 200 ? "healthy" : "unhealthy",
-      responseTime: walletTime,
-      version: walletResponse.data?.version || "unknown",
+      ...walletHealth,
+      integration: "payment-processing-service",
     };
   } catch (error) {
     // Don't mark overall service as unhealthy if wallet service is down
@@ -244,6 +239,7 @@ app.get("/health", async (req, res) => {
       status: "unhealthy",
       error: error.message,
       note: "Wallet service unavailable, COD shipments still available",
+      integration: "payment-processing-service",
     };
   }
 
