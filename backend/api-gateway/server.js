@@ -222,31 +222,31 @@ logger.info("🔗 API Gateway Service Configuration:", {
 const services = {
   auth: {
     target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
-    pathRewrite: { "^/api/v1/auth": "/auth" },
+    pathRewrite: { "^/api/v1/auth": "" },
   },
   users: {
     target: process.env.USER_SERVICE_URL || "http://user-service:3003",
-    pathRewrite: { "^/api/v1/users": "/api/v1/users" },
+    pathRewrite: { "^/api/v1/users": "" },
   },
   shipments: {
     target: process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
-    pathRewrite: { "^/api/v1/shipments": "/api/v1/shipments" },
+    pathRewrite: { "^/api/v1/shipments": "" },
   },
   partners: {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
-    pathRewrite: { "^/api/v1/partners": "/api/v1/partners" },
+    pathRewrite: { "^/api/v1/partners": "" },
   },
   wallet: {
     target: process.env.WALLET_SERVICE_URL || "http://wallet-service:3006",
-    pathRewrite: { "^/api/v1/wallet": "/api/v1/wallet" },
+    pathRewrite: { "^/api/v1/wallet": "" },
   },
   support: {
     target: process.env.SUPPORT_SERVICE_URL || "http://support-service:3007",
-    pathRewrite: { "^/api/v1/support": "/api/v1/support" },
+    pathRewrite: { "^/api/v1/support": "" },
   },
   platforms: {
     target: process.env.PLATFORM_SERVICE_URL || "http://platform-service:3008",
-    pathRewrite: { "^/api/v1/platforms": "/api/v1/platforms" },
+    pathRewrite: { "^/api/v1/platforms": "" },
   },
 };
 
