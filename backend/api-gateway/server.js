@@ -346,8 +346,56 @@ const services = {
  * /api/v1/partners/{path}:
  *   get:
  *     tags: [Gateway]
- *     summary: Proxy requests to Partner Service
- *     description: Routes partner requests to the partner service
+ *     summary: Proxy GET requests to Partner Service
+ *     description: Routes partner GET requests to the partner service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Partner service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       503:
+ *         description: Partner service unavailable
+ *   post:
+ *     tags: [Gateway]
+ *     summary: Proxy POST requests to Partner Service
+ *     description: Routes partner POST requests to the partner service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Partner service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       503:
+ *         description: Partner service unavailable
+ *   put:
+ *     tags: [Gateway]
+ *     summary: Proxy PUT requests to Partner Service
+ *     description: Routes partner PUT requests to the partner service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Partner service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       503:
+ *         description: Partner service unavailable
+ *   delete:
+ *     tags: [Gateway]
+ *     summary: Proxy DELETE requests to Partner Service
+ *     description: Routes partner DELETE requests to the partner service
  *     parameters:
  *       - name: path
  *         in: path
@@ -392,8 +440,56 @@ const services = {
  * /api/v1/support/{path}:
  *   get:
  *     tags: [Gateway]
- *     summary: Proxy requests to Support Service
- *     description: Routes support requests to the support service
+ *     summary: Proxy GET requests to Support Service
+ *     description: Routes support GET requests to the support service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Support service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from support service
+ *       503:
+ *         description: Support service unavailable
+ *   post:
+ *     tags: [Gateway]
+ *     summary: Proxy POST requests to Support Service
+ *     description: Routes support POST requests to the support service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Support service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from support service
+ *       503:
+ *         description: Support service unavailable
+ *   put:
+ *     tags: [Gateway]
+ *     summary: Proxy PUT requests to Support Service
+ *     description: Routes support PUT requests to the support service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Support service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from support service
+ *       503:
+ *         description: Support service unavailable
+ *   delete:
+ *     tags: [Gateway]
+ *     summary: Proxy DELETE requests to Support Service
+ *     description: Routes support DELETE requests to the support service
  *     parameters:
  *       - name: path
  *         in: path
@@ -413,8 +509,56 @@ const services = {
  * /api/v1/platforms/{path}:
  *   get:
  *     tags: [Gateway]
- *     summary: Proxy requests to Platform Service
- *     description: Routes platform requests to the platform service
+ *     summary: Proxy GET requests to Platform Service
+ *     description: Routes platform GET requests to the platform service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Platform service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from platform service
+ *       503:
+ *         description: Platform service unavailable
+ *   post:
+ *     tags: [Gateway]
+ *     summary: Proxy POST requests to Platform Service
+ *     description: Routes platform POST requests to the platform service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Platform service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from platform service
+ *       503:
+ *         description: Platform service unavailable
+ *   put:
+ *     tags: [Gateway]
+ *     summary: Proxy PUT requests to Platform Service
+ *     description: Routes platform PUT requests to the platform service
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Platform service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from platform service
+ *       503:
+ *         description: Platform service unavailable
+ *   delete:
+ *     tags: [Gateway]
+ *     summary: Proxy DELETE requests to Platform Service
+ *     description: Routes platform DELETE requests to the platform service
  *     parameters:
  *       - name: path
  *         in: path
