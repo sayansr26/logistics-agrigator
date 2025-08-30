@@ -8,22 +8,43 @@ try {
   // Try to use winston and winston-daily-rotate-file if available
   winston = require("winston");
 
-  // Try different paths for winston-daily-rotate-file module resolution
+  // Enhanced module resolution for winston-daily-rotate-file
   try {
     DailyRotateFile = require("winston-daily-rotate-file");
   } catch (rotateError) {
-    // If direct require fails, try using require.resolve from shared context
-    try {
-      const resolvedPath = require.resolve("winston-daily-rotate-file", {
-        paths: [
-          path.resolve(__dirname, "../node_modules"),
-          path.resolve(__dirname, "../.."),
-        ],
-      });
-      DailyRotateFile = require(resolvedPath);
-    } catch (resolveError) {
-      // Final fallback: try direct symlink path
-      DailyRotateFile = require("/app/shared/node_modules/winston-daily-rotate-file");
+    // Try alternative resolution paths for Docker/PNPM environment
+    const possiblePaths = [
+      // Direct path to pnpm symlink
+      path.resolve(__dirname, "../node_modules/winston-daily-rotate-file"),
+      // Absolute container path
+      "/app/shared/node_modules/winston-daily-rotate-file",
+      // Resolve through pnpm structure
+      path.resolve(
+        __dirname,
+        "../node_modules/.pnpm/winston-daily-rotate-file@4.7.1_winston@3.17.0/node_modules/winston-daily-rotate-file",
+      ),
+    ];
+
+    let moduleLoaded = false;
+    for (const modulePath of possiblePaths) {
+      try {
+        if (require("fs").existsSync(modulePath)) {
+          DailyRotateFile = require(modulePath);
+          moduleLoaded = true;
+          console.log(
+            `Successfully loaded winston-daily-rotate-file from: ${modulePath}`,
+          );
+          break;
+        }
+      } catch (pathError) {
+        continue; // Try next path
+      }
+    }
+
+    if (!moduleLoaded) {
+      throw new Error(
+        "winston-daily-rotate-file not found in any expected location",
+      );
     }
   }
 
