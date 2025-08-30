@@ -15,6 +15,7 @@ const prisma = new PrismaClient();
 
 // Import Swagger configuration
 const swaggerSpecs = require("./config/swagger");
+const { corsConfig } = require("./shared");
 
 // Import middleware
 const auth = require("./middleware/auth");
@@ -31,12 +32,7 @@ const PORT = process.env.PORT || 8002;
 
 // Middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-    credentials: true,
-  }),
-);
+app.use(cors(corsConfig.getCorsOptions()));
 
 // Security headers to prevent mixed content issues
 app.use((req, res, next) => {
@@ -566,6 +562,9 @@ app.use("*", notFoundHandler);
 
 // Error handler
 app.use(errorHandler);
+
+// Log CORS configuration
+corsConfig.logCorsConfiguration();
 
 app.listen(PORT, "0.0.0.0", () => {
   logger.info(

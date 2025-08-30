@@ -49,6 +49,14 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - CORS_ORIGIN=http://localhost:3000
       - SERVICE_NAME=api-gateway
+      # Service URLs for proxy routing
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
+      - PARTNER_SERVICE_URL=http://partner-service:3005
+      - WALLET_SERVICE_URL=http://wallet-service:3006
+      - SUPPORT_SERVICE_URL=http://support-service:3007
+      - PLATFORM_SERVICE_URL=http://platform-service:3008
     ports:
       - "3001:3001"
     volumes:

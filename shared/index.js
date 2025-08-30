@@ -6,6 +6,7 @@ const database = require("./lib/database");
 const redis = require("./lib/redis");
 const response = require("./lib/response");
 const errors = require("./lib/errors");
+const corsConfig = require("./lib/corsConfig");
 
 module.exports = {
   auth,
@@ -15,4 +16,5 @@ module.exports = {
   redis,
   response,
   errors,
+  corsConfig,
 };

@@ -14,13 +14,14 @@ const { errorHandler } = require("./middleware/errorHandler");
 const { connectDB, prisma } = require("./config/database");
 const { connectRedis, getRedisClient } = require("./config/redis");
 const swaggerSpecs = require("./config/swagger");
+const { corsConfig } = require("./shared");
 
 const app = express();
 const PORT = process.env.PORT || 8001;
 
 // Security middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsConfig.getCorsOptions()));
 
 // Security headers to prevent mixed content issues
 app.use((req, res, next) => {
@@ -240,6 +241,9 @@ async function startServer() {
     // Connect to Redis
     await connectRedis();
     logger.info("Redis connected");
+
+    // Log CORS configuration
+    corsConfig.logCorsConfiguration();
 
     app.listen(PORT, () => {
       logger.info(

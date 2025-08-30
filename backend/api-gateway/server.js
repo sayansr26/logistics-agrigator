@@ -13,21 +13,14 @@ const logger = require("./shared/lib/logger");
 const { connectRedis, getRedisClient } = require("./config/redis");
 const { errorHandler } = require("./middleware/errorHandler");
 const swaggerSpecs = require("./config/swagger");
+const corsConfig = require("./shared/lib/corsConfig");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Security middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? ["https://logistics.example.com"]
-        : true,
-    credentials: true,
-  }),
-);
+app.use(cors(corsConfig.getCorsOptions()));
 
 // Logging - use shared logger
 app.use(logger.httpLogger);
@@ -210,34 +203,49 @@ app.get("/health", async (req, res) => {
   res.json(healthStatus);
 });
 
-// Service routing configuration with correct ports
+// Service routing configuration using environment variables
+logger.info("🔗 API Gateway Service Configuration:", {
+  AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
+  USER_SERVICE_URL: process.env.USER_SERVICE_URL || "http://user-service:3003",
+  SHIPMENT_SERVICE_URL:
+    process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
+  PARTNER_SERVICE_URL:
+    process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+  WALLET_SERVICE_URL:
+    process.env.WALLET_SERVICE_URL || "http://wallet-service:3006",
+  SUPPORT_SERVICE_URL:
+    process.env.SUPPORT_SERVICE_URL || "http://support-service:3007",
+  PLATFORM_SERVICE_URL:
+    process.env.PLATFORM_SERVICE_URL || "http://platform-service:3008",
+});
+
 const services = {
   auth: {
-    target: "http://auth-service:8001",
+    target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
     pathRewrite: { "^/api/v1/auth": "/auth" },
   },
   users: {
-    target: "http://user-service:8002",
+    target: process.env.USER_SERVICE_URL || "http://user-service:3003",
     pathRewrite: { "^/api/v1/users": "/api/v1/users" },
   },
   shipments: {
-    target: "http://shipment-service:8003",
+    target: process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
     pathRewrite: { "^/api/v1/shipments": "/api/v1/shipments" },
   },
   partners: {
-    target: "http://partner-service:3005",
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: { "^/api/v1/partners": "/api/v1/partners" },
   },
   wallet: {
-    target: "http://wallet-service:8006",
+    target: process.env.WALLET_SERVICE_URL || "http://wallet-service:3006",
     pathRewrite: { "^/api/v1/wallet": "/api/v1/wallet" },
   },
   support: {
-    target: "http://support-service:8004",
+    target: process.env.SUPPORT_SERVICE_URL || "http://support-service:3007",
     pathRewrite: { "^/api/v1/support": "/api/v1/support" },
   },
   platforms: {
-    target: "http://platform-service:8005",
+    target: process.env.PLATFORM_SERVICE_URL || "http://platform-service:3008",
     pathRewrite: { "^/api/v1/platforms": "/api/v1/platforms" },
   },
 };
@@ -487,6 +495,9 @@ async function startServer() {
     // Connect to Redis
     await connectRedis();
     logger.info("Redis connected");
+
+    // Log CORS configuration
+    corsConfig.logCorsConfiguration();
 
     app.listen(PORT, () => {
       logger.info(

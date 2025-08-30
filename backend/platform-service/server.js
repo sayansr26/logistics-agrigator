@@ -3,18 +3,14 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 require("dotenv").config();
+const { corsConfig } = require("./shared");
 
 const app = express();
 const PORT = process.env.PORT || 8005;
 
 // Middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-    credentials: true,
-  }),
-);
+app.use(cors(corsConfig.getCorsOptions()));
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -66,6 +62,9 @@ app.use((err, req, res, next) => {
     message: "Something went wrong!",
   });
 });
+
+// Log CORS configuration
+corsConfig.logCorsConfiguration();
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Platform Service running on port ${PORT}`);
