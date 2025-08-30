@@ -147,6 +147,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3004
+      - SERVICE_NAME=shipment-service
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_shipments
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
@@ -301,6 +302,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3007
+      - SERVICE_NAME=support-service
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_support
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
@@ -337,6 +339,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3008
+      - SERVICE_NAME=platform-service
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_platforms
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
