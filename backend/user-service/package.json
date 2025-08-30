@@ -4,7 +4,7 @@
   "description": "User management microservice for Logistics Portal",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "npx nodemon server.js",
     "start": "node server.js",
     "generate": "npx prisma generate",
     "migrate": "npx prisma migrate dev",

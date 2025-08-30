@@ -62,6 +62,7 @@ services:
     volumes:
       - ./backend/api-gateway:/app
       - ./shared:/app/shared
+      - ./logs:/app/logs
       - api_gateway_node_modules:/app/node_modules
     depends_on:
       redis:
@@ -92,6 +93,7 @@ services:
     volumes:
       - ./backend/auth-service:/app
       - ./shared:/app/shared
+      - ./logs:/app/logs
       - auth_service_node_modules:/app/node_modules
     depends_on:
       postgres:
@@ -117,10 +119,11 @@ services:
     ports:
       - "3003:3003"
     # For live reload in development, uncomment these volumes:
-    # volumes:
-    #   - ./backend/user-service:/app
-    #   - ./shared:/app/shared
-    #   - user_node_modules:/app/node_modules
+    volumes:
+      - ./backend/user-service:/app
+      - ./shared:/app/shared
+      - ./logs:/app/logs
+      - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -158,6 +161,7 @@ services:
     volumes:
       - ./backend/shipment-service:/app
       - ./shared:/app/shared
+      - ./logs:/app/logs
       - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
@@ -209,6 +213,7 @@ services:
     volumes:
       - ./backend/partner-service:/app
       - ./shared:/app/shared
+      - ./logs:/app/logs
       - partner_node_modules:/app/node_modules
     depends_on:
       postgres:
@@ -270,6 +275,7 @@ services:
     volumes:
       - ./backend/wallet-service:/app
       - ./shared:/app/shared
+      - ./logs:/app/logs
       - wallet_node_modules:/app/node_modules
     depends_on:
       postgres:
@@ -303,10 +309,11 @@ services:
     ports:
       - "3007:3007"
     # For live reload in development, uncomment these volumes:
-    # volumes:
-    #   - ./backend/support-service:/app
-    #   - ./shared:/app/shared
-    #   - support_node_modules:/app/node_modules
+    volumes:
+      - ./backend/support-service:/app
+      - ./shared:/app/shared
+      - ./logs:/app/logs
+      - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -341,10 +348,11 @@ services:
     ports:
       - "3008:3008"
     # For live reload in development, uncomment these volumes:
-    # volumes:
-    #   - ./backend/platform-service:/app
-    #   - ./shared:/app/shared
-    #   - platform_node_modules:/app/node_modules
+    volumes:
+      - ./backend/platform-service:/app
+       - ./shared:/app/shared
+      - ./logs:/app/logs
+      - shipment_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
