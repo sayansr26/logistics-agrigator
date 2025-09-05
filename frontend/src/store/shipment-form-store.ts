@@ -1,15 +1,33 @@
 import { create } from "zustand";
 
-interface Box {
+// Type definitions
+export interface Box {
   id: string;
   length: string;
   height: string;
   width: string;
 }
 
-interface ShipmentFormState {
-  currentStep: number;
+export interface Invoice {
+  id: string;
+  invoiceType: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  invoiceAmt: string;
+  currency: string;
+  taxAmount: string;
+  discountAmount: string;
+  totalAmount: string;
+  eWayBillNo: string;
+  attachment: File | null;
+  sellerGSTIN: string;
+  buyerGSTIN: string;
+  hsnCode: string;
+  sacCode: string;
+  paymentTerms: string;
+}
 
+export interface ShipmentFormData {
   // Docket form fields
   referenceNo: string;
   actualWeight: string;
@@ -35,74 +53,64 @@ interface ShipmentFormState {
   returnCity: string;
   returnState: string;
 
-  // Invoice form fields
-  eWayBillNo: string;
-  invoiceNo: string;
-  invoiceAmt: string;
-  invoiceDate: string;
-  attachment: File | null;
-  // Additional invoice fields
-  invoiceType: string;
-  paymentTerms: string;
-  currency: string;
-  taxAmount: string;
-  discountAmount: string;
-  totalAmount: string;
-  sellerGSTIN: string;
-  buyerGSTIN: string;
-  hsnCode: string;
-  sacCode: string;
-
-  // Multiple invoices support
-  invoices: Array<{
-    id: string;
-    invoiceType: string;
-    invoiceNo: string;
-    invoiceDate: string;
-    invoiceAmt: string;
-    currency: string;
-    taxAmount: string;
-    discountAmount: string;
-    totalAmount: string;
-    eWayBillNo: string;
-    attachment: File | null;
-  }>;
-
   // Dimensions form fields
-  boxes: Box[];
+  length: string;
+  width: string;
+  height: string;
+  volumetricWeight: string;
+  packageType: string;
+}
 
-  // Form data (for other steps)
-  formData: Record<string, any>;
-  errors: Record<string, string>;
+export interface FormErrors {
+  [key: string]: string;
+}
+
+export interface ShipmentFormState {
+  // Form state
+  currentStep: number;
+  formData: ShipmentFormData;
+  errors: FormErrors;
+
+  // Collections
+  boxes: Box[];
+  invoices: Invoice[];
 
   // Methods
-  setStep: (_step: number) => void;
-  setField: (_field: string, _value: any) => void;
-  updateField: (_field: string, _value: any) => void;
-  setErrors: (_errors: Record<string, string>) => void;
+  setStep: (step: number) => void;
+  setField: <K extends keyof ShipmentFormData>(
+    field: K,
+    value: ShipmentFormData[K],
+  ) => void;
+  setError: (field: string, error: string) => void;
+  clearError: (field: string) => void;
+  setErrors: (errors: FormErrors) => void;
+  clearAllErrors: () => void;
   resetForm: () => void;
 
   // Box management methods
   addBox: () => void;
-  removeBox: (_id: string) => void;
-  updateBox: (_id: string, _field: keyof Box, _value: string) => void;
+  removeBox: (id: string) => void;
+  updateBox: (id: string, field: keyof Box, value: string) => void;
 
   // Invoice management methods
   addInvoice: () => void;
-  removeInvoice: (_id: string) => void;
-  updateInvoice: (_id: string, _field: string, _value: any) => void;
+  removeInvoice: (id: string) => void;
+  updateInvoice: (
+    id: string,
+    field: keyof Invoice,
+    value: Invoice[keyof Invoice],
+  ) => void;
 }
 
-export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
-  currentStep: 1,
-
-  // Initialize docket form fields
+// Initial form data
+const initialFormData: ShipmentFormData = {
+  // Docket form fields
   referenceNo: "",
   actualWeight: "",
   pickupAddress: "",
   productDescription: "",
 
-  // Initialize delivery form fields
+  // Delivery form fields
   phoneNumber: "",
   alternatePhone: "",
   email: "",
@@ -114,104 +122,62 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
   city: "",
   state: "",
 
-  // Initialize RTO and return address fields
-  isRTO: true,
+  // RTO and Return Address fields
+  isRTO: false,
   returnAddress: "",
   returnPincode: "",
   returnCity: "",
   returnState: "",
 
-  // Initialize invoice form fields
-  eWayBillNo: "",
-  invoiceNo: "",
-  invoiceAmt: "",
-  invoiceDate: "",
-  attachment: null,
-  // Initialize additional invoice fields
-  invoiceType: "",
-  paymentTerms: "",
-  currency: "INR",
-  taxAmount: "",
-  discountAmount: "",
-  totalAmount: "",
-  sellerGSTIN: "",
-  buyerGSTIN: "",
-  hsnCode: "",
-  sacCode: "",
+  // Dimensions form fields
+  length: "",
+  width: "",
+  height: "",
+  volumetricWeight: "",
+  packageType: "",
+};
 
-  // Initialize multiple invoices
-  invoices: [],
-
-  // Initialize dimensions form fields
-  boxes: [],
-
-  formData: {},
+// Initial state
+const initialState = {
+  currentStep: 1,
+  formData: initialFormData,
   errors: {},
+  boxes: [],
+  invoices: [],
+};
+
+export const useShipmentFormStore = create<ShipmentFormState>((set) => ({
+  ...initialState,
 
   setStep: (step: number) => set({ currentStep: step }),
 
-  setField: (field: string, value: any) =>
+  setField: <K extends keyof ShipmentFormData>(
+    field: K,
+    value: ShipmentFormData[K],
+  ) =>
     set((state) => ({
-      [field]: value,
-      // Clear error for this field when value is set
+      formData: { ...state.formData, [field]: value },
       errors: { ...state.errors, [field]: "" },
     })),
 
-  updateField: (field: string, value: any) =>
+  setError: (field: string, error: string) =>
     set((state) => ({
-      formData: { ...state.formData, [field]: value },
+      errors: { ...state.errors, [field]: error },
     })),
 
-  setErrors: (errors: Record<string, string>) => set({ errors }),
+  clearError: (field: string) =>
+    set((state) => ({
+      errors: { ...state.errors, [field]: "" },
+    })),
+
+  setErrors: (errors: FormErrors) => set({ errors }),
+
+  clearAllErrors: () => set({ errors: {} }),
 
   resetForm: () =>
     set({
+      ...initialState,
       currentStep: 1,
-      // Reset docket fields
-      referenceNo: "",
-      actualWeight: "",
-      pickupAddress: "",
-      productDescription: "",
-      // Reset delivery fields
-      phoneNumber: "",
-      alternatePhone: "",
-      email: "",
-      receiverName: "",
-      address: "",
-      landmark: "",
-      pincode: "",
-      area: "",
-      city: "",
-      state: "",
-      // Reset RTO and return address fields
-      isRTO: true,
-      returnAddress: "",
-      returnPincode: "",
-      returnCity: "",
-      returnState: "",
-      // Reset invoice fields
-      eWayBillNo: "",
-      invoiceNo: "",
-      invoiceAmt: "",
-      invoiceDate: "",
-      attachment: null,
-      // Reset additional invoice fields
-      invoiceType: "",
-      paymentTerms: "",
-      currency: "INR",
-      taxAmount: "",
-      discountAmount: "",
-      totalAmount: "",
-      sellerGSTIN: "",
-      buyerGSTIN: "",
-      hsnCode: "",
-      sacCode: "",
-      // Reset multiple invoices
-      invoices: [],
-      // Reset dimensions fields
-      boxes: [],
-      formData: {},
-      errors: {},
     }),
 
   // Box management methods
@@ -220,7 +186,7 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
       boxes: [
         ...state.boxes,
         {
-          id: `box-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: `box-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           length: "",
           height: "",
           width: "",
@@ -246,7 +212,7 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
       invoices: [
         ...state.invoices,
         {
-          id: `invoice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: `invoice-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           invoiceType: "",
           invoiceNo: "",
           invoiceDate: "",
@@ -257,6 +223,11 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
           totalAmount: "",
           eWayBillNo: "",
           attachment: null,
+          sellerGSTIN: "",
+          buyerGSTIN: "",
+          hsnCode: "",
+          sacCode: "",
+          paymentTerms: "",
         },
       ],
     })),
@@ -266,7 +237,11 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, _get) => ({
       invoices: state.invoices.filter((invoice) => invoice.id !== id),
     })),
 
-  updateInvoice: (id: string, field: string, value: any) =>
+  updateInvoice: (
+    id: string,
+    field: keyof Invoice,
+    value: Invoice[keyof Invoice],
+  ) =>
     set((state) => ({
       invoices: state.invoices.map((invoice) =>
         invoice.id === id ? { ...invoice, [field]: value } : invoice,

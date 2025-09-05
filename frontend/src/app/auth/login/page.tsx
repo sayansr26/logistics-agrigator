@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Form validation schema
 const loginFormSchema = z.object({
@@ -41,8 +42,9 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, isLoading, error, clearError, redirectIfAuthenticated } =
+    useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -53,22 +55,28 @@ export default function LoginPage() {
     },
   });
 
-  async function onSubmit(_data: LoginFormValues) {
-    setIsLoading(true);
+  // Redirect if already authenticated
+  useEffect(() => {
+    redirectIfAuthenticated();
+  }, [redirectIfAuthenticated]);
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Clear error when form changes
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      if (error) clearError();
+    });
+    return () => subscription.unsubscribe();
+  }, [form, error, clearError]);
 
-    // TODO: Replace with actual API call
-    // const response = await fetch('/api/auth/login', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(data)
-    // })
-
-    // Static success - redirect to dashboard
-    router.push("/dashboard");
-    setIsLoading(false);
+  async function onSubmit(data: LoginFormValues) {
+    try {
+      await login(data.email, data.password, data.rememberMe);
+      // Login successful, redirect to dashboard
+      router.push("/dashboard");
+    } catch (error) {
+      // Error is handled by the auth store
+      console.error("Login failed:", error);
+    }
   }
 
   return (
@@ -89,6 +97,16 @@ export default function LoginPage() {
             Sign in to your account to continue
           </p>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        )}
 
         {/* Login Form */}
         <Card>
