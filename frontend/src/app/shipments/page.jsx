@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -87,7 +87,7 @@ export default function ShipmentsPage() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedData = currentData.slice(startIndex, endIndex);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = (page) => {
     setCurrentPage(page);
   };
 

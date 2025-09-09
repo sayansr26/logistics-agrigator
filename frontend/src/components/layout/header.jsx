@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,10 +39,7 @@ import {
   Search,
 } from "lucide-react";
 
-interface HeaderProps {
-  className?: string;
-}
-
+// HeaderProps: { className?: string }
 const quickActions = [
   {
     title: "Create Shipment",
@@ -120,7 +118,14 @@ const integrations = [
   },
 ];
 
-export function Header({ className }: HeaderProps) {
+export function Header({ className }) {
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    // The logout function in useAuthStore should automatically redirect to login
+  };
+
   return (
     <header
       className={cn(
@@ -260,30 +265,44 @@ export function Header({ className }: HeaderProps) {
                   className="relative h-8 w-8 rounded-full"
                 >
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarFallback>
+                      {user?.name
+                        ? user.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                        : "U"}
+                    </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">John Doe</p>
+                    <p className="text-sm font-medium leading-none">
+                      {user?.name || "User"}
+                    </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      john@logistics.com
+                      {user?.email || "user@logistics.com"}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
                 </DropdownMenuItem>
@@ -296,18 +315,8 @@ export function Header({ className }: HeaderProps) {
   );
 }
 
-const ListItem = ({
-  className,
-  title,
-  children,
-  href,
-  ...props
-}: {
-  className?: string;
-  title: React.ReactNode;
-  children: React.ReactNode;
-  href: string;
-}) => {
+// ListItem props: { className?, title, children, href, ...props }
+const ListItem = ({ className, title, children, href, ...props }) => {
   return (
     <li>
       <NavigationMenuLink asChild>

@@ -168,7 +168,7 @@ export default function WalletPage() {
   const closingAccountBalance = walletBalance + pendingAmount;
 
   // Calculate running balance for each transaction
-  const calculateRunningBalance = (transactions: typeof mockTransactions) => {
+  const calculateRunningBalance = (transactions) => {
     let runningBalance = walletBalance;
     return transactions
       .map((transaction, _index) => {

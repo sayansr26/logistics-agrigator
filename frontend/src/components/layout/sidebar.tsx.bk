@@ -20,20 +20,26 @@ import {
   Globe,
   AlertTriangle,
   Store,
+  LucideIcon,
 } from "lucide-react";
+
+interface NavigationItem {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  badge?: string;
+}
+
+interface NavItemComponentProps {
+  item: NavigationItem;
+  pathname: string;
+}
 
 interface SidebarProps {
   className?: string;
 }
 
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-}
-
-const navigationItems: NavItem[] = [
+const navigationItems: NavigationItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
@@ -45,12 +51,12 @@ const navigationItems: NavItem[] = [
     icon: Package,
     badge: "89",
   },
-  {
-    title: "Orders",
-    href: "/orders",
-    icon: FileText,
-    badge: "24",
-  },
+  // {
+  //   title: "Orders",
+  //   href: "/orders",
+  //   icon: FileText,
+  //   badge: "24",
+  // },
   {
     title: "Wallet & Billing",
     href: "/wallet",
@@ -94,7 +100,7 @@ const navigationItems: NavItem[] = [
   },
 ];
 
-const bottomNavItems: NavItem[] = [
+const bottomNavItems: NavigationItem[] = [
   {
     title: "Notifications",
     href: "/notifications",
@@ -159,11 +165,6 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
     </div>
   );
-}
-
-interface NavItemComponentProps {
-  item: NavItem;
-  pathname: string;
 }
 
 function NavItemComponent({ item, pathname }: NavItemComponentProps) {
