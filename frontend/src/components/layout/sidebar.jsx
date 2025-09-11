@@ -35,6 +35,11 @@ const navigationItems = [
     icon: Package,
     badge: "89",
   },
+  {
+    title: "Zone",
+    href: "/zone",
+    icon: Globe,
+  },
   // {
   //   title: "Orders",
   //   href: "/orders",

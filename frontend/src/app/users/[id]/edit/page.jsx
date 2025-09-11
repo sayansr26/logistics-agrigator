@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,14 +37,14 @@ import {
 export default function EditUserPage() {
   const params = useParams();
   const router = useRouter();
-  const userId = params.id as string;
+  const userId = params.id;
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState<any>({});
-  const [errors, setErrors] = useState<any>({});
+  const [formData, setFormData] = useState({});
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     // Simulate API call
@@ -88,7 +88,7 @@ export default function EditUserPage() {
     { title: "Edit User" },
   ];
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -97,7 +97,7 @@ export default function EditUserPage() {
   };
 
   const validateForm = () => {
-    const newErrors: any = {};
+    const newErrors = {};
 
     if (!formData.firstName?.trim()) {
       newErrors.firstName = "First name is required";
@@ -198,7 +198,7 @@ export default function EditUserPage() {
     router.push(`/users/${userId}`);
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status) => {
     switch (status) {
       case "active":
         return <CheckCircle className="h-4 w-4 text-green-600" />;

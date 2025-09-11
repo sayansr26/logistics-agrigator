@@ -2,7 +2,7 @@
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://103.17.193.231",
 
-  TIMEOUT: 10000, // 10 seconds
+  TIMEOUT: 30000, // 30 seconds
   RETRY_ATTRIES: 3,
 } as const;
 

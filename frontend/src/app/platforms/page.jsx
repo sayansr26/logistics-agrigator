@@ -45,60 +45,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-// Types for platform integration
-interface Channel {
-  id: string;
-  name: string;
-  type: "online" | "offline" | "marketplace" | "social" | "api";
-  status: "active" | "inactive" | "pending" | "error";
-  ordersCount: number;
-  revenue: number;
-  lastSync: string;
-  settings: ChannelSettings;
-}
-
-interface ChannelSettings {
-  autoSync: boolean;
-  syncInterval: number; // minutes
-  orderStatusMapping: Record<string, string>;
-  customFields: Record<string, any>;
-}
-
-interface Platform {
-  id: string;
-  name: string;
-  type: "shopify" | "woocommerce" | "api" | "webhook" | "multi-channel";
-  status: "connected" | "disconnected" | "error" | "pending";
-  lastSync: string;
-  ordersCount: number;
-  revenue: number;
-  accessToken: string;
-  outlet: string;
-  apiKey?: string;
-  webhookUrl?: string;
-  settings: PlatformSettings;
-  channels: Channel[];
-}
-
-interface PlatformSettings {
-  autoSync: boolean;
-  syncInterval: number; // minutes
-  webhookEnabled: boolean;
-  orderStatusMapping: Record<string, string>;
-  multiChannelEnabled: boolean;
-}
-
-interface IntegrationStats {
-  totalPlatforms: number;
-  connectedPlatforms: number;
-  totalChannels: number;
-  activeChannels: number;
-  totalOrders: number;
-  totalRevenue: number;
-  lastSyncTime: string;
-}
-
-function getStatusColor(status: string) {
+function getStatusColor(status) {
   switch (status) {
     case "connected":
     case "active":
@@ -115,7 +62,7 @@ function getStatusColor(status: string) {
   }
 }
 
-function getStatusIcon(status: string) {
+function getStatusIcon(status) {
   switch (status) {
     case "connected":
     case "active":
@@ -132,7 +79,7 @@ function getStatusIcon(status: string) {
   }
 }
 
-function getPlatformIcon(type: string) {
+function getPlatformIcon(type) {
   switch (type) {
     case "shopify":
       return <Building className="h-5 w-5 text-green-600 rounded-full" />;
@@ -149,7 +96,7 @@ function getPlatformIcon(type: string) {
   }
 }
 
-function getChannelIcon(type: string) {
+function getChannelIcon(type) {
   switch (type) {
     case "online":
       return <Globe className="h-4 w-4 text-blue-500" />;
@@ -167,33 +114,30 @@ function getChannelIcon(type: string) {
 }
 
 export default function PlatformsPage() {
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(
-    null,
-  );
+  const [platforms, setPlatforms] = useState([]);
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [showAddPlatform, setShowAddPlatform] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
-  const [selectedPlatformForChannel, setSelectedPlatformForChannel] = useState<
-    string | null
-  >(null);
+  const [selectedPlatformForChannel, setSelectedPlatformForChannel] =
+    useState(null);
   const [newPlatform, setNewPlatform] = useState({
     name: "",
-    type: "" as Platform["type"],
+    type: "",
     accessToken: "",
     outlet: "",
-    status: "enable" as "enable" | "disable",
+    status: "enable",
     apiKey: "",
     webhookUrl: "",
     multiChannelEnabled: false,
   });
   const [newChannel, setNewChannel] = useState({
     name: "",
-    type: "" as Channel["type"],
-    status: "active" as "active" | "inactive",
+    type: "",
+    status: "active",
   });
 
   // Calculate stats dynamically
-  const integrationStats: IntegrationStats = {
+  const integrationStats = {
     totalPlatforms: platforms.length,
     connectedPlatforms: platforms.filter((p) => p.status === "connected")
       .length,
@@ -214,16 +158,16 @@ export default function PlatformsPage() {
         : new Date().toISOString(),
   };
 
-  const handlePlatformSelect = (platform: Platform) => {
+  const handlePlatformSelect = (platform) => {
     setSelectedPlatform(platform);
   };
 
-  const handleSyncPlatform = (_platformId: string) => {
+  const handleSyncPlatform = (platformId) => {
     // TODO: Implement platform sync logic
     // console.log(`Syncing platform: ${platformId}`);
   };
 
-  const handleRemovePlatform = (platformId: string) => {
+  const handleRemovePlatform = (platformId) => {
     setPlatforms((prev) => prev.filter((p) => p.id !== platformId));
     if (selectedPlatform?.id === platformId) {
       setSelectedPlatform(null);
@@ -239,7 +183,7 @@ export default function PlatformsPage() {
     )
       return;
 
-    const platform: Platform = {
+    const platform = {
       id: `${newPlatform.type}-${Date.now()}`,
       name: newPlatform.name,
       type: newPlatform.type,
@@ -264,10 +208,10 @@ export default function PlatformsPage() {
     setPlatforms((prev) => [...prev, platform]);
     setNewPlatform({
       name: "",
-      type: "" as Platform["type"],
+      type: "",
       accessToken: "",
       outlet: "",
-      status: "enable" as "enable" | "disable",
+      status: "enable",
       apiKey: "",
       webhookUrl: "",
       multiChannelEnabled: false,
@@ -279,7 +223,7 @@ export default function PlatformsPage() {
     if (!selectedPlatformForChannel || !newChannel.name || !newChannel.type)
       return;
 
-    const channel: Channel = {
+    const channel = {
       id: `${newChannel.type}-${Date.now()}`,
       name: newChannel.name,
       type: newChannel.type,
@@ -305,14 +249,14 @@ export default function PlatformsPage() {
 
     setNewChannel({
       name: "",
-      type: "" as Channel["type"],
-      status: "active" as "active" | "inactive",
+      type: "",
+      status: "active",
     });
     setShowAddChannel(false);
     setSelectedPlatformForChannel(null);
   };
 
-  const handleRemoveChannel = (platformId: string, channelId: string) => {
+  const handleRemoveChannel = (platformId, channelId) => {
     setPlatforms((prev) =>
       prev.map((p) =>
         p.id === platformId
@@ -325,10 +269,10 @@ export default function PlatformsPage() {
   const resetNewPlatform = () => {
     setNewPlatform({
       name: "",
-      type: "" as Platform["type"],
+      type: "",
       accessToken: "",
       outlet: "",
-      status: "enable" as "enable" | "disable",
+      status: "enable",
       apiKey: "",
       webhookUrl: "",
       multiChannelEnabled: false,
@@ -338,8 +282,8 @@ export default function PlatformsPage() {
   const resetNewChannel = () => {
     setNewChannel({
       name: "",
-      type: "" as Channel["type"],
-      status: "active" as "active" | "inactive",
+      type: "",
+      status: "active",
     });
   };
 
@@ -485,7 +429,7 @@ export default function PlatformsPage() {
                 <Label htmlFor="platform-type">Platform Type</Label>
                 <Select
                   value={newPlatform.type}
-                  onValueChange={(value: Platform["type"]) =>
+                  onValueChange={(value) =>
                     setNewPlatform((prev) => ({ ...prev, type: value }))
                   }
                 >
@@ -570,7 +514,7 @@ export default function PlatformsPage() {
                     <Label htmlFor="platform-status">Status</Label>
                     <Select
                       value={newPlatform.status || "enable"}
-                      onValueChange={(value: "enable" | "disable") =>
+                      onValueChange={(value) =>
                         setNewPlatform((prev) => ({ ...prev, status: value }))
                       }
                     >
@@ -724,7 +668,7 @@ export default function PlatformsPage() {
                 <Label htmlFor="channel-type">Channel Type</Label>
                 <Select
                   value={newChannel.type}
-                  onValueChange={(value: Channel["type"]) =>
+                  onValueChange={(value) =>
                     setNewChannel((prev) => ({ ...prev, type: value }))
                   }
                 >
@@ -770,7 +714,7 @@ export default function PlatformsPage() {
                 <Label htmlFor="channel-status">Status</Label>
                 <Select
                   value={newChannel.status}
-                  onValueChange={(value: "active" | "inactive") =>
+                  onValueChange={(value) =>
                     setNewChannel((prev) => ({ ...prev, status: value }))
                   }
                 >

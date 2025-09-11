@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,9 +41,9 @@ import {
 export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const userId = params.id as string;
+  const userId = params.id;
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function UserProfilePage() {
     );
   }
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status) => {
     switch (status) {
       case "active":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
@@ -377,7 +377,7 @@ export default function UserProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {user.permissions.map((permission: string, index: number) => (
+                  {user.permissions.map((permission, index) => (
                     <div
                       key={index}
                       className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg"

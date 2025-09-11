@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 
 // Icon mapping for dynamic icon rendering
-const iconMap: Record<string, React.ComponentType<any>> = {
+const iconMap = {
   Package,
   Users,
   BarChart3,
@@ -57,19 +57,15 @@ const iconMap: Record<string, React.ComponentType<any>> = {
 export default function ManagePermissionsPage() {
   const params = useParams();
   const router = useRouter();
-  const userId = params.id as string;
+  const userId = params.id;
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [userPermissions, setUserPermissions] = useState<Set<string>>(
-    new Set(),
-  );
-  const [originalPermissions, setOriginalPermissions] = useState<Set<string>>(
-    new Set(),
-  );
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [userPermissions, setUserPermissions] = useState(new Set());
+  const [originalPermissions, setOriginalPermissions] = useState(new Set());
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
@@ -101,7 +97,7 @@ export default function ManagePermissionsPage() {
     { title: "Manage Permissions" },
   ];
 
-  const handlePermissionToggle = (permissionId: string) => {
+  const handlePermissionToggle = (permissionId) => {
     const newPermissions = new Set(userPermissions);
     if (newPermissions.has(permissionId)) {
       newPermissions.delete(permissionId);
@@ -115,7 +111,7 @@ export default function ManagePermissionsPage() {
     setHasChanges(hasChangesNow);
   };
 
-  const handleCategoryToggle = (categoryId: string) => {
+  const handleCategoryToggle = (categoryId) => {
     const category = permissionCategories.find((cat) => cat.id === categoryId);
     if (!category) return;
 
@@ -172,7 +168,7 @@ export default function ManagePermissionsPage() {
     setHasChanges(false);
   };
 
-  const setsAreEqual = (a: Set<string>, b: Set<string>) => {
+  const setsAreEqual = (a, b) => {
     if (a.size !== b.size) return false;
     for (const item of a) {
       if (!b.has(item)) return false;
@@ -180,7 +176,7 @@ export default function ManagePermissionsPage() {
     return true;
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status) => {
     switch (status) {
       case "active":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
