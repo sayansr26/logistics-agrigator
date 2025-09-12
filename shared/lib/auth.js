@@ -17,7 +17,7 @@ const authUtils = {
   // Generate JWT token
   generateToken: (payload, options = {}) => {
     const defaultOptions = {
-      expiresIn: process.env.JWT_EXPIRES_IN || "3600s",
+      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
     };
     return jwt.sign(payload, process.env.JWT_SECRET, {
       ...defaultOptions,

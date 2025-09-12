@@ -1,0 +1,444 @@
+"use client";
+
+import React, { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Package,
+  Truck,
+  Navigation,
+  CheckCircle,
+  XCircle,
+  Clock,
+  X,
+} from "lucide-react";
+import { Zone, ZoneFormData, ZoneType, ZoneStatus, PopulationDensity } from "@/types/zones";
+
+interface ZoneFormProps {
+  initialData?: Partial<ZoneFormData>;
+  onSubmit: (data: ZoneFormData) => void;
+  onCancel: () => void;
+  isLoading?: boolean;
+  title?: string;
+  description?: string;
+}
+
+const defaultFormData: ZoneFormData = {
+  name: "",
+  code: "",
+  type: "both",
+  status: "active",
+  pincodes: "",
+  cities: "",
+  states: "",
+  area: "",
+  population: "",
+  density: "medium",
+  weightLimit: "",
+  hazardousAllowed: false,
+  fragileAllowed: true,
+  liquidAllowed: false,
+  perishableAllowed: true,
+};
+
+export function ZoneForm({
+  initialData = {},
+  onSubmit,
+  onCancel,
+  isLoading = false,
+  title = "Zone Configuration",
+  description = "Configure zone details, coverage, and service restrictions",
+}: ZoneFormProps) {
+  const [formData, setFormData] = useState<ZoneFormData>({
+    ...defaultFormData,
+    ...initialData,
+  });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      newErrors.name = "Zone name is required";
+    }
+
+    if (!formData.code.trim()) {
+      newErrors.code = "Zone code is required";
+    } else if (!/^[A-Z0-9]+$/.test(formData.code)) {
+      newErrors.code = "Zone code must contain only uppercase letters and numbers";
+    }
+
+    if (!formData.pincodes.trim()) {
+      newErrors.pincodes = "At least one pincode is required";
+    } else {
+      const pincodes = formData.pincodes.split(",").map(p => p.trim());
+      const invalidPincodes = pincodes.filter(p => !/^\d{6}$/.test(p));
+      if (invalidPincodes.length > 0) {
+        newErrors.pincodes = `Invalid pincodes: ${invalidPincodes.join(", ")}`;
+      }
+    }
+
+    if (!formData.cities.trim()) {
+      newErrors.cities = "At least one city is required";
+    }
+
+    if (!formData.states.trim()) {
+      newErrors.states = "At least one state is required";
+    }
+
+    if (formData.area && isNaN(Number(formData.area))) {
+      newErrors.area = "Area must be a valid number";
+    }
+
+    if (formData.population && isNaN(Number(formData.population))) {
+      newErrors.population = "Population must be a valid number";
+    }
+
+    if (formData.weightLimit && isNaN(Number(formData.weightLimit))) {
+      newErrors.weightLimit = "Weight limit must be a valid number";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validateForm()) {
+      onSubmit(formData);
+    }
+  };
+
+  const updateFormData = (updates: Partial<ZoneFormData>) => {
+    setFormData(prev => ({ ...prev, ...updates }));
+    // Clear related errors when user starts typing
+    const clearedErrors = { ...errors };
+    Object.keys(updates).forEach(key => {
+      delete clearedErrors[key];
+    });
+    setErrors(clearedErrors);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onCancel}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <div className="text-sm font-medium">Basic Information</div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Zone Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="Enter zone name"
+                  value={formData.name}
+                  onChange={(e) => updateFormData({ name: e.target.value })}
+                  className={errors.name ? "border-red-500" : ""}
+                />
+                {errors.name && (
+                  <p className="text-sm text-red-500 mt-1">{errors.name}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="code">Zone Code *</Label>
+                <Input
+                  id="code"
+                  placeholder="Enter zone code (e.g., ZONE001)"
+                  value={formData.code}
+                  onChange={(e) => updateFormData({ code: e.target.value.toUpperCase() })}
+                  className={errors.code ? "border-red-500" : ""}
+                />
+                {errors.code && (
+                  <p className="text-sm text-red-500 mt-1">{errors.code}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="type">Service Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value: ZoneType) => updateFormData({ type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select service type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pickup">
+                      <div className="flex items-center space-x-2">
+                        <Package className="h-4 w-4 text-blue-600" />
+                        <span>Pickup Only</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="delivery">
+                      <div className="flex items-center space-x-2">
+                        <Truck className="h-4 w-4 text-green-600" />
+                        <span>Delivery Only</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="both">
+                      <div className="flex items-center space-x-2">
+                        <Navigation className="h-4 w-4 text-purple-600" />
+                        <span>Both Services</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value: ZoneStatus) => updateFormData({ status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span>Active</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="inactive">
+                      <div className="flex items-center space-x-2">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <span>Inactive</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="pending">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-4 w-4 text-yellow-600" />
+                        <span>Pending</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Coverage Details */}
+          <div className="space-y-4">
+            <div className="text-sm font-medium">Coverage Details</div>
+            
+            <div>
+              <Label htmlFor="pincodes">Pincodes (comma-separated) *</Label>
+              <Input
+                id="pincodes"
+                placeholder="110001, 110002, 110003"
+                value={formData.pincodes}
+                onChange={(e) => updateFormData({ pincodes: e.target.value })}
+                className={errors.pincodes ? "border-red-500" : ""}
+              />
+              {errors.pincodes && (
+                <p className="text-sm text-red-500 mt-1">{errors.pincodes}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="cities">Cities (comma-separated) *</Label>
+                <Input
+                  id="cities"
+                  placeholder="Delhi, Mumbai, Bangalore"
+                  value={formData.cities}
+                  onChange={(e) => updateFormData({ cities: e.target.value })}
+                  className={errors.cities ? "border-red-500" : ""}
+                />
+                {errors.cities && (
+                  <p className="text-sm text-red-500 mt-1">{errors.cities}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="states">States (comma-separated) *</Label>
+                <Input
+                  id="states"
+                  placeholder="Delhi, Maharashtra, Karnataka"
+                  value={formData.states}
+                  onChange={(e) => updateFormData({ states: e.target.value })}
+                  className={errors.states ? "border-red-500" : ""}
+                />
+                {errors.states && (
+                  <p className="text-sm text-red-500 mt-1">{errors.states}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="area">Area (sq km)</Label>
+                <Input
+                  id="area"
+                  placeholder="100"
+                  value={formData.area}
+                  onChange={(e) => updateFormData({ area: e.target.value })}
+                  className={errors.area ? "border-red-500" : ""}
+                />
+                {errors.area && (
+                  <p className="text-sm text-red-500 mt-1">{errors.area}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="population">Population</Label>
+                <Input
+                  id="population"
+                  placeholder="1000000"
+                  value={formData.population}
+                  onChange={(e) => updateFormData({ population: e.target.value })}
+                  className={errors.population ? "border-red-500" : ""}
+                />
+                {errors.population && (
+                  <p className="text-sm text-red-500 mt-1">{errors.population}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="density">Population Density</Label>
+                <Select
+                  value={formData.density}
+                  onValueChange={(value: PopulationDensity) => updateFormData({ density: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select density" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Service Restrictions */}
+          <div className="space-y-4">
+            <div className="text-sm font-medium">Service Restrictions</div>
+            
+            <div>
+              <Label htmlFor="weight-limit">Weight Limit (kg)</Label>
+              <Input
+                id="weight-limit"
+                placeholder="25"
+                value={formData.weightLimit}
+                onChange={(e) => updateFormData({ weightLimit: e.target.value })}
+                className={errors.weightLimit ? "border-red-500" : ""}
+              />
+              {errors.weightLimit && (
+                <p className="text-sm text-red-500 mt-1">{errors.weightLimit}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="hazardous-allowed"
+                  checked={formData.hazardousAllowed}
+                  onChange={(e) => updateFormData({ hazardousAllowed: e.target.checked })}
+                  className="rounded"
+                />
+                <Label htmlFor="hazardous-allowed" className="text-sm">
+                  Allow Hazardous Items
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="fragile-allowed"
+                  checked={formData.fragileAllowed}
+                  onChange={(e) => updateFormData({ fragileAllowed: e.target.checked })}
+                  className="rounded"
+                />
+                <Label htmlFor="fragile-allowed" className="text-sm">
+                  Allow Fragile Items
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="liquid-allowed"
+                  checked={formData.liquidAllowed || false}
+                  onChange={(e) => updateFormData({ liquidAllowed: e.target.checked })}
+                  className="rounded"
+                />
+                <Label htmlFor="liquid-allowed" className="text-sm">
+                  Allow Liquid Items
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="perishable-allowed"
+                  checked={formData.perishableAllowed || false}
+                  onChange={(e) => updateFormData({ perishableAllowed: e.target.checked })}
+                  className="rounded"
+                />
+                <Label htmlFor="perishable-allowed" className="text-sm">
+                  Allow Perishable Items
+                </Label>
+              </div>
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div className="flex space-x-2 pt-4">
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isLoading}
+            >
+              {isLoading ? "Saving..." : "Save Zone"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}

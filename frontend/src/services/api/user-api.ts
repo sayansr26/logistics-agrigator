@@ -89,12 +89,17 @@ export class UserApiService extends BaseApiService {
   }
 
   async getMyProfile(): Promise<UserProfileResponse> {
-    return this.get<UserProfileResponse>(`${API_ENDPOINTS.USERS.PROFILE}/me`);
+    return this.get<UserProfileResponse>(`${API_ENDPOINTS.USERS.PROFILE}/me`, {
+      headers: this.getAuthHeaders(),
+    });
   }
 
   async getProfile(profileId: string): Promise<UserProfileResponse> {
     return this.get<UserProfileResponse>(
       `${API_ENDPOINTS.USERS.PROFILE}/${profileId}`,
+      {
+        headers: this.getAuthHeaders(),
+      },
     );
   }
 
@@ -105,6 +110,9 @@ export class UserApiService extends BaseApiService {
     return this.put<UserProfileResponse>(
       `${API_ENDPOINTS.USERS.PROFILE}/${profileId}`,
       updateData,
+      {
+        headers: this.getAuthHeaders(),
+      },
     );
   }
 
@@ -114,32 +122,19 @@ export class UserApiService extends BaseApiService {
     return this.post<UserProfileResponse>(
       `${API_ENDPOINTS.USERS.PROFILE}`,
       profileData,
+      {
+        headers: this.getAuthHeaders(),
+      },
     );
   }
 
-  async deleteProfile(
-    profileId: string,
-  ): Promise<{
+  async deleteProfile(profileId: string): Promise<{
     status: "success" | "error";
     data?: { message: string };
     error?: { code: string; message: string };
   }> {
-    return this.delete(`${API_ENDPOINTS.USERS.PROFILE}/${profileId}`);
-  }
-
-  // Override the request method to include auth headers
-  protected async request<T>(
-    endpoint: string,
-    options: RequestInit = {},
-  ): Promise<T> {
-    const authHeaders = this.getAuthHeaders();
-
-    return super.request<T>(endpoint, {
-      ...options,
-      headers: {
-        ...authHeaders,
-        ...options.headers,
-      },
+    return this.delete(`${API_ENDPOINTS.USERS.PROFILE}/${profileId}`, {
+      headers: this.getAuthHeaders(),
     });
   }
 }

@@ -76,21 +76,37 @@ export class BaseApiService {
     });
   }
 
-  protected async put<T>(endpoint: string, data?: any): Promise<T> {
+  protected async put<T>(
+    endpoint: string,
+    data?: any,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       method: "PUT",
       body: JSON.stringify(data),
+      headers: options?.headers,
     });
   }
 
-  protected async delete<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: "DELETE" });
+  protected async delete<T>(
+    endpoint: string,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: "DELETE",
+      headers: options?.headers,
+    });
   }
 
-  protected async patch<T>(endpoint: string, data?: any): Promise<T> {
+  protected async patch<T>(
+    endpoint: string,
+    data?: any,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       method: "PATCH",
       body: JSON.stringify(data),
+      headers: options?.headers,
     });
   }
 

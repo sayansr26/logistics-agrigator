@@ -171,7 +171,7 @@ PARTNER_SERVICE_API_KEY="your_partner_service_api_key"
 
 ```bash
 JWT_SECRET="your-super-secret-jwt-key-change-in-production"
-JWT_EXPIRES_IN="3600"
+JWT_EXPIRES_IN="8h"
 ```
 
 ### Database Connection (Service-specific)

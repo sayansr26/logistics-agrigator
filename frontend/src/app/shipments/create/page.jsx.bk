@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
-import { useAuthStore } from "@/store/auth-store";
-import { shipmentApiService } from "@/services";
 import { CreateShipmentLayout } from "@/components/shipments/create/layout.jsx";
 import {
   Package,
@@ -38,14 +35,8 @@ import {
 } from "lucide-react";
 
 export default function CreateShipmentPage() {
-  const router = useRouter();
   const [isClient, setIsClient] = useState(false);
   const [activeSection, setActiveSection] = useState("docket");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-
-  const { accessToken, isAuthenticated } = useAuthStore();
   const {
     formData,
     invoices,
@@ -54,8 +45,6 @@ export default function CreateShipmentPage() {
     removeInvoice,
     updateInvoice,
     errors,
-    setErrors,
-    clearAllErrors,
   } = useShipmentFormStore();
 
   const {
@@ -114,205 +103,50 @@ export default function CreateShipmentPage() {
 
   const [customReturnAddress, setCustomReturnAddress] = useState("");
 
-  // Authentication check
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/auth/login");
-      return;
-    }
     setIsClient(true);
-  }, [isAuthenticated, router]);
-
-  // Transform form data to API format
-  const transformFormDataToApiFormat = () => {
-    const selectedPickup = pickupAddresses.find(
-      (addr) => addr.value === pickupAddress,
-    );
-
-    // Get return address details
-    let returnAddressData = null;
-    if (!isRTO) {
-      if (returnAddress === "custom") {
-        returnAddressData = {
-          name: "Return Address",
-          phone: phoneNumber,
-          email: email || "",
-          addressLine1: customReturnAddress,
-          addressLine2: "",
-          landmark: "",
-          city: returnCity,
-          state: returnState,
-          pincode: returnPincode,
-          country: "India",
-        };
-      } else {
-        const returnWarehouse = pickupAddresses.find(
-          (addr) => addr.value === returnAddress,
-        );
-        if (returnWarehouse) {
-          returnAddressData = {
-            name: "Return Address",
-            phone: phoneNumber,
-            email: email || "",
-            addressLine1: returnWarehouse.details.fullAddress,
-            addressLine2: "",
-            landmark: "",
-            city: returnCity,
-            state: returnState,
-            pincode: returnPincode,
-            country: "India",
-          };
-        }
-      }
-    }
-
-    return {
-      orderId: referenceNo,
-      pickupAddress: {
-        name: "Pickup Address",
-        phone: phoneNumber,
-        email: email || "",
-        addressLine1: selectedPickup?.details.fullAddress || "",
-        addressLine2: "",
-        landmark: "",
-        city: selectedPickup?.details.address.split(", ")[0] || "",
-        state: selectedPickup?.details.address.split(", ")[1] || "",
-        pincode: selectedPickup?.details.address.split(", ")[2] || "",
-        country: "India",
-      },
-      deliveryAddress: {
-        name: receiverName,
-        phone: phoneNumber,
-        email: email || "",
-        addressLine1: address,
-        addressLine2: "",
-        landmark: landmark,
-        city: city,
-        state: state,
-        pincode: pincode,
-        country: "India",
-      },
-      packageDetails: {
-        weight: parseFloat(actualWeight) || 0,
-        dimensions: {
-          length: parseFloat(length) || 0,
-          width: parseFloat(width) || 0,
-          height: parseFloat(height) || 0,
-        },
-        description: productDescription,
-        value: 0, // Default value, can be calculated from invoices
-        fragile: false, // Default value
-      },
-      paymentType: "PREPAID", // Default payment type
-      serviceType: "STANDARD", // Default service type
-      specialInstructions: isRTO ? "RTO address same as pickup address" : "",
-      returnAddress: returnAddressData,
-    };
-  };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Clear previous errors
-    setSubmitError(null);
-    clearAllErrors();
-
-    // Validate required fields
-    const validationErrors = {};
-
-    if (!referenceNo)
-      validationErrors.referenceNo = "Reference number is required";
-    if (!actualWeight)
-      validationErrors.actualWeight = "Actual weight is required";
-    if (!pickupAddress)
-      validationErrors.pickupAddress = "Pickup address is required";
-    if (!productDescription)
-      validationErrors.productDescription = "Product description is required";
-    if (!receiverName)
-      validationErrors.receiverName = "Receiver name is required";
-    if (!address) validationErrors.address = "Delivery address is required";
-    if (!pincode) validationErrors.pincode = "Pincode is required";
-    if (!city) validationErrors.city = "City is required";
-    if (!state) validationErrors.state = "State is required";
-    if (!phoneNumber) validationErrors.phoneNumber = "Phone number is required";
-    if (!length) validationErrors.length = "Length is required";
-    if (!width) validationErrors.width = "Width is required";
-    if (!height) validationErrors.height = "Height is required";
-
-    // RTO validation
-    if (!isRTO) {
-      if (
-        !returnAddress ||
-        (returnAddress === "custom" && !customReturnAddress)
-      ) {
-        validationErrors.returnAddress =
-          "Return address is required when RTO is unchecked";
-      }
-      if (!returnPincode)
-        validationErrors.returnPincode = "Return pincode is required";
-      if (!returnCity) validationErrors.returnCity = "Return city is required";
-      if (!returnState)
-        validationErrors.returnState = "Return state is required";
-    }
-
-    // Invoice validation
-    if (invoices.length === 0) {
-      validationErrors.invoices = "At least one invoice is required";
-    } else {
-      invoices.forEach((invoice, index) => {
-        if (!invoice.invoiceNo) {
-          validationErrors[`invoiceNo-${index}`] = "Invoice number is required";
-        }
-        if (!invoice.invoiceDate) {
-          validationErrors[`invoiceDate-${index}`] = "Invoice date is required";
-        }
-        if (!invoice.invoiceAmt) {
-          validationErrors[`invoiceAmt-${index}`] =
-            "Invoice amount is required";
-        }
-      });
-    }
-
-    // If there are validation errors, set them and return
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setSubmitError("Please fix the validation errors below");
-      return;
-    }
-
-    setIsSubmitting(true);
-
     try {
-      // Transform form data to API format
-      const apiData = transformFormDataToApiFormat();
+      const submissionData = {
+        ...formData,
+        returnAddress:
+          returnAddress === "custom" ? customReturnAddress : returnAddress,
+      };
 
-      console.log("Submitting shipment data:", apiData);
+      console.log("Form data:", submissionData);
       console.log("Invoices:", invoices);
 
-      // Set access token for the API service
-      shipmentApiService.setAccessToken(accessToken);
+      if (
+        !referenceNo ||
+        !actualWeight ||
+        !pickupAddress ||
+        !productDescription
+      ) {
+        console.error("Required fields missing");
+        return;
+      }
 
-      // Call the API
-      const response = await shipmentApiService.createShipment(apiData);
-
-      if (response.status === "success" && response.data) {
-        setSubmitSuccess(true);
-        console.log("Shipment created successfully:", response.data);
-
-        // Show success message and redirect after a delay
-        setTimeout(() => {
-          router.push(`/shipments/${response.data.shipment.id}`);
-        }, 2000);
-      } else {
-        throw new Error(response.error?.message || "Failed to create shipment");
+      if (!isRTO) {
+        if (
+          !returnAddress ||
+          (returnAddress === "custom" && !customReturnAddress)
+        ) {
+          console.error("Return address is required when RTO is unchecked");
+          return;
+        }
+        if (!returnPincode || !returnCity || !returnState) {
+          console.error(
+            "Return address details are required when RTO is unchecked",
+          );
+          return;
+        }
       }
     } catch (error) {
-      console.error("Shipment creation failed:", error);
-      setSubmitError(
-        error.message || "Failed to create shipment. Please try again.",
-      );
-    } finally {
-      setIsSubmitting(false);
+      console.error("Form submission failed:", error);
     }
   };
 
@@ -426,55 +260,8 @@ export default function CreateShipmentPage() {
     return null;
   }
 
-  // Show loading state if not authenticated
-  if (!isClient || !isAuthenticated) {
-    return (
-      <CreateShipmentLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
-          </div>
-        </div>
-      </CreateShipmentLayout>
-    );
-  }
-
   return (
     <CreateShipmentLayout>
-      {/* Success Message */}
-      {submitSuccess && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center space-x-3">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
-            <div>
-              <h3 className="text-lg font-semibold text-green-900">
-                Shipment Created Successfully!
-              </h3>
-              <p className="text-green-700">
-                Your shipment has been created and you will be redirected
-                shortly.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {submitError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="h-6 w-6 text-red-600" />
-            <div>
-              <h3 className="text-lg font-semibold text-red-900">
-                Submission Failed
-              </h3>
-              <p className="text-red-700">{submitError}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Enhanced Progress Indicator */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
@@ -1180,11 +967,6 @@ export default function CreateShipmentPage() {
                 <p className="text-gray-500 mb-6">
                   Add invoice details to proceed with shipment creation
                 </p>
-                {errors.invoices && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-700 text-sm">{errors.invoices}</p>
-                  </div>
-                )}
                 <Button
                   type="button"
                   variant="outline"
@@ -1243,13 +1025,8 @@ export default function CreateShipmentPage() {
                               e.target.value,
                             )
                           }
-                          className={`h-11 text-base ${
-                            errors[`invoiceNo-${index}`]
-                              ? "border-red-500 focus:ring-red-200"
-                              : "border-purple-200 focus:border-purple-500 focus:ring-purple-200"
-                          }`}
+                          className="h-11 text-base border-purple-200 focus:border-purple-500 focus:ring-purple-200"
                         />
-                        <FormError message={errors[`invoiceNo-${index}`]} />
                       </div>
 
                       <div className="space-y-2">
@@ -1270,13 +1047,8 @@ export default function CreateShipmentPage() {
                               e.target.value,
                             )
                           }
-                          className={`h-11 text-base ${
-                            errors[`invoiceDate-${index}`]
-                              ? "border-red-500 focus:ring-red-200"
-                              : "border-purple-200 focus:border-purple-500 focus:ring-purple-200"
-                          }`}
+                          className="h-11 text-base border-purple-200 focus:border-purple-500 focus:ring-purple-200"
                         />
-                        <FormError message={errors[`invoiceDate-${index}`]} />
                       </div>
                     </div>
 
@@ -1301,13 +1073,8 @@ export default function CreateShipmentPage() {
                               e.target.value,
                             )
                           }
-                          className={`h-11 text-base ${
-                            errors[`invoiceAmt-${index}`]
-                              ? "border-red-500 focus:ring-red-200"
-                              : "border-purple-200 focus:border-purple-500 focus:ring-purple-200"
-                          }`}
+                          className="h-11 text-base border-purple-200 focus:border-purple-500 focus:ring-purple-200"
                         />
-                        <FormError message={errors[`invoiceAmt-${index}`]} />
                       </div>
 
                       <div className="space-y-2">
@@ -1367,41 +1134,6 @@ export default function CreateShipmentPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Submit Button */}
-        <div className="flex justify-end space-x-4 pt-6">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-            disabled={isSubmitting}
-            className="px-8"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={isSubmitting || submitSuccess}
-            className="px-8 bg-blue-600 hover:bg-blue-700"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Creating Shipment...
-              </>
-            ) : submitSuccess ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Shipment Created
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Create Shipment
-              </>
-            )}
-          </Button>
-        </div>
       </form>
     </CreateShipmentLayout>
   );

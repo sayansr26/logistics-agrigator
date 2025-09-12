@@ -29,18 +29,12 @@ import {
   Check,
 } from "lucide-react";
 import {
+  COVERAGE_OPTIONS,
   SERVICE_OPTIONS,
   PARTNER_TYPES,
   PARTNER_STATUSES,
   RATING_OPTIONS,
 } from "@/lib/mock-data";
-import { partnersApiService } from "@/services";
-import { useAuthStore } from "@/store/auth-store";
-import {
-  CreatePartnerRequest,
-  PartnerFormData,
-  PartnerValidationErrors,
-} from "@/types/partner";
 
 const STEPS = [
   {
@@ -71,22 +65,14 @@ const STEPS = [
 
 export default function AddPartnerPage() {
   const router = useRouter();
-  const { accessToken } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
-  // Generate partner code function
-  const generatePartnerCode = () => {
-    const firstChar = formData.name.charAt(0).toUpperCase();
-    const randomDigits = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
-    return `${firstChar}${randomDigits}`;
-  };
-
   const [formData, setFormData] = useState({
     name: "",
     type: "",
     status: "pending",
     rating: 5,
     deliveryTime: "",
-    servicePincodes: [],
+    coverage: [],
     services: [],
     baseRate: 0,
     perKgRate: 0,
@@ -95,28 +81,12 @@ export default function AddPartnerPage() {
     phone: "",
     address: "",
     website: "",
-    partnerCode: "",
-    apiUrl: "",
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-  const [pincodeInput, setPincodeInput] = useState("");
 
   const handleInputChange = (field, value) => {
-    setFormData((prev) => {
-      const updatedData = { ...prev, [field]: value };
-
-      // Auto-generate partner code when name changes
-      if (field === "name" && value.trim()) {
-        const firstChar = value.charAt(0).toUpperCase();
-        const randomDigits = Math.floor(1000 + Math.random() * 9000);
-        updatedData.partnerCode = `${firstChar}${randomDigits}`;
-      }
-
-      return updatedData;
-    });
-
+    setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => {
@@ -127,22 +97,12 @@ export default function AddPartnerPage() {
     }
   };
 
-  const handleAddPincode = () => {
-    if (pincodeInput.trim() && /^\d{6}$/.test(pincodeInput.trim())) {
-      if (!formData.servicePincodes.includes(pincodeInput.trim())) {
-        setFormData((prev) => ({
-          ...prev,
-          servicePincodes: [...prev.servicePincodes, pincodeInput.trim()],
-        }));
-        setPincodeInput("");
-      }
-    }
-  };
-
-  const handleRemovePincode = (pincode) => {
+  const handleCoverageToggle = (coverage, checked) => {
     setFormData((prev) => ({
       ...prev,
-      servicePincodes: prev.servicePincodes.filter((p) => p !== pincode),
+      coverage: checked
+        ? [...prev.coverage, coverage]
+        : prev.coverage.filter((c) => c !== coverage),
     }));
   };
 
@@ -164,12 +124,10 @@ export default function AddPartnerPage() {
         if (!formData.type) newErrors.type = "Partner type is required";
         if (!formData.deliveryTime.trim())
           newErrors.deliveryTime = "Delivery time is required";
-        if (!formData.apiUrl.trim()) newErrors.apiUrl = "API URL is required";
         break;
       case 2:
-        if (formData.servicePincodes.length === 0)
-          newErrors.servicePincodes =
-            "At least one service pincode is required";
+        if (formData.coverage.length === 0)
+          newErrors.coverage = "At least one coverage area is required";
         if (formData.services.length === 0)
           newErrors.services = "At least one service is required";
         break;
@@ -201,47 +159,16 @@ export default function AddPartnerPage() {
     if (!validateCurrentStep()) return;
 
     setIsSubmitting(true);
-    setSubmitError(null);
-
     try {
-      // Ensure we have an access token
-      if (!accessToken) {
-        throw new Error("Authentication required. Please log in again.");
-      }
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Set the access token in the API service
-      partnersApiService.setAccessToken(accessToken);
+      // In a real app, this would call an API
 
-      // Prepare the data for API submission
-      const partnerData = {
-        name: formData.name,
-        code: formData.partnerCode, // Backend expects 'code' field
-        displayName: formData.name, // Use name as displayName for now
-        apiUrl: formData.apiUrl || "https://api.example.com", // Default API URL
-        isActive: formData.status === "active",
-        baseRate: formData.baseRate,
-        perKgRate: formData.perKgRate,
-        fuelSurcharge: formData.fuelSurcharge,
-        servicePincodes: formData.servicePincodes, // Use actual pincodes
-      };
-
-      // Call the API to create the partner
-      const response = await partnersApiService.createPartner(partnerData);
-
-      if (response.status === "success" && response.data) {
-        // Success - redirect to partners list
-        router.push("/partners");
-      } else {
-        // Handle API error response
-        const errorMessage =
-          response.error?.message || "Failed to create partner";
-        setSubmitError(errorMessage);
-      }
+      // Redirect back to partners list
+      router.push("/partners");
     } catch (error) {
-      console.error("Error creating partner:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred";
-      setSubmitError(errorMessage);
+      // Handle error appropriately in production
     } finally {
       setIsSubmitting(false);
     }
@@ -275,37 +202,6 @@ export default function AddPartnerPage() {
                   />
                   {errors.name && (
                     <p className="text-sm text-red-500">{errors.name}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="partnerCode">Partner Code</Label>
-                  <Input
-                    id="partnerCode"
-                    value={formData.partnerCode}
-                    placeholder="Auto-generated when name is entered"
-                    readOnly
-                    className="bg-gray-50 text-gray-600 cursor-not-allowed"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Partner code is auto-generated from the first letter of the
-                    name + 4 random digits
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="apiUrl">API URL *</Label>
-                  <Input
-                    id="apiUrl"
-                    value={formData.apiUrl}
-                    onChange={(e) =>
-                      handleInputChange("apiUrl", e.target.value)
-                    }
-                    placeholder="https://api.partner.com"
-                    className={errors.apiUrl ? "border-red-500" : ""}
-                  />
-                  {errors.apiUrl && (
-                    <p className="text-sm text-red-500">{errors.apiUrl}</p>
                   )}
                 </div>
 
@@ -411,57 +307,28 @@ export default function AddPartnerPage() {
             </CardHeader>
             <CardContent className="space-y-8">
               <div className="space-y-4">
-                <Label>Service Pincodes *</Label>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      value={pincodeInput}
-                      onChange={(e) => setPincodeInput(e.target.value)}
-                      placeholder="Enter 6-digit pincode (e.g., 110001)"
-                      maxLength={6}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddPincode}
-                      disabled={
-                        !pincodeInput.trim() ||
-                        !/^\d{6}$/.test(pincodeInput.trim())
-                      }
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      Add
-                    </Button>
-                  </div>
-
-                  {formData.servicePincodes.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.servicePincodes.map((pincode) => (
-                        <div
-                          key={pincode}
-                          className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm"
-                        >
-                          <span>{pincode}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePincode(pincode)}
-                            className="text-blue-600 hover:text-blue-800 font-bold"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                <Label>Coverage Areas *</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {COVERAGE_OPTIONS.map((coverage) => (
+                    <div key={coverage} className="flex items-center space-x-3">
+                      <Checkbox
+                        id={`coverage-${coverage}`}
+                        checked={formData.coverage.includes(coverage)}
+                        onCheckedChange={(checked) =>
+                          handleCoverageToggle(coverage, checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor={`coverage-${coverage}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {coverage}
+                      </Label>
                     </div>
-                  )}
-
-                  <p className="text-xs text-gray-500">
-                    Add 6-digit pincodes where this partner provides service
-                  </p>
+                  ))}
                 </div>
-                {errors.servicePincodes && (
-                  <p className="text-sm text-red-500">
-                    {errors.servicePincodes}
-                  </p>
+                {errors.coverage && (
+                  <p className="text-sm text-red-500">{errors.coverage}</p>
                 )}
               </div>
 
@@ -754,35 +621,6 @@ export default function AddPartnerPage() {
 
         {/* Step Content */}
         <div>{renderStepContent()}</div>
-
-        {/* Error Display */}
-        {submitError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-red-400"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">
-                  Error creating partner
-                </h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{submitError}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );

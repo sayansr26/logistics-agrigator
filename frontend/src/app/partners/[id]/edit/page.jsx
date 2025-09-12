@@ -17,81 +17,79 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Star, MapPin, DollarSign, Phone, Save } from "lucide-react";
-import { mockPartners } from "@/lib/mock-data";
-
-const COVERAGE_OPTIONS = [
-  "North India",
-  "South India",
-  "East India",
-  "West India",
-  "Central India",
-  "Northeast India",
-  "Himalayan Region",
-  "Coastal Areas",
-  "Metro Cities",
-  "Tier 2 Cities",
-];
-
-const SERVICE_OPTIONS = [
-  "Express Delivery",
-  "Standard Delivery",
-  "Same Day Delivery",
-  "Next Day Delivery",
-  "COD",
-  "Prepaid",
-  "Insurance",
-  "Signature Required",
-  "Fragile Handling",
-  "Temperature Controlled",
-];
+import {
+  Star,
+  MapPin,
+  DollarSign,
+  Phone,
+  Save,
+  AlertCircle,
+} from "lucide-react";
+import { usePartner } from "@/hooks/usePartner";
+import { partnersApiService } from "@/services";
+import { useAuthStore } from "@/store/auth-store";
+import { UpdatePartnerRequest } from "@/types/partner";
 
 export default function EditPartnerPage() {
   const router = useRouter();
   const params = useParams();
   const partnerId = params.id;
-  const [partner, setPartner] = useState(null);
+  const { accessToken } = useAuthStore();
+
+  // Use the usePartner hook to fetch partner data
+  const {
+    partner,
+    isLoading: isLoadingPartner,
+    error: partnerError,
+    refetch,
+  } = usePartner(partnerId);
+
   const [formData, setFormData] = useState({
     name: "",
-    type: "",
-    status: "",
-    rating: 5,
-    deliveryTime: "",
-    coverage: [],
-    services: [],
+    code: "",
+    displayName: "",
+    apiUrl: "",
+    isActive: true,
     baseRate: 0,
     perKgRate: 0,
     fuelSurcharge: 0,
-    email: "",
-    phone: "",
-    address: "",
-    website: "",
+    servicePincodes: [],
+    supportsCOD: false,
+    supportsReverse: false,
+    maxWeight: 0,
+    maxDimensions: {
+      length: 0,
+      width: 0,
+      height: 0,
+    },
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
-    const foundPartner = mockPartners.find((p) => p.id === partnerId);
-    if (foundPartner) {
-      setPartner(foundPartner);
+    if (partner) {
       setFormData({
-        name: foundPartner.name,
-        type: foundPartner.type,
-        status: foundPartner.status,
-        rating: foundPartner.rating,
-        deliveryTime: foundPartner.deliveryTime,
-        coverage: foundPartner.coverage,
-        services: foundPartner.services,
-        baseRate: foundPartner.pricing.baseRate,
-        perKgRate: foundPartner.pricing.perKgRate,
-        fuelSurcharge: foundPartner.pricing.fuelSurcharge,
-        email: foundPartner.contact.email,
-        phone: foundPartner.contact.phone,
-        address: foundPartner.contact.address,
-        website: foundPartner.contact.website,
+        name: partner.name || "",
+        code: partner.code || "",
+        displayName: partner.displayName || "",
+        apiUrl: partner.apiUrl || "",
+        isActive: partner.isActive ?? true,
+        baseRate: partner.baseRate || 0,
+        perKgRate: partner.perKgRate || 0,
+        fuelSurcharge: partner.fuelSurcharge || 0,
+        servicePincodes: partner.servicePincodes || [],
+        supportsCOD: partner.supportsCOD ?? false,
+        supportsReverse: partner.supportsReverse ?? false,
+        maxWeight: partner.maxWeight || 0,
+        maxDimensions: {
+          length: partner.maxDimensions?.length || 0,
+          width: partner.maxDimensions?.width || 0,
+          height: partner.maxDimensions?.height || 0,
+        },
       });
     }
-  }, [partnerId]);
+  }, [partner]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -101,63 +99,83 @@ export default function EditPartnerPage() {
     }
   };
 
-  const handleCoverageToggle = (coverage) => {
-    setFormData((prev) => ({
-      ...prev,
-      coverage: prev.coverage.includes(coverage)
-        ? prev.coverage.filter((c) => c !== coverage)
-        : [...prev.coverage, coverage],
-    }));
-  };
-
-  const handleServiceToggle = (service) => {
-    setFormData((prev) => ({
-      ...prev,
-      services: prev.services.includes(service)
-        ? prev.services.filter((s) => s !== service)
-        : [...prev.services, service],
-    }));
-  };
-
   const validateForm = () => {
     const newErrors = {};
 
     if (!formData.name.trim()) newErrors.name = "Partner name is required";
-    if (!formData.type) newErrors.type = "Partner type is required";
-    if (!formData.deliveryTime.trim())
-      newErrors.deliveryTime = "Delivery time is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    if (!formData.phone || !formData.phone.toString().trim()) {
-      newErrors.phone = "Phone is required";
-    }
-    if (!formData.address || !formData.address.toString().trim()) {
-      newErrors.address = "Address is required";
-    }
-    if (!Array.isArray(formData.coverage) || formData.coverage.length === 0) {
-      newErrors.coverage = "At least one coverage area is required";
-    }
-    if (!Array.isArray(formData.services) || formData.services.length === 0) {
-      newErrors.services = "At least one service is required";
+    if (!formData.code.trim()) newErrors.code = "Partner code is required";
+    if (!formData.displayName.trim())
+      newErrors.displayName = "Display name is required";
+    if (!formData.apiUrl.trim()) newErrors.apiUrl = "API URL is required";
+
+    // Validate API URL format
+    if (formData.apiUrl.trim() && !isValidUrl(formData.apiUrl)) {
+      newErrors.apiUrl = "Please enter a valid API URL";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  const isValidUrl = (string) => {
+    try {
+      new URL(string);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
   const handleSave = async () => {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+    setSubmitError("");
+
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Set the access token in the partners API service
+      partnersApiService.setAccessToken(accessToken);
 
-      // In a real app, this would call an API
+      // Prepare the update data
+      const updateData = {
+        id: partnerId,
+        name: formData.name.trim(),
+        code: formData.code.trim(),
+        displayName: formData.displayName.trim(),
+        apiUrl: formData.apiUrl.trim(),
+        isActive: formData.isActive,
+        baseRate: formData.baseRate,
+        perKgRate: formData.perKgRate,
+        fuelSurcharge: formData.fuelSurcharge,
+        servicePincodes: formData.servicePincodes,
+        supportsCOD: formData.supportsCOD,
+        supportsReverse: formData.supportsReverse,
+        maxWeight: formData.maxWeight > 0 ? formData.maxWeight : undefined,
+        maxDimensions:
+          formData.maxDimensions.length > 0 ||
+          formData.maxDimensions.width > 0 ||
+          formData.maxDimensions.height > 0
+            ? formData.maxDimensions
+            : undefined,
+      };
 
-      // Redirect back to partner details
-      router.push(`/partners/${partnerId}`);
+      // Call the API to update the partner
+      const response = await partnersApiService.updatePartner(
+        partnerId,
+        updateData,
+      );
+
+      if (response.status === "success") {
+        // Redirect back to partner details
+        router.push(`/partners/${partnerId}`);
+      } else {
+        throw new Error(response.error?.message || "Failed to update partner");
+      }
     } catch (error) {
-      // Handle error appropriately in production
+      console.error("Error updating partner:", error);
+      setSubmitError(
+        error instanceof Error ? error.message : "Failed to update partner",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -167,13 +185,50 @@ export default function EditPartnerPage() {
     router.push(`/partners/${partnerId}`);
   };
 
-  if (!partner) {
+  if (isLoadingPartner) {
     return (
       <DashboardLayout>
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-muted-foreground">Loading partner details...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (partnerError) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-red-600 mb-2">
+              Error Loading Partner
+            </h2>
+            <p className="text-muted-foreground mb-4">{partnerError}</p>
+            <Button onClick={refetch} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!partner) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-600 mb-2">
+              Partner Not Found
+            </h2>
+            <p className="text-muted-foreground">
+              The requested partner could not be found.
+            </p>
           </div>
         </div>
       </DashboardLayout>
@@ -203,6 +258,16 @@ export default function EditPartnerPage() {
             </p>
           </div>
         </div>
+
+        {/* Submit Error Display */}
+        {submitError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <p className="text-red-700">{submitError}</p>
+            </div>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
@@ -238,155 +303,162 @@ export default function EditPartnerPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="type">Partner Type *</Label>
-                    <Select
-                      value={formData.type}
-                      onValueChange={(value) =>
-                        handleInputChange("type", value)
+                    <Label htmlFor="code">Partner Code *</Label>
+                    <Input
+                      id="code"
+                      value={formData.code}
+                      onChange={(e) =>
+                        handleInputChange("code", e.target.value)
                       }
-                    >
-                      <SelectTrigger
-                        className={errors.type ? "border-red-500" : ""}
-                      >
-                        <SelectValue placeholder="Select partner type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="courier">Courier</SelectItem>
-                        <SelectItem value="logistics">Logistics</SelectItem>
-                        <SelectItem value="warehouse">Warehouse</SelectItem>
-                        <SelectItem value="customs">Customs</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.type && (
-                      <p className="text-sm text-red-500">{errors.type}</p>
+                      placeholder="e.g., DELHIVERY, BLUEDART"
+                      className={errors.code ? "border-red-500" : ""}
+                    />
+                    {errors.code && (
+                      <p className="text-sm text-red-500">{errors.code}</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) =>
-                        handleInputChange("status", value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="rating">Rating</Label>
-                    <Select
-                      value={formData.rating.toString()}
-                      onValueChange={(value) =>
-                        handleInputChange("rating", parseInt(value))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 4, 5].map((rating) => (
-                          <SelectItem key={rating} value={rating.toString()}>
-                            {rating} Star{rating !== 1 ? "s" : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="deliveryTime">Delivery Time *</Label>
+                    <Label htmlFor="displayName">Display Name *</Label>
                     <Input
-                      id="deliveryTime"
-                      value={formData.deliveryTime}
+                      id="displayName"
+                      value={formData.displayName}
                       onChange={(e) =>
-                        handleInputChange("deliveryTime", e.target.value)
+                        handleInputChange("displayName", e.target.value)
                       }
-                      placeholder="e.g., 2-3 business days"
-                      className={errors.deliveryTime ? "border-red-500" : ""}
+                      placeholder="e.g., Delhivery Express"
+                      className={errors.displayName ? "border-red-500" : ""}
                     />
-                    {errors.deliveryTime && (
+                    {errors.displayName && (
                       <p className="text-sm text-red-500">
-                        {errors.deliveryTime}
+                        {errors.displayName}
                       </p>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="apiUrl">API URL *</Label>
+                    <Input
+                      id="apiUrl"
+                      value={formData.apiUrl}
+                      onChange={(e) =>
+                        handleInputChange("apiUrl", e.target.value)
+                      }
+                      placeholder="https://api.partner.com"
+                      className={errors.apiUrl ? "border-red-500" : ""}
+                    />
+                    {errors.apiUrl && (
+                      <p className="text-sm text-red-500">{errors.apiUrl}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="isActive">Status</Label>
+                    <Select
+                      value={formData.isActive ? "active" : "inactive"}
+                      onValueChange={(value) =>
+                        handleInputChange("isActive", value === "active")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Coverage & Services */}
+            {/* Service Configuration */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <MapPin className="h-5 w-5 text-green-600" />
-                  <span>Coverage & Services</span>
+                  <span>Service Configuration</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <Label>Coverage Areas *</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {COVERAGE_OPTIONS.map((coverage) => (
-                      <Badge
-                        key={coverage}
-                        variant={
-                          formData.coverage.includes(coverage)
-                            ? "default"
-                            : "outline"
-                        }
-                        className={`cursor-pointer hover:bg-blue-50 ${
-                          formData.coverage.includes(coverage)
-                            ? "bg-blue-600"
-                            : ""
-                        }`}
-                        onClick={() => handleCoverageToggle(coverage)}
-                      >
-                        {coverage}
-                      </Badge>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="supportsCOD">Supports COD</Label>
+                    <Select
+                      value={formData.supportsCOD ? "yes" : "no"}
+                      onValueChange={(value) =>
+                        handleInputChange("supportsCOD", value === "yes")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  {errors.coverage && (
-                    <p className="text-sm text-red-500">{errors.coverage}</p>
-                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="supportsReverse">
+                      Supports Reverse Pickup
+                    </Label>
+                    <Select
+                      value={formData.supportsReverse ? "yes" : "no"}
+                      onValueChange={(value) =>
+                        handleInputChange("supportsReverse", value === "yes")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="maxWeight">Max Weight (kg)</Label>
+                    <Input
+                      id="maxWeight"
+                      type="number"
+                      value={formData.maxWeight}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "maxWeight",
+                          parseFloat(e.target.value) || 0,
+                        )
+                      }
+                      placeholder="0"
+                      step="0.1"
+                    />
+                  </div>
                 </div>
 
                 <Separator />
 
                 <div className="space-y-3">
-                  <Label>Services Offered *</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {SERVICE_OPTIONS.map((service) => (
-                      <Badge
-                        key={service}
-                        variant={
-                          formData.services.includes(service)
-                            ? "default"
-                            : "outline"
-                        }
-                        className={`cursor-pointer hover:bg-green-50 ${
-                          formData.services.includes(service)
-                            ? "bg-green-600"
-                            : ""
-                        }`}
-                        onClick={() => handleServiceToggle(service)}
-                      >
-                        {service}
-                      </Badge>
-                    ))}
+                  <Label>Service Pincodes</Label>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Enter pincodes separated by commas (e.g., 110001, 110002, 110003)"
+                      value={formData.servicePincodes.join(", ")}
+                      onChange={(e) => {
+                        const pincodes = e.target.value
+                          .split(",")
+                          .map((p) => p.trim())
+                          .filter((p) => p.length > 0);
+                        handleInputChange("servicePincodes", pincodes);
+                      }}
+                    />
+                    <p className="text-sm text-gray-500">
+                      Enter pincodes where this partner provides service
+                    </p>
                   </div>
-                  {errors.services && (
-                    <p className="text-sm text-red-500">{errors.services}</p>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -455,75 +527,64 @@ export default function EditPartnerPage() {
               </CardContent>
             </Card>
 
-            {/* Contact Information */}
+            {/* Dimensions */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Phone className="h-5 w-5 text-purple-600" />
-                  <span>Contact Information</span>
+                  <MapPin className="h-5 w-5 text-purple-600" />
+                  <span>Package Dimensions</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
+                    <Label htmlFor="length">Max Length (cm)</Label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
+                      id="length"
+                      type="number"
+                      value={formData.maxDimensions.length}
                       onChange={(e) =>
-                        handleInputChange("email", e.target.value)
+                        handleInputChange("maxDimensions", {
+                          ...formData.maxDimensions,
+                          length: parseFloat(e.target.value) || 0,
+                        })
                       }
-                      placeholder="partner@example.com"
-                      className={errors.email ? "border-red-500" : ""}
+                      placeholder="0"
+                      step="0.1"
                     />
-                    {errors.email && (
-                      <p className="text-sm text-red-500">{errors.email}</p>
-                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone *</Label>
+                    <Label htmlFor="width">Max Width (cm)</Label>
                     <Input
-                      id="phone"
-                      value={formData.phone}
+                      id="width"
+                      type="number"
+                      value={formData.maxDimensions.width}
                       onChange={(e) =>
-                        handleInputChange("phone", e.target.value)
+                        handleInputChange("maxDimensions", {
+                          ...formData.maxDimensions,
+                          width: parseFloat(e.target.value) || 0,
+                        })
                       }
-                      placeholder="+91 98765 43210"
-                      className={errors.phone ? "border-red-500" : ""}
+                      placeholder="0"
+                      step="0.1"
                     />
-                    {errors.phone && (
-                      <p className="text-sm text-red-500">{errors.phone}</p>
-                    )}
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="address">Address *</Label>
-                    <Textarea
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) =>
-                        handleInputChange("address", e.target.value)
-                      }
-                      placeholder="Enter complete address"
-                      rows={3}
-                      className={errors.address ? "border-red-500" : ""}
-                    />
-                    {errors.address && (
-                      <p className="text-sm text-red-500">{errors.address}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="website">Website</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="height">Max Height (cm)</Label>
                     <Input
-                      id="website"
-                      value={formData.website}
+                      id="height"
+                      type="number"
+                      value={formData.maxDimensions.height}
                       onChange={(e) =>
-                        handleInputChange("website", e.target.value)
+                        handleInputChange("maxDimensions", {
+                          ...formData.maxDimensions,
+                          height: parseFloat(e.target.value) || 0,
+                        })
                       }
-                      placeholder="https://partner-website.com"
+                      placeholder="0"
+                      step="0.1"
                     />
                   </div>
                 </div>

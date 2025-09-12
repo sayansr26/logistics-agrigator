@@ -36,8 +36,8 @@ const navigationItems = [
     badge: "89",
   },
   {
-    title: "Zone",
-    href: "/zone",
+    title: "Zones",
+    href: "/zones",
     icon: Globe,
   },
   // {

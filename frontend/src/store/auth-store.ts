@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { authApiService } from "@/services";
+import {
+  authApiService,
+  setTokenForAllServices,
+  clearTokensFromAllServices,
+} from "@/services";
 import { User, LoginCredentials, RegisterData } from "@/types/auth";
 
 export interface AuthState {
@@ -39,8 +43,8 @@ export const useAuthStore = create<AuthState>()(
           if (response.status === "success" && response.data) {
             const { user, accessToken, refreshToken } = response.data;
 
-            // Set token in API service
-            authApiService.setAccessToken(accessToken);
+            // Set token in ALL API services
+            setTokenForAllServices(accessToken);
 
             set({
               user,
@@ -74,8 +78,8 @@ export const useAuthStore = create<AuthState>()(
           if (response.status === "success" && response.data) {
             const { user, accessToken, refreshToken } = response.data;
 
-            // Set token in API service
-            authApiService.setAccessToken(accessToken);
+            // Set token in ALL API services
+            setTokenForAllServices(accessToken);
 
             set({
               user,
@@ -113,8 +117,8 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error("Logout error:", error);
         } finally {
-          // Clear tokens from API service
-          authApiService.setAccessToken(null);
+          // Clear tokens from ALL API services
+          clearTokensFromAllServices();
 
           // Clear local state
           set({
@@ -140,8 +144,8 @@ export const useAuthStore = create<AuthState>()(
             const { accessToken, refreshToken: newRefreshToken } =
               response.data;
 
-            // Update tokens
-            authApiService.setAccessToken(accessToken);
+            // Update tokens in ALL API services
+            setTokenForAllServices(accessToken);
             set({
               accessToken,
               refreshToken: newRefreshToken,
@@ -161,8 +165,8 @@ export const useAuthStore = create<AuthState>()(
         if (!accessToken) return;
 
         try {
-          // Set the access token first
-          authApiService.setAccessToken(accessToken);
+          // Set the access token in ALL API services first
+          setTokenForAllServices(accessToken);
 
           const response = await authApiService.getUserProfile();
 
@@ -190,9 +194,9 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
-        // Set the access token in the API service when rehydrating from storage
+        // Set the access token in ALL API services when rehydrating from storage
         if (state?.accessToken) {
-          authApiService.setAccessToken(state.accessToken);
+          setTokenForAllServices(state.accessToken);
         }
       },
     },

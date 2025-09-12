@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
@@ -26,32 +26,54 @@ import {
   Truck,
   Award,
   Activity,
+  Loader2,
+  AlertCircle,
+  Power,
+  PowerOff,
 } from "lucide-react";
-import {
-  mockPartners,
-  formatCurrency,
-  formatDate,
-  getPartnerStatusColor,
-  getPartnerTypeColor,
-  getRatingColor,
-  formatRating,
-} from "@/lib/mock-data";
+import { usePartner } from "@/hooks/usePartner";
+import { partnersApiService } from "@/services";
 
 export default function PartnerDetailPage() {
   const router = useRouter();
   const params = useParams();
   const partnerId = params.id;
-  const [partner, setPartner] = useState(null);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
 
-  useEffect(() => {
-    const foundPartner = mockPartners.find((p) => p.id === partnerId);
-    if (foundPartner) {
-      setPartner(foundPartner);
-    }
-  }, [partnerId]);
+  // Use the custom hook to fetch partner data
+  const { partner, isLoading, error, refetch } = usePartner(partnerId);
 
   const handleEdit = () => {
     router.push(`/partners/${partnerId}/edit`);
+  };
+
+  const handleDeactivate = async () => {
+    if (!partner) return;
+
+    setIsDeactivating(true);
+    try {
+      await partnersApiService.deactivatePartner(partnerId);
+      await refetch(); // Refresh the data
+    } catch (error) {
+      console.error("Error deactivating partner:", error);
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!partner) return;
+
+    setIsActivating(true);
+    try {
+      await partnersApiService.activatePartner(partnerId);
+      await refetch(); // Refresh the data
+    } catch (error) {
+      console.error("Error activating partner:", error);
+    } finally {
+      setIsActivating(false);
+    }
   };
 
   const getStatusIcon = (status) => {
@@ -84,13 +106,50 @@ export default function PartnerDetailPage() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading partner details...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Error Loading Partner
+            </h3>
+            <p className="text-gray-500 mb-4">{error}</p>
+            <Button onClick={refetch} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (!partner) {
     return (
       <DashboardLayout>
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading partner details...</p>
+            <Truck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Partner Not Found
+            </h3>
+            <p className="text-gray-500">
+              The partner you're looking for doesn't exist.
+            </p>
           </div>
         </div>
       </DashboardLayout>
@@ -103,31 +162,53 @@ export default function PartnerDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            {/* <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBack}
-              className="hover:bg-gray-100"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Partners
-            </Button> */}
             <div>
               <h1 className="text-3xl font-bold text-foreground">
-                {partner.name}
+                {partner.displayName}
               </h1>
               <p className="text-muted-foreground">
                 Partner details and performance metrics
               </p>
             </div>
           </div>
-          <Button
-            onClick={handleEdit}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Partner
-          </Button>
+          <div className="flex items-center space-x-3">
+            {partner.isActive ? (
+              <Button
+                onClick={handleDeactivate}
+                disabled={isDeactivating}
+                variant="outline"
+                className="border-red-200 text-red-600 hover:bg-red-50"
+              >
+                {isDeactivating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <PowerOff className="h-4 w-4 mr-2" />
+                )}
+                Deactivate
+              </Button>
+            ) : (
+              <Button
+                onClick={handleActivate}
+                disabled={isActivating}
+                variant="outline"
+                className="border-green-200 text-green-600 hover:bg-green-50"
+              >
+                {isActivating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Power className="h-4 w-4 mr-2" />
+                )}
+                Activate
+              </Button>
+            )}
+            <Button
+              onClick={handleEdit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Partner
+            </Button>
+          </div>
         </div>
 
         {/* Partner Overview */}
@@ -136,9 +217,8 @@ export default function PartnerDetailPage() {
             <div className="flex items-start justify-between">
               <div className="flex items-center space-x-4">
                 <Avatar className="h-20 w-20 ring-4 ring-gray-100">
-                  <AvatarImage src={partner.logo} alt={partner.name} />
                   <AvatarFallback className="bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 text-2xl font-bold">
-                    {partner.name
+                    {partner.displayName
                       .split(" ")
                       .map((n) => n[0])
                       .join("")}
@@ -147,55 +227,57 @@ export default function PartnerDetailPage() {
                 <div className="space-y-2">
                   <div className="flex items-center space-x-3">
                     <h2 className="text-2xl font-bold text-foreground">
-                      {partner.name}
+                      {partner.displayName}
                     </h2>
                     <Badge
-                      className={`${getPartnerTypeColor(partner.type)} text-sm`}
+                      className={`${partner.isActive ? "bg-green-100 text-green-800 border-green-200" : "bg-gray-100 text-gray-800 border-gray-200"} text-sm`}
                     >
-                      {getTypeIcon(partner.type)}
-                      <span className="ml-2 capitalize">{partner.type}</span>
+                      {partner.isActive ? (
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                      ) : (
+                        <div className="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>
+                      )}
+                      <span className="capitalize">
+                        {partner.isActive ? "Active" : "Inactive"}
+                      </span>
                     </Badge>
-                    <Badge
-                      className={`${getPartnerStatusColor(partner.status)} text-sm`}
-                    >
-                      {getStatusIcon(partner.status)}
-                      <span className="ml-2 capitalize">{partner.status}</span>
+                    <Badge variant="outline" className="text-sm">
+                      <Truck className="h-3 w-3 mr-2" />
+                      <span className="font-mono">{partner.code}</span>
                     </Badge>
                   </div>
                   <div className="flex items-center space-x-6 text-sm text-muted-foreground">
                     <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4" />
-                      <span>{partner.deliveryTime}</span>
+                      <MapPin className="h-4 w-4" />
+                      <span>
+                        {partner.servicePincodes?.length || 0} pincodes
+                      </span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <MapPin className="h-4 w-4" />
-                      <span>{partner.coverage.join(", ")}</span>
+                      <Package className="h-4 w-4" />
+                      <span>{partner.supportsCOD ? "COD" : "No COD"}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4" />
-                      <span>Since {formatDate(partner.contractStartDate)}</span>
+                      <span>
+                        Since {new Date(partner.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="flex items-center space-x-1 mb-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`h-5 w-5 ${
-                        star <= partner.rating
-                          ? `${getRatingColor(partner.rating)} fill-current`
-                          : "text-gray-300"
-                      }`}
-                    />
-                  ))}
+                <div className="text-sm text-muted-foreground mb-2">
+                  Partner Statistics
                 </div>
-                <p
-                  className={`text-lg font-semibold ${getRatingColor(partner.rating)}`}
-                >
-                  {formatRating(partner.rating)}
-                </p>
+                <div className="space-y-1">
+                  <div className="text-lg font-semibold text-blue-600">
+                    {partner._count?.shipments || 0} shipments
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {partner._count?.rates || 0} rate entries
+                  </div>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -216,7 +298,7 @@ export default function PartnerDetailPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-blue-600 mb-2">
-                      {partner.performance.totalShipments.toLocaleString()}
+                      {partner._count?.shipments || 0}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Total Shipments
@@ -224,76 +306,101 @@ export default function PartnerDetailPage() {
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600 mb-2">
-                      {partner.performance.successRate}%
+                      {partner._count?.rates || 0}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Success Rate
+                      Rate Entries
                     </p>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-purple-600 mb-2">
-                      {partner.performance.avgDeliveryTime}
+                      {partner.servicePincodes?.length || 0}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Avg Delivery (Days)
+                      Service Areas
                     </p>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-orange-600 mb-2">
-                      {partner.performance.customerSatisfaction}%
+                      {partner.maxWeight ? `${partner.maxWeight}kg` : "∞"}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Customer Satisfaction
-                    </p>
+                    <p className="text-sm text-muted-foreground">Max Weight</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Rating Breakdown */}
+            {/* Service Capabilities */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Star className="h-5 w-5 text-yellow-600" />
-                  <span>Rating Breakdown</span>
+                  <Package className="h-5 w-5 text-blue-600" />
+                  <span>Service Capabilities</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium w-16">5 Stars</span>
-                    <Progress value={80} className="flex-1" />
-                    <span className="text-sm text-muted-foreground w-12">
-                      80%
-                    </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">COD Support</span>
+                      <Badge
+                        className={
+                          partner.supportsCOD
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : "bg-gray-100 text-gray-800 border-gray-200"
+                        }
+                      >
+                        {partner.supportsCOD ? "Yes" : "No"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        Reverse Logistics
+                      </span>
+                      <Badge
+                        className={
+                          partner.supportsReverse
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : "bg-gray-100 text-gray-800 border-gray-200"
+                        }
+                      >
+                        {partner.supportsReverse ? "Yes" : "No"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Max Weight</span>
+                      <span className="text-sm text-muted-foreground">
+                        {partner.maxWeight
+                          ? `${partner.maxWeight}kg`
+                          : "No limit"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium w-16">4 Stars</span>
-                    <Progress value={15} className="flex-1" />
-                    <span className="text-sm text-muted-foreground w-12">
-                      15%
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium w-16">3 Stars</span>
-                    <Progress value={3} className="flex-1" />
-                    <span className="text-sm text-muted-foreground w-12">
-                      3%
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium w-16">2 Stars</span>
-                    <Progress value={1} className="flex-1" />
-                    <span className="text-sm text-muted-foreground w-12">
-                      1%
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm font-medium w-16">1 Star</span>
-                    <Progress value={1} className="flex-1" />
-                    <span className="text-sm text-muted-foreground w-12">
-                      1%
-                    </span>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">API Version</span>
+                      <span className="text-sm text-muted-foreground">
+                        {partner.apiVersion || "Not specified"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Service Areas</span>
+                      <span className="text-sm text-muted-foreground">
+                        {partner.servicePincodes?.length || 0} pincodes
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Status</span>
+                      <Badge
+                        className={
+                          partner.isActive
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : "bg-gray-100 text-gray-800 border-gray-200"
+                        }
+                      >
+                        {partner.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -309,32 +416,56 @@ export default function PartnerDetailPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <h4 className="font-semibold mb-3">Coverage Areas</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {partner.coverage.map((area) => (
-                      <Badge
-                        key={area}
-                        variant="outline"
-                        className="bg-blue-50 text-blue-700 border-blue-200"
-                      >
-                        {area}
-                      </Badge>
-                    ))}
+                  <h4 className="font-semibold mb-3">Service Pincodes</h4>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {partner.servicePincodes &&
+                    partner.servicePincodes.length > 0 ? (
+                      partner.servicePincodes.map((pincode) => (
+                        <Badge
+                          key={pincode}
+                          variant="outline"
+                          className="bg-blue-50 text-blue-700 border-blue-200"
+                        >
+                          {pincode}
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground">
+                        No service pincodes configured
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Separator />
                 <div>
-                  <h4 className="font-semibold mb-3">Services Offered</h4>
+                  <h4 className="font-semibold mb-3">Service Features</h4>
                   <div className="flex flex-wrap gap-2">
-                    {partner.services.map((service) => (
-                      <Badge
-                        key={service}
-                        variant="outline"
-                        className="bg-green-50 text-green-700 border-green-200"
-                      >
-                        {service}
-                      </Badge>
-                    ))}
+                    <Badge
+                      variant="outline"
+                      className={
+                        partner.supportsCOD
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : "bg-gray-50 text-gray-700 border-gray-200"
+                      }
+                    >
+                      COD Support
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={
+                        partner.supportsReverse
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : "bg-gray-50 text-gray-700 border-gray-200"
+                      }
+                    >
+                      Reverse Logistics
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      API Integration
+                    </Badge>
                   </div>
                 </div>
               </CardContent>
@@ -352,19 +483,21 @@ export default function PartnerDetailPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600 mb-2">
-                      {formatCurrency(partner.pricing.baseRate)}
+                      {partner.baseRate ? `₹${partner.baseRate}` : "N/A"}
                     </div>
                     <p className="text-sm text-muted-foreground">Base Rate</p>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600 mb-2">
-                      {formatCurrency(partner.pricing.perKgRate)}
+                      {partner.perKgRate ? `₹${partner.perKgRate}` : "N/A"}
                     </div>
                     <p className="text-sm text-muted-foreground">Per KG Rate</p>
                   </div>
                   <div className="text-center p-4 bg-orange-50 rounded-lg">
                     <div className="text-2xl font-bold text-orange-600 mb-2">
-                      {partner.pricing.fuelSurcharge}%
+                      {partner.fuelSurcharge
+                        ? `${partner.fuelSurcharge}%`
+                        : "N/A"}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Fuel Surcharge
@@ -373,23 +506,28 @@ export default function PartnerDetailPage() {
                 </div>
 
                 <div className="mt-6">
-                  <h4 className="font-semibold mb-3">Zone-based Rates</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {Object.entries(partner.pricing.zoneRates).map(
-                      ([zone, rate]) => (
-                        <div
-                          key={zone}
-                          className="text-center p-3 bg-gray-50 rounded-lg"
-                        >
-                          <div className="font-semibold text-gray-900">
-                            {zone}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatCurrency(rate)}
-                          </div>
-                        </div>
-                      ),
-                    )}
+                  <h4 className="font-semibold mb-3">Additional Charges</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="font-semibold text-gray-900">
+                        COD Charge
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {partner.codChargePercent
+                          ? `${partner.codChargePercent}%`
+                          : "Not configured"}
+                      </div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="font-semibold text-gray-900">
+                        Max Dimensions
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {partner.maxDimensions
+                          ? `${partner.maxDimensions.length}×${partner.maxDimensions.width}×${partner.maxDimensions.height} cm`
+                          : "No limit"}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -398,81 +536,70 @@ export default function PartnerDetailPage() {
 
           {/* Right Column - Contact & Contract Info */}
           <div className="space-y-6">
-            {/* Contact Information */}
+            {/* API Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <Phone className="h-5 w-5 text-purple-600" />
-                  <span>Contact Information</span>
+                  <Globe className="h-5 w-5 text-purple-600" />
+                  <span>API Information</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{partner.contact.email}</p>
-                    <p className="text-sm text-muted-foreground">Email</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{partner.contact.phone}</p>
-                    <p className="text-sm text-muted-foreground">Phone</p>
-                  </div>
-                </div>
                 <div className="flex items-start space-x-3">
-                  <MapPin className="h-4 w-4 text-muted-foreground mt-1" />
+                  <Globe className="h-4 w-4 text-muted-foreground mt-1" />
                   <div>
-                    <p className="font-medium">{partner.contact.address}</p>
-                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="font-medium break-all">{partner.apiUrl}</p>
+                    <p className="text-sm text-muted-foreground">API URL</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <Activity className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <a
-                      href={partner.contact.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-blue-600 hover:text-blue-800 flex items-center space-x-2"
-                    >
-                      <span>Visit Website</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <p className="text-sm text-muted-foreground">Website</p>
+                    <p className="font-medium">
+                      {partner.apiVersion || "Not specified"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">API Version</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">
+                      {partner.apiToken ? "Configured" : "Not configured"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">API Token</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Contract Information */}
+            {/* Partner Details */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Calendar className="h-5 w-5 text-indigo-600" />
-                  <span>Contract Details</span>
+                  <span>Partner Details</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">
-                    Contract Start
-                  </p>
-                  <p className="font-medium">
-                    {formatDate(partner.contractStartDate)}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Partner Code</p>
+                  <p className="font-medium font-mono">{partner.code}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Contract End</p>
+                  <p className="text-sm text-muted-foreground">Display Name</p>
+                  <p className="font-medium">{partner.displayName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Created</p>
                   <p className="font-medium">
-                    {formatDate(partner.contractEndDate)}
+                    {new Date(partner.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Last Updated</p>
                   <p className="font-medium">
-                    {formatDate(partner.lastUpdated)}
+                    {new Date(partner.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
               </CardContent>
@@ -487,18 +614,51 @@ export default function PartnerDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button variant="outline" className="w-full justify-start">
-                  <Package className="h-4 w-4 mr-2" />
-                  View Shipments
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => router.push(`/partners/${partnerId}/edit`)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Partner
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Performance Report
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => router.push("/partners")}
+                >
+                  <Truck className="h-4 w-4 mr-2" />
+                  Back to Partners
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Users className="h-4 w-4 mr-2" />
-                  Contact Support
-                </Button>
+                {partner.isActive ? (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={handleDeactivate}
+                    disabled={isDeactivating}
+                  >
+                    {isDeactivating ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <PowerOff className="h-4 w-4 mr-2" />
+                    )}
+                    Deactivate Partner
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start border-green-200 text-green-600 hover:bg-green-50"
+                    onClick={handleActivate}
+                    disabled={isActivating}
+                  >
+                    {isActivating ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Power className="h-4 w-4 mr-2" />
+                    )}
+                    Activate Partner
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
