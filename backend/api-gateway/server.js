@@ -44,6 +44,10 @@ app.use(
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Logistics API Gateway",
+    // Disable external CDN resources to prevent HTTPS/CORS issues
+    customCssUrl: null,
+    customfavIcon: null,
+    customJs: null,
     swaggerOptions: {
       url:
         process.env.NODE_ENV === "production"

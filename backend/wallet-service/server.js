@@ -54,6 +54,10 @@ app.use(
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Logistics Wallet Service API",
+    // Disable external CDN resources to prevent HTTPS/CORS issues
+    customCssUrl: null,
+    customfavIcon: null,
+    customJs: null,
     swaggerOptions: {
       // Force HTTP protocol for development to avoid SSL errors with IP access
       url:
