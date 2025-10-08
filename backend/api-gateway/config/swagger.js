@@ -15,6 +15,14 @@ const options = {
     },
     servers: [
       {
+        url: process.env.API_GATEWAY_URL_LOCAL || "http://localhost:3001",
+        description: "Current server",
+      },
+      {
+        url: "http://103.17.193.231:3001",
+        description: "Production server",
+      },
+      {
         url: "http://localhost:3001",
         description: "Development server",
       },
