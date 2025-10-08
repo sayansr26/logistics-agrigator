@@ -7,7 +7,8 @@
 # Can be run manually or called by deployment script
 # ============================================================================
 
-set -e
+# Don't exit on errors - we want to continue even if some backups fail
+set +e
 
 # Colors
 GREEN='\033[0;32m'
@@ -24,6 +25,12 @@ POSTGRES_USER="${POSTGRES_USER:-logistics}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-logistics123}"
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+
+# Change to project directory
+cd "$PROJECT_DIR" || {
+    echo -e "${RED}[ERROR]${NC} Failed to change to project directory: $PROJECT_DIR"
+    exit 0  # Exit gracefully - don't fail deployment
+}
 
 # Databases to backup
 DATABASES=(
@@ -44,6 +51,20 @@ echo -e "${BLUE}═════════════════════�
 echo -e "${BLUE}          DATABASE BACKUP - $(date '+%Y-%m-%d %H:%M:%S')${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo ""
+
+# Check if Docker is running
+if ! docker ps > /dev/null 2>&1; then
+    echo -e "${YELLOW}[WARNING]${NC} Docker is not running or not accessible"
+    echo -e "${YELLOW}[INFO]${NC} Skipping database backup - services will be started fresh"
+    exit 0  # Exit gracefully
+fi
+
+# Check if postgres container exists
+if ! docker-compose ps postgres | grep -q "postgres"; then
+    echo -e "${YELLOW}[WARNING]${NC} PostgreSQL container not found"
+    echo -e "${YELLOW}[INFO]${NC} Skipping database backup - fresh deployment will initialize databases"
+    exit 0  # Exit gracefully
+fi
 
 # Export password for pg_dump
 export PGPASSWORD="$POSTGRES_PASSWORD"
