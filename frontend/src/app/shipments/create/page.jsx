@@ -44,6 +44,8 @@ export default function CreateShipmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
 
   const { accessToken, isAuthenticated } = useAuthStore();
   const {
@@ -83,6 +85,11 @@ export default function CreateShipmentPage() {
     returnPincode,
     returnCity,
     returnState,
+    packageValue,
+    isFragile,
+    paymentType,
+    serviceType,
+    specialInstructions,
   } = formData;
 
   // Debug logging for stepper
@@ -114,6 +121,53 @@ export default function CreateShipmentPage() {
 
   const [customReturnAddress, setCustomReturnAddress] = useState("");
 
+  // Function to generate 14-digit random reference number
+  const generateReferenceNumber = () => {
+    // Generate a 14-digit random number
+    const randomNumber = Math.floor(Math.random() * 100000000000000)
+      .toString()
+      .padStart(14, "0");
+    setField("referenceNo", randomNumber);
+  };
+
+  // Function to save draft
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true);
+    setDraftSaved(false);
+
+    try {
+      // Transform form data to API format
+      const apiData = transformFormDataToApiFormat();
+
+      console.log("Saving draft:", apiData);
+
+      // Set access token for the API service
+      shipmentApiService.setAccessToken(accessToken);
+
+      // Call the draft API
+      const response = await shipmentApiService.saveDraft(apiData);
+
+      if (response.status === "success" && response.data) {
+        setDraftSaved(true);
+        console.log("Draft saved successfully:", response.data);
+
+        // Show success message and redirect after a delay
+        setTimeout(() => {
+          router.push("/shipments");
+        }, 2000);
+      } else {
+        throw new Error(response.error?.message || "Failed to save draft");
+      }
+    } catch (error) {
+      console.error("Draft saving failed:", error);
+      setSubmitError(
+        error.message || "Failed to save draft. Please try again.",
+      );
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   // Authentication check
   useEffect(() => {
     if (!isAuthenticated) {
@@ -129,48 +183,13 @@ export default function CreateShipmentPage() {
       (addr) => addr.value === pickupAddress,
     );
 
-    // Get return address details
-    let returnAddressData = null;
-    if (!isRTO) {
-      if (returnAddress === "custom") {
-        returnAddressData = {
-          name: "Return Address",
-          phone: phoneNumber,
-          email: email || "",
-          addressLine1: customReturnAddress,
-          addressLine2: "",
-          landmark: "",
-          city: returnCity,
-          state: returnState,
-          pincode: returnPincode,
-          country: "India",
-        };
-      } else {
-        const returnWarehouse = pickupAddresses.find(
-          (addr) => addr.value === returnAddress,
-        );
-        if (returnWarehouse) {
-          returnAddressData = {
-            name: "Return Address",
-            phone: phoneNumber,
-            email: email || "",
-            addressLine1: returnWarehouse.details.fullAddress,
-            addressLine2: "",
-            landmark: "",
-            city: returnCity,
-            state: returnState,
-            pincode: returnPincode,
-            country: "India",
-          };
-        }
-      }
-    }
-
     return {
       orderId: referenceNo,
       pickupAddress: {
         name: "Pickup Address",
-        phone: phoneNumber,
+        phone: phoneNumber.startsWith("+91")
+          ? phoneNumber
+          : `+91${phoneNumber}`,
         email: email || "",
         addressLine1: selectedPickup?.details.fullAddress || "",
         addressLine2: "",
@@ -182,7 +201,9 @@ export default function CreateShipmentPage() {
       },
       deliveryAddress: {
         name: receiverName,
-        phone: phoneNumber,
+        phone: phoneNumber.startsWith("+91")
+          ? phoneNumber
+          : `+91${phoneNumber}`,
         email: email || "",
         addressLine1: address,
         addressLine2: "",
@@ -200,13 +221,14 @@ export default function CreateShipmentPage() {
           height: parseFloat(height) || 0,
         },
         description: productDescription,
-        value: 0, // Default value, can be calculated from invoices
-        fragile: false, // Default value
+        value: parseFloat(packageValue) || 0,
+        fragile: isFragile || false,
       },
-      paymentType: "PREPAID", // Default payment type
-      serviceType: "STANDARD", // Default service type
-      specialInstructions: isRTO ? "RTO address same as pickup address" : "",
-      returnAddress: returnAddressData,
+      paymentType: paymentType || "PREPAID",
+      serviceType: serviceType || "STANDARD",
+      specialInstructions:
+        specialInstructions ||
+        (isRTO ? "RTO address same as pickup address" : ""),
     };
   };
 
@@ -235,9 +257,15 @@ export default function CreateShipmentPage() {
     if (!city) validationErrors.city = "City is required";
     if (!state) validationErrors.state = "State is required";
     if (!phoneNumber) validationErrors.phoneNumber = "Phone number is required";
+    else if (!phoneNumber.match(/^(\+91|91)?[6-9]\d{9}$/)) {
+      validationErrors.phoneNumber =
+        "Phone number must be in format +91XXXXXXXXXX";
+    }
     if (!length) validationErrors.length = "Length is required";
     if (!width) validationErrors.width = "Width is required";
     if (!height) validationErrors.height = "Height is required";
+    if (!paymentType) validationErrors.paymentType = "Payment type is required";
+    if (!serviceType) validationErrors.serviceType = "Service type is required";
 
     // RTO validation
     if (!isRTO) {
@@ -460,6 +488,24 @@ export default function CreateShipmentPage() {
         </div>
       )}
 
+      {/* Draft Saved Message */}
+      {draftSaved && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <CheckCircle2 className="h-6 w-6 text-blue-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900">
+                Draft Saved Successfully!
+              </h3>
+              <p className="text-blue-700">
+                Your shipment draft has been saved and you will be redirected to
+                the dashboard shortly.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error Message */}
       {submitError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -632,13 +678,24 @@ export default function CreateShipmentPage() {
                   <FileText className="h-4 w-4 text-blue-500" />
                   <span>Reference Number *</span>
                 </label>
-                <Input
-                  id="referenceNo"
-                  placeholder="e.g., 250810021T1582"
-                  value={referenceNo}
-                  onChange={(e) => setField("referenceNo", e.target.value)}
-                  className={`h-11 text-base ${errors.referenceNo ? "border-red-500 ring-red-200" : "border-gray-300 focus:border-blue-500 focus:ring-blue-200"}`}
-                />
+                <div className="flex space-x-2">
+                  <Input
+                    id="referenceNo"
+                    placeholder="Click generate to create reference number"
+                    value={referenceNo}
+                    readOnly
+                    className={`flex-1 h-11 text-base bg-gray-50 cursor-not-allowed ${errors.referenceNo ? "border-red-500 ring-red-200" : "border-gray-300"}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={generateReferenceNumber}
+                    className="px-4 h-11 border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
+                    title="Generate 14-digit random reference number"
+                  >
+                    <RefreshCcw className="h-4 w-4" />
+                  </Button>
+                </div>
                 <FormError message={errors.referenceNo} />
               </div>
 
@@ -785,6 +842,136 @@ export default function CreateShipmentPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Package Value and Fragile Option */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 pb-2">
+                <Calculator className="h-5 w-5 text-green-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Package Value & Handling
+                </h3>
+                <Badge variant="secondary" className="text-xs">
+                  Optional
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="packageValue"
+                    className="text-sm font-medium text-gray-700 flex items-center space-x-2"
+                  >
+                    <span>💰</span>
+                    <span>Package Value (₹)</span>
+                  </label>
+                  <Input
+                    id="packageValue"
+                    type="number"
+                    step="0.01"
+                    placeholder="25000.00"
+                    value={packageValue}
+                    onChange={(e) => setField("packageValue", e.target.value)}
+                    className="h-11 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-200"
+                  />
+                  <FormError message={errors.packageValue} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Package Handling
+                  </label>
+                  <div className="flex items-center space-x-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <input
+                      type="checkbox"
+                      id="isFragile"
+                      checked={isFragile}
+                      onChange={(e) => setField("isFragile", e.target.checked)}
+                      className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <label
+                      htmlFor="isFragile"
+                      className="text-sm font-medium text-amber-900 flex items-center space-x-2"
+                    >
+                      <span>⚠️</span>
+                      <span>Fragile - Handle with care</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment and Service Type */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 pb-2">
+                <Truck className="h-5 w-5 text-purple-600" />
+                <h3 className="font-semibold text-gray-900">Service Options</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="paymentType"
+                    className="text-sm font-semibold text-gray-700"
+                  >
+                    Payment Type *
+                  </label>
+                  <select
+                    id="paymentType"
+                    value={paymentType}
+                    onChange={(e) => setField("paymentType", e.target.value)}
+                    className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-background px-4 py-2 text-base ring-offset-background focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+                  >
+                    <option value="">Select payment type</option>
+                    <option value="PREPAID">Prepaid</option>
+                    <option value="COD">Cash on Delivery (COD)</option>
+                  </select>
+                  <FormError message={errors.paymentType} />
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="serviceType"
+                    className="text-sm font-semibold text-gray-700"
+                  >
+                    Service Type *
+                  </label>
+                  <select
+                    id="serviceType"
+                    value={serviceType}
+                    onChange={(e) => setField("serviceType", e.target.value)}
+                    className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-background px-4 py-2 text-base ring-offset-background focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+                  >
+                    <option value="">Select service type</option>
+                    <option value="STANDARD">Standard Delivery</option>
+                    <option value="EXPRESS">Express Delivery</option>
+                    <option value="PRIORITY">Priority Delivery</option>
+                  </select>
+                  <FormError message={errors.serviceType} />
+                </div>
+              </div>
+            </div>
+
+            {/* Special Instructions */}
+            <div className="space-y-3">
+              <label
+                htmlFor="specialInstructions"
+                className="text-sm font-semibold text-gray-700 flex items-center space-x-2"
+              >
+                <Info className="h-4 w-4 text-blue-500" />
+                <span>Special Instructions</span>
+              </label>
+              <Textarea
+                id="specialInstructions"
+                placeholder="Any special handling instructions, delivery preferences, or notes for the courier..."
+                value={specialInstructions}
+                onChange={(e) =>
+                  setField("specialInstructions", e.target.value)
+                }
+                className="min-h-[80px] text-base resize-none border-gray-300 focus:border-blue-500 focus:ring-blue-200"
+                rows={3}
+              />
+              <FormError message={errors.specialInstructions} />
             </div>
 
             {/* RTO Option */}
@@ -979,6 +1166,10 @@ export default function CreateShipmentPage() {
                     onChange={(e) => setField("phoneNumber", e.target.value)}
                     className={`h-11 text-base ${errors.phoneNumber ? "border-red-500 ring-red-200" : "border-gray-300 focus:border-green-500 focus:ring-green-200"}`}
                   />
+                  <div className="text-xs text-gray-500 mt-1">
+                    Enter phone number with +91 country code (e.g., +91 98765
+                    43210)
+                  </div>
                   <FormError message={errors.phoneNumber} />
                 </div>
               </div>
@@ -999,6 +1190,9 @@ export default function CreateShipmentPage() {
                     onChange={(e) => setField("alternatePhone", e.target.value)}
                     className="h-11 text-base border-gray-300 focus:border-green-500 focus:ring-green-200"
                   />
+                  <div className="text-xs text-gray-500 mt-1">
+                    Optional: Enter alternate phone with +91 country code
+                  </div>
                   <FormError message={errors.alternatePhone} />
                 </div>
 
@@ -1013,7 +1207,7 @@ export default function CreateShipmentPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="receiver@example.com"
+                    placeholder="Email"
                     value={email}
                     onChange={(e) => setField("email", e.target.value)}
                     className="h-11 text-base border-gray-300 focus:border-green-500 focus:ring-green-200"
@@ -1078,7 +1272,7 @@ export default function CreateShipmentPage() {
                   </label>
                   <Input
                     id="pincode"
-                    placeholder="110001"
+                    placeholder="Enter pincode"
                     value={pincode}
                     onChange={(e) => setField("pincode", e.target.value)}
                     className={`h-11 text-base ${errors.pincode ? "border-red-500 ring-red-200" : "border-gray-300 focus:border-green-500 focus:ring-green-200"}`}
@@ -1095,7 +1289,7 @@ export default function CreateShipmentPage() {
                   </label>
                   <Input
                     id="area"
-                    placeholder="Area name"
+                    placeholder="Enter area"
                     value={area}
                     onChange={(e) => setField("area", e.target.value)}
                     className="h-11 text-base border-gray-300 focus:border-green-500 focus:ring-green-200"
@@ -1112,7 +1306,7 @@ export default function CreateShipmentPage() {
                   </label>
                   <Input
                     id="city"
-                    placeholder="City name"
+                    placeholder="Enter city"
                     value={city}
                     onChange={(e) => setField("city", e.target.value)}
                     className={`h-11 text-base ${errors.city ? "border-red-500 ring-red-200" : "border-gray-300 focus:border-green-500 focus:ring-green-200"}`}
@@ -1130,7 +1324,7 @@ export default function CreateShipmentPage() {
                 </label>
                 <Input
                   id="state"
-                  placeholder="State name"
+                  placeholder="Enter state"
                   value={state}
                   onChange={(e) => setField("state", e.target.value)}
                   className={`h-11 text-base ${errors.state ? "border-red-500 ring-red-200" : "border-gray-300 focus:border-green-500 focus:ring-green-200"}`}
@@ -1368,39 +1562,71 @@ export default function CreateShipmentPage() {
           </CardContent>
         </Card>
 
-        {/* Submit Button */}
-        <div className="flex justify-end space-x-4 pt-6">
+        {/* Submit Buttons */}
+        <div className="flex justify-between items-center pt-6">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isSavingDraft}
             className="px-8"
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            disabled={isSubmitting || submitSuccess}
-            className="px-8 bg-blue-600 hover:bg-blue-700"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Creating Shipment...
-              </>
-            ) : submitSuccess ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Shipment Created
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Create Shipment
-              </>
-            )}
-          </Button>
+
+          <div className="flex space-x-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={
+                isSubmitting || isSavingDraft || submitSuccess || draftSaved
+              }
+              className="px-8 border-orange-300 text-orange-700 hover:bg-orange-50"
+            >
+              {isSavingDraft ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600 mr-2"></div>
+                  Saving Draft...
+                </>
+              ) : draftSaved ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Draft Saved
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Draft
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting || isSavingDraft || submitSuccess || draftSaved
+              }
+              className="px-8 bg-blue-600 hover:bg-blue-700"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Creating Shipment...
+                </>
+              ) : submitSuccess ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Shipment Created
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Create Shipment
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </form>
     </CreateShipmentLayout>

@@ -29,6 +29,7 @@ export interface PackageDetails {
 export type PaymentType = "PREPAID" | "COD" | "POSTPAID";
 export type ServiceType = "STANDARD" | "EXPRESS" | "OVERNIGHT" | "SAME_DAY";
 export type ShipmentStatus =
+  | "draft"
   | "created"
   | "picked"
   | "in-transit"
@@ -196,4 +197,151 @@ export interface ShipmentFilters {
   search?: string;
   page?: number;
   limit?: number;
+}
+
+// Pickup Management Types
+export interface PickupSchedule {
+  id: string;
+  shipmentId: string;
+  partnerId: string;
+  scheduledDate: string;
+  timeSlot: string;
+  status: "scheduled" | "picked" | "failed" | "cancelled";
+  pickupAddress: Address;
+  contactPerson: string;
+  contactPhone: string;
+  instructions?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PickupSlot {
+  id: string;
+  partnerId: string;
+  date: string;
+  timeSlot: string;
+  available: boolean;
+  maxCapacity: number;
+  currentBookings: number;
+}
+
+export interface CreatePickupRequest {
+  shipmentId: string;
+  partnerId: string;
+  scheduledDate: string;
+  timeSlot: string;
+  pickupAddress: Address;
+  contactPerson: string;
+  contactPhone: string;
+  instructions?: string;
+}
+
+export interface PickupResponse {
+  status: "success" | "error";
+  data?: {
+    pickup: PickupSchedule;
+    message: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface PickupSlotsResponse {
+  status: "success" | "error";
+  data?: {
+    slots: PickupSlot[];
+    date: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// NDR (Non-Delivery Report) Types
+export interface NDRReason {
+  id: string;
+  code: string;
+  description: string;
+  isActive: boolean;
+}
+
+export interface NDRReport {
+  id: string;
+  shipmentId: string;
+  reason: string;
+  reasonCode: string;
+  description: string;
+  reportedBy: string;
+  reportedAt: string;
+  status: "pending" | "resolved" | "escalated";
+  resolution?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+}
+
+export interface CreateNDRRequest {
+  shipmentId: string;
+  reason: string;
+  reasonCode: string;
+  description: string;
+}
+
+export interface NDRResponse {
+  status: "success" | "error";
+  data?: {
+    ndr: NDRReport;
+    message: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// Bulk Operations Types
+export interface BulkShipmentRequest {
+  shipments: CreateShipmentRequest[];
+}
+
+export interface BulkShipmentResponse {
+  status: "success" | "error";
+  data?: {
+    shipments: Shipment[];
+    failed: Array<{
+      index: number;
+      error: string;
+      data: CreateShipmentRequest;
+    }>;
+    message: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// Label Generation Types
+export interface LabelRequest {
+  shipmentIds: string[];
+  format?: "pdf" | "png" | "jpg";
+  size?: "A4" | "A5" | "thermal";
+}
+
+export interface LabelResponse {
+  status: "success" | "error";
+  data?: {
+    labels: Array<{
+      shipmentId: string;
+      labelUrl: string;
+      format: string;
+    }>;
+    downloadUrl: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
 }

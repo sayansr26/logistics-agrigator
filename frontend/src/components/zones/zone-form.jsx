@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -27,18 +27,43 @@ import {
   XCircle,
   Clock,
   X,
+  Loader2,
+  MapPin,
+  Building,
+  Users,
+  Plus,
+  Trash2,
+  Route,
+  Map,
 } from "lucide-react";
+import { geographicalApiService, partnersApiService } from "@/services";
+import { useAuth } from "@/hooks/useAuth";
 
 const defaultFormData = {
   name: "",
   description: "",
-  partnerId: "partner_001",
+  partnerId: "",
   status: true,
-  pincodes: "",
-  cities: "",
-  states: "",
-  areas: "",
+  zoneType: "zone-wise", // New field for zone type selection
+  selectedStates: [],
+  selectedCities: [],
+  selectedAreas: [],
+  selectedPincodes: [],
+  manualPincodes: [], // New field for manually entered pincodes
   services: [],
+  // Distance-wise specific fields
+  distanceSlabs: [{ id: 1, name: "", distanceFrom: "", distanceTo: "" }],
+  // Network tax table fields
+  networkTaxes: [
+    {
+      id: 1,
+      taxName: "",
+      taxType: "percentage",
+      taxValue: "",
+      isActive: true,
+      description: "",
+    },
+  ],
   // Legacy fields for backward compatibility
   code: "",
   type: "both",
@@ -66,6 +91,308 @@ export function ZoneForm({
   });
 
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  // Get authentication token
+  const { accessToken } = useAuth();
+
+  // Dynamic data state
+  const [states, setStates] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [areas, setAreas] = useState([]);
+  const [pincodes, setPincodes] = useState([]);
+  const [partners, setPartners] = useState([]);
+
+  // Manual pincode input state
+  const [manualPincodeInput, setManualPincodeInput] = useState("");
+  const [pincodeSearchResults, setPincodeSearchResults] = useState([]);
+  const [isSearchingPincodes, setIsSearchingPincodes] = useState(false);
+  const [showPincodeSearch, setShowPincodeSearch] = useState(false);
+
+  // City filtering state
+  const [cityFilter, setCityFilter] = useState("all"); // "all", "metro", "non-metro"
+
+  // Loading states
+  const [loadingStates, setLoadingStates] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [loadingAreas, setLoadingAreas] = useState(false);
+  const [loadingPincodes, setLoadingPincodes] = useState(false);
+  const [loadingPartners, setLoadingPartners] = useState(false);
+
+  // Fetch initial data on component mount and when token is available
+  useEffect(() => {
+    if (accessToken) {
+      fetchStates();
+      fetchPartners();
+    }
+  }, [accessToken]);
+
+  // Fetch states
+  const fetchStates = async () => {
+    setLoadingStates(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      const response = await geographicalApiService.getStates();
+      console.log("States API response:", response); // Debug log
+      if (response.status === "success") {
+        console.log("States data:", response.data); // Debug log
+        setStates(response.data || []);
+      } else {
+        console.error("Failed to fetch states:", response.error);
+        setStates([]);
+      }
+    } catch (error) {
+      console.error("Error fetching states:", error);
+      setStates([]);
+    } finally {
+      setLoadingStates(false);
+    }
+  };
+
+  // Fetch cities by state
+  const fetchCitiesByState = async (stateId) => {
+    setLoadingCities(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      const response = await geographicalApiService.getCitiesByState(stateId);
+      if (response.status === "success") {
+        setCities(response.data || []);
+      } else {
+        console.error("Failed to fetch cities:", response.error);
+        setCities([]);
+      }
+    } catch (error) {
+      console.error("Error fetching cities:", error);
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  };
+
+  // Fetch cities for multiple states with better error handling
+  const fetchCitiesForStates = async (selectedStates) => {
+    setLoadingCities(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      // Limit concurrent requests to prevent overwhelming the system
+      const maxConcurrentRequests = 3;
+      const allCities = [];
+
+      // Process states in batches to prevent memory issues
+      for (let i = 0; i < selectedStates.length; i += maxConcurrentRequests) {
+        const batch = selectedStates.slice(i, i + maxConcurrentRequests);
+
+        try {
+          // Add timeout protection
+          const cityPromises = batch.map((state) =>
+            Promise.race([
+              geographicalApiService.getCitiesByState(state.id),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Request timeout")), 10000),
+              ),
+            ]),
+          );
+
+          const responses = await Promise.allSettled(cityPromises);
+
+          responses.forEach((result, index) => {
+            if (
+              result.status === "fulfilled" &&
+              result.value.status === "success" &&
+              result.value.data
+            ) {
+              allCities.push(...result.value.data);
+            } else {
+              const error =
+                result.status === "rejected"
+                  ? result.reason
+                  : result.value.error;
+              console.error(
+                `Failed to fetch cities for state ${batch[index].name}:`,
+                error,
+              );
+            }
+          });
+
+          // Small delay between batches to prevent overwhelming the system
+          if (i + maxConcurrentRequests < selectedStates.length) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        } catch (batchError) {
+          console.error(
+            `Error in batch ${i}-${i + maxConcurrentRequests}:`,
+            batchError,
+          );
+        }
+      }
+
+      setCities(allCities);
+    } catch (error) {
+      console.error("Error fetching cities for states:", error);
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  };
+
+  // Fetch areas by city
+  const fetchAreasByCity = async (cityId) => {
+    setLoadingAreas(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      const response = await geographicalApiService.getAreasByCity(cityId);
+      if (response.status === "success") {
+        setAreas(response.data || []);
+      } else {
+        console.error("Failed to fetch areas:", response.error);
+        setAreas([]);
+      }
+    } catch (error) {
+      console.error("Error fetching areas:", error);
+      setAreas([]);
+    } finally {
+      setLoadingAreas(false);
+    }
+  };
+
+  // Fetch areas for multiple cities
+  const fetchAreasForCities = async (selectedCities) => {
+    setLoadingAreas(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      // Fetch areas for all selected cities
+      const areaPromises = selectedCities.map((city) =>
+        geographicalApiService.getAreasByCity(city.id),
+      );
+
+      const responses = await Promise.all(areaPromises);
+      const allAreas = [];
+
+      responses.forEach((response, index) => {
+        if (response.status === "success" && response.data) {
+          allAreas.push(...response.data);
+        } else {
+          console.error(
+            `Failed to fetch areas for city ${selectedCities[index].name}:`,
+            response.error,
+          );
+        }
+      });
+
+      setAreas(allAreas);
+    } catch (error) {
+      console.error("Error fetching areas for cities:", error);
+      setAreas([]);
+    } finally {
+      setLoadingAreas(false);
+    }
+  };
+
+  // Fetch pincodes by area
+  const fetchPincodesByArea = async (areaId) => {
+    setLoadingPincodes(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      const response = await geographicalApiService.getPincodesByArea(areaId);
+      if (response.status === "success") {
+        setPincodes(response.data || []);
+      } else {
+        console.error("Failed to fetch pincodes:", response.error);
+        setPincodes([]);
+      }
+    } catch (error) {
+      console.error("Error fetching pincodes:", error);
+      setPincodes([]);
+    } finally {
+      setLoadingPincodes(false);
+    }
+  };
+
+  // Fetch pincodes for multiple areas
+  const fetchPincodesForAreas = async (selectedAreas) => {
+    setLoadingPincodes(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      // Fetch pincodes for all selected areas
+      const pincodePromises = selectedAreas.map((area) =>
+        geographicalApiService.getPincodesByArea(area.id),
+      );
+
+      const responses = await Promise.all(pincodePromises);
+      const allPincodes = [];
+
+      responses.forEach((response, index) => {
+        if (response.status === "success" && response.data) {
+          allPincodes.push(...response.data);
+        } else {
+          console.error(
+            `Failed to fetch pincodes for area ${selectedAreas[index].name}:`,
+            response.error,
+          );
+        }
+      });
+
+      setPincodes(allPincodes);
+    } catch (error) {
+      console.error("Error fetching pincodes for areas:", error);
+      setPincodes([]);
+    } finally {
+      setLoadingPincodes(false);
+    }
+  };
+
+  // Fetch partners
+  const fetchPartners = async () => {
+    setLoadingPartners(true);
+    try {
+      // Set the access token before making the API call
+      if (accessToken) {
+        partnersApiService.setAccessToken(accessToken);
+      }
+
+      const response = await partnersApiService.getPartners({ isActive: true });
+      if (response.status === "success" && response.data?.partners) {
+        setPartners(response.data.partners);
+      } else {
+        console.error("Failed to fetch partners:", response.error);
+        setPartners([]);
+      }
+    } catch (error) {
+      console.error("Error fetching partners:", error);
+      setPartners([]);
+    } finally {
+      setLoadingPartners(false);
+    }
+  };
 
   const validateForm = () => {
     const newErrors = {};
@@ -86,26 +413,66 @@ export function ZoneForm({
         "Zone description must be between 10 and 500 characters";
     }
 
-    if (!formData.partnerId.trim()) {
-      newErrors.partnerId = "Partner ID is required";
+    if (!formData.partnerId) {
+      newErrors.partnerId = "Partner selection is required";
     }
 
-    if (!formData.pincodes.trim()) {
-      newErrors.pincodes = "At least one pincode is required";
-    } else {
-      const pincodes = formData.pincodes.split(",").map((p) => p.trim());
-      const invalidPincodes = pincodes.filter((p) => !/^\d{6}$/.test(p));
-      if (invalidPincodes.length > 0) {
-        newErrors.pincodes = `Invalid pincodes: ${invalidPincodes.join(", ")}`;
+    // Zone-wise validation
+    if (formData.zoneType === "zone-wise") {
+      if (!formData.selectedStates || formData.selectedStates.length === 0) {
+        newErrors.selectedStates = "At least one state is required";
+      }
+
+      if (!formData.selectedCities || formData.selectedCities.length === 0) {
+        newErrors.selectedCities = "At least one city is required";
+      }
+
+      if (
+        (!formData.selectedPincodes ||
+          formData.selectedPincodes.length === 0) &&
+        (!formData.manualPincodes || formData.manualPincodes.length === 0)
+      ) {
+        newErrors.selectedPincodes =
+          "At least one pincode is required (either selected from areas or manually entered)";
       }
     }
 
-    if (!formData.cities.trim()) {
-      newErrors.cities = "At least one city is required";
-    }
-
-    if (!formData.states.trim()) {
-      newErrors.states = "At least one state is required";
+    // Distance-wise validation
+    if (formData.zoneType === "distance-wise") {
+      if (!formData.distanceSlabs || formData.distanceSlabs.length === 0) {
+        newErrors.distanceSlabs = "At least one distance slab is required";
+      } else {
+        formData.distanceSlabs.forEach((slab, index) => {
+          if (!slab.name.trim()) {
+            newErrors[`distanceSlab_${index}_name`] = "Zone name is required";
+          }
+          if (
+            !slab.distanceFrom ||
+            isNaN(Number(slab.distanceFrom)) ||
+            Number(slab.distanceFrom) < 0
+          ) {
+            newErrors[`distanceSlab_${index}_distanceFrom`] =
+              "Valid distance from is required";
+          }
+          if (
+            !slab.distanceTo ||
+            isNaN(Number(slab.distanceTo)) ||
+            Number(slab.distanceTo) <= 0
+          ) {
+            newErrors[`distanceSlab_${index}_distanceTo`] =
+              "Valid distance to is required";
+          }
+          // Validate that distanceTo is greater than distanceFrom
+          if (
+            slab.distanceFrom &&
+            slab.distanceTo &&
+            Number(slab.distanceTo) <= Number(slab.distanceFrom)
+          ) {
+            newErrors[`distanceSlab_${index}_distanceTo`] =
+              "Distance to must be greater than distance from";
+          }
+        });
+      }
     }
 
     // Legacy validation for backward compatibility
@@ -126,14 +493,120 @@ export function ZoneForm({
       newErrors.weightLimit = "Weight limit must be a valid number";
     }
 
+    // Manual pincode validation
+    if (formData.manualPincodes && formData.manualPincodes.length > 0) {
+      formData.manualPincodes.forEach((pincode, index) => {
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+          newErrors[`manualPincode_${index}`] =
+            "Pincode must be exactly 6 digits";
+        }
+      });
+    }
+
+    // Network tax validation
+    if (formData.networkTaxes && formData.networkTaxes.length > 0) {
+      formData.networkTaxes.forEach((tax, index) => {
+        if (!tax.taxName.trim()) {
+          newErrors[`networkTax_${index}_taxName`] = "Tax name is required";
+        }
+        if (
+          !tax.taxValue ||
+          isNaN(Number(tax.taxValue)) ||
+          Number(tax.taxValue) < 0
+        ) {
+          newErrors[`networkTax_${index}_taxValue`] =
+            "Valid tax value is required";
+        }
+        if (tax.taxType === "percentage" && Number(tax.taxValue) > 100) {
+          newErrors[`networkTax_${index}_taxValue`] =
+            "Percentage cannot exceed 100%";
+        }
+      });
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSubmit(formData);
+      setIsSubmitting(true);
+      try {
+        // Convert form data to the format expected by the API
+        const apiFormData = {
+          name: formData.name,
+          description: formData.description,
+          partnerId: formData.partnerId,
+          status: formData.status,
+          zoneType: formData.zoneType,
+          ...(formData.zoneType === "zone-wise"
+            ? {
+                geographical: {
+                  states: formData.selectedStates.map((state) => state.id),
+                  cities: formData.selectedCities.map((city) => city.id),
+                  areas: formData.selectedAreas.map((area) => area.id),
+                  pincodes: formData.selectedPincodes.map(
+                    (pincode) => pincode.id,
+                  ),
+                  manualPincodes: formData.manualPincodes || [],
+                },
+              }
+            : {
+                distanceSlabs: formData.distanceSlabs.map((slab) => ({
+                  name: slab.name,
+                  distanceFrom: Number(slab.distanceFrom),
+                  distanceTo: Number(slab.distanceTo),
+                })),
+              }),
+          services:
+            formData.services.length > 0
+              ? formData.services
+              : [
+                  {
+                    serviceTypeId: 1,
+                    isAvailable: true,
+                    baseCharge: 60,
+                    customCharges: {
+                      expressDelivery: 25,
+                      codCharge: 15,
+                    },
+                    additionalInfo: {
+                      cutoffTime: "18:00",
+                      deliveryWindow: "24-48 hours",
+                    },
+                  },
+                ],
+          networkTaxes: formData.networkTaxes.map((tax) => ({
+            taxName: tax.taxName,
+            taxType: tax.taxType,
+            taxValue: Number(tax.taxValue),
+            isActive: tax.isActive,
+            description: tax.description,
+          })),
+        };
+
+        // Call the onSubmit function and wait for it to complete
+        await onSubmit(apiFormData);
+
+        // Set success state
+        setIsSuccess(true);
+
+        // Reset form after successful submission
+        setFormData({ ...defaultFormData });
+        setErrors({});
+        setCities([]);
+        setAreas([]);
+        setPincodes([]);
+        setManualPincodeInput("");
+        setPincodeSearchResults([]);
+        setShowPincodeSearch(false);
+      } catch (error) {
+        console.error("Form submission error:", error);
+        // Don't reset form on error, let user retry
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -145,6 +618,332 @@ export function ZoneForm({
       delete clearedErrors[key];
     });
     setErrors(clearedErrors);
+    // Clear success state when user makes changes
+    if (isSuccess) {
+      setIsSuccess(false);
+    }
+  };
+
+  // Handle state selection (multiple)
+  const handleStateChange = (stateId, isChecked) => {
+    const state = states.find((s) => s.id === parseInt(stateId));
+    if (state) {
+      let newSelectedStates;
+      if (isChecked) {
+        // Add state if not already selected
+        newSelectedStates = [...formData.selectedStates, state];
+      } else {
+        // Remove state
+        newSelectedStates = formData.selectedStates.filter(
+          (s) => s.id !== state.id,
+        );
+      }
+
+      updateFormData({
+        selectedStates: newSelectedStates,
+        selectedCities: [],
+        selectedAreas: [],
+        selectedPincodes: [],
+      });
+      setCities([]);
+      setAreas([]);
+      setPincodes([]);
+
+      // Fetch cities for all selected states
+      if (newSelectedStates.length > 0) {
+        fetchCitiesForStates(newSelectedStates);
+      }
+    }
+  };
+
+  // Handle city selection (multiple)
+  const handleCityChange = (cityId, isChecked) => {
+    const city = cities.find((c) => c.id === parseInt(cityId));
+    if (city) {
+      let newSelectedCities;
+      if (isChecked) {
+        // Add city if not already selected
+        newSelectedCities = [...formData.selectedCities, city];
+      } else {
+        // Remove city
+        newSelectedCities = formData.selectedCities.filter(
+          (c) => c.id !== city.id,
+        );
+      }
+
+      updateFormData({
+        selectedCities: newSelectedCities,
+        selectedAreas: [],
+        selectedPincodes: [],
+      });
+      setAreas([]);
+      setPincodes([]);
+
+      // Fetch areas for all selected cities
+      if (newSelectedCities.length > 0) {
+        fetchAreasForCities(newSelectedCities);
+      }
+    }
+  };
+
+  // Handle area selection (multiple)
+  const handleAreaChange = (areaId, isChecked) => {
+    const area = areas.find((a) => a.id === parseInt(areaId));
+    if (area) {
+      let newSelectedAreas;
+      if (isChecked) {
+        // Add area if not already selected
+        newSelectedAreas = [...formData.selectedAreas, area];
+      } else {
+        // Remove area
+        newSelectedAreas = formData.selectedAreas.filter(
+          (a) => a.id !== area.id,
+        );
+      }
+
+      updateFormData({
+        selectedAreas: newSelectedAreas,
+        selectedPincodes: [],
+      });
+      setPincodes([]);
+
+      // Fetch pincodes for all selected areas
+      if (newSelectedAreas.length > 0) {
+        fetchPincodesForAreas(newSelectedAreas);
+      }
+    }
+  };
+
+  // Handle pincode selection (multiple)
+  const handlePincodeChange = (pincodeId, isChecked) => {
+    const pincode = pincodes.find((p) => p.id === parseInt(pincodeId));
+    if (pincode) {
+      let newSelectedPincodes;
+      if (isChecked) {
+        // Add pincode if not already selected
+        newSelectedPincodes = [...formData.selectedPincodes, pincode];
+      } else {
+        // Remove pincode
+        newSelectedPincodes = formData.selectedPincodes.filter(
+          (p) => p.id !== pincode.id,
+        );
+      }
+
+      updateFormData({ selectedPincodes: newSelectedPincodes });
+    }
+  };
+
+  // Distance slab management functions
+  const addDistanceSlab = () => {
+    const newSlab = {
+      id: Date.now(),
+      name: "",
+      distanceFrom: "",
+      distanceTo: "",
+    };
+    updateFormData({
+      distanceSlabs: [...formData.distanceSlabs, newSlab],
+    });
+  };
+
+  const removeDistanceSlab = (slabId) => {
+    if (formData.distanceSlabs.length > 1) {
+      updateFormData({
+        distanceSlabs: formData.distanceSlabs.filter(
+          (slab) => slab.id !== slabId,
+        ),
+      });
+    }
+  };
+
+  const updateDistanceSlab = (slabId, field, value) => {
+    updateFormData({
+      distanceSlabs: formData.distanceSlabs.map((slab) =>
+        slab.id === slabId ? { ...slab, [field]: value } : slab,
+      ),
+    });
+  };
+
+  // Network tax management functions
+  const addNetworkTax = () => {
+    const newTax = {
+      id: Date.now(),
+      taxName: "",
+      taxType: "percentage",
+      taxValue: "",
+      isActive: true,
+      description: "",
+    };
+    updateFormData({
+      networkTaxes: [...formData.networkTaxes, newTax],
+    });
+  };
+
+  const removeNetworkTax = (taxId) => {
+    if (formData.networkTaxes.length > 1) {
+      updateFormData({
+        networkTaxes: formData.networkTaxes.filter((tax) => tax.id !== taxId),
+      });
+    }
+  };
+
+  const updateNetworkTax = (taxId, field, value) => {
+    updateFormData({
+      networkTaxes: formData.networkTaxes.map((tax) =>
+        tax.id === taxId ? { ...tax, [field]: value } : tax,
+      ),
+    });
+  };
+
+  // Manual pincode management functions
+  const addManualPincode = () => {
+    if (
+      manualPincodeInput.trim() &&
+      /^\d{6}$/.test(manualPincodeInput.trim())
+    ) {
+      const pincode = manualPincodeInput.trim();
+      if (!formData.manualPincodes.includes(pincode)) {
+        updateFormData({
+          manualPincodes: [...formData.manualPincodes, pincode],
+        });
+        setManualPincodeInput("");
+      } else {
+        // Show error for duplicate pincode
+        setErrors({
+          ...errors,
+          manualPincodeDuplicate: "This pincode is already added",
+        });
+        setTimeout(() => {
+          setErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors.manualPincodeDuplicate;
+            return newErrors;
+          });
+        }, 3000);
+      }
+    } else {
+      setErrors({
+        ...errors,
+        manualPincodeInput: "Please enter a valid 6-digit pincode",
+      });
+      setTimeout(() => {
+        setErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.manualPincodeInput;
+          return newErrors;
+        });
+      }, 3000);
+    }
+  };
+
+  const removeManualPincode = (pincode) => {
+    updateFormData({
+      manualPincodes: formData.manualPincodes.filter((p) => p !== pincode),
+    });
+  };
+
+  const handleManualPincodeKeyPress = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addManualPincode();
+    }
+  };
+
+  // Search pincodes function
+  const searchPincodes = async (query) => {
+    if (!query || query.length < 3) {
+      setPincodeSearchResults([]);
+      setShowPincodeSearch(false);
+      return;
+    }
+
+    setIsSearchingPincodes(true);
+    try {
+      if (accessToken) {
+        geographicalApiService.setAccessToken(accessToken);
+      }
+
+      const response = await geographicalApiService.searchPincodes(query, 10);
+      if (response.status === "success") {
+        setPincodeSearchResults(response.data || []);
+        setShowPincodeSearch(true);
+      } else {
+        console.error("Failed to search pincodes:", response.error);
+        setPincodeSearchResults([]);
+        setShowPincodeSearch(false);
+      }
+    } catch (error) {
+      console.error("Error searching pincodes:", error);
+      setPincodeSearchResults([]);
+      setShowPincodeSearch(false);
+    } finally {
+      setIsSearchingPincodes(false);
+    }
+  };
+
+  // Handle pincode search input change
+  const handlePincodeSearchChange = (value) => {
+    setManualPincodeInput(value);
+
+    // Clear error when user starts typing
+    if (errors.manualPincodeInput) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.manualPincodeInput;
+        return newErrors;
+      });
+    }
+
+    // Search pincodes with debounce
+    if (value.length >= 3) {
+      const timeoutId = setTimeout(() => {
+        searchPincodes(value);
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setPincodeSearchResults([]);
+      setShowPincodeSearch(false);
+    }
+  };
+
+  // Add pincode from search results
+  const addPincodeFromSearch = (pincodeData) => {
+    const pincode = pincodeData.pincode;
+    if (!formData.manualPincodes.includes(pincode)) {
+      updateFormData({
+        manualPincodes: [...formData.manualPincodes, pincode],
+      });
+      setManualPincodeInput("");
+      setShowPincodeSearch(false);
+      setPincodeSearchResults([]);
+    } else {
+      setErrors({
+        ...errors,
+        manualPincodeDuplicate: "This pincode is already added",
+      });
+      setTimeout(() => {
+        setErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.manualPincodeDuplicate;
+          return newErrors;
+        });
+      }, 3000);
+    }
+  };
+
+  // Filter cities based on metro status
+  const getFilteredCities = () => {
+    if (!cities || cities.length === 0) return [];
+
+    switch (cityFilter) {
+      case "metro":
+        return cities.filter((city) => city.isMetro === true);
+      case "non-metro":
+        return cities.filter((city) => city.isMetro === false);
+      default:
+        return cities;
+    }
   };
 
   return (
@@ -161,6 +960,14 @@ export function ZoneForm({
         </div>
       </CardHeader>
       <CardContent>
+        {/* Success Message */}
+        {isSuccess && (
+          <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 flex items-center space-x-3">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            <span className="font-medium">Zone created successfully!</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
           <div className="space-y-4">
@@ -182,16 +989,56 @@ export function ZoneForm({
               </div>
 
               <div>
-                <Label htmlFor="partnerId">Partner ID *</Label>
-                <Input
-                  id="partnerId"
-                  placeholder="Enter partner ID"
+                <Label htmlFor="partnerId">Courier Partner *</Label>
+                <Select
                   value={formData.partnerId}
-                  onChange={(e) =>
-                    updateFormData({ partnerId: e.target.value })
+                  onValueChange={(value) =>
+                    updateFormData({ partnerId: value })
                   }
-                  className={errors.partnerId ? "border-red-500" : ""}
-                />
+                  disabled={loadingPartners || partners.length === 0}
+                >
+                  <SelectTrigger
+                    className={errors.partnerId ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        loadingPartners
+                          ? "Loading partners..."
+                          : partners.length === 0
+                            ? "No partners available"
+                            : "Select a courier partner"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingPartners ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="text-sm text-gray-500">
+                          Loading partners...
+                        </span>
+                      </div>
+                    ) : partners.length === 0 ? (
+                      <div className="flex items-center justify-center py-4">
+                        <span className="text-sm text-gray-500">
+                          No partners available
+                        </span>
+                      </div>
+                    ) : (
+                      partners.map((partner) => (
+                        <SelectItem key={partner.id} value={partner.id}>
+                          <div className="flex items-center space-x-2">
+                            <Truck className="h-4 w-4 text-blue-600" />
+                            <span>{partner.name}</span>
+                            <span className="text-xs text-gray-500">
+                              ({partner.code})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
                 {errors.partnerId && (
                   <p className="text-sm text-red-500 mt-1">
                     {errors.partnerId}
@@ -240,8 +1087,80 @@ export function ZoneForm({
               </div>
             )}
 
+            {/* Zone Type Selection */}
+            <div>
+              <Label className="text-sm font-medium mb-3 block">
+                Zone Type *
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    formData.zoneType === "zone-wise"
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                  onClick={() => updateFormData({ zoneType: "zone-wise" })}
+                >
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      name="zoneType"
+                      value="zone-wise"
+                      checked={formData.zoneType === "zone-wise"}
+                      onChange={() => updateFormData({ zoneType: "zone-wise" })}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <Map className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          Zone Wise
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Define zones by geographical areas
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    formData.zoneType === "distance-wise"
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                  onClick={() => updateFormData({ zoneType: "distance-wise" })}
+                >
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      name="zoneType"
+                      value="distance-wise"
+                      checked={formData.zoneType === "distance-wise"}
+                      onChange={() =>
+                        updateFormData({ zoneType: "distance-wise" })
+                      }
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <Route className="h-5 w-5 text-green-600" />
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          Distance Wise
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Define zones by distance slabs
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              {/* <div>
                 <Label htmlFor="type">Service Type</Label>
                 <Select
                   value={formData.type}
@@ -271,7 +1190,7 @@ export function ZoneForm({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </div> */}
 
               <div>
                 <Label htmlFor="status">Status</Label>
@@ -307,76 +1226,643 @@ export function ZoneForm({
 
           {/* Coverage Details */}
           <div className="space-y-4">
-            <div className="text-sm font-medium">Coverage Details</div>
-
-            <div>
-              <Label htmlFor="pincodes">Pincodes (comma-separated) *</Label>
-              <Input
-                id="pincodes"
-                placeholder="400001, 400002, 400003"
-                value={formData.pincodes}
-                onChange={(e) => updateFormData({ pincodes: e.target.value })}
-                className={errors.pincodes ? "border-red-500" : ""}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter 6-digit pincodes separated by commas (e.g., 400001,
-                400002)
-              </p>
-              {errors.pincodes && (
-                <p className="text-sm text-red-500 mt-1">{errors.pincodes}</p>
-              )}
+            <div className="text-sm font-medium">
+              {formData.zoneType === "zone-wise"
+                ? "Geographical Coverage"
+                : "Distance Slabs"}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="cities">Cities (comma-separated) *</Label>
-                <Input
-                  id="cities"
-                  placeholder="1, 2, 3"
-                  value={formData.cities}
-                  onChange={(e) => updateFormData({ cities: e.target.value })}
-                  className={errors.cities ? "border-red-500" : ""}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter city IDs separated by commas (e.g., 1, 2, 3)
-                </p>
-                {errors.cities && (
-                  <p className="text-sm text-red-500 mt-1">{errors.cities}</p>
+            {/* Zone-wise Geographical Coverage */}
+            {formData.zoneType === "zone-wise" && (
+              <>
+                {/* State Selection */}
+                <div>
+                  <Label htmlFor="state">States *</Label>
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                    {loadingStates ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span>Loading states...</span>
+                      </div>
+                    ) : states.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        No states available (Debug: states.length ={" "}
+                        {states.length})
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {states.map((state) => (
+                          <div
+                            key={state.id}
+                            className="flex items-center space-x-3"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`state-${state.id}`}
+                              checked={formData.selectedStates.some(
+                                (s) => s.id === state.id,
+                              )}
+                              onChange={(e) =>
+                                handleStateChange(state.id, e.target.checked)
+                              }
+                              className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <label
+                              htmlFor={`state-${state.id}`}
+                              className="flex items-center space-x-2 cursor-pointer"
+                            >
+                              <MapPin className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm">{state.name}</span>
+                              <span className="text-xs text-gray-500">
+                                ({state.code})
+                              </span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.selectedStates.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600">
+                        Selected:{" "}
+                        {formData.selectedStates.map((s) => s.name).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {errors.selectedStates && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.selectedStates}
+                    </p>
+                  )}
+                </div>
+
+                {/* City Selection */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="city">Cities *</Label>
+                    {cities.length > 0 && (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-500">Filter:</span>
+                        <Select
+                          value={cityFilter}
+                          onValueChange={setCityFilter}
+                        >
+                          <SelectTrigger className="w-32 h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Cities</SelectItem>
+                            <SelectItem value="metro">Metro Only</SelectItem>
+                            <SelectItem value="non-metro">Non-Metro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                    {!formData.selectedStates.length ? (
+                      <div className="text-center py-4 text-gray-500">
+                        Select states first
+                      </div>
+                    ) : loadingCities ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span>Loading cities...</span>
+                      </div>
+                    ) : cities.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        No cities available
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {getFilteredCities().map((city) => (
+                          <div
+                            key={city.id}
+                            className="flex items-center space-x-3"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`city-${city.id}`}
+                              checked={formData.selectedCities.some(
+                                (c) => c.id === city.id,
+                              )}
+                              onChange={(e) =>
+                                handleCityChange(city.id, e.target.checked)
+                              }
+                              className="h-4 w-4 text-green-600 rounded focus:ring-green-500"
+                            />
+                            <label
+                              htmlFor={`city-${city.id}`}
+                              className="flex items-center space-x-2 cursor-pointer flex-1"
+                            >
+                              <Building className="h-4 w-4 text-green-600" />
+                              <span className="text-sm">{city.name}</span>
+                              {city.isMetro && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  Metro
+                                </span>
+                              )}
+                              {city.population && (
+                                <span className="text-xs text-gray-500">
+                                  ({city.population.toLocaleString()})
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        ))}
+                        {getFilteredCities().length === 0 &&
+                          cityFilter !== "all" && (
+                            <div className="text-center py-4 text-gray-500">
+                              No{" "}
+                              {cityFilter === "metro" ? "metro" : "non-metro"}{" "}
+                              cities found
+                            </div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                  {formData.selectedCities.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600 mb-2">
+                        Selected Cities ({formData.selectedCities.length}):
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.selectedCities.map((city) => (
+                          <div
+                            key={city.id}
+                            className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm"
+                          >
+                            <Building className="h-3 w-3" />
+                            <span>{city.name}</span>
+                            {city.isMetro && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
+                                Metro
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleCityChange(city.id, false)}
+                              className="text-green-600 hover:text-green-800 ml-1"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {errors.selectedCities && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.selectedCities}
+                    </p>
+                  )}
+
+                  {/* City Statistics */}
+                  {cities.length > 0 && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-1">
+                            <Building className="h-4 w-4 text-gray-500" />
+                            <span className="text-gray-600">Total Cities:</span>
+                            <span className="font-medium">{cities.length}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            <span className="text-gray-600">Metro:</span>
+                            <span className="font-medium">
+                              {cities.filter((c) => c.isMetro).length}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                            <span className="text-gray-600">Non-Metro:</span>
+                            <span className="font-medium">
+                              {cities.filter((c) => !c.isMetro).length}
+                            </span>
+                          </div>
+                        </div>
+                        {formData.selectedCities.length > 0 && (
+                          <div className="text-green-600 font-medium">
+                            {formData.selectedCities.length} selected
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Area Selection */}
+                <div>
+                  <Label htmlFor="area">Areas (Optional)</Label>
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                    {!formData.selectedCities.length ? (
+                      <div className="text-center py-4 text-gray-500">
+                        Select cities first
+                      </div>
+                    ) : loadingAreas ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span>Loading areas...</span>
+                      </div>
+                    ) : areas.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        No areas available
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {areas.map((area) => (
+                          <div
+                            key={area.id}
+                            className="flex items-center space-x-3"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`area-${area.id}`}
+                              checked={formData.selectedAreas.some(
+                                (a) => a.id === area.id,
+                              )}
+                              onChange={(e) =>
+                                handleAreaChange(area.id, e.target.checked)
+                              }
+                              className="h-4 w-4 text-purple-600 rounded focus:ring-purple-500"
+                            />
+                            <label
+                              htmlFor={`area-${area.id}`}
+                              className="flex items-center space-x-2 cursor-pointer"
+                            >
+                              <Users className="h-4 w-4 text-purple-600" />
+                              <span className="text-sm">{area.name}</span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.selectedAreas.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600">
+                        Selected:{" "}
+                        {formData.selectedAreas.map((a) => a.name).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pincode Selection */}
+                <div>
+                  <Label htmlFor="pincode">Pincodes *</Label>
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                    {!formData.selectedAreas.length ? (
+                      <div className="text-center py-4 text-gray-500">
+                        Select areas first
+                      </div>
+                    ) : loadingPincodes ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span>Loading pincodes...</span>
+                      </div>
+                    ) : pincodes.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        No pincodes available
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {pincodes.map((pincode) => (
+                          <div
+                            key={pincode.id}
+                            className="flex items-center space-x-3"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`pincode-${pincode.id}`}
+                              checked={formData.selectedPincodes.some(
+                                (p) => p.id === pincode.id,
+                              )}
+                              onChange={(e) =>
+                                handlePincodeChange(
+                                  pincode.id,
+                                  e.target.checked,
+                                )
+                              }
+                              className="h-4 w-4 text-orange-600 rounded focus:ring-orange-500"
+                            />
+                            <label
+                              htmlFor={`pincode-${pincode.id}`}
+                              className="flex items-center space-x-2 cursor-pointer"
+                            >
+                              <MapPin className="h-4 w-4 text-orange-600" />
+                              <span className="text-sm">{pincode.pincode}</span>
+                              {pincode.areaName && (
+                                <span className="text-xs text-gray-500">
+                                  ({pincode.areaName})
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.selectedPincodes.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600">
+                        Selected:{" "}
+                        {formData.selectedPincodes
+                          .map((p) => p.pincode)
+                          .join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {errors.selectedPincodes && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.selectedPincodes}
+                    </p>
+                  )}
+                </div>
+
+                {/* Manual Pincode Input */}
+                <div>
+                  <Label htmlFor="manualPincode">
+                    Add Pincodes Manually (Optional)
+                  </Label>
+                  <div className="relative">
+                    <div className="flex space-x-2 mt-2">
+                      <div className="flex-1 relative">
+                        <Input
+                          id="manualPincode"
+                          placeholder="Enter 6-digit pincode or search by area name (e.g., 110001 or 'Connaught Place')"
+                          value={manualPincodeInput}
+                          onChange={(e) =>
+                            handlePincodeSearchChange(e.target.value)
+                          }
+                          onKeyPress={handleManualPincodeKeyPress}
+                          className={`w-full ${errors.manualPincodeInput ? "border-red-500" : ""}`}
+                          maxLength={50}
+                        />
+                        {isSearchingPincodes && (
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addManualPincode}
+                        disabled={
+                          !manualPincodeInput.trim() ||
+                          manualPincodeInput.length !== 6
+                        }
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Pincode Search Results Dropdown */}
+                    {showPincodeSearch && pincodeSearchResults.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        {pincodeSearchResults.map((pincodeData, index) => (
+                          <div
+                            key={index}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => addPincodeFromSearch(pincodeData)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <MapPin className="h-4 w-4 text-blue-600" />
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {pincodeData.pincode}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {pincodeData.areaName &&
+                                      `${pincodeData.areaName}, `}
+                                    {pincodeData.cityName &&
+                                      `${pincodeData.cityName}, `}
+                                    {pincodeData.stateName}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                Click to add
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No results message */}
+                    {showPincodeSearch &&
+                      pincodeSearchResults.length === 0 &&
+                      manualPincodeInput.length >= 3 &&
+                      !isSearchingPincodes && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-4">
+                          <div className="text-center text-gray-500">
+                            <MapPin className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                            <p className="text-sm">
+                              No pincodes found for "{manualPincodeInput}"
+                            </p>
+                            <p className="text-xs mt-1">
+                              Try entering a 6-digit pincode directly
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                  {errors.manualPincodeInput && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.manualPincodeInput}
+                    </p>
+                  )}
+                  {errors.manualPincodeDuplicate && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.manualPincodeDuplicate}
+                    </p>
+                  )}
+
+                  {/* Display manually added pincodes */}
+                  {formData.manualPincodes.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        Manually Added Pincodes:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.manualPincodes.map((pincode, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm"
+                          >
+                            <MapPin className="h-3 w-3" />
+                            <span>{pincode}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeManualPincode(pincode)}
+                              className="text-blue-600 hover:text-blue-800 ml-1"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Distance-wise Form */}
+            {formData.zoneType === "distance-wise" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900">
+                      Distance Slabs
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Define zones based on distance ranges
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addDistanceSlab}
+                    className="flex items-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Slab</span>
+                  </Button>
+                </div>
+
+                {errors.distanceSlabs && (
+                  <p className="text-sm text-red-500">{errors.distanceSlabs}</p>
                 )}
+
+                <div className="space-y-4">
+                  {formData.distanceSlabs.map((slab, index) => (
+                    <div
+                      key={slab.id}
+                      className="border border-gray-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-sm font-medium text-gray-700">
+                          Distance Slab {index + 1}
+                        </h4>
+                        {formData.distanceSlabs.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeDistanceSlab(slab.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor={`slab-name-${slab.id}`}>
+                            Zone Name *
+                          </Label>
+                          <Input
+                            id={`slab-name-${slab.id}`}
+                            placeholder="e.g., Local Zone, Metro Zone"
+                            value={slab.name}
+                            onChange={(e) =>
+                              updateDistanceSlab(
+                                slab.id,
+                                "name",
+                                e.target.value,
+                              )
+                            }
+                            className={
+                              errors[`distanceSlab_${index}_name`]
+                                ? "border-red-500"
+                                : ""
+                            }
+                          />
+                          {errors[`distanceSlab_${index}_name`] && (
+                            <p className="text-sm text-red-500 mt-1">
+                              {errors[`distanceSlab_${index}_name`]}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <Label htmlFor={`slab-distance-from-${slab.id}`}>
+                            Distance From (km) *
+                          </Label>
+                          <Input
+                            id={`slab-distance-from-${slab.id}`}
+                            type="number"
+                            placeholder="e.g., 0, 10, 25"
+                            value={slab.distanceFrom}
+                            onChange={(e) =>
+                              updateDistanceSlab(
+                                slab.id,
+                                "distanceFrom",
+                                e.target.value,
+                              )
+                            }
+                            className={
+                              errors[`distanceSlab_${index}_distanceFrom`]
+                                ? "border-red-500"
+                                : ""
+                            }
+                            min="0"
+                            step="0.1"
+                          />
+                          {errors[`distanceSlab_${index}_distanceFrom`] && (
+                            <p className="text-sm text-red-500 mt-1">
+                              {errors[`distanceSlab_${index}_distanceFrom`]}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <Label htmlFor={`slab-distance-to-${slab.id}`}>
+                            Distance To (km) *
+                          </Label>
+                          <Input
+                            id={`slab-distance-to-${slab.id}`}
+                            type="number"
+                            placeholder="e.g., 10, 25, 50"
+                            value={slab.distanceTo}
+                            onChange={(e) =>
+                              updateDistanceSlab(
+                                slab.id,
+                                "distanceTo",
+                                e.target.value,
+                              )
+                            }
+                            className={
+                              errors[`distanceSlab_${index}_distanceTo`]
+                                ? "border-red-500"
+                                : ""
+                            }
+                            min="0"
+                            step="0.1"
+                          />
+                          {errors[`distanceSlab_${index}_distanceTo`] && (
+                            <p className="text-sm text-red-500 mt-1">
+                              {errors[`distanceSlab_${index}_distanceTo`]}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
 
-              <div>
-                <Label htmlFor="states">States (comma-separated) *</Label>
-                <Input
-                  id="states"
-                  placeholder="1, 2, 3"
-                  value={formData.states}
-                  onChange={(e) => updateFormData({ states: e.target.value })}
-                  className={errors.states ? "border-red-500" : ""}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter state IDs separated by commas (e.g., 1, 2, 3)
-                </p>
-                {errors.states && (
-                  <p className="text-sm text-red-500 mt-1">{errors.states}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="areas">Areas (comma-separated)</Label>
-              <Input
-                id="areas"
-                placeholder="101, 102, 103"
-                value={formData.areas}
-                onChange={(e) => updateFormData({ areas: e.target.value })}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter area IDs separated by commas (e.g., 101, 102, 103)
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="area">Area (sq km)</Label>
                 <Input
@@ -425,13 +1911,13 @@ export function ZoneForm({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+            </div> */}
           </div>
 
           <Separator />
 
           {/* Service Restrictions */}
-          <div className="space-y-4">
+          {/* <div className="space-y-4">
             <div className="text-sm font-medium">Service Restrictions</div>
 
             <div>
@@ -513,18 +1999,29 @@ export function ZoneForm({
                 </Label>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* Form Actions */}
           <div className="flex space-x-2 pt-4">
-            <Button type="submit" className="flex-1" disabled={isLoading}>
-              {isLoading ? "Saving..." : "Save Zone"}
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isLoading || isSubmitting}
+            >
+              {isLoading || isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                "Save Zone"
+              )}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={onCancel}
-              disabled={isLoading}
+              disabled={isLoading || isSubmitting}
             >
               Cancel
             </Button>

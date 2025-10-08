@@ -14,6 +14,8 @@ export default function CreateZonePage() {
 
   const handleSubmit = async (formData) => {
     setIsLoading(true);
+    setNotification(null); // Clear any existing notifications
+
     try {
       // Convert form data to API format
       const zoneData = {
@@ -21,26 +23,23 @@ export default function CreateZonePage() {
         description: formData.description,
         partnerId: formData.partnerId,
         status: formData.status,
-        geographical: {
-          states: formData.states
-            .split(",")
-            .map((s) => parseInt(s.trim()))
-            .filter((s) => !isNaN(s)),
-          cities: formData.cities
-            .split(",")
-            .map((c) => parseInt(c.trim()))
-            .filter((c) => !isNaN(c)),
-          areas: formData.areas
-            ? formData.areas
-                .split(",")
-                .map((a) => parseInt(a.trim()))
-                .filter((a) => !isNaN(a))
-            : [],
-          pincodes: formData.pincodes
-            .split(",")
-            .map((p) => parseInt(p.trim()))
-            .filter((p) => !isNaN(p)),
-        },
+        zoneType: formData.zoneType,
+        ...(formData.zoneType === "zone-wise"
+          ? {
+              geographical: {
+                states: formData.geographical.states,
+                cities: formData.geographical.cities,
+                areas: formData.geographical.areas,
+                pincodes: formData.geographical.pincodes,
+              },
+            }
+          : {
+              distanceSlabs: formData.distanceSlabs.map((slab) => ({
+                name: slab.name,
+                distanceFrom: Number(slab.distanceFrom),
+                distanceTo: Number(slab.distanceTo),
+              })),
+            }),
         services: formData.services || [
           {
             serviceTypeId: 1,
@@ -67,13 +66,13 @@ export default function CreateZonePage() {
         console.log("Zone created successfully:", response.data);
         setNotification({
           type: "success",
-          message: "Zone created successfully!",
+          message: "Zone created successfully! Redirecting to zones list...",
         });
 
-        // Redirect to zones list after a short delay
+        // Redirect to zones list after a short delay to show success message
         setTimeout(() => {
           router.push("/zones");
-        }, 1500);
+        }, 2000);
       } else {
         throw new Error(response.error?.message || "Failed to create zone");
       }
@@ -83,6 +82,8 @@ export default function CreateZonePage() {
         type: "error",
         message: `Failed to create zone: ${error.message}`,
       });
+      // Re-throw the error so the form can handle it
+      throw error;
     } finally {
       setIsLoading(false);
     }

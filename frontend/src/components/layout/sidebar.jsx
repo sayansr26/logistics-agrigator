@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Store,
   LucideIcon,
+  IndianRupee,
 } from "lucide-react";
 
 const navigationItems = [
@@ -86,6 +87,11 @@ const navigationItems = [
     title: "User Management",
     href: "/users",
     icon: Users,
+  },
+  {
+    title: "Charges",
+    href: "/charges",
+    icon: IndianRupee,
   },
 ];
 

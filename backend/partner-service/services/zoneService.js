@@ -14,7 +14,7 @@
  */
 
 const logger = require("../shared/lib/logger");
-const { getRedisClient } = require("../shared/lib/redis");
+const { getClient } = require("../shared/lib/redis");
 const { ExternalPartnerClient } = require("./externalPartnerClient");
 
 class ZoneService {
@@ -45,7 +45,7 @@ class ZoneService {
 
     try {
       // Check cache first
-      const redis = getRedisClient();
+      const redis = getClient();
       const cached = await redis.get(cacheKey);
       if (cached) {
         logger.debug("Zones retrieved from cache", { cacheKey });
@@ -187,7 +187,7 @@ class ZoneService {
 
     try {
       // Check cache first
-      const redis = getRedisClient();
+      const redis = getClient();
       const cached = await redis.get(cacheKey);
       if (cached) {
         logger.debug("Service types retrieved from cache", { cacheKey });
@@ -330,7 +330,7 @@ class ZoneService {
 
     try {
       // Check cache first
-      const redis = getRedisClient();
+      const redis = getClient();
       const cached = await redis.get(cacheKey);
       if (cached) {
         logger.debug("Partner zones retrieved from cache", {
@@ -428,7 +428,7 @@ class ZoneService {
 
     try {
       // Check cache first
-      const redis = getRedisClient();
+      const redis = getClient();
       const cached = await redis.get(cacheKey);
       if (cached) {
         logger.debug("Comprehensive partner data retrieved from cache", {
@@ -584,7 +584,7 @@ class ZoneService {
    */
   async clearZoneCaches() {
     try {
-      const redis = getRedisClient();
+      const redis = getClient();
       const keys = await redis.keys("zones:*");
       if (keys.length > 0) {
         await redis.del(...keys);
@@ -600,7 +600,7 @@ class ZoneService {
    */
   async clearServiceTypeCaches() {
     try {
-      const redis = getRedisClient();
+      const redis = getClient();
       const keys = await redis.keys("service-types:*");
       if (keys.length > 0) {
         await redis.del(...keys);
@@ -618,7 +618,7 @@ class ZoneService {
    */
   async clearPartnerCaches(partnerId) {
     try {
-      const redis = getRedisClient();
+      const redis = getClient();
       const keys = await redis.keys(`*${partnerId}*`);
       if (keys.length > 0) {
         await redis.del(...keys);

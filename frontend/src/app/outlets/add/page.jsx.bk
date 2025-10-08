@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,12 +39,9 @@ import {
   ChevronRight,
   ChevronLeft,
   CheckCircle,
-  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GeographicalApiService } from "@/services/api/geographical-api";
-import { useAuth } from "@/hooks/useAuth";
 
 const initialFormData = {
   outletCode: "",
@@ -76,7 +73,6 @@ const initialFormData = {
   serviceAreas: [],
 };
 
-// Dynamic data will be fetched from API
 const availableCouriers = [
   "Delhivery",
   "Blue Dart",
@@ -88,49 +84,43 @@ const availableCouriers = [
   "XpressBees",
 ];
 
-// Fallback states in case API fails
-const fallbackStates = [
-  { id: 1, name: "Andhra Pradesh", code: "AP", isActive: true },
-  { id: 2, name: "Arunachal Pradesh", code: "AR", isActive: true },
-  { id: 3, name: "Assam", code: "AS", isActive: true },
-  { id: 4, name: "Bihar", code: "BR", isActive: true },
-  { id: 5, name: "Chhattisgarh", code: "CG", isActive: true },
-  { id: 6, name: "Goa", code: "GA", isActive: true },
-  { id: 7, name: "Gujarat", code: "GJ", isActive: true },
-  { id: 8, name: "Haryana", code: "HR", isActive: true },
-  { id: 9, name: "Himachal Pradesh", code: "HP", isActive: true },
-  { id: 10, name: "Jharkhand", code: "JH", isActive: true },
-  { id: 11, name: "Karnataka", code: "KA", isActive: true },
-  { id: 12, name: "Kerala", code: "KL", isActive: true },
-  { id: 13, name: "Madhya Pradesh", code: "MP", isActive: true },
-  { id: 14, name: "Maharashtra", code: "MH", isActive: true },
-  { id: 15, name: "Manipur", code: "MN", isActive: true },
-  { id: 16, name: "Meghalaya", code: "ML", isActive: true },
-  { id: 17, name: "Mizoram", code: "MZ", isActive: true },
-  { id: 18, name: "Nagaland", code: "NL", isActive: true },
-  { id: 19, name: "Odisha", code: "OR", isActive: true },
-  { id: 20, name: "Punjab", code: "PB", isActive: true },
-  { id: 21, name: "Rajasthan", code: "RJ", isActive: true },
-  { id: 22, name: "Sikkim", code: "SK", isActive: true },
-  { id: 23, name: "Tamil Nadu", code: "TN", isActive: true },
-  { id: 24, name: "Telangana", code: "TG", isActive: true },
-  { id: 25, name: "Tripura", code: "TR", isActive: true },
-  { id: 26, name: "Uttar Pradesh", code: "UP", isActive: true },
-  { id: 27, name: "Uttarakhand", code: "UK", isActive: true },
-  { id: 28, name: "West Bengal", code: "WB", isActive: true },
-  { id: 29, name: "Delhi", code: "DL", isActive: true },
-  { id: 30, name: "Jammu and Kashmir", code: "JK", isActive: true },
-  { id: 31, name: "Ladakh", code: "LA", isActive: true },
-  { id: 32, name: "Chandigarh", code: "CH", isActive: true },
-  {
-    id: 33,
-    name: "Dadra and Nagar Haveli and Daman and Diu",
-    code: "DH",
-    isActive: true,
-  },
-  { id: 34, name: "Lakshadweep", code: "LD", isActive: true },
-  { id: 35, name: "Puducherry", code: "PY", isActive: true },
-  { id: 36, name: "Andaman and Nicobar Islands", code: "AN", isActive: true },
+const indianStates = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Delhi",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Lakshadweep",
+  "Puducherry",
+  "Andaman and Nicobar Islands",
 ];
 
 const steps = [
@@ -154,21 +144,10 @@ const steps = [
 
 export default function AddOutletPage() {
   const router = useRouter();
-  const { accessToken } = useAuth();
   const [formData, setFormData] = useState(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [newServiceArea, setNewServiceArea] = useState("");
-
-  // Geographical data state
-  const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [businessCities, setBusinessCities] = useState([]);
-  const [isLoadingStates, setIsLoadingStates] = useState(false);
-  const [isLoadingCities, setIsLoadingCities] = useState(false);
-  const [isLoadingBusinessCities, setIsLoadingBusinessCities] = useState(false);
-  const [geoError, setGeoError] = useState(null);
-  const [geoApiService] = useState(() => new GeographicalApiService());
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
@@ -176,129 +155,11 @@ export default function AddOutletPage() {
     { title: "Add Outlet" },
   ];
 
-  // Load states on component mount
-  useEffect(() => {
-    const loadStates = async () => {
-      console.log("Loading states, accessToken:", !!accessToken);
-      if (accessToken) {
-        setIsLoadingStates(true);
-        setGeoError(null);
-        try {
-          geoApiService.setAccessToken(accessToken);
-          console.log("Making API call to get states...");
-          const response = await geoApiService.getStates();
-          console.log("States API response:", response);
-          if (response.status === "success") {
-            setStates(response.data);
-            console.log("States loaded:", response.data);
-          } else {
-            console.error(
-              "Failed to load states from API, using fallback:",
-              response.error,
-            );
-            setStates(fallbackStates);
-            setGeoError("Using offline states");
-          }
-        } catch (error) {
-          console.error("Error loading states, using fallback:", error);
-          setStates(fallbackStates);
-          setGeoError("Using offline states");
-        } finally {
-          setIsLoadingStates(false);
-        }
-      } else {
-        console.log("No access token available, using fallback states");
-        setStates(fallbackStates);
-      }
-    };
-
-    loadStates();
-  }, [accessToken, geoApiService]);
-
-  // Load cities when state changes
-  const loadCities = async (stateId) => {
-    console.log("Loading cities for stateId:", stateId);
-    if (stateId && accessToken) {
-      setIsLoadingCities(true);
-      try {
-        geoApiService.setAccessToken(accessToken);
-        const response = await geoApiService.getCitiesByState(stateId);
-        console.log("Cities API response:", response);
-        if (response.status === "success") {
-          setCities(response.data);
-          console.log("Cities loaded:", response.data);
-        } else {
-          console.error("Failed to load cities from API:", response.error);
-          // For now, we'll just clear cities if API fails
-          setCities([]);
-        }
-      } catch (error) {
-        console.error("Error loading cities:", error);
-        setCities([]);
-      } finally {
-        setIsLoadingCities(false);
-      }
-    } else {
-      console.log("No access token or stateId, clearing cities");
-      setCities([]);
-    }
-  };
-
-  // Load business cities when business state changes
-  const loadBusinessCities = async (stateId) => {
-    console.log("Loading business cities for stateId:", stateId);
-    if (stateId && accessToken) {
-      setIsLoadingBusinessCities(true);
-      try {
-        geoApiService.setAccessToken(accessToken);
-        const response = await geoApiService.getCitiesByState(stateId);
-        console.log("Business cities API response:", response);
-        if (response.status === "success") {
-          setBusinessCities(response.data);
-          console.log("Business cities loaded:", response.data);
-        } else {
-          console.error(
-            "Failed to load business cities from API:",
-            response.error,
-          );
-          setBusinessCities([]);
-        }
-      } catch (error) {
-        console.error("Error loading business cities:", error);
-        setBusinessCities([]);
-      } finally {
-        setIsLoadingBusinessCities(false);
-      }
-    } else {
-      console.log("No access token or stateId, clearing business cities");
-      setBusinessCities([]);
-    }
-  };
-
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
-
-    // Handle state changes to load cities
-    if (field === "state") {
-      const selectedState = states.find((state) => state.name === value);
-      if (selectedState) {
-        loadCities(selectedState.id);
-        // Clear city when state changes
-        setFormData((prev) => ({ ...prev, city: "" }));
-      }
-    }
-
-    if (field === "businessState") {
-      const selectedState = states.find((state) => state.name === value);
-      if (selectedState) {
-        loadBusinessCities(selectedState.id);
-        // Clear business city when business state changes
-        setFormData((prev) => ({ ...prev, businessCity: "" }));
-      }
-    }
   };
 
   const handleBankDetailsChange = (field, value) => {
@@ -337,44 +198,9 @@ export default function AddOutletPage() {
     }));
   };
 
-  const validateStep = (step) => {
-    switch (step) {
-      case 1:
-        return (
-          formData.outletCode &&
-          formData.outletName &&
-          formData.retailerName &&
-          formData.type &&
-          formData.status
-        );
-      case 2:
-        return (
-          formData.contactPerson &&
-          formData.phone &&
-          formData.email &&
-          formData.address &&
-          formData.city &&
-          formData.state &&
-          formData.pincode
-        );
-      case 3:
-        return formData.bankDetails.accountHolderName;
-      case 4:
-        return true; // No required fields in step 4
-      default:
-        return false;
-    }
-  };
-
   const nextStep = () => {
     if (currentStep < steps.length) {
-      if (validateStep(currentStep)) {
-        setCurrentStep(currentStep + 1);
-      } else {
-        alert(
-          "Please fill in all required fields before proceeding to the next step.",
-        );
-      }
+      setCurrentStep(currentStep + 1);
     }
   };
 
@@ -386,15 +212,6 @@ export default function AddOutletPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Final validation before submission
-    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
-      alert(
-        "Please complete all required fields in the previous steps before creating the outlet.",
-      );
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -402,16 +219,12 @@ export default function AddOutletPage() {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // In real implementation, make API call here
-      console.log("Creating outlet:", formData);
-
-      // Show success message
-      alert("Outlet created successfully!");
+      // console.log("Creating outlet:", formData);
 
       // Redirect to outlets list
       router.push("/outlets");
     } catch (error) {
-      console.error("Error creating outlet:", error);
-      alert("Failed to create outlet. Please try again.");
+      // console.error("Error creating outlet:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -456,7 +269,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("outletCode", e.target.value)
                     }
-                    placeholder="Enter Outlet Code"
+                    placeholder="e.g., OUT001"
                     required
                   />
                 </div>
@@ -468,7 +281,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("outletName", e.target.value)
                     }
-                    placeholder="Enter Business Name"
+                    placeholder="e.g., Main Branch"
                     required
                   />
                 </div>
@@ -480,7 +293,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("retailerName", e.target.value)
                     }
-                    placeholder="Enter Business Owner Name"
+                    placeholder="e.g., RG ENTERPRISES"
                     required
                   />
                 </div>
@@ -548,7 +361,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("businessHours", e.target.value)
                     }
-                    placeholder="Enter Business Hours"
+                    placeholder="e.g., 9:00 AM - 8:00 PM"
                   />
                 </div>
               </div>
@@ -564,7 +377,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("gstNumber", e.target.value)
                     }
-                    placeholder="Enter GST Number"
+                    placeholder="e.g., 27AABFR1234M1Z5"
                   />
                 </div>
                 <div className="space-y-2">
@@ -575,7 +388,7 @@ export default function AddOutletPage() {
                     onChange={(e) =>
                       handleInputChange("panNumber", e.target.value)
                     }
-                    placeholder="Enter PAN Number"
+                    placeholder="e.g., AABFR1234M"
                   />
                 </div>
               </div>
@@ -609,7 +422,7 @@ export default function AddOutletPage() {
                       onChange={(e) =>
                         handleInputChange("contactPerson", e.target.value)
                       }
-                      placeholder="Enter Contact Person"
+                      placeholder="e.g., Rajesh Gupta"
                       required
                     />
                   </div>
@@ -621,7 +434,7 @@ export default function AddOutletPage() {
                       onChange={(e) =>
                         handleInputChange("phone", e.target.value)
                       }
-                      placeholder="Enter Phone Number"
+                      placeholder="e.g., +91 98765 43210"
                       required
                     />
                   </div>
@@ -634,7 +447,7 @@ export default function AddOutletPage() {
                       onChange={(e) =>
                         handleInputChange("email", e.target.value)
                       }
-                      placeholder="Enter Email Address"
+                      placeholder="e.g., rajesh@rgenterprises.com"
                       required
                     />
                   </div>
@@ -647,11 +460,6 @@ export default function AddOutletPage() {
                 <h3 className="text-lg font-semibold mb-4">
                   Address Information
                 </h3>
-                {geoError && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-600">{geoError}</p>
-                  </div>
-                )}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="address">Complete Address *</Label>
@@ -661,42 +469,22 @@ export default function AddOutletPage() {
                       onChange={(e) =>
                         handleInputChange("address", e.target.value)
                       }
-                      placeholder="Enter Complete Address"
+                      placeholder="e.g., 123 Main Street, Sector 15"
                       required
                     />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="city">City *</Label>
-                      <Select
+                      <Input
+                        id="city"
                         value={formData.city}
-                        onValueChange={(value) =>
-                          handleInputChange("city", value)
+                        onChange={(e) =>
+                          handleInputChange("city", e.target.value)
                         }
-                        disabled={!formData.state || isLoadingCities}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              isLoadingCities
-                                ? "Loading cities..."
-                                : !formData.state
-                                  ? "Select state first"
-                                  : "Select City"
-                            }
-                          />
-                          {isLoadingCities && (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          {cities.map((city) => (
-                            <SelectItem key={city.id} value={city.name}>
-                              {city.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="e.g., Mumbai"
+                        required
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="state">State *</Label>
@@ -705,24 +493,14 @@ export default function AddOutletPage() {
                         onValueChange={(value) =>
                           handleInputChange("state", value)
                         }
-                        disabled={isLoadingStates}
                       >
                         <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              isLoadingStates
-                                ? "Loading states..."
-                                : "Select State"
-                            }
-                          />
-                          {isLoadingStates && (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          )}
+                          <SelectValue placeholder="Select State" />
                         </SelectTrigger>
                         <SelectContent>
-                          {states.map((state) => (
-                            <SelectItem key={state.id} value={state.name}>
-                              {state.name}
+                          {indianStates.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -736,7 +514,7 @@ export default function AddOutletPage() {
                         onChange={(e) =>
                           handleInputChange("pincode", e.target.value)
                         }
-                        placeholder="Enter Pincode"
+                        placeholder="e.g., 400001"
                         required
                       />
                     </div>
@@ -757,43 +535,20 @@ export default function AddOutletPage() {
                       onChange={(e) =>
                         handleInputChange("businessAddress", e.target.value)
                       }
-                      placeholder="Enter Complete Business Address"
+                      placeholder="e.g., Registered business address for legal purposes"
                     />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="businessCity">City</Label>
-                      <Select
+                      <Input
+                        id="businessCity"
                         value={formData.businessCity}
-                        onValueChange={(value) =>
-                          handleInputChange("businessCity", value)
+                        onChange={(e) =>
+                          handleInputChange("businessCity", e.target.value)
                         }
-                        disabled={
-                          !formData.businessState || isLoadingBusinessCities
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              isLoadingBusinessCities
-                                ? "Loading cities..."
-                                : !formData.businessState
-                                  ? "Select state first"
-                                  : "Select City"
-                            }
-                          />
-                          {isLoadingBusinessCities && (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          {businessCities.map((city) => (
-                            <SelectItem key={city.id} value={city.name}>
-                              {city.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="e.g., Mumbai"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="businessState">State</Label>
@@ -802,24 +557,14 @@ export default function AddOutletPage() {
                         onValueChange={(value) =>
                           handleInputChange("businessState", value)
                         }
-                        disabled={isLoadingStates}
                       >
                         <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              isLoadingStates
-                                ? "Loading states..."
-                                : "Select State"
-                            }
-                          />
-                          {isLoadingStates && (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          )}
+                          <SelectValue placeholder="Select State" />
                         </SelectTrigger>
                         <SelectContent>
-                          {states.map((state) => (
-                            <SelectItem key={state.id} value={state.name}>
-                              {state.name}
+                          {indianStates.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -833,7 +578,7 @@ export default function AddOutletPage() {
                         onChange={(e) =>
                           handleInputChange("businessPincode", e.target.value)
                         }
-                        placeholder="e.g., Enter Pincode"
+                        placeholder="e.g., 400001"
                       />
                     </div>
                   </div>
@@ -1034,9 +779,7 @@ export default function AddOutletPage() {
                     <div
                       className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
                         currentStep >= step.id
-                          ? validateStep(step.id)
-                            ? "bg-green-600 border-green-600 text-white"
-                            : "bg-blue-600 border-blue-600 text-white"
+                          ? "bg-blue-600 border-blue-600 text-white"
                           : "border-gray-300 text-gray-500"
                       }`}
                     >
@@ -1074,7 +817,7 @@ export default function AddOutletPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {renderStepContent()}
 
           {/* Form Actions */}
@@ -1096,25 +839,23 @@ export default function AddOutletPage() {
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : (
-                <form onSubmit={handleSubmit}>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Create Outlet
-                      </>
-                    )}
-                  </Button>
-                </form>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Create Outlet
+                    </>
+                  )}
+                </Button>
               )}
             </div>
           </div>
-        </div>
+        </form>
       </div>
     </DashboardLayout>
   );

@@ -16,7 +16,7 @@
  */
 
 const logger = require("../shared/lib/logger");
-const { getRedisClient } = require("../shared/lib/redis");
+const { getClient } = require("../shared/lib/redis");
 const { ExternalPartnerClient } = require("./externalPartnerClient");
 
 class DiscountService {
@@ -43,7 +43,7 @@ class DiscountService {
   async getDiscounts(filters = {}) {
     try {
       const cacheKey = `${this.cachePrefix}:discounts:${this.createFilterHash(filters)}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -108,7 +108,7 @@ class DiscountService {
   async getDiscountById(discountId, partnerId = null) {
     try {
       const cacheKey = `${this.cachePrefix}:discount:${discountId}:${partnerId || "all"}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -371,7 +371,7 @@ class DiscountService {
   async calculateDiscount(calculationData) {
     try {
       const cacheKey = `${this.cachePrefix}:calculation:${this.createCalculationHash(calculationData)}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -448,7 +448,7 @@ class DiscountService {
       }
 
       const cacheKey = `${this.cachePrefix}:active:${partnerId}:${applicableOn || "all"}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -591,7 +591,7 @@ class DiscountService {
    */
   async clearDiscountCaches(partnerId = null) {
     try {
-      const redis = getRedisClient();
+      const redis = getClient();
       const patterns = [
         `${this.cachePrefix}:discounts:*`,
         `${this.cachePrefix}:calculation:*`,

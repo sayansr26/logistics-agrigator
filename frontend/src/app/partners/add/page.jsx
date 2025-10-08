@@ -102,6 +102,8 @@ export default function AddPartnerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [pincodeInput, setPincodeInput] = useState("");
+  const [customServiceInput, setCustomServiceInput] = useState("");
+  const [availableServices, setAvailableServices] = useState(SERVICE_OPTIONS);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => {
@@ -155,15 +157,41 @@ export default function AddPartnerPage() {
     }));
   };
 
+  const handleAddCustomService = () => {
+    const serviceName = customServiceInput.trim();
+    if (serviceName && !availableServices.includes(serviceName)) {
+      setAvailableServices((prev) => [...prev, serviceName]);
+      setCustomServiceInput("");
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddCustomService();
+    }
+  };
+
+  const handleRemoveCustomService = (service) => {
+    // Only allow removal of custom services (not the original SERVICE_OPTIONS)
+    if (!SERVICE_OPTIONS.includes(service)) {
+      setAvailableServices((prev) => prev.filter((s) => s !== service));
+      setFormData((prev) => ({
+        ...prev,
+        services: prev.services.filter((s) => s !== service),
+      }));
+    }
+  };
+
   const validateCurrentStep = () => {
     const newErrors = {};
 
     switch (currentStep) {
       case 1:
         if (!formData.name.trim()) newErrors.name = "Partner name is required";
-        if (!formData.type) newErrors.type = "Partner type is required";
-        if (!formData.deliveryTime.trim())
-          newErrors.deliveryTime = "Delivery time is required";
+        // if (!formData.type) newErrors.type = "Partner type is required";
+        // if (!formData.deliveryTime.trim())
+        //   newErrors.deliveryTime = "Delivery time is required";
         if (!formData.apiUrl.trim()) newErrors.apiUrl = "API URL is required";
         break;
       case 2:
@@ -287,10 +315,6 @@ export default function AddPartnerPage() {
                     readOnly
                     className="bg-gray-50 text-gray-600 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-500">
-                    Partner code is auto-generated from the first letter of the
-                    name + 4 random digits
-                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -309,7 +333,7 @@ export default function AddPartnerPage() {
                   )}
                 </div>
 
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <Label htmlFor="type">Partner Type *</Label>
                   <Select
                     value={formData.type}
@@ -331,7 +355,7 @@ export default function AddPartnerPage() {
                   {errors.type && (
                     <p className="text-sm text-red-500">{errors.type}</p>
                   )}
-                </div>
+                </div> */}
 
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
@@ -354,7 +378,7 @@ export default function AddPartnerPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <Label htmlFor="rating">Rating</Label>
                   <Select
                     value={formData.rating.toString()}
@@ -376,9 +400,9 @@ export default function AddPartnerPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </div> */}
 
-                <div className="space-y-2 lg:col-span-2">
+                {/* <div className="space-y-2">
                   <Label htmlFor="deliveryTime">Delivery Time *</Label>
                   <Input
                     id="deliveryTime"
@@ -394,7 +418,7 @@ export default function AddPartnerPage() {
                       {errors.deliveryTime}
                     </p>
                   )}
-                </div>
+                </div> */}
               </div>
             </CardContent>
           </Card>
@@ -470,26 +494,83 @@ export default function AddPartnerPage() {
               </div>
 
               <div className="space-y-4">
-                <Label>Services Offered *</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {SERVICE_OPTIONS.map((service) => (
-                    <div key={service} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={`service-${service}`}
-                        checked={formData.services.includes(service)}
-                        onCheckedChange={(checked) =>
-                          handleServiceToggle(service, checked === true)
-                        }
-                      />
-                      <Label
-                        htmlFor={`service-${service}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {service}
-                      </Label>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <Label>Services Offered *</Label>
+                  <span className="text-sm text-gray-500">
+                    {formData.services.length} service
+                    {formData.services.length !== 1 ? "s" : ""} selected
+                  </span>
                 </div>
+
+                {/* Add Custom Service */}
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      value={customServiceInput}
+                      onChange={(e) => setCustomServiceInput(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Add custom service (e.g., White Glove Delivery)"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddCustomService}
+                      disabled={
+                        !customServiceInput.trim() ||
+                        availableServices.includes(customServiceInput.trim())
+                      }
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      Add Service
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Add custom services that aren't in the predefined list
+                  </p>
+                </div>
+
+                {/* Services Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {availableServices.map((service) => {
+                    const isCustomService = !SERVICE_OPTIONS.includes(service);
+                    return (
+                      <div
+                        key={service}
+                        className="flex items-center space-x-3 group"
+                      >
+                        <Checkbox
+                          id={`service-${service}`}
+                          checked={formData.services.includes(service)}
+                          onCheckedChange={(checked) =>
+                            handleServiceToggle(service, checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor={`service-${service}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                        >
+                          {service}
+                          {isCustomService && (
+                            <span className="ml-2 text-xs text-blue-600 font-normal">
+                              (Custom)
+                            </span>
+                          )}
+                        </Label>
+                        {isCustomService && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomService(service)}
+                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                            title="Remove custom service"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
                 {errors.services && (
                   <p className="text-sm text-red-500">{errors.services}</p>
                 )}
