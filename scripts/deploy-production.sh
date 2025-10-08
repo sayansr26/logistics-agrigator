@@ -23,6 +23,11 @@ cd /var/www/sub-solution || exit 1
 echo -e "${BLUE}[INFO]${NC} Current directory: $(pwd)"
 echo -e "${BLUE}[INFO]${NC} Current commit: $(git rev-parse HEAD)"
 
+# Setup production environment variables
+echo -e "${BLUE}[INFO]${NC} Setting up production environment..."
+chmod +x scripts/setup-production-env.sh
+./scripts/setup-production-env.sh
+
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}[INFO]${NC} .env file not found, running setup..."
@@ -31,6 +36,9 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         cp .env.example .env
         echo -e "${GREEN}[SUCCESS]${NC} Created .env from .env.example"
+
+        # Setup production URLs
+        ./scripts/setup-production-env.sh
     fi
 
     # Run setup:dev which creates .env files and starts services
