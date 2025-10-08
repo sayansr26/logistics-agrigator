@@ -7,7 +7,7 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml - Commented out to allow lockfile in repo for CI/CD
 
 # Environment variables
 .env
