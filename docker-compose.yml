@@ -85,7 +85,7 @@ services:
       - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - JWT_EXPIRES_IN=3600
+      - JWT_EXPIRES_IN=8h
       - JWT_REFRESH_EXPIRES_IN=604800
     ports:
       - "3002:3002"
@@ -252,7 +252,7 @@ services:
       - EXTERNAL_WALLET_USER_ID=wallet-service
       - EXTERNAL_WALLET_JWT_TOKEN=
       # JWT Configuration
-      - JWT_EXPIRES_IN=3600
+      - JWT_EXPIRES_IN=8h
       - JWT_REFRESH_EXPIRES_IN=2592000
       # Default Client Configuration
       - DEFAULT_CLIENT_CODE=DEFAULT

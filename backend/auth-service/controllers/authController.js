@@ -4,10 +4,7 @@ const speakeasy = require("speakeasy");
 const { prisma } = require("../config/database");
 const { getRedisClient } = require("../config/redis");
 const APIResponse = require("../shared/lib/response");
-const {
-  ConflictError,
-  errorUtils,
-} = require("../shared/lib/errors");
+const { ConflictError, errorUtils } = require("../shared/lib/errors");
 
 class AuthController {
   // User registration
@@ -163,7 +160,7 @@ class AuthController {
           permissions,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" },
+        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
       );
 
       const refreshToken = jwt.sign(
@@ -283,7 +280,7 @@ class AuthController {
           permissions,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "3600s" },
+        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
       );
 
       // Generate new refresh token

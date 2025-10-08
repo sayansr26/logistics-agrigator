@@ -576,13 +576,18 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(dateString: string): string {
+  // Ensure consistent timezone handling by using UTC
+  const date = new Date(dateString);
+
+  // Use UTC methods to avoid timezone differences
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(dateString));
+    timeZone: "UTC", // Force UTC to prevent hydration mismatch
+  }).format(date);
 }
 
 export function getOrderStatusColor(status: Order["status"]): string {

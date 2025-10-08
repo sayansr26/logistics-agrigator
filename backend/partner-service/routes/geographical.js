@@ -497,6 +497,110 @@ router.get(
 
 /**
  * @swagger
+ * /api/geographical/pincodes:
+ *   get:
+ *     summary: Get pincodes by area ID
+ *     tags: [Geographical]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: areaId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Area ID to get pincodes for
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of results per page
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           default: pincode
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         description: Sort order
+ *       - in: query
+ *         name: includeCoordinates
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include coordinate information
+ *       - in: query
+ *         name: includeHierarchy
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include geographical hierarchy
+ *       - in: query
+ *         name: includeMetadata
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include additional metadata
+ *     responses:
+ *       200:
+ *         description: Pincodes list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       pincode:
+ *                         type: string
+ *                       areaId:
+ *                         type: integer
+ *                       areaName:
+ *                         type: string
+ *                       cityId:
+ *                         type: integer
+ *                       cityName:
+ *                         type: string
+ *                       stateId:
+ *                         type: integer
+ *                       stateName:
+ *                         type: string
+ *                       isActive:
+ *                         type: boolean
+ *       400:
+ *         description: Invalid area ID
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  "/pincodes",
+  authMiddleware.authenticate,
+  rateLimiter.geographicalSearchLimiter,
+  GeographicalController.getPincodesByArea,
+);
+
+/**
+ * @swagger
  * /api/geographical/stats:
  *   get:
  *     summary: Get geographical service statistics
@@ -531,6 +635,61 @@ router.get(
   authMiddleware.authenticate,
   rateLimiter.geographicalSearchLimiter,
   GeographicalController.getGeographicalStats,
+);
+
+/**
+ * @swagger
+ * /api/geographical/test-cities:
+ *   get:
+ *     summary: Get test cities data (for development/testing)
+ *     description: Returns sample cities data for testing zone creation functionality
+ *     tags: [Geographical]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: stateIds
+ *         schema:
+ *           type: string
+ *         description: Comma-separated state IDs to filter cities
+ *         example: "1,20,9"
+ *     responses:
+ *       200:
+ *         description: Test cities data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       stateId:
+ *                         type: integer
+ *                       stateName:
+ *                         type: string
+ *                       isActive:
+ *                         type: boolean
+ *                 message:
+ *                   type: string
+ *                   example: Test cities data retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  "/test-cities",
+  authMiddleware.authenticate,
+  rateLimiter.geographicalSearchLimiter,
+  GeographicalController.getTestCities,
 );
 
 module.exports = router;

@@ -401,6 +401,68 @@ app.get("/", (req, res) => {
 // Error handling
 app.use(errorHandler);
 
+// Global error handlers to prevent service crashes
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("unhandledRejection:", {
+    error: reason,
+    stack: reason?.stack,
+    promise: promise,
+    date: new Date().toISOString(),
+    process: {
+      pid: process.pid,
+      uid: process.getuid ? process.getuid() : "unknown",
+      gid: process.getgid ? process.getgid() : "unknown",
+      cwd: process.cwd(),
+      execPath: process.execPath,
+      version: process.version,
+      argv: process.argv,
+      memoryUsage: process.memoryUsage(),
+    },
+    os: {
+      loadavg: require("os").loadavg(),
+      uptime: require("os").uptime(),
+    },
+    trace: reason?.stack
+      ? reason.stack.split("\n").map((line) => {
+          const match = line.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/);
+          if (match) {
+            return {
+              function: match[1],
+              file: match[2],
+              line: parseInt(match[3]),
+              column: parseInt(match[4]),
+            };
+          }
+          return { raw: line };
+        })
+      : [],
+  });
+  // Don't exit the process, just log the error
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught Exception:", {
+    error: error.message,
+    stack: error.stack,
+    date: new Date().toISOString(),
+    process: {
+      pid: process.pid,
+      uid: process.getuid ? process.getuid() : "unknown",
+      gid: process.getgid ? process.getgid() : "unknown",
+      cwd: process.cwd(),
+      execPath: process.execPath,
+      version: process.version,
+      argv: process.argv,
+      memoryUsage: process.memoryUsage(),
+    },
+    os: {
+      loadavg: require("os").loadavg(),
+      uptime: require("os").uptime(),
+    },
+  });
+  // Don't exit the process, just log the error
+});
+
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nReceived SIGINT, shutting down gracefully...");

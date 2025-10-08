@@ -17,7 +17,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const logger = require("../shared/lib/logger");
-const { getRedisClient } = require("../shared/lib/redis");
+const { getClient } = require("../shared/lib/redis");
 
 class ExternalPartnerClient {
   constructor() {
@@ -29,9 +29,9 @@ class ExternalPartnerClient {
       process.env.HMAC_SECRET || "hmac_super_secret_key_2024_partner_services";
     this.apiSecretSalt =
       process.env.API_SECRET_SALT || "api_secret_salt_2024_partner_services";
-    this.timeout = parseInt(process.env.PARTNER_SERVICE_TIMEOUT) || 5000;
+    this.timeout = parseInt(process.env.PARTNER_SERVICE_TIMEOUT) || 10000; // Increased timeout
     this.retryAttempts =
-      parseInt(process.env.PARTNER_SERVICE_RETRY_ATTEMPTS) || 3;
+      parseInt(process.env.PARTNER_SERVICE_RETRY_ATTEMPTS) || 2; // Reduced retry attempts
     this.cacheTTL = parseInt(process.env.PARTNER_SERVICE_CACHE_TTL) || 300; // 5 minutes
 
     // Circuit breaker state
@@ -301,7 +301,7 @@ class ExternalPartnerClient {
    */
   async getCachedResponse(cacheKey) {
     try {
-      const redis = await getRedisClient();
+      const redis = await getClient();
       const cached = await redis.get(cacheKey);
       return cached ? JSON.parse(cached) : null;
     } catch (error) {
@@ -315,7 +315,7 @@ class ExternalPartnerClient {
    */
   async setCachedResponse(cacheKey, data) {
     try {
-      const redis = await getRedisClient();
+      const redis = await getClient();
       await redis.setex(cacheKey, this.cacheTTL, JSON.stringify(data));
     } catch (error) {
       logger.warn("Cache set failed", { error: error.message, cacheKey });
@@ -330,7 +330,6 @@ class ExternalPartnerClient {
       origin,
       destination,
       weight,
-      dimensions,
       serviceType = "standard",
       partnerId = "partner_001",
     } = params;
@@ -416,7 +415,7 @@ class ExternalPartnerClient {
 
     // Cache successful response with longer TTL for serviceability
     if (response.success) {
-      const redis = await getRedisClient();
+      const redis = await getClient();
       await redis.setex(cacheKey, 86400, JSON.stringify(response)); // 24 hours
     }
 
@@ -445,7 +444,7 @@ class ExternalPartnerClient {
 
     // Cache partners list for 1 hour
     if (response.success) {
-      const redis = await getRedisClient();
+      const redis = await getClient();
       await redis.setex(cacheKey, 3600, JSON.stringify(response));
     }
 

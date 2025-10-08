@@ -15,7 +15,7 @@
  */
 
 const logger = require("../shared/lib/logger");
-const { getRedisClient } = require("../shared/lib/redis");
+const { getClient } = require("../shared/lib/redis");
 const { ExternalPartnerClient } = require("./externalPartnerClient");
 
 class PackageService {
@@ -40,7 +40,7 @@ class PackageService {
   async getPackageCharges(filters = {}) {
     try {
       const cacheKey = `${this.cachePrefix}:charges:${this.createFilterHash(filters)}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -260,7 +260,7 @@ class PackageService {
   async calculatePackageCharges(calculationData, partnerId) {
     try {
       const cacheKey = `${this.cachePrefix}:calculation:${this.createCalculationHash(calculationData, partnerId)}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first (shorter TTL for calculations)
       const cached = await redis.get(cacheKey);
@@ -310,7 +310,7 @@ class PackageService {
   async getPartnerPackageCharges(partnerId, options = {}) {
     try {
       const cacheKey = `${this.cachePrefix}:partner:${partnerId}:${this.createFilterHash(options)}`;
-      const redis = getRedisClient();
+      const redis = getClient();
 
       // Try cache first
       const cached = await redis.get(cacheKey);
@@ -426,7 +426,7 @@ class PackageService {
    */
   async clearPackageCache(partnerId) {
     try {
-      const redis = getRedisClient();
+      const redis = getClient();
       const pattern = `${this.cachePrefix}:*${partnerId}*`;
       const keys = await redis.keys(pattern);
 
