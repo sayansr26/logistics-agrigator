@@ -98,23 +98,10 @@ deploy:production:
     - echo "Branch: $CI_COMMIT_REF_NAME"
     - echo "Commit: $CI_COMMIT_SHORT_SHA"
     - echo "====================================================="
-    - |
-      ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST bash << EOF
-      set -e
-      echo "📂 Navigating to project directory..."
-      cd $DEPLOY_PATH || exit 1
-      echo "🔄 Pulling latest code from GitLab..."
-      git fetch origin
-      git reset --hard origin/master
-      git clean -fd
-      echo "✅ Code updated to latest commit"
-      echo "🚀 Running deployment script..."
-      chmod +x scripts/deploy-production.sh
-      ./scripts/deploy-production.sh
-      echo "====================================================="
-      echo "✅ DEPLOYMENT COMPLETED SUCCESSFULLY"
-      echo "====================================================="
-      EOF
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "cd $DEPLOY_PATH && git fetch origin && git reset --hard origin/master && git clean -fd && chmod +x scripts/deploy-production.sh && ./scripts/deploy-production.sh"
+    - echo "====================================================="
+    - echo "✅ DEPLOYMENT COMPLETED SUCCESSFULLY"
+    - echo "====================================================="
 
   environment:
     name: production
@@ -146,16 +133,10 @@ rollback:production:
     - echo "====================================================="
     - echo "⏪ ROLLING BACK PRODUCTION DEPLOYMENT"
     - echo "====================================================="
-    - |
-      ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST bash << EOF
-      cd $DEPLOY_PATH
-      echo "🔄 Running rollback script..."
-      chmod +x scripts/rollback.sh
-      ./scripts/rollback.sh
-      echo "====================================================="
-      echo "✅ ROLLBACK COMPLETED"
-      echo "====================================================="
-      EOF
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "cd $DEPLOY_PATH && chmod +x scripts/rollback.sh && ./scripts/rollback.sh"
+    - echo "====================================================="
+    - echo "✅ ROLLBACK COMPLETED"
+    - echo "====================================================="
 
   environment:
     name: production
@@ -184,12 +165,7 @@ health:check:
     - echo "====================================================="
     - echo "🏥 RUNNING HEALTH CHECKS"
     - echo "====================================================="
-    - |
-      ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST bash << EOF
-      cd $DEPLOY_PATH
-      chmod +x scripts/health-check.sh
-      ./scripts/health-check.sh
-      EOF
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "cd $DEPLOY_PATH && chmod +x scripts/health-check.sh && ./scripts/health-check.sh"
 
   only:
     - master
