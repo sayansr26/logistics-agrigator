@@ -6,6 +6,7 @@
   "scripts": {
     "install:all": "pnpm install",
     "prepare": "husky install",
+    "setup:dev": "pnpm install && docker-compose up -d",
     "dev": "docker-compose --profile all-services up",
     "dev:detached": "docker-compose --profile all-services up -d",
     "dev:build": "docker-compose --profile all-services up --build",
