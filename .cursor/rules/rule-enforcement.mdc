@@ -1,6 +1,7 @@
 ---
 description: Rule enforcement system to ensure all project rules are followed
-globs: backend/**/*.js,backend/**/*.ts,**/*.md
+alwaysApply: true
+globs: backend/**/*.js,backend/**/*.ts,**/*.md,**/TASK.md,memory-bank/**/*.md
 ---
 
 # 🚨 RULE ENFORCEMENT SYSTEM

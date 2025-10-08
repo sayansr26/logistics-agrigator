@@ -1,6 +1,7 @@
 ---
 description: Frontend development standards for Next.js with TypeScript and Tailwind CSS
-globs: frontend/**/*.js,frontend/**/*.jsx,frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.json
+alwaysApply: true
+globs: frontend/**/*.js,frontend/**/*.jsx,frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.json,frontend/**/app/**/*,frontend/**/components/**/*,frontend/**/hooks/**/*,frontend/**/lib/**/*,frontend/**/store/**/*,frontend/src/**/*,frontend/package.json,frontend/next.config.js,frontend/tailwind.config.js
 ---
 
 # Frontend Development Standards

@@ -1,6 +1,7 @@
 ---
 description: Mandatory task verification and completion workflow
-globs: backend/**/*.js,backend/**/*.ts,backend/**/*.md
+alwaysApply: true
+globs: backend/**/*.js,backend/**/*.ts,backend/**/*.md,**/BACKEND_TASK.md,**/USER_SERVICE_TASK.md,**/PARTNER_SERVICE_TASK.md,**/BACKEND_*.md
 ---
 
 # 🚨 MANDATORY TASK VERIFICATION WORKFLOW

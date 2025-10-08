@@ -1,6 +1,7 @@
 ---
 description: Complete backend development standards for logistics microservices
-globs: backend/**/*.js,backend/**/*.ts,backend/**/*.prisma,backend/**/package.json,backend/**/Dockerfile,backend/**/server.js
+alwaysApply: true
+globs: backend/**/*.js,backend/**/*.ts,backend/**/*.prisma,backend/**/package.json,backend/**/Dockerfile,backend/**/server.js,backend/**/*.json,backend/**/.env*,backend/**/routes/*.js,backend/**/controllers/*.js,backend/**/middleware/*.js,backend/**/config/*.js,backend/**/validation/*.js
 ---
 
 # Backend Development Standards

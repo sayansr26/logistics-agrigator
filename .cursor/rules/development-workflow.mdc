@@ -1,6 +1,7 @@
 ---
 description: Development workflow, quality standards, and monorepo commands
-globs: package.json,docker-compose*.yml,.husky/*,*.config.js,scripts/**/*,*.md
+alwaysApply: true
+globs: package.json,docker-compose*.yml,.husky/*,*.config.js,scripts/**/*,*.md,pnpm-workspace.yaml,.env*,README.md,CHANGELOG.md
 ---
 
 # Development Workflow & Quality Standards

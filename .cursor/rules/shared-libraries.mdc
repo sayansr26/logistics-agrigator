@@ -1,6 +1,7 @@
 ---
 description: Shared library import patterns and monorepo structure usage
-globs: backend/**/*.js,backend/**/*.ts,shared/**/*.js,shared/**/*.ts
+alwaysApply: true
+globs: backend/**/*.js,backend/**/*.ts,shared/**/*.js,shared/**/*.ts,backend/**/controllers/*.js,backend/**/routes/*.js,backend/**/middleware/*.js,backend/**/services/*.js,backend/**/server.js
 ---
 
 # Shared Library Usage Patterns
