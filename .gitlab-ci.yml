@@ -91,7 +91,7 @@ deploy:production:
 
   script:
     - echo "====================================================="
-    - echo "🚀 DEPLOYING TO PRODUCTION SERVER"
+    - echo "DEPLOYING TO PRODUCTION SERVER"
     - echo "====================================================="
     - echo "Server $SERVER_HOST"
     - echo "Deploy Path $DEPLOY_PATH"
@@ -140,7 +140,7 @@ rollback:production:
 
   environment:
     name: production
-    action: rollback
+    action: prepare
 
   only:
     - master
