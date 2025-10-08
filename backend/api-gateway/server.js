@@ -36,98 +36,44 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// API Documentation - Static serving without CDN
-const swaggerUiOptions = {
+// Intercept and block any HTTPS asset requests
+app.use("/api-docs/*", (req, res, next) => {
+  // If request is for swagger assets that might load from CDN, return empty
+  if (
+    req.path.includes(".css") ||
+    req.path.includes(".js") ||
+    req.path.includes(".png") ||
+    req.path.includes("favicon")
+  ) {
+    if (req.path.includes(".css")) {
+      res.setHeader("Content-Type", "text/css");
+      res.send("/* Empty CSS to prevent external loading */");
+    } else if (req.path.includes(".js")) {
+      res.setHeader("Content-Type", "application/javascript");
+      res.send("// Empty JS to prevent external loading");
+    } else {
+      res.status(204).send();
+    }
+    return;
+  }
+  next();
+});
+
+// API Documentation
+const swaggerHtml = swaggerUi.generateHTML(swaggerSpecs, {
   customCss: ".swagger-ui .topbar { display: none }",
   customSiteTitle: "Logistics API Gateway",
-  // IMPORTANT: Explicitly disable ALL external resources
-  customCssUrl: false,
-  customfavIcon: false,
-  customJs: false,
-  swaggerUrl: null,
-  swaggerUrls: null,
-  isExplorer: true,
-  explorer: true,
   swaggerOptions: {
-    url: `http://${process.env.HOST || "103.17.193.231"}:${process.env.PORT || 3001}/openapi.json`,
-    validatorUrl: null, // Disable online validator
-    supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
-    schemes: ["http"], // Only HTTP
-    deepLinking: false,
+    url: "/openapi.json",
+    validatorUrl: null,
     tryItOutEnabled: true,
-    displayRequestDuration: true,
-    filter: false,
-    showExtensions: true,
-    showCommonExtensions: true,
-    // Disable any external requests
-    requestInterceptor: (req) => {
-      // Force all requests to use HTTP
-      if (req.url) {
-        req.url = req.url.replace(/^https:/, "http:");
-      }
-      return req;
-    },
+    supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
   },
-};
+});
 
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpecs, swaggerUiOptions),
-);
-
-// Alternative simple API docs endpoint for testing
-app.get("/api-docs-simple", (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>API Gateway Documentation</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        h1 { color: #333; }
-        .endpoint { margin: 20px 0; padding: 10px; border: 1px solid #ddd; }
-        .method { font-weight: bold; }
-        .get { color: #61affe; }
-        .post { color: #49cc90; }
-        a { color: #61affe; text-decoration: none; }
-      </style>
-    </head>
-    <body>
-      <h1>Logistics API Gateway</h1>
-      <p>Simple API Documentation (no external dependencies)</p>
-
-      <div class="endpoint">
-        <span class="method get">GET</span> <code>/health</code> - Health check
-      </div>
-
-      <div class="endpoint">
-        <span class="method get">GET</span> <code>/openapi.json</code> - OpenAPI specification
-      </div>
-
-      <div class="endpoint">
-        <span class="method post">POST</span> <code>/auth/*</code> - Auth service proxy
-      </div>
-
-      <div class="endpoint">
-        <span class="method post">POST</span> <code>/users/*</code> - User service proxy
-      </div>
-
-      <h2>Service Endpoints:</h2>
-      <ul>
-        <li><a href="http://${req.hostname}:3002/api-docs">Auth Service Docs</a></li>
-        <li><a href="http://${req.hostname}:3003/api-docs">User Service Docs</a></li>
-        <li><a href="http://${req.hostname}:3004/api-docs">Shipment Service Docs</a></li>
-        <li><a href="http://${req.hostname}:3005/api-docs">Partner Service Docs</a></li>
-        <li><a href="http://${req.hostname}:3006/api-docs">Wallet Service Docs</a></li>
-      </ul>
-
-      <h2>Test Endpoints:</h2>
-      <p><a href="/health">Test Health Check</a></p>
-      <p><a href="/openapi.json">View OpenAPI Spec</a></p>
-    </body>
-    </html>
-  `);
+app.use("/api-docs", swaggerUi.serveFiles(swaggerSpecs, {}));
+app.get("/api-docs", (req, res) => {
+  res.send(swaggerHtml);
 });
 
 /**
