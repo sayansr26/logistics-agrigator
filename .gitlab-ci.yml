@@ -110,8 +110,6 @@ deploy:production:
   only:
     - master
 
-  when: manual # Require manual trigger for production deployment
-
   allow_failure: false
 
 # =============================================================================

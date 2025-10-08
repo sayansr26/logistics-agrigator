@@ -51,6 +51,7 @@ BACKUP_DIR="$PROJECT_DIR/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_TAG="backup_$TIMESTAMP"
 LOG_FILE="$PROJECT_DIR/logs/deployment_$TIMESTAMP.log"
+ENV_FILE="$PROJECT_DIR/.env"
 
 # Create necessary directories
 mkdir -p "$BACKUP_DIR"
@@ -159,6 +160,31 @@ else
 fi
 
 # ============================================================================
+# CHECK AND SETUP ENVIRONMENT
+# ============================================================================
+
+log_step "🔧 CHECKING ENVIRONMENT SETUP"
+
+# Check if .env file exists
+if [ ! -f "$ENV_FILE" ]; then
+    log_warning ".env file not found, running initial setup..."
+
+    # Copy example env if exists
+    if [ -f "$PROJECT_DIR/.env.example" ]; then
+        cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
+        log_info "Created .env from .env.example"
+    fi
+
+    # Run setup:dev command
+    log_info "Running pnpm setup:dev..."
+    pnpm run setup:dev || {
+        log_warning "setup:dev failed, continuing with deployment..."
+    }
+else
+    log_success ".env file exists"
+fi
+
+# ============================================================================
 # INSTALL/UPDATE DEPENDENCIES
 # ============================================================================
 
@@ -175,15 +201,17 @@ log_success "Dependencies updated"
 
 log_step "🐳 BUILDING DOCKER IMAGES"
 
-# Use production docker-compose if available
+# Determine which docker-compose file to use
 COMPOSE_FILE="docker-compose.yml"
 if [ -f "docker-compose.production.yml" ]; then
     COMPOSE_FILE="docker-compose.production.yml"
     log_info "Using production docker-compose configuration"
+else
+    log_info "Using standard docker-compose configuration"
 fi
 
-log_info "Building Docker images (this may take a while)..."
-docker-compose -f "$COMPOSE_FILE" build --no-cache
+log_info "Building Docker images with rebuild (this may take a while)..."
+docker-compose -f "$COMPOSE_FILE" build --no-cache --pull
 
 log_success "Docker images built successfully"
 
@@ -210,24 +238,29 @@ done
 log_success "Migrations completed"
 
 # ============================================================================
-# RESTART SERVICES (ZERO-DOWNTIME)
+# RESTART SERVICES (COMPLETE REBUILD)
 # ============================================================================
 
 log_step "🔄 RESTARTING SERVICES"
 
-# Stop services gracefully
-log_info "Stopping current services..."
-docker-compose -f "$COMPOSE_FILE" --profile all-services down --timeout 30
+# Stop all services and remove containers/volumes
+log_info "Stopping all services and cleaning up..."
+docker-compose -f "$COMPOSE_FILE" down --timeout 30
 
-# Start services
-log_info "Starting updated services..."
-docker-compose -f "$COMPOSE_FILE" --profile all-services up -d
+# Remove dangling images and volumes
+log_info "Cleaning up old images and volumes..."
+docker image prune -f
+docker volume prune -f
+
+# Start all services fresh
+log_info "Starting all services from fresh build..."
+docker-compose -f "$COMPOSE_FILE" up -d
 
 # Wait for services to be ready
-log_info "Waiting for services to start (30 seconds)..."
-sleep 30
+log_info "Waiting for services to start (45 seconds)..."
+sleep 45
 
-log_success "Services restarted"
+log_success "Services restarted with fresh containers"
 
 # ============================================================================
 # HEALTH CHECKS
