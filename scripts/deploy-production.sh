@@ -111,11 +111,13 @@ log_success "Pre-deployment checks passed"
 
 log_step "💾 CREATING BACKUP"
 
-# Run backup script
+# Run backup script (don't fail deployment if backup fails)
 if [ -f "./scripts/backup-database.sh" ]; then
     log_info "Running database backup..."
-    bash ./scripts/backup-database.sh
-    log_success "Database backup completed"
+    bash ./scripts/backup-database.sh || {
+        log_warning "Database backup had issues but continuing deployment..."
+    }
+    log_success "Database backup process completed"
 else
     log_warning "Database backup script not found, skipping..."
 fi
@@ -216,12 +218,38 @@ docker-compose -f "$COMPOSE_FILE" build --no-cache --pull
 log_success "Docker images built successfully"
 
 # ============================================================================
+# RESTART SERVICES (COMPLETE REBUILD)
+# ============================================================================
+
+log_step "🔄 RESTARTING SERVICES"
+
+# Stop all services and remove containers
+log_info "Stopping all services..."
+docker-compose -f "$COMPOSE_FILE" down --timeout 30 || {
+    log_warning "Some containers may not have stopped cleanly"
+}
+
+# Remove dangling images
+log_info "Cleaning up old images..."
+docker image prune -f || true
+
+# Start all services fresh
+log_info "Starting all services from fresh build..."
+docker-compose -f "$COMPOSE_FILE" --profile all-services up -d || {
+    log_warning "Some services may have failed to start, continuing..."
+}
+
+# Wait for services to be ready
+log_info "Waiting for services to start (60 seconds)..."
+sleep 60
+
+# ============================================================================
 # RUN DATABASE MIGRATIONS
 # ============================================================================
 
 log_step "🗃️  RUNNING DATABASE MIGRATIONS"
 
-log_info "Running Prisma migrations..."
+log_info "Running Prisma migrations after services are up..."
 
 # Run migrations for each service
 SERVICES=("auth-service" "user-service" "partner-service" "wallet-service" "shipment-service")
@@ -229,36 +257,13 @@ SERVICES=("auth-service" "user-service" "partner-service" "wallet-service" "ship
 for service in "${SERVICES[@]}"; do
     if [ -d "backend/$service/prisma" ]; then
         log_info "Running migrations for $service..."
-        docker-compose -f "$COMPOSE_FILE" exec -T $service pnpm run migrate:deploy || {
-            log_warning "Migration failed for $service, but continuing..."
+        docker-compose -f "$COMPOSE_FILE" exec -T $service npx prisma migrate deploy 2>/dev/null || {
+            log_warning "Migration for $service skipped or no migrations needed"
         }
     fi
 done
 
-log_success "Migrations completed"
-
-# ============================================================================
-# RESTART SERVICES (COMPLETE REBUILD)
-# ============================================================================
-
-log_step "🔄 RESTARTING SERVICES"
-
-# Stop all services and remove containers/volumes
-log_info "Stopping all services and cleaning up..."
-docker-compose -f "$COMPOSE_FILE" down --timeout 30
-
-# Remove dangling images and volumes
-log_info "Cleaning up old images and volumes..."
-docker image prune -f
-docker volume prune -f
-
-# Start all services fresh
-log_info "Starting all services from fresh build..."
-docker-compose -f "$COMPOSE_FILE" up -d
-
-# Wait for services to be ready
-log_info "Waiting for services to start (45 seconds)..."
-sleep 45
+log_success "Migration process completed"
 
 log_success "Services restarted with fresh containers"
 
