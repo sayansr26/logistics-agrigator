@@ -53,8 +53,17 @@ else
 
     echo -e "${BLUE}[INFO]${NC} Restarting services..."
 
-    # Stop services
-    docker-compose down --timeout 30 || true
+    # Stop services with force and remove volumes/networks
+    docker-compose down --timeout 30 --remove-orphans || true
+
+    # Force remove any remaining containers
+    docker ps -aq --filter "name=logistics-" | xargs -r docker rm -f 2>/dev/null || true
+
+    # Remove the network explicitly if it exists
+    docker network rm sub-solution_logistics-network 2>/dev/null || true
+
+    # Prune unused networks
+    docker network prune -f 2>/dev/null || true
 
     # Start services in detached mode (same as dev but with -d)
     docker-compose --profile all-services up -d --build
