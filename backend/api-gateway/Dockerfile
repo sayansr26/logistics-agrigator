@@ -18,10 +18,10 @@ RUN pnpm install
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
-# Create logs directory with service-specific subdirectory
-RUN mkdir -p logs/api-gateway
+# Create logs directory with proper ownership BEFORE switching user
+RUN mkdir -p /app/logs/api-gateway && chown -R nodejs:nodejs /app/logs
 
-# Change ownership (including logs)
+# Change ownership of all app files
 RUN chown -R nodejs:nodejs /app
 
 USER nodejs
