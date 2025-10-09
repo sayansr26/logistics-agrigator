@@ -20,14 +20,14 @@ RUN npx prisma generate
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
-# Create logs directory
-RUN mkdir -p logs
+# Create logs directory with service-specific subdirectory
+RUN mkdir -p logs/shipment-service
 
 # Create startup script that runs migrations before starting the server
 RUN printf '#!/bin/sh\necho "Running Prisma migrations..."\nnpx prisma migrate deploy || echo "Migration failed or no migrations to apply"\necho "Starting server with auto-reload..."\nexec pnpm run dev\n' > /app/start.sh
 RUN chmod +x /app/start.sh
 
-# Change ownership of all files
+# Change ownership of all files (including logs)
 RUN chown -R nodejs:nodejs /app
 
 USER nodejs

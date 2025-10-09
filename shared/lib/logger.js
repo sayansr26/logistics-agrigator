@@ -55,10 +55,17 @@ try {
   const projectRoot = path.resolve(__dirname, "../..");
   const logsDir = path.join(projectRoot, "logs", serviceName);
 
-  // Ensure log directory exists
+  // Ensure log directory exists with permission error handling
   const fs = require("fs");
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+  } catch (mkdirError) {
+    // If we can't create logs directory (permission issue in Docker), throw to trigger fallback
+    throw new Error(
+      `Cannot create logs directory: ${mkdirError.message}. Will use console fallback.`,
+    );
   }
 
   // Custom format for better readability and audit trail
