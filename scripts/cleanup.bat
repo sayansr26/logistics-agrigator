@@ -169,24 +169,51 @@ REM Remove Docker build cache (optional)
 where docker >nul 2>nul
 if %errorlevel% equ 0 (
     echo [INFO] Cleaning Docker artifacts...
-    
-    REM Stop all containers
-    for /f "tokens=*" %%i in ('docker ps -q 2^>nul') do (
-        echo [INFO] Stopping container: %%i
+
+    REM Stop only logistics project containers (filter by name prefix)
+    echo [INFO] Stopping logistics project containers...
+    for /f "tokens=*" %%i in ('docker ps -q --filter "name=logistics-" 2^>nul') do (
+        echo [INFO] Stopping logistics container: %%i
         docker stop %%i 2>nul
     )
-    
-    REM Remove project containers
-    echo [INFO] Removing project containers...
+
+    REM Remove project containers using docker-compose
+    echo [INFO] Removing project containers via docker-compose...
     docker-compose down -v 2>nul
     docker-compose -f docker-compose.frontend.yml down -v 2>nul
     docker-compose -f docker-compose.backend.yml down -v 2>nul
-    
-    REM Clean up Docker system (be careful with this)
+
+    REM Clean up Docker system (ONLY logistics-related resources)
     if "%1"=="--docker-deep-clean" (
-        echo [WARNING] Performing deep Docker cleanup...
-        docker system prune -af --volumes 2>nul
-        echo [SUCCESS] Docker deep clean completed
+        echo [WARNING] Performing deep Docker cleanup ^(LOGISTICS PROJECT ONLY^)...
+
+        REM Remove logistics-specific images only
+        echo [INFO] Removing logistics Docker images...
+        for /f "tokens=*" %%i in ('docker images --filter "reference=*logistics*" -q 2^>nul') do (
+            docker rmi -f %%i 2>nul
+        )
+
+        REM Remove dangling images
+        echo [INFO] Removing dangling images...
+        docker image prune -f 2>nul
+
+        REM Remove logistics-specific volumes only
+        echo [INFO] Removing logistics Docker volumes...
+        for /f "tokens=*" %%i in ('docker volume ls --filter "name=logistics" -q 2^>nul') do (
+            docker volume rm %%i 2>nul
+        )
+
+        REM Remove logistics-specific networks only
+        echo [INFO] Removing logistics Docker networks...
+        for /f "tokens=*" %%i in ('docker network ls --filter "name=logistics" -q 2^>nul') do (
+            docker network rm %%i 2>nul
+        )
+
+        REM Clean build cache ^(safe - doesn't affect other projects^)
+        echo [INFO] Cleaning Docker build cache...
+        docker builder prune -f 2>nul
+
+        echo [SUCCESS] Docker deep clean completed ^(logistics project only^)
     ) else (
         echo [INFO] Cleaning Docker build cache...
         docker builder prune -f 2>nul

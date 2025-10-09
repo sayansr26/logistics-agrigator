@@ -149,24 +149,46 @@ find_and_remove "Thumbs.db" "Windows system files"
 # Remove Docker build cache (optional)
 if command -v docker &> /dev/null; then
     print_status "🐳 Cleaning Docker artifacts..."
-    
-    # Stop all containers
-    if [ "$(docker ps -q)" ]; then
-        print_status "Stopping running containers..."
-        docker stop $(docker ps -q) 2>/dev/null || true
+
+    # Stop only logistics project containers (filter by name prefix)
+    logistics_containers=$(docker ps -q --filter "name=logistics-" 2>/dev/null || true)
+    if [ -n "$logistics_containers" ]; then
+        print_status "Stopping logistics project containers..."
+        echo "$logistics_containers" | xargs docker stop 2>/dev/null || true
+        print_success "✅ Stopped logistics containers"
     fi
-    
-    # Remove project containers
-    print_status "Removing project containers..."
+
+    # Remove project containers using docker-compose
+    print_status "Removing project containers via docker-compose..."
     docker-compose down -v 2>/dev/null || true
     docker-compose -f docker-compose.frontend.yml down -v 2>/dev/null || true
     docker-compose -f docker-compose.backend.yml down -v 2>/dev/null || true
-    
-    # Clean up Docker system (be careful with this)
+
+    # Clean up Docker system (ONLY logistics-related resources)
     if [ "$1" = "--docker-deep-clean" ]; then
-        print_warning "Performing deep Docker cleanup..."
-        docker system prune -af --volumes 2>/dev/null || true
-        print_success "✅ Docker deep clean completed"
+        print_warning "⚠️  Performing deep Docker cleanup (LOGISTICS PROJECT ONLY)..."
+
+        # Remove logistics-specific images only
+        print_status "Removing logistics Docker images..."
+        docker images --filter "reference=*logistics*" -q | xargs -r docker rmi -f 2>/dev/null || true
+
+        # Remove dangling images (not used by any container)
+        print_status "Removing dangling images..."
+        docker image prune -f 2>/dev/null || true
+
+        # Remove logistics-specific volumes only
+        print_status "Removing logistics Docker volumes..."
+        docker volume ls --filter "name=logistics" -q | xargs -r docker volume rm 2>/dev/null || true
+
+        # Remove logistics-specific networks only
+        print_status "Removing logistics Docker networks..."
+        docker network ls --filter "name=logistics" -q | xargs -r docker network rm 2>/dev/null || true
+
+        # Clean build cache (safe - doesn't affect other projects)
+        print_status "Cleaning Docker build cache..."
+        docker builder prune -f 2>/dev/null || true
+
+        print_success "✅ Docker deep clean completed (logistics project only)"
     else
         print_status "Cleaning Docker build cache..."
         docker builder prune -f 2>/dev/null || true
