@@ -23,12 +23,19 @@ RUN adduser -S nodejs -u 1001
 # Create logs directory with proper ownership BEFORE switching user
 RUN mkdir -p /app/logs/partner-service && chown -R nodejs:nodejs /app/logs
 
-# Create startup script that runs migrations before starting the server
-RUN printf '#!/bin/sh\necho "Running Prisma migrations..."\nnpx prisma migrate deploy || echo "Migration failed or no migrations to apply"\necho "Starting server with auto-reload..."\nexec pnpm run dev\n' > /app/start.sh
-RUN chmod +x /app/start.sh
-
-# Change ownership of all files
+# CRITICAL FIX: Ensure /app directory and all subdirectories are writable by nodejs user
+# This allows pnpm to create temp files and install dependencies when running as nodejs user
 RUN chown -R nodejs:nodejs /app
+RUN chmod -R 755 /app
+RUN chmod -R 775 /app/node_modules 2>/dev/null || true
+
+# Create .pnpm-store directory for pnpm cache with proper permissions
+RUN mkdir -p /app/.pnpm-store && chown -R nodejs:nodejs /app/.pnpm-store && chmod 775 /app/.pnpm-store
+
+# Create startup script that ensures dependencies are installed before starting
+RUN printf '#!/bin/sh\necho "Checking and installing dependencies if needed..."\npnpm install --frozen-lockfile 2>/dev/null || pnpm install\necho "Running Prisma migrations..."\nnpx prisma migrate deploy || echo "Migration failed or no migrations to apply"\necho "Starting server with auto-reload..."\nexec pnpm run dev\n' > /app/start.sh
+RUN chmod +x /app/start.sh
+RUN chown nodejs:nodejs /app/start.sh
 
 USER nodejs
 

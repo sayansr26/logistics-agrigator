@@ -28,6 +28,14 @@ echo -e "${BLUE}[INFO]${NC} Setting up production environment..."
 chmod +x scripts/setup-production-env.sh
 ./scripts/setup-production-env.sh
 
+# Fix permissions for all services (CRITICAL)
+echo -e "${BLUE}[INFO]${NC} Fixing permissions for all services..."
+if [ -f "scripts/update-dockerfiles-permissions.sh" ]; then
+    chmod +x scripts/update-dockerfiles-permissions.sh
+    ./scripts/update-dockerfiles-permissions.sh
+    echo -e "${GREEN}[SUCCESS]${NC} Dockerfiles updated with permission fixes"
+fi
+
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}[INFO]${NC} .env file not found, running setup..."
@@ -65,8 +73,19 @@ else
     # Prune unused networks
     docker network prune -f 2>/dev/null || true
 
-    # Start services in detached mode (same as dev but with -d)
-    docker-compose --profile all-services up -d --build
+    # CRITICAL: Remove old node_modules volumes to ensure fresh permissions
+    echo -e "${BLUE}[INFO]${NC} Removing old node_modules volumes for fresh installation..."
+    for volume in $(docker volume ls -q | grep -E "(shipment|auth|user|partner|wallet|support|platform|api|frontend).*node_modules"); do
+        docker volume rm -f "$volume" 2>/dev/null || true
+    done
+    echo -e "${GREEN}[SUCCESS]${NC} Old volumes removed"
+
+    # Rebuild all images with no cache to ensure permission fixes are applied
+    echo -e "${BLUE}[INFO]${NC} Rebuilding all Docker images with permission fixes..."
+    docker-compose build --no-cache --pull
+
+    # Start services in detached mode with fresh volumes
+    docker-compose --profile all-services up -d
 fi
 
 # Wait for services to be ready
