@@ -136,6 +136,7 @@ junit.xml
 
 # Service-specific ignores
 backend/**/.env
+backend/*/shared/
 frontend/.env*
 !frontend/.env.example
 
