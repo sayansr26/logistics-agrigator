@@ -7,8 +7,9 @@ services:
       - POSTGRES_USER=logistics
       - POSTGRES_PASSWORD=logistics123
       - POSTGRES_DB=logistics_main
-    ports:
-      - "3009:5432"
+    # Port removed for security - accessible only within Docker network
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
@@ -23,8 +24,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: logistics-redis-dev
-    ports:
-      - "3010:6379"
+    # Port removed for security - accessible only within Docker network
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     networks:
@@ -82,8 +84,9 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - JWT_EXPIRES_IN=8h
       - JWT_REFRESH_EXPIRES_IN=604800
-    ports:
-      - "3002:3002"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3002"
     volumes:
       - ./backend/auth-service:/app
       - ./shared:/app/shared
@@ -110,8 +113,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
-    ports:
-      - "3003:3003"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3003"
     volumes:
       - ./backend/user-service:/app
       - ./shared:/app/shared
@@ -144,8 +148,9 @@ services:
       - WALLET_SERVICE_URL=http://wallet-service:3006
       - PARTNER_SERVICE_URL=http://partner-service:3005
       - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
-    ports:
-      - "3004:3004"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3004"
     volumes:
       - ./backend/shipment-service:/app
       - ./shared:/app/shared
@@ -197,8 +202,9 @@ services:
       - DTDC_API_TOKEN=your-dtdc-api-token
       - ECOM_EXPRESS_API_URL=https://api.ecomexpress.in
       - ECOM_EXPRESS_API_TOKEN=your-ecom-express-api-token
-    ports:
-      - "3005:3005"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3005"
     volumes:
       - ./backend/partner-service:/app
       - ./shared:/app/shared
@@ -256,8 +262,9 @@ services:
       - RATE_LIMIT_STRICT_MAX=50
       - RATE_LIMIT_BALANCE_MAX=100
       - RATE_LIMIT_TRANSACTION_MAX=30
-    ports:
-      - "3006:3006"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3006"
     volumes:
       - ./backend/wallet-service:/app
       - ./shared:/app/shared
@@ -290,8 +297,9 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
       - SHIPMENT_SERVICE_URL=http://shipment-service:3004
-    ports:
-      - "3007:3007"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3007"
     volumes:
       - ./backend/support-service:/app
       - ./shared:/app/shared
@@ -326,8 +334,9 @@ services:
       - SHIPMENT_SERVICE_URL=http://shipment-service:3004
       - SHOPIFY_CLIENT_ID=your_shopify_client_id
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
-    ports:
-      - "3008:3008"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3008"
     volumes:
       - ./backend/platform-service:/app
       - ./shared:/app/shared

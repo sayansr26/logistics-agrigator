@@ -10,8 +10,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
-    ports:
-      - "3009:5432"
+    # Port removed for security - accessible only within Docker network
+    expose:
+      - "5432"
     networks:
       - logistics-network
     healthcheck:
@@ -26,8 +27,9 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "3010:6379"
+    # Port removed for security - accessible only within Docker network
+    expose:
+      - "6379"
     networks:
       - logistics-network
     healthcheck:
@@ -88,8 +90,9 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - JWT_EXPIRES_IN=8h
       - JWT_REFRESH_EXPIRES_IN=604800
-    ports:
-      - "3002:3002"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3002"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/auth-service:/app
@@ -118,8 +121,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
-    ports:
-      - "3003:3003"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3003"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/user-service:/app
@@ -159,8 +163,9 @@ services:
       - WALLET_SERVICE_URL=http://wallet-service:3006
       - PARTNER_SERVICE_URL=http://partner-service:3005
       - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
-    ports:
-      - "3004:3004"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3004"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/shipment-service:/app
@@ -212,8 +217,9 @@ services:
       - DELHIVERY_API_URL=https://track.delhivery.com/api/cmu/push/json
       - BLUEDART_API_URL=https://apigateway.bluedart.com
       - DTDC_API_URL=https://blktracksvc.dtdc.com
-    ports:
-      - "3005:3005"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3005"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/partner-service:/app
@@ -275,8 +281,9 @@ services:
       - RATE_LIMIT_STRICT_MAX=50
       - RATE_LIMIT_BALANCE_MAX=100
       - RATE_LIMIT_TRANSACTION_MAX=30
-    ports:
-      - "3006:3006"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3006"
     # For live reload in development, enable these volumes:
     volumes:
       - ./backend/wallet-service:/app
@@ -313,8 +320,9 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
-    ports:
-      - "3007:3007"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3007"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/support-service:/app
@@ -353,8 +361,9 @@ services:
       - SHIPMENT_SERVICE_URL=http://shipment-service:3004
       - SHOPIFY_CLIENT_ID=your_shopify_client_id
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
-    ports:
-      - "3008:3008"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3008"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/platform-service:/app
@@ -397,8 +406,9 @@ services:
       # Service URLs
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
-    ports:
-      - "3011:3011"
+    # Port removed for security - accessible only through API Gateway (3001)
+    expose:
+      - "3011"
     volumes:
       - ./backend/license-service:/app
       - ./shared:/app/shared
