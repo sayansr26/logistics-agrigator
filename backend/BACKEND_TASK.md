@@ -1119,6 +1119,1406 @@ const productionOrigins = [
 
 ---
 
+### **RBAC-001: Database Schema & Permission Foundation**
+
+**Task Name**: Implement Comprehensive RBAC Database Schema with 11 Roles and Permission System
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create complete RBAC foundation with 11 roles (superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate) and granular permission system
+- **Scope**: Auth-service and user-service schema updates, Permission/RolePermission/UserPermission models, Client/Customer models with license integration
+- **Approach**: Update Prisma schemas, create migrations, add permission seeding infrastructure
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] Auth Service operational (COMPLETED)
+- [x] User Service operational (COMPLETED)
+- [x] License Service operational (COMPLETED)
+- [x] Shared library structure available (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Auth-Service Schema Update (Day 1)**
+
+- [ ] **Expand Role Enum** - Add new roles: superadmin, client, accounts, sales, customer, customer_account, customer_sales, customer_support, affiliate
+- [ ] **Update User Model** - Add fields: parentClientId, parentUserId, accessLevel, assignedCustomerIds[], licenseId, licenseValidUntil, commissionRate, commissionType
+- [ ] **Create Permission Model** - Fields: module, action, scope, description with proper indexing
+- [ ] **Create RolePermission Model** - Link roles to permissions with role + permissionId unique constraint
+- [ ] **Create UserPermission Model** - User-specific permission overrides (granted boolean for revocation)
+- [ ] **Add AccessLevel Enum** - FULL, RESTRICTED for accounts/sales/support roles
+- [ ] **Add CommissionType Enum** - FLAT, PERCENTAGE for affiliate role
+- [ ] **Create Migrations** - Generate and test Prisma migrations for auth-service
+
+**Phase 2: User-Service Schema Update (Day 2)**
+
+- [ ] **Enhance Client Model** - Add fields: licenseId, licenseStatus, licenseValidUntil, clientType, dockerImageTag, deployedAt, activationCode, isReseller, commissionRate
+- [ ] **Create ClientUser Model** - Link clients to their team users (clientId, userId, role, permissions)
+- [ ] **Create Customer Model** - Fields: clientId, name, email, monthlyShipmentLimit, enabledModules[], isActive
+- [ ] **Create CustomerUser Model** - Customer team members with role-based access
+- [ ] **Add ClientType Enum** - STANDARD, LICENSE_BASED, RESELLER
+- [ ] **Add LicenseStatus Enum** - INACTIVE, ACTIVE, SUSPENDED, EXPIRED
+- [ ] **Update UserProfile Model** - Add customerId, customerRole fields for linking
+- [ ] **Create Migrations** - Generate and test Prisma migrations for user-service
+
+**Completion Criteria**:
+
+- [ ] All 11 roles added to auth-service Role enum
+- [ ] Permission, RolePermission, UserPermission models created with proper relations
+- [ ] Client model enhanced with license integration fields
+- [ ] Customer and CustomerUser models created
+- [ ] All migrations generated and tested successfully
+- [ ] Database schemas validated with Prisma Studio
+- [ ] No breaking changes to existing functionality
+- [ ] All services restart successfully with new schemas
+
+**Database Models to Create/Modify**:
+
+**Auth-Service (`backend/auth-service/prisma/schema.prisma`)**:
+```prisma
+enum Role {
+  superadmin         // NEW - System owner
+  admin              // EXISTING - Enhanced
+  client             // EXISTING - Enhanced with license
+  accounts           // NEW - Finance team
+  sales              // NEW - Sales team
+  support            // EXISTING - Enhanced
+  customer           // NEW - End customer
+  customer_account   // NEW - Customer finance access
+  customer_sales     // NEW - Customer sales access
+  customer_support   // NEW - Customer support access
+  affiliate          // NEW - Commission-based partner
+}
+
+enum AccessLevel {
+  FULL               // Access to all customers
+  RESTRICTED         // Access to assigned customers only
+}
+
+enum CommissionType {
+  FLAT               // Fixed amount per transaction
+  PERCENTAGE         // Percentage of transaction value
+}
+
+model User {
+  // EXISTING FIELDS (keep as-is)
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  passwordHash         String
+  role                 Role
+  clientId             String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // NEW: Multi-tenant & hierarchy
+  parentClientId       String?  // For reseller hierarchy
+  parentUserId         String?  // For customer sub-users
+
+  // NEW: Access control
+  accessLevel          AccessLevel @default(FULL)
+  assignedCustomerIds  String[]    // For RESTRICTED access
+
+  // NEW: License integration
+  licenseId            String?
+  isLicenseActive      Boolean @default(false)
+  licenseValidUntil    DateTime?
+
+  // NEW: Affiliate commission
+  commissionRate       Float?
+  commissionType       CommissionType?
+
+  // NEW: Relations
+  userPermissions      UserPermission[]
+
+  @@index([clientId])
+  @@index([parentClientId])
+  @@index([licenseId])
+}
+
+model Permission {
+  id                 String   @id @default(uuid())
+  module             String   // client, license, customer, shipment, billing, wallet, partner, platform, support, user, analytics, report
+  action             String   // create, read, update, delete, manage, export, approve, assign
+  scope              String   // own, parent, assigned, all, * (wildcard)
+  description        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  rolePermissions    RolePermission[]
+  userPermissions    UserPermission[]
+
+  @@unique([module, action, scope])
+  @@index([module])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id                 String     @id @default(uuid())
+  role               Role
+  permissionId       String
+  createdAt          DateTime   @default(now())
+
+  permission         Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id                 String     @id @default(uuid())
+  userId             String
+  permissionId       String
+  granted            Boolean    // true = grant permission, false = revoke permission (override)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission         Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@map("user_permissions")
+}
+```
+
+**User-Service (`backend/user-service/prisma/schema.prisma`)**:
+```prisma
+enum ClientType {
+  STANDARD           // Regular platform user
+  LICENSE_BASED      // Secure Docker deployment
+  RESELLER           // Commission-based partner
+}
+
+enum LicenseStatus {
+  INACTIVE           // Not activated yet
+  ACTIVE             // Currently active
+  SUSPENDED          // Temporarily suspended
+  EXPIRED            // License expired
+}
+
+model Client {
+  // EXISTING FIELDS (keep as-is)
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  contactEmail       String
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // NEW: License integration
+  licenseId          String?  @unique
+  licenseStatus      LicenseStatus @default(INACTIVE)
+  licenseValidUntil  DateTime?
+
+  // NEW: Client type and deployment
+  clientType         ClientType @default(STANDARD)
+  dockerImageTag     String?
+  deployedAt         DateTime?
+  activationCode     String?  // License key for activation
+
+  // NEW: Reseller support
+  isReseller         Boolean @default(false)
+  commissionRate     Float?
+
+  // EXISTING & NEW Relations
+  userProfiles       UserProfile[]
+  clientSettings     ClientSettings?
+  clientUsers        ClientUser[]    // NEW
+  customers          Customer[]      // NEW
+
+  @@index([licenseId])
+  @@index([clientType])
+}
+
+model ClientUser {
+  id                 String   @id @default(uuid())
+  clientId           String
+  userId             String   // Reference to auth-service User
+  role               String   // accounts, sales, support
+  accessLevel        String   @default("FULL")  // FULL or RESTRICTED
+  assignedCustomerIds String[]
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([clientId])
+  @@index([userId])
+  @@map("client_users")
+}
+
+model Customer {
+  id                    String   @id @default(uuid())
+  clientId              String
+  name                  String
+  email                 String
+  phone                 String?
+
+  // Feature access control
+  monthlyShipmentLimit  Int?
+  enabledModules        String[]  // ['shipment', 'billing', 'wallet', 'analytics']
+
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  client                Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userProfiles          UserProfile[]
+  customerUsers         CustomerUser[]
+
+  @@unique([clientId, email])
+  @@index([clientId])
+  @@index([email])
+  @@map("customers")
+}
+
+model CustomerUser {
+  id                 String   @id @default(uuid())
+  customerId         String
+  userId             String   // Reference to auth-service User
+  role               String   // customer, customer_account, customer_sales, customer_support
+  enabledModules     String[] // Sub-access control within customer
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer           Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, userId])
+  @@index([customerId])
+  @@index([userId])
+  @@map("customer_users")
+}
+
+// EXISTING UserProfile model - ADD these fields
+model UserProfile {
+  // ... existing fields ...
+
+  // NEW: Customer linking
+  customerId         String?
+  customerRole       String?  // For customer sub-users
+
+  // NEW: Relation
+  customer           Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+}
+```
+
+**Files to Create/Modify**:
+
+- `backend/auth-service/prisma/schema.prisma` - Add 11 roles, Permission models, User enhancements
+- `backend/user-service/prisma/schema.prisma` - Enhance Client, add Customer/ClientUser/CustomerUser models
+- `backend/auth-service/prisma/migrations/` - New migration files
+- `backend/user-service/prisma/migrations/` - New migration files
+
+---
+
+### **RBAC-002: Permission System & Database Seeds**
+
+**Task Name**: Implement 100+ Permissions and Role-Permission Mappings with Database Seeding
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create comprehensive permission system with module:action:scope pattern for all 11 roles
+- **Scope**: 100+ permissions across 12 modules, role-permission mappings, database seeding scripts
+- **Approach**: Create permission definitions, seed database with permissions and role mappings, test permission system
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema & Permission Foundation)
+- [x] Auth Service operational (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Permission Definitions (Day 1)**
+
+- [ ] **Create Permission Seed Data** - `backend/auth-service/prisma/seeds/permissions.js`
+- [ ] **Define Module Permissions** - 100+ permissions across:
+  - client: create, read, update, delete, manage, register, activate (scopes: own, all, *)
+  - license: create, read, update, delete, manage, generate, activate, deactivate (scopes: own, all, *)
+  - customer: create, read, update, delete, manage, assign (scopes: own, parent, assigned, all, *)
+  - shipment: create, read, update, delete, cancel, bulk_create, bulk_cancel (scopes: own, parent, assigned, all, *)
+  - billing: read, export, approve, manage (scopes: own, parent, assigned, all, *)
+  - wallet: read, debit, credit, load_balance, manage (scopes: own, parent, assigned, all, *)
+  - partner: read, manage, assign (scopes: all, *)
+  - platform: read, manage, integrate (scopes: all, *)
+  - support: read, create, update, resolve, manage (scopes: own, assigned, all, *)
+  - user: create, read, update, delete, manage (scopes: own, parent, all, *)
+  - analytics: read, export (scopes: own, parent, all, *)
+  - report: read, generate, export (scopes: own, parent, all, *)
+- [ ] **Permission Helper Functions** - Create utility functions for permission checking
+
+**Phase 2: Role-Permission Mappings (Day 2)**
+
+- [ ] **Create Role-Permission Seed Data** - `backend/auth-service/prisma/seeds/rolePermissions.js`
+- [ ] **Map Superadmin Permissions** - Grant all permissions with * scope
+- [ ] **Map Admin Permissions** - All operational permissions except client/license management
+- [ ] **Map Client Permissions** - Customer and shipment management for their clientId
+- [ ] **Map Accounts/Sales/Support Permissions** - Module-specific with FULL or RESTRICTED scopes
+- [ ] **Map Customer Permissions** - Own shipments and billing (scope: own)
+- [ ] **Map Customer Sub-Role Permissions** - Module-specific (customer_account, customer_sales, customer_support)
+- [ ] **Map Affiliate Permissions** - Read-only with commission tracking (scope: own)
+- [ ] **Create Seed Script** - `backend/auth-service/prisma/seed.js` to run all seeds
+- [ ] **Test Seeding** - Run seeds and verify permissions in database
+
+**Completion Criteria**:
+
+- [ ] 100+ permissions created and seeded in database
+- [ ] All 11 roles have proper permission mappings
+- [ ] Seed scripts run successfully without errors
+- [ ] Permission data verified in Prisma Studio
+- [ ] Helper functions for permission checking implemented
+- [ ] Permission system tested with sample users
+- [ ] Documentation added for permission structure
+
+**Permission Structure Examples**:
+
+```javascript
+// Module:Action:Scope pattern
+const permissions = [
+  // Client Management (Super Admin only)
+  { module: 'client', action: 'create', scope: 'all', description: 'Create new clients' },
+  { module: 'client', action: 'read', scope: 'all', description: 'View all clients' },
+  { module: 'client', action: 'register', scope: 'all', description: 'Register and onboard clients' },
+
+  // License Management (Super Admin only)
+  { module: 'license', action: 'generate', scope: 'all', description: 'Generate license keys' },
+  { module: 'license', action: 'activate', scope: 'all', description: 'Activate client licenses' },
+
+  // Customer Management (Client + Team)
+  { module: 'customer', action: 'create', scope: 'parent', description: 'Create customers under own client' },
+  { module: 'customer', action: 'read', scope: 'assigned', description: 'View assigned customers' },
+  { module: 'customer', action: 'manage', scope: 'all', description: 'Full customer management' },
+
+  // Shipment Operations
+  { module: 'shipment', action: 'create', scope: 'own', description: 'Create own shipments' },
+  { module: 'shipment', action: 'create', scope: 'parent', description: 'Create shipments for parent customer' },
+  { module: 'shipment', action: 'bulk_create', scope: 'assigned', description: 'Bulk create for assigned customers' },
+
+  // Billing & Wallet
+  { module: 'billing', action: 'read', scope: 'own', description: 'View own billing' },
+  { module: 'billing', action: 'export', scope: 'parent', description: 'Export parent billing data' },
+  { module: 'wallet', action: 'load_balance', scope: 'all', description: 'Load balance for any user' },
+
+  // Analytics & Reports
+  { module: 'analytics', action: 'read', scope: 'parent', description: 'View analytics for own clients' },
+  { module: 'report', action: 'generate', scope: 'assigned', description: 'Generate reports for assigned customers' },
+];
+
+// Role-Permission Mappings
+const rolePermissions = {
+  superadmin: ['*:*:*'],  // All permissions
+
+  admin: [
+    'customer:*:all', 'shipment:*:all', 'billing:*:all', 'wallet:*:all',
+    'partner:*:all', 'platform:*:all', 'support:*:all', 'user:*:all',
+    'analytics:*:all', 'report:*:all'
+  ],
+
+  client: [
+    'customer:create:parent', 'customer:read:parent', 'customer:update:parent', 'customer:manage:parent',
+    'shipment:create:parent', 'shipment:read:parent', 'shipment:update:parent', 'shipment:cancel:parent',
+    'billing:read:parent', 'wallet:read:parent', 'analytics:read:parent', 'report:generate:parent'
+  ],
+
+  accounts: [
+    'customer:read:assigned', 'shipment:read:assigned', 'billing:*:assigned',
+    'wallet:read:assigned', 'analytics:read:assigned', 'report:generate:assigned'
+  ],
+
+  sales: [
+    'customer:create:assigned', 'customer:read:assigned', 'customer:update:assigned',
+    'shipment:create:assigned', 'shipment:read:assigned', 'analytics:read:assigned'
+  ],
+
+  support: [
+    'customer:read:assigned', 'shipment:read:assigned', 'shipment:update:assigned',
+    'support:*:assigned'
+  ],
+
+  customer: [
+    'shipment:create:own', 'shipment:read:own', 'shipment:cancel:own',
+    'billing:read:own', 'wallet:read:own', 'support:create:own', 'support:read:own'
+  ],
+
+  customer_account: [
+    'billing:read:parent', 'billing:export:parent', 'wallet:read:parent'
+  ],
+
+  customer_sales: [
+    'shipment:create:parent', 'shipment:read:parent', 'shipment:bulk_create:parent'
+  ],
+
+  customer_support: [
+    'shipment:read:parent', 'support:create:parent', 'support:read:parent', 'support:update:parent'
+  ],
+
+  affiliate: [
+    'customer:read:own', 'shipment:read:own', 'analytics:read:own', 'report:generate:own'
+  ]
+};
+```
+
+**Files to Create**:
+
+- `backend/auth-service/prisma/seeds/permissions.js` - Permission definitions
+- `backend/auth-service/prisma/seeds/rolePermissions.js` - Role-permission mappings
+- `backend/auth-service/prisma/seed.js` - Main seeding script
+- `backend/auth-service/utils/permissionHelpers.js` - Permission checking utilities
+
+---
+
+### **RBAC-003: Client Registration & License Integration**
+
+**Task Name**: Implement Client Registration API with Auto-License Generation and Secure Image Build
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create super-admin-only client registration endpoint that auto-generates license, triggers secure Docker image build, and returns deployment package
+- **Scope**: Client registration API, license generation integration, secure-docker-builder trigger, deployment package creation
+- **Approach**: Add endpoint to user-service, integrate with license-service and secure-docker-builder, create deployment workflow
+- **Estimated Time**: 3 days
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema)
+- [x] RBAC-002 completed (Permission System)
+- [x] License Service operational (COMPLETED)
+- [x] Secure Docker Builder available (COMPLETED)
+- [x] User Service operational (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Client Registration API (Day 1)**
+
+- [ ] **Create Client Controller** - `backend/user-service/controllers/clientController.js`
+- [ ] **Add Registration Endpoint** - `POST /api/v1/clients/register` (super admin only)
+- [ ] **Input Validation** - Joi schema for client registration (name, email, licenseType, services[], registry)
+- [ ] **Client Creation** - Create Client record with clientType=LICENSE_BASED
+- [ ] **Admin User Creation** - Create client admin user in auth-service with role=client
+- [ ] **Audit Logging** - Log client registration with comprehensive details
+
+**Phase 2: License Integration (Day 2)**
+
+- [ ] **License Service Client** - `backend/user-service/services/licenseServiceClient.js`
+- [ ] **Auto-Generate License** - Call license-service `/api/v1/licenses/generate` endpoint
+- [ ] **License Linking** - Update Client record with licenseId and activationCode
+- [ ] **License Validation** - Ensure license created successfully before proceeding
+- [ ] **Error Handling** - Rollback client creation if license generation fails
+
+**Phase 3: Secure Image Build Integration (Day 3)**
+
+- [ ] **Docker Builder Client** - `backend/user-service/services/dockerBuilderClient.js`
+- [ ] **Trigger Build** - Call secure-docker-builder with client config
+- [ ] **Build Configuration** - Map client data to build config (clientId, clientName, services, licenseType, registry)
+- [ ] **Track Build Status** - Update Client record with dockerImageTag and deployedAt
+- [ ] **Deployment Package** - Create response with image name, registry, activation code, deployment instructions
+- [ ] **Error Handling** - Handle build failures, provide partial deployment options
+
+**Completion Criteria**:
+
+- [ ] `POST /api/v1/clients/register` endpoint operational (super admin only)
+- [ ] Client registration creates Client record and admin user
+- [ ] License auto-generated and linked to client
+- [ ] Secure Docker image build triggered automatically
+- [ ] Deployment package returned with all necessary information
+- [ ] Comprehensive error handling and rollback logic
+- [ ] Audit logging for all operations
+- [ ] Integration tested end-to-end
+
+**API Endpoints to Implement**:
+
+1. **Client Registration** (Super Admin Only):
+   - `POST /api/v1/clients/register` - Register new client with license and image
+   ```json
+   // Request
+   {
+     "name": "ABC Corporation",
+     "email": "admin@abc.com",
+     "contactPerson": "John Doe",
+     "licenseType": "PROFESSIONAL",
+     "services": ["auth-service", "user-service", "api-gateway", "shipment-service", "partner-service", "wallet-service"],
+     "registry": "docker.io/logistics-secure",
+     "enableMonitoring": true
+   }
+
+   // Response
+   {
+     "success": true,
+     "data": {
+       "client": {
+         "id": "uuid",
+         "name": "ABC Corporation",
+         "slug": "abc-corporation",
+         "clientType": "LICENSE_BASED",
+         "licenseStatus": "ACTIVE"
+       },
+       "license": {
+         "id": "uuid",
+         "key": "activation-code-128-chars",
+         "type": "PROFESSIONAL",
+         "validUntil": "2026-01-15T00:00:00Z",
+         "maxActivations": 3
+       },
+       "deployment": {
+         "imageName": "logistics/secure-abc:v1",
+         "registry": "docker.io/logistics-secure",
+         "tag": "abc-corp-1704567890",
+         "buildStatus": "completed"
+       },
+       "credentials": {
+         "adminEmail": "admin@abc.com",
+         "temporaryPassword": "generated-password"
+       },
+       "instructions": "Docker deployment command and activation steps..."
+     }
+   }
+   ```
+
+2. **Client Management** (Super Admin Only):
+   - `GET /api/v1/clients` - List all clients with filtering
+   - `GET /api/v1/clients/:id` - Get client details
+   - `PUT /api/v1/clients/:id` - Update client info
+   - `PUT /api/v1/clients/:id/license` - Update license status
+   - `DELETE /api/v1/clients/:id` - Deactivate client
+
+3. **Client Activation** (Client Admin):
+   - `POST /api/v1/clients/:id/activate` - Activate deployment with license key
+   - `GET /api/v1/clients/:id/status` - Check activation and license status
+
+**Workflow Diagram**:
+
+```
+Super Admin → POST /api/v1/clients/register
+                ↓
+          1. Create Client (user-service)
+                ↓
+          2. Create Admin User (auth-service)
+                ↓
+          3. Generate License (license-service)
+                ↓
+          4. Link License to Client
+                ↓
+          5. Trigger Secure Image Build (secure-docker-builder)
+                ↓
+          6. Update Client with Image Info
+                ↓
+          7. Return Deployment Package
+                ↓
+Client Admin → Receives email with:
+               - Docker image name
+               - Activation code (license key)
+               - Deployment instructions
+               - Admin credentials
+```
+
+**Files to Create/Modify**:
+
+- `backend/user-service/controllers/clientController.js` (NEW)
+- `backend/user-service/services/licenseServiceClient.js` (NEW)
+- `backend/user-service/services/dockerBuilderClient.js` (NEW)
+- `backend/user-service/routes/clients.js` (NEW)
+- `backend/user-service/validation/clientSchemas.js` (NEW)
+- `backend/user-service/server.js` (MODIFY - add client routes)
+
+---
+
+### **RBAC-004: Enhanced Auth Middleware & Permission Checking**
+
+**Task Name**: Implement Advanced Auth Middleware with Permission and Customer Access Checking
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create comprehensive auth middleware with permission checking, customer access validation, and scope-based query filtering
+- **Scope**: Enhanced shared auth utilities, permission middleware, customer access middleware, scope filtering helpers
+- **Approach**: Extend shared/lib/auth.js with new functions, create reusable middleware, add comprehensive testing
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema)
+- [x] RBAC-002 completed (Permission System)
+- [x] Auth Service operational (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Permission Checking Functions (Day 1)**
+
+- [ ] **Enhance shared/lib/auth.js** - Add permission checking functions
+- [ ] **checkPermission Function** - Check if user has specific permission (module:action:scope)
+- [ ] **getEffectivePermissions Function** - Get all permissions for user (role + user-specific)
+- [ ] **checkCustomerAccess Function** - Validate if user can access customer
+- [ ] **applyScopeFilter Function** - Apply scope-based filtering to Prisma queries
+- [ ] **Permission Caching** - Redis caching for permission lookups (5-minute TTL)
+- [ ] **Unit Tests** - Test all permission checking functions
+
+**Phase 2: Auth Middleware (Day 2)**
+
+- [ ] **requirePermission Middleware** - Protect endpoints with permission requirements
+- [ ] **requireCustomerAccess Middleware** - Validate customer access on customer-specific endpoints
+- [ ] **requireRole Middleware** - Simple role-based access (backward compatible)
+- [ ] **optionalAuth Middleware** - Optional authentication for public endpoints with enhanced features
+- [ ] **Integration with Services** - Update all services to use new middleware
+- [ ] **Error Handling** - Comprehensive 401/403 responses with clear messages
+- [ ] **Integration Tests** - Test middleware across all services
+
+**Completion Criteria**:
+
+- [ ] All permission checking functions implemented and tested
+- [ ] Middleware functions created and documented
+- [ ] Redis caching operational for permission lookups
+- [ ] All services using new auth middleware
+- [ ] Comprehensive test coverage (>90%)
+- [ ] Clear error messages for authorization failures
+- [ ] Documentation updated with usage examples
+
+**Enhanced Auth Functions**:
+
+```javascript
+// shared/lib/auth.js enhancements
+
+/**
+ * Check if user has specific permission
+ * @param {Object} user - User object from JWT
+ * @param {string} module - Permission module (e.g., 'shipment')
+ * @param {string} action - Permission action (e.g., 'create')
+ * @param {string} scope - Permission scope (e.g., 'own', 'all')
+ * @returns {Promise<boolean>}
+ */
+authUtils.checkPermission = async (user, module, action, scope = 'all') => {
+  // Super admin has all permissions
+  if (user.role === 'superadmin') return true;
+
+  // Check cache first
+  const cacheKey = `perm:${user.id}:${module}:${action}:${scope}`;
+  const cached = await redis.get(cacheKey);
+  if (cached !== null) return cached === 'true';
+
+  // Get effective permissions (role + user-specific)
+  const permissions = await getEffectivePermissions(user);
+
+  // Check for exact match or wildcard
+  const hasPermission = permissions.some(p =>
+    (p.module === module || p.module === '*') &&
+    (p.action === action || p.action === '*') &&
+    (p.scope === scope || p.scope === '*')
+  );
+
+  // Cache result for 5 minutes
+  await redis.setex(cacheKey, 300, hasPermission ? 'true' : 'false');
+
+  return hasPermission;
+};
+
+/**
+ * Get all effective permissions for user
+ * @param {Object} user - User object
+ * @returns {Promise<Array>} Array of permission objects
+ */
+authUtils.getEffectivePermissions = async (user) => {
+  const cacheKey = `perms:${user.id}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  // Get role-based permissions
+  const rolePermissions = await prisma.rolePermission.findMany({
+    where: { role: user.role },
+    include: { permission: true }
+  });
+
+  // Get user-specific permission overrides
+  const userPermissions = await prisma.userPermission.findMany({
+    where: { userId: user.id },
+    include: { permission: true }
+  });
+
+  // Merge permissions (user overrides take precedence)
+  const permMap = new Map();
+
+  // Add role permissions
+  rolePermissions.forEach(rp => {
+    const key = `${rp.permission.module}:${rp.permission.action}:${rp.permission.scope}`;
+    permMap.set(key, rp.permission);
+  });
+
+  // Apply user overrides (granted=true adds, granted=false removes)
+  userPermissions.forEach(up => {
+    const key = `${up.permission.module}:${up.permission.action}:${up.permission.scope}`;
+    if (up.granted) {
+      permMap.set(key, up.permission);
+    } else {
+      permMap.delete(key);
+    }
+  });
+
+  const permissions = Array.from(permMap.values());
+
+  // Cache for 5 minutes
+  await redis.setex(cacheKey, 300, JSON.stringify(permissions));
+
+  return permissions;
+};
+
+/**
+ * Check if user has access to customer
+ * @param {Object} user - User object
+ * @param {string} customerId - Customer ID to check
+ * @returns {Promise<boolean>}
+ */
+authUtils.checkCustomerAccess = async (user, customerId) => {
+  // Super admin and admin have access to all
+  if (['superadmin', 'admin'].includes(user.role)) return true;
+
+  // Client has access to all their customers
+  if (user.role === 'client') {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { clientId: true }
+    });
+    return customer && customer.clientId === user.clientId;
+  }
+
+  // Customer has access to own data
+  if (user.role === 'customer') {
+    return user.userId === customerId;
+  }
+
+  // Customer sub-users have access to parent customer
+  if (user.role.startsWith('customer_')) {
+    return user.parentUserId === customerId;
+  }
+
+  // Accounts/Sales/Support roles
+  if (['accounts', 'sales', 'support'].includes(user.role)) {
+    // FULL access level = all customers under client
+    if (user.accessLevel === 'FULL') {
+      const customer = await prisma.customer.findUnique({
+        where: { id: customerId },
+        select: { clientId: true }
+      });
+      return customer && customer.clientId === user.clientId;
+    }
+
+    // RESTRICTED access level = only assigned customers
+    return user.assignedCustomerIds.includes(customerId);
+  }
+
+  return false;
+};
+
+/**
+ * Apply scope-based filtering to Prisma query
+ * @param {Object} req - Express request object
+ * @param {Object} query - Prisma query object
+ * @returns {Object} Modified query with scope filters
+ */
+authUtils.applyScopeFilter = (req, query) => {
+  const { role, accessLevel, assignedCustomerIds, clientId, userId, parentUserId } = req.user;
+
+  // Super admin and admin see everything
+  if (['superadmin', 'admin'].includes(role)) return query;
+
+  query.where = query.where || {};
+
+  // Client sees all data under their clientId
+  if (role === 'client') {
+    query.where.clientId = clientId;
+    return query;
+  }
+
+  // Accounts/Sales/Support filtering
+  if (['accounts', 'sales', 'support'].includes(role)) {
+    if (accessLevel === 'FULL') {
+      query.where.clientId = clientId;
+    } else {
+      query.where.customerId = { in: assignedCustomerIds };
+    }
+    return query;
+  }
+
+  // Customer sees only own data
+  if (role === 'customer') {
+    query.where.customerId = userId;
+    return query;
+  }
+
+  // Customer sub-users see parent customer data
+  if (role.startsWith('customer_')) {
+    query.where.customerId = parentUserId;
+    return query;
+  }
+
+  // Affiliate sees only referred data
+  if (role === 'affiliate') {
+    query.where.referredBy = userId;
+    return query;
+  }
+
+  return query;
+};
+```
+
+**Middleware Examples**:
+
+```javascript
+// Middleware for permission-based access
+const requirePermission = (module, action, scope = 'all') => {
+  return async (req, res, next) => {
+    try {
+      const hasPermission = await authUtils.checkPermission(req.user, module, action, scope);
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: `You don't have permission to ${action} ${module} with scope ${scope}`
+        });
+      }
+
+      next();
+    } catch (error) {
+      logger.error('Permission check error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal Server Error',
+        message: 'Failed to verify permissions'
+      });
+    }
+  };
+};
+
+// Middleware for customer access validation
+const requireCustomerAccess = async (req, res, next) => {
+  try {
+    const customerId = req.params.customerId || req.body.customerId || req.query.customerId;
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bad Request',
+        message: 'Customer ID is required'
+      });
+    }
+
+    const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'You don\'t have access to this customer'
+      });
+    }
+
+    next();
+  } catch (error) {
+    logger.error('Customer access check error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: 'Failed to verify customer access'
+    });
+  }
+};
+
+// Usage in routes
+router.post('/shipments',
+  authMiddleware,
+  requirePermission('shipment', 'create', 'parent'),
+  requireCustomerAccess,
+  shipmentController.createShipment
+);
+
+router.get('/customers/:customerId/billing',
+  authMiddleware,
+  requirePermission('billing', 'read', 'assigned'),
+  requireCustomerAccess,
+  billingController.getCustomerBilling
+);
+```
+
+**Files to Create/Modify**:
+
+- `shared/lib/auth.js` (MODIFY - add permission checking functions)
+- `shared/middleware/requirePermission.js` (NEW)
+- `shared/middleware/requireCustomerAccess.js` (NEW)
+- `shared/middleware/requireRole.js` (NEW)
+- `shared/utils/permissionCache.js` (NEW)
+
+---
+
+### **RBAC-005: Service Integration & Route Protection**
+
+**Task Name**: Apply Permission-Based Access Control to All Service Routes
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Integrate RBAC system into all 7 services with permission-based route protection and scope filtering
+- **Scope**: Update all service routes, controllers, apply permission middleware, add scope filtering to queries
+- **Approach**: Service-by-service integration, comprehensive testing, maintain backward compatibility
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema)
+- [x] RBAC-002 completed (Permission System)
+- [x] RBAC-003 completed (Client Registration)
+- [x] RBAC-004 completed (Auth Middleware)
+
+**Implementation Details**:
+
+**Phase 1: Route Protection (Day 1)**
+
+- [ ] **Auth Service** - Apply permission checks to user management endpoints
+- [ ] **User Service** - Protect client/customer management with proper permissions
+- [ ] **Shipment Service** - Add scope filtering and permission checks
+- [ ] **Partner Service** - Restrict partner management to authorized roles
+- [ ] **Wallet Service** - Apply permission checks to balance operations
+- [ ] **Platform Service** - Protect integration endpoints
+- [ ] **Support Service** - Add ticket access control based on roles
+- [ ] **API Gateway** - Update route configurations with permission metadata
+
+**Phase 2: Scope Filtering (Day 2)**
+
+- [ ] **Apply Scope Filters** - Add `applyScopeFilter` to all list/query endpoints
+- [ ] **Controller Updates** - Modify controllers to use scope-filtered queries
+- [ ] **Test Access Control** - Verify different roles see appropriate data
+- [ ] **Performance Testing** - Ensure scope filtering doesn't impact performance
+- [ ] **Audit Logging** - Log all permission checks and denials
+- [ ] **Documentation** - Update API docs with permission requirements
+- [ ] **Integration Testing** - End-to-end testing across all services
+
+**Completion Criteria**:
+
+- [ ] All service routes protected with appropriate permission checks
+- [ ] Scope filtering operational on all list/query endpoints
+- [ ] Super admin can access everything
+- [ ] Admin can access all operational endpoints
+- [ ] Client can manage own customers and shipments
+- [ ] Accounts/Sales/Support have appropriate module access
+- [ ] Customer can only see own data
+- [ ] Customer sub-users have limited access based on role
+- [ ] Affiliate can only see referred customers
+- [ ] All permission denials logged with audit trail
+- [ ] Integration tests passing (>90% coverage)
+
+**Service-Specific Integration**:
+
+**Auth Service Routes**:
+```javascript
+// User Management (Admin/Super Admin only)
+router.get('/users',
+  authMiddleware,
+  requirePermission('user', 'read', 'all'),
+  userController.listUsers
+);
+
+router.post('/users',
+  authMiddleware,
+  requirePermission('user', 'create', 'all'),
+  userController.createUser
+);
+```
+
+**User Service Routes**:
+```javascript
+// Client Registration (Super Admin only)
+router.post('/clients/register',
+  authMiddleware,
+  requirePermission('client', 'register', 'all'),
+  clientController.registerClient
+);
+
+// Customer Management (Client + Team)
+router.get('/customers',
+  authMiddleware,
+  requirePermission('customer', 'read', 'assigned'),
+  async (req, res) => {
+    let query = { include: { client: true } };
+    query = authUtils.applyScopeFilter(req, query);
+    const customers = await prisma.customer.findMany(query);
+    res.json({ success: true, data: customers });
+  }
+);
+
+router.post('/customers',
+  authMiddleware,
+  requirePermission('customer', 'create', 'parent'),
+  customerController.createCustomer
+);
+```
+
+**Shipment Service Routes**:
+```javascript
+// Shipment Creation (Scope-based)
+router.post('/shipments',
+  authMiddleware,
+  requirePermission('shipment', 'create', 'parent'),
+  requireCustomerAccess,
+  shipmentController.createShipment
+);
+
+// Shipment Listing (Scope-filtered)
+router.get('/shipments',
+  authMiddleware,
+  requirePermission('shipment', 'read', 'assigned'),
+  async (req, res) => {
+    let query = {
+      include: { trackingEvents: true, customer: true },
+      orderBy: { createdAt: 'desc' }
+    };
+    query = authUtils.applyScopeFilter(req, query);
+    const shipments = await prisma.shipment.findMany(query);
+    res.json({ success: true, data: shipments });
+  }
+);
+
+// Bulk Operations (Higher permissions required)
+router.post('/shipments/bulk',
+  authMiddleware,
+  requirePermission('shipment', 'bulk_create', 'assigned'),
+  shipmentController.bulkCreateShipments
+);
+```
+
+**Wallet Service Routes**:
+```javascript
+// Load Balance (Admin only)
+router.post('/wallet/:userId/load-balance',
+  authMiddleware,
+  requirePermission('wallet', 'load_balance', 'all'),
+  walletController.loadBalance
+);
+
+// View Balance (Scope-based)
+router.get('/wallet/:userId/balance',
+  authMiddleware,
+  requirePermission('wallet', 'read', 'assigned'),
+  walletController.getBalance
+);
+```
+
+**Files to Modify**:
+
+- `backend/auth-service/routes/*.js` - Add permission middleware
+- `backend/user-service/routes/*.js` - Add permission middleware
+- `backend/shipment-service/routes/*.js` - Add permission and scope filtering
+- `backend/partner-service/routes/*.js` - Add permission middleware
+- `backend/wallet-service/routes/*.js` - Add permission middleware
+- `backend/platform-service/routes/*.js` - Add permission middleware
+- `backend/support-service/routes/*.js` - Add permission and customer access checks
+- `backend/*/controllers/*.js` - Update controllers with scope filtering
+
+---
+
+### **RBAC-006: Client & Customer Management APIs**
+
+**Task Name**: Implement Complete Client and Customer Management Endpoints
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create comprehensive APIs for client customer management, customer sub-user management, and role-based dashboards
+- **Scope**: Client customer CRUD, customer sub-user management, assignment APIs for accounts/sales/support, dashboard endpoints
+- **Approach**: Build on user-service foundation, integrate with auth-service, comprehensive access control
+- **Estimated Time**: 2 days
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema)
+- [x] RBAC-002 completed (Permission System)
+- [x] RBAC-003 completed (Client Registration)
+- [x] RBAC-004 completed (Auth Middleware)
+- [x] RBAC-005 completed (Service Integration)
+
+**Implementation Details**:
+
+**Phase 1: Client Customer Management (Day 1)**
+
+- [ ] **Customer Controller** - `backend/user-service/controllers/customerController.js`
+- [ ] **CRUD Endpoints** - Create, read, update, delete customers (client role)
+- [ ] **Customer Sub-User Management** - Add/remove team members for customers
+- [ ] **Module Access Control** - Configure enabled modules per customer
+- [ ] **Shipment Limits** - Set monthly shipment limits per customer
+- [ ] **Validation Schemas** - Comprehensive Joi validation for all endpoints
+- [ ] **Audit Logging** - Log all customer management operations
+
+**Phase 2: Assignment & Dashboard APIs (Day 2)**
+
+- [ ] **Assignment Controller** - `backend/user-service/controllers/assignmentController.js`
+- [ ] **Assign Customers to Team** - For accounts/sales/support roles with RESTRICTED access
+- [ ] **Dashboard Endpoints** - Role-based dashboards with relevant metrics
+- [ ] **Customer Sub-User APIs** - CRUD for customer team members
+- [ ] **Access Level Management** - Switch between FULL and RESTRICTED access
+- [ ] **Bulk Operations** - Bulk customer assignment/unassignment
+- [ ] **Integration Testing** - Test all endpoints with different roles
+
+**Completion Criteria**:
+
+- [ ] Client can create/manage customers under their account
+- [ ] Customer sub-users can be added with role-based access
+- [ ] Accounts/Sales/Support team members can be assigned to customers
+- [ ] Access level (FULL/RESTRICTED) switching operational
+- [ ] Dashboard endpoints return role-appropriate data
+- [ ] All endpoints have proper permission checks
+- [ ] Comprehensive validation and error handling
+- [ ] Audit logging for all operations
+- [ ] Integration tests passing
+
+**API Endpoints to Implement**:
+
+**Customer Management (Client Role)**:
+```javascript
+// 1. Create Customer
+POST /api/v1/customers
+{
+  "name": "Customer ABC",
+  "email": "contact@customer.com",
+  "phone": "+1234567890",
+  "monthlyShipmentLimit": 1000,
+  "enabledModules": ["shipment", "billing", "wallet", "analytics"]
+}
+
+// 2. List Customers (scope-filtered)
+GET /api/v1/customers?page=1&limit=20&search=ABC
+
+// 3. Get Customer Details
+GET /api/v1/customers/:customerId
+
+// 4. Update Customer
+PUT /api/v1/customers/:customerId
+{
+  "name": "Customer ABC Updated",
+  "monthlyShipmentLimit": 2000
+}
+
+// 5. Deactivate Customer
+DELETE /api/v1/customers/:customerId
+```
+
+**Customer Sub-User Management**:
+```javascript
+// 6. Add Customer Team Member
+POST /api/v1/customers/:customerId/users
+{
+  "email": "finance@customer.com",
+  "name": "Finance Manager",
+  "role": "customer_account",
+  "enabledModules": ["billing", "wallet"]
+}
+
+// 7. List Customer Team Members
+GET /api/v1/customers/:customerId/users
+
+// 8. Update Customer User
+PUT /api/v1/customers/:customerId/users/:userId
+{
+  "role": "customer_sales",
+  "enabledModules": ["shipment"]
+}
+
+// 9. Remove Customer User
+DELETE /api/v1/customers/:customerId/users/:userId
+```
+
+**Team Assignment (Client Admin for Accounts/Sales/Support)**:
+```javascript
+// 10. Assign Customer to Team Member
+POST /api/v1/assignments
+{
+  "userId": "team-member-id",
+  "customerIds": ["customer1-id", "customer2-id"]
+}
+
+// 11. Get Team Member Assignments
+GET /api/v1/assignments/:userId
+
+// 12. Update Access Level
+PUT /api/v1/users/:userId/access-level
+{
+  "accessLevel": "RESTRICTED",  // or "FULL"
+  "assignedCustomerIds": ["customer1-id", "customer2-id"]
+}
+
+// 13. Bulk Assignment
+POST /api/v1/assignments/bulk
+{
+  "customerIds": ["customer1-id", "customer2-id"],
+  "userIds": ["user1-id", "user2-id"]
+}
+```
+
+**Dashboard Endpoints**:
+```javascript
+// 14. Client Dashboard
+GET /api/v1/dashboard/client
+// Returns: customer count, total shipments, revenue, top customers
+
+// 15. Customer Dashboard
+GET /api/v1/dashboard/customer
+// Returns: own shipments, wallet balance, recent activity
+
+// 16. Team Member Dashboard
+GET /api/v1/dashboard/team
+// Returns: assigned customers, tasks, metrics based on role
+
+// 17. Super Admin Dashboard
+GET /api/v1/dashboard/admin
+// Returns: all clients, licenses, system metrics
+```
+
+**Files to Create**:
+
+- `backend/user-service/controllers/customerController.js`
+- `backend/user-service/controllers/assignmentController.js`
+- `backend/user-service/controllers/dashboardController.js`
+- `backend/user-service/services/customerService.js`
+- `backend/user-service/services/assignmentService.js`
+- `backend/user-service/routes/customers.js`
+- `backend/user-service/routes/assignments.js`
+- `backend/user-service/routes/dashboard.js`
+- `backend/user-service/validation/customerSchemas.js`
+- `backend/user-service/validation/assignmentSchemas.js`
+
+---
+
+### **RBAC-007: Affiliate Commission System (Optional)**
+
+**Task Name**: Implement Affiliate Commission Tracking and Payout System
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Create affiliate/reseller system with commission tracking, calculation, and payout management
+- **Scope**: Affiliate registration, commission calculation (flat/percentage), tracking, payout APIs, dashboard
+- **Approach**: Add affiliate tracking to shipments, calculate commissions, create payout workflows
+- **Estimated Time**: 2 days (Optional - can be deferred)
+
+**Dependencies**:
+
+- [x] RBAC-001 completed (Database Schema)
+- [x] RBAC-002 completed (Permission System)
+- [x] RBAC-005 completed (Service Integration)
+- [x] Wallet Service operational (COMPLETED)
+
+**Implementation Details**:
+
+**Phase 1: Affiliate Registration & Tracking (Day 1)**
+
+- [ ] **Affiliate Registration** - Create affiliate users with commission settings
+- [ ] **Referral Tracking** - Link customers to referring affiliates
+- [ ] **Commission Calculation** - Implement flat and percentage-based commission
+- [ ] **Shipment Tracking** - Track affiliate commissions on shipment creation
+- [ ] **Commission Model** - Create Commission model in database
+- [ ] **Audit Logging** - Log all commission calculations
+
+**Phase 2: Payout Management (Day 2)**
+
+- [ ] **Payout Controller** - `backend/wallet-service/controllers/payoutController.js`
+- [ ] **Commission Dashboard** - Affiliate view of earned commissions
+- [ ] **Payout Requests** - Allow affiliates to request payouts
+- [ ] **Admin Approval** - Admin workflow for payout approval
+- [ ] **Wallet Integration** - Credit affiliate wallet on payout approval
+- [ ] **Payout History** - Track all payouts with status
+- [ ] **Integration Testing** - Test commission calculation and payouts
+
+**Completion Criteria**:
+
+- [ ] Affiliate registration working with commission settings
+- [ ] Customer referral tracking operational
+- [ ] Commission calculation accurate for both types
+- [ ] Affiliate dashboard shows earned commissions
+- [ ] Payout request and approval workflow functional
+- [ ] Wallet integration for payouts working
+- [ ] Comprehensive audit trail for all transactions
+- [ ] Integration tests passing
+
+**API Endpoints to Implement**:
+
+**Affiliate Management**:
+```javascript
+// 1. Register Affiliate
+POST /api/v1/affiliates/register
+{
+  "name": "Affiliate Partner",
+  "email": "partner@example.com",
+  "commissionType": "PERCENTAGE",
+  "commissionRate": 5.0  // 5%
+}
+
+// 2. Link Customer to Affiliate
+POST /api/v1/customers/:customerId/referral
+{
+  "affiliateId": "affiliate-user-id"
+}
+
+// 3. Get Affiliate Dashboard
+GET /api/v1/affiliates/dashboard
+// Returns: total commissions, pending payouts, customer count
+```
+
+**Commission Tracking**:
+```javascript
+// 4. Calculate Commission (automatic on shipment creation)
+// Triggered internally when shipment is created for referred customer
+
+// 5. Get Commission History
+GET /api/v1/affiliates/commissions?startDate=2024-01-01&endDate=2024-12-31
+
+// 6. Get Commission Summary
+GET /api/v1/affiliates/commissions/summary
+```
+
+**Payout Management**:
+```javascript
+// 7. Request Payout
+POST /api/v1/affiliates/payouts/request
+{
+  "amount": 1000.00,
+  "paymentMethod": "wallet"
+}
+
+// 8. Approve Payout (Admin)
+POST /api/v1/affiliates/payouts/:payoutId/approve
+
+// 9. Get Payout History
+GET /api/v1/affiliates/payouts
+
+// 10. Get Pending Payouts (Admin)
+GET /api/v1/admin/payouts/pending
+```
+
+**Files to Create**:
+
+- `backend/wallet-service/controllers/affiliateController.js`
+- `backend/wallet-service/controllers/payoutController.js`
+- `backend/wallet-service/services/commissionService.js`
+- `backend/wallet-service/routes/affiliates.js`
+- `backend/wallet-service/routes/payouts.js`
+- `backend/wallet-service/prisma/schema.prisma` (add Commission, Payout models)
+- `backend/wallet-service/validation/affiliateSchemas.js`
+
+---
+
 ## **TASK MANAGEMENT RULES**
 
 ### **Before Starting Any Task**
@@ -1167,31 +2567,41 @@ const productionOrigins = [
 
 ## **NEXT STEPS**
 
-**Current Priority**: Fix Critical CORS Security Vulnerability (Urgent Security Fix Required)
+**Current Priority**: Implement Comprehensive RBAC System with 11 Roles and License Integration
 
-### **Phase 1: Critical Security & Infrastructure (Week 1)**
+### **Phase 1: RBAC Foundation (Week 1 - 4 days)**
 
-1. **CORS-001** - Critical CORS Security Configuration Fix (URGENT - 0.5 days) 🔒
-2. **LOG-001** - Enhanced Logging Infrastructure Foundation (CRITICAL - 2 days)
-3. **LOG-002** - API Gateway Log Management System (HIGH - 1 day)
+1. **RBAC-001** - Database Schema & Permission Foundation (CRITICAL - 2 days) 🔐
+2. **RBAC-002** - Permission System & Database Seeds (HIGH - 2 days) 🔐
 
-### **Phase 2: Platform Service Implementation (Week 2)**
+### **Phase 2: RBAC Integration (Week 2 - 7 days)**
 
-3. **PLAT-001** - Platform Service Implementation (MEDIUM - 3 days)
+3. **RBAC-003** - Client Registration & License Integration (CRITICAL - 3 days) 🔐
+4. **RBAC-004** - Enhanced Auth Middleware & Permission Checking (HIGH - 2 days) 🔐
+5. **RBAC-005** - Service Integration & Route Protection (HIGH - 2 days) 🔐
 
-### **Phase 3: Support and Enhancement Services (Week 3)**
+### **Phase 3: RBAC Management & Features (Week 3 - 4 days)**
 
-4. **SUPP-001** - Support Service Implementation (LOW - 2 days)
-5. **API-001** - API Gateway Enhancement (OPTIONAL - 2 days)
+6. **RBAC-006** - Client & Customer Management APIs (MEDIUM - 2 days) 🔐
+7. **RBAC-007** - Affiliate Commission System (OPTIONAL - 2 days) 🔐
+
+### **Phase 4: Platform & Support Services (Week 4+)**
+
+8. **PLAT-001** - Platform Service Implementation (MEDIUM - 3 days)
+9. **SUPP-001** - Support Service Implementation (LOW - 2 days)
+10. **LOG-002** - API Gateway Log Management System (OPTIONAL - 1 day)
 
 ### **Implementation Priority Order**:
 
-1. **🚨 CORS-001 (URGENT)**: Critical CORS security configuration fix across all services ⚡ **HIGHEST PRIORITY**
-2. **🎯 LOG-001 (CURRENT)**: Enhanced logging infrastructure with service-specific daily files ⚡ **IN_PROGRESS**
-3. **LOG-002 (Next)**: API Gateway log management with admin-only access
-4. **PLAT-001 (Week 2)**: Platform service for e-commerce integration
-5. **SUPP-001 (Week 3)**: Support service for customer operations
-6. **API-001 (Optional)**: API Gateway production enhancements
+1. **🚨 RBAC-001 (URGENT)**: Database schema with 11 roles, Permission models, Client/Customer models ⚡ **HIGHEST PRIORITY**
+2. **🔐 RBAC-002 (CRITICAL)**: 100+ permissions, role-permission mappings, database seeding ⚡ **CRITICAL**
+3. **🔐 RBAC-003 (CRITICAL)**: Client registration with auto-license generation and secure Docker image build ⚡ **CRITICAL**
+4. **🔐 RBAC-004 (HIGH)**: Permission checking functions and auth middleware ⚡ **HIGH PRIORITY**
+5. **🔐 RBAC-005 (HIGH)**: Apply RBAC to all 7 services with scope filtering ⚡ **HIGH PRIORITY**
+6. **🔐 RBAC-006 (MEDIUM)**: Customer management APIs and dashboards
+7. **🔐 RBAC-007 (OPTIONAL)**: Affiliate commission tracking and payouts
+8. **PLAT-001 (Week 4)**: Platform service for e-commerce integration
+9. **SUPP-001 (Week 4+)**: Support service for customer operations
 
 ### **Completed Foundation Services**:
 
@@ -1234,5 +2644,5 @@ const productionOrigins = [
 6. **IMPORTANT** maintain >90% test coverage for all services
 7. **NECESSARY** follow monorepo structure consistently
 
-**Last Updated**: December 2024 (Added CORS-001 critical security task as URGENT priority - fixes CORS vulnerability across all services. Also added comprehensive logging infrastructure tasks LOG-001 and LOG-002)
-**Current Active Task**: CORS-001 - Critical CORS Security Configuration Fix (URGENT - fixing CORS security vulnerability across all 7 services before production deployment)
+**Last Updated**: January 2025 (Added RBAC-001 through RBAC-007 tasks for comprehensive role-based access control system with 11 roles, client registration, and license integration)
+**Current Active Task**: RBAC-001 - Database Schema & Permission Foundation (CRITICAL - implementing 11-role RBAC system with client registration and license-based deployment integration)
