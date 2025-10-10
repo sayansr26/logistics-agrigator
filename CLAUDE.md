@@ -598,16 +598,37 @@ await invalidatePermissionCache(userId);
 - **Explicit**: "Use the task-verifier agent to check shipment service"
 - **Chained**: "Build feature X, verify it, then document it"
 
+## Project Requirements Documents
+
+### Active PRDs
+
+- **[API Gateway & RBAC Implementation](./docs/PRD_API_GATEWAY_RBAC.md)** - Complete security overhaul and RBAC system
+  - Status: In Development
+  - Priority: P0 (Critical)
+  - Timeline: 2 weeks
+  - Tasks: [Backend](./backend/BACKEND_GATEWAY_TASK.md) | [Frontend](./frontend/FRONTEND_ARCHITECTURE_TASK.md)
+
+## Current Development Focus
+
+**🔒 SECURITY CRITICAL**: Implementing API Gateway Security & RBAC
+
+- Phase 1: Service Isolation (Blocking direct access)
+- Phase 2: RBAC System (11 roles, granular permissions)
+- Phase 3: Frontend Architecture (Redux/RTK Query)
+- Phase 4: Documentation (100% Swagger coverage)
+
+See [PRD_API_GATEWAY_RBAC.md](./docs/PRD_API_GATEWAY_RBAC.md) for complete requirements.
+
 ## Next Priorities
 
-1. **RBAC-001 to RBAC-007**: Complete comprehensive RBAC system
-2. **SHIP-005**: Complete Shipment Service - Bulk operations
-3. **PLAT-001**: Platform Service Foundation - Shopify integration
-4. **Frontend Integration**: Connect frontend with backend services
+1. **Gateway Security**: Complete API Gateway isolation and RBAC implementation
+2. **Frontend Migration**: Redux/RTK Query architecture with permission system
+3. **SHIP-005**: Complete Shipment Service - Bulk operations
+4. **PLAT-001**: Platform Service Foundation - Shopify integration
 
 ---
 
 **Last Updated**: January 2025
-**Current Focus**: Comprehensive RBAC System Implementation (RBAC-001 to RBAC-007)
-**Project Status**: 70% complete - Core services operational, RBAC in progress
+**Current Focus**: API Gateway Security & RBAC Implementation
+**Project Status**: 75% complete - Core services operational, security upgrade in progress
 **AI Assistance**: 7 specialized agents + 6 auto-applying rules + dedicated RBAC guidelines
