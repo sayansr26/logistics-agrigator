@@ -125,8 +125,12 @@ junit.xml
 
 # Backup files
 *.backup
+*.backup-*
 *.bak
 *.tmp
+*.archived
+**/docker-compose*.backup-*
+docker-compose.*.archived
 
 # Certificate files (for local SSL development)
 *.pem
