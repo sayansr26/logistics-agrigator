@@ -252,6 +252,7 @@ model Customer {
   client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   userProfiles  UserProfile[]
   customerUsers CustomerUser[]
+  commissions   Commission[] // Commissions for affiliate who referred this customer
 
   @@unique([clientId, email])
   @@index([clientId])
@@ -276,6 +277,33 @@ model CustomerUser {
   @@index([customerId])
   @@index([userId])
   @@map("customer_users")
+}
+
+// Commission - Affiliate commission tracking for referred customers
+model Commission {
+  id               String           @id @default(uuid()) @db.Uuid
+  affiliateId      String           @map("affiliate_id") @db.Uuid // Reference to auth-service User with affiliate role
+  customerId       String           @map("customer_id") @db.Uuid // Reference to Customer
+  shipmentId       String?          @map("shipment_id") @db.Uuid // Reference to shipment (if per-shipment commission)
+  commissionType   CommissionType   @map("commission_type") // FLAT or PERCENTAGE
+  commissionRate   Float            @map("commission_rate") // Rate applied (percentage or flat amount)
+  baseAmount       Decimal          @map("base_amount") @db.Decimal(15, 2) // Original shipment cost or base amount
+  commissionAmount Decimal          @map("commission_amount") @db.Decimal(15, 2) // Calculated commission
+  status           CommissionStatus @default(PENDING)
+  paidAt           DateTime?        @map("paid_at")
+  payoutId         String?          @map("payout_id") @db.Uuid // Reference to wallet payout transaction
+  metadata         Json? // Additional commission metadata
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
+  @@index([customerId])
+  @@index([shipmentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("commissions")
 }
 
 // Enums
@@ -311,4 +339,16 @@ enum LicenseStatus {
   ACTIVE // Currently active
   SUSPENDED // Temporarily suspended
   EXPIRED // License expired
+}
+
+enum CommissionType {
+  FLAT // Fixed amount per customer/shipment
+  PERCENTAGE // Percentage of shipment cost
+}
+
+enum CommissionStatus {
+  PENDING // Commission calculated but not approved
+  APPROVED // Approved for payout
+  PAID // Already paid to affiliate
+  CANCELLED // Cancelled (e.g., customer refunded)
 }

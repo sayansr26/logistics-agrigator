@@ -29,6 +29,8 @@ const clientRoutes = require("./routes/clients");
 const customerRoutes = require("./routes/customers");
 const assignmentRoutes = require("./routes/assignments");
 const dashboardRoutes = require("./routes/dashboard");
+const affiliateRoutes = require("./routes/affiliate");
+const adminAffiliateRoutes = require("./routes/admin/affiliates");
 
 const app = express();
 const PORT = process.env.PORT || 8002;
@@ -566,6 +568,8 @@ app.use("/api", clientRoutes);
 app.use("/api", customerRoutes);
 app.use("/api", assignmentRoutes);
 app.use("/api", dashboardRoutes);
+app.use("/api/v1/affiliate", affiliateRoutes);
+app.use("/api/v1/admin/affiliates", adminAffiliateRoutes);
 
 // 404 handler
 app.use("*", notFoundHandler);

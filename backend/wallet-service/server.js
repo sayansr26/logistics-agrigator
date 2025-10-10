@@ -10,6 +10,7 @@ const swaggerUi = require("swagger-ui-express");
 const logger = require("./shared/lib/logger");
 
 const walletRoutes = require("./routes/wallet");
+const payoutRoutes = require("./routes/payout");
 const { errorHandler } = require("./middleware/errorHandler");
 const { connectDB, prisma } = require("./config/database");
 const { connectRedis, getRedisClient } = require("./config/redis");
@@ -105,6 +106,7 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/v1/wallet", walletRoutes);
+app.use("/api/v1/payout", payoutRoutes);
 
 /**
  * @swagger
