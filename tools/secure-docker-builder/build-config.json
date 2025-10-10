@@ -1,0 +1,22 @@
+{
+  "clientId": "3f44f873-1f9a-48e5-a725-2f9f905be5ca",
+  "clientName": "Sayan Choudhury",
+  "services": [
+    "auth-service",
+    "user-service",
+    "api-gateway",
+    "shipment-service",
+    "partner-service",
+    "wallet-service",
+    "support-service",
+    "platform-service"
+  ],
+  "licenseType": "TRIAL",
+  "registry": "docker.io/sayansr26/logistics-secure-client",
+  "licenseServer": "http://localhost:3011",
+  "enableMonitoring": false,
+  "secretKey": "9687f27c518382ec8c5f6970162ca1bab2a09e4c05833adea9b5b9e046ab9607",
+  "tag": "sayan-choudhury-1760079727205",
+  "outputImage": "logistics/secure-3f44f873-1f9a-48e5-a725-2f9f905be5ca:sayan-choudhury-1760079727205",
+  "timestamp": "2025-10-10T07:02:07.205Z"
+}

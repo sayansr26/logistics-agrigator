@@ -1,0 +1,40 @@
+{
+  "name": "@logistics/secure-docker-builder",
+  "version": "2.0.0",
+  "description": "Secure Docker image builder with runtime activation",
+  "main": "src/index.js",
+  "bin": {
+    "logistics-secure-build": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "build:binary": "pkg src/runtime-activator.js -t node18-linux-x64 -o bin/activator",
+    "build:all": "npm run build:binary && npm run build:images",
+    "build:images": "node src/image-builder.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "dockerode": "^4.0.2",
+    "inquirer": "^8.2.6",
+    "javascript-obfuscator": "^4.1.0",
+    "js-yaml": "^4.1.0",
+    "ora": "^5.4.1",
+    "tar": "^6.2.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "templates/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-linux-arm64",
+      "node18-alpine-x64"
+    ]
+  }
+}

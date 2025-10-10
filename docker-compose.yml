@@ -57,6 +57,7 @@ services:
       - WALLET_SERVICE_URL=http://wallet-service:3006
       - SUPPORT_SERVICE_URL=http://support-service:3007
       - PLATFORM_SERVICE_URL=http://platform-service:3008
+      - LICENSE_SERVICE_URL=http://license-service:3011
     ports:
       - "3001:3001"
     volumes:
@@ -370,6 +371,49 @@ services:
       - all-services
       - platform-service
 
+  # License Service (Critical for client licensing and activation)
+  license-service:
+    build:
+      context: .
+      dockerfile: backend/license-service/Dockerfile
+    container_name: logistics-license-service
+    environment:
+      - NODE_ENV=development
+      - PORT=3011
+      - SERVICE_NAME=license-service
+      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_license
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_EXPIRES_IN=8h
+      - JWT_REFRESH_EXPIRES_IN=604800
+      # License encryption keys
+      - LICENSE_SECRET_KEY=ultra-secure-license-key-min-32-chars-required-change-in-prod
+      - LICENSE_SIGNING_KEY=signing-key-for-license-validation-hmac-sha256-change-in-prod
+      # Service URLs
+      - AUTH_SERVICE_URL=http://auth-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+    ports:
+      - "3011:3011"
+    volumes:
+      - ./backend/license-service:/app
+      - ./shared:/app/shared
+      # Container-only logs directory (no bidirectional sync to prevent nodemon restart loop)
+      - license_logs:/app/logs
+      - license_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    command: pnpm run dev
+    profiles:
+      - all-services
+      - license-service
+
   # Frontend (Core Service)
   frontend:
     build:
@@ -402,6 +446,8 @@ volumes:
   wallet_node_modules:
   support_node_modules:
   platform_node_modules:
+  license_node_modules:
+  license_logs:
   frontend_node_modules:
   frontend_next:
 

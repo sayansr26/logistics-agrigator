@@ -25,6 +25,9 @@ CREATE DATABASE logistics_support;
 -- Platform Service Database
 CREATE DATABASE logistics_platforms;
 
+-- License Service Database
+CREATE DATABASE logistics_license;
+
 -- Grant privileges to logistics user
 GRANT ALL PRIVILEGES ON DATABASE logistics_gateway TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_auth TO logistics;
@@ -34,6 +37,7 @@ GRANT ALL PRIVILEGES ON DATABASE logistics_partners TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_wallet TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_support TO logistics;
 GRANT ALL PRIVILEGES ON DATABASE logistics_platforms TO logistics;
+GRANT ALL PRIVILEGES ON DATABASE logistics_license TO logistics;
 
 -- Output confirmation
 \echo 'All microservice databases created successfully!'

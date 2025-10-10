@@ -1,0 +1,412 @@
+// License Service Prisma Schema
+// Handles license generation, activation, and subscription management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// License model - Core license information
+model License {
+  id               String   @id @default(uuid()) @db.Uuid
+  key              String   @unique @db.VarChar(500) // Encrypted license key
+  clientId         String   @map("client_id") @db.Uuid // References user-service Client
+
+  // License configuration
+  type             LicenseType @default(STANDARD)
+  plan             SubscriptionPlan @default(MONTHLY)
+  status           LicenseStatus @default(INACTIVE)
+
+  // Service permissions
+  allowedServices  String[] @map("allowed_services") // Array of service names
+  maxActivations   Int      @default(1) @map("max_activations")
+  currentActivations Int    @default(0) @map("current_activations")
+
+  // Validity period
+  validFrom        DateTime @default(now()) @map("valid_from")
+  validUntil       DateTime @map("valid_until")
+
+  // IP/Machine restrictions
+  allowedIPs       String[] @map("allowed_ips") // Empty = any IP
+  allowedMachineIds String[] @map("allowed_machine_ids") // Empty = any machine
+
+  // Metadata
+  metadata         Json?    // Additional configuration
+  features         Json?    // Enabled features
+  limits           Json?    // Usage limits
+
+  // Billing
+  billingCycle     BillingCycle @default(MONTHLY) @map("billing_cycle")
+  lastBilledAt     DateTime?    @map("last_billed_at")
+  nextBillingDate  DateTime?    @map("next_billing_date")
+
+  // Commission for resellers
+  commissionRate   Float?   @map("commission_rate") @db.Real // 0.0 to 1.0
+
+  // Security
+  signature        String   @map("signature") @db.Text // HMAC signature
+  encryptedConfig  String?  @map("encrypted_config") @db.Text // Encrypted env vars
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  revokedAt        DateTime? @map("revoked_at")
+
+  // Relationships
+  activations      LicenseActivation[]
+  subscriptions    ClientSubscription[]
+  usageLogs        LicenseUsageLog[]
+  auditLogs        AuditLog[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([validUntil])
+  @@index([type])
+  @@map("licenses")
+}
+
+// License Activation - Track where licenses are activated
+model LicenseActivation {
+  id               String   @id @default(uuid()) @db.Uuid
+  licenseId        String   @map("license_id") @db.Uuid
+
+  // Machine identification
+  machineId        String   @map("machine_id") @db.VarChar(255) // Hardware fingerprint
+  serverIP         String   @map("server_ip") @db.Inet
+  hostname         String?  @db.VarChar(255)
+
+  // Activation details
+  status           ActivationStatus @default(ACTIVE)
+  activatedAt      DateTime @default(now()) @map("activated_at")
+  lastSeenAt       DateTime @default(now()) @map("last_seen_at")
+  deactivatedAt    DateTime? @map("deactivated_at")
+
+  // Environment info
+  nodeVersion      String?  @map("node_version") @db.VarChar(50)
+  dockerVersion    String?  @map("docker_version") @db.VarChar(50)
+  osInfo           Json?    @map("os_info") // OS details
+
+  // Services deployed
+  deployedServices String[] @map("deployed_services")
+
+  // Heartbeat tracking
+  lastHeartbeatAt  DateTime? @map("last_heartbeat_at")
+  missedHeartbeats Int      @default(0) @map("missed_heartbeats")
+
+  // Metadata
+  metadata         Json?
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  license          License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseId, machineId]) // One activation per machine per license
+  @@index([serverIP])
+  @@index([status])
+  @@index([lastSeenAt])
+  @@map("license_activations")
+}
+
+// Client Subscription - Billing and subscription management
+model ClientSubscription {
+  id               String   @id @default(uuid()) @db.Uuid
+  clientId         String   @map("client_id") @db.Uuid // References user-service Client
+  licenseId        String?  @map("license_id") @db.Uuid
+
+  // Subscription details
+  plan             SubscriptionPlan
+  status           SubscriptionStatus @default(PENDING)
+
+  // Billing information
+  billingCycle     BillingCycle @default(MONTHLY) @map("billing_cycle")
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String   @default("INR") @db.VarChar(3)
+
+  // Payment details
+  paymentMethod    PaymentMethod @default(MANUAL) @map("payment_method")
+  autoRenew        Boolean  @default(false) @map("auto_renew")
+
+  // Commission tracking (for resellers)
+  isCommissionBased Boolean @default(false) @map("is_commission_based")
+  commissionRate   Float?   @map("commission_rate") @db.Real // 0.0 to 1.0
+  commissionEarned Decimal? @map("commission_earned") @db.Decimal(10, 2)
+
+  // Subscription period
+  startDate        DateTime @map("start_date")
+  endDate          DateTime? @map("end_date")
+  nextBillingDate  DateTime? @map("next_billing_date")
+
+  // Grace period for renewals
+  gracePeriodDays  Int      @default(7) @map("grace_period_days")
+
+  // Trial information
+  trialStartDate   DateTime? @map("trial_start_date")
+  trialEndDate     DateTime? @map("trial_end_date")
+  isTrialUsed      Boolean  @default(false) @map("is_trial_used")
+
+  // Metadata
+  metadata         Json?
+  notes            String?  @db.Text
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  cancelledAt      DateTime? @map("cancelled_at")
+
+  // Relationships
+  license          License? @relation(fields: [licenseId], references: [id])
+  payments         PaymentHistory[]
+  invoices         Invoice[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([nextBillingDate])
+  @@map("client_subscriptions")
+}
+
+// Payment History - Track all payments
+model PaymentHistory {
+  id               String   @id @default(uuid()) @db.Uuid
+  subscriptionId   String   @map("subscription_id") @db.Uuid
+
+  // Payment details
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String   @default("INR") @db.VarChar(3)
+  status           PaymentStatus @default(PENDING)
+
+  // Payment method details
+  paymentMethod    PaymentMethod @map("payment_method")
+  transactionId    String?  @map("transaction_id") @db.VarChar(255)
+  gatewayResponse  Json?    @map("gateway_response")
+
+  // Commission (if applicable)
+  commissionAmount Decimal? @map("commission_amount") @db.Decimal(10, 2)
+
+  // Period covered
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+
+  // Payment processing
+  processedAt      DateTime? @map("processed_at")
+  failureReason    String?   @map("failure_reason") @db.Text
+  retryCount       Int      @default(0) @map("retry_count")
+
+  // Metadata
+  metadata         Json?
+  notes            String?  @db.Text
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  subscription     ClientSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payment_history")
+}
+
+// Invoice - Generated invoices for subscriptions
+model Invoice {
+  id               String   @id @default(uuid()) @db.Uuid
+  subscriptionId   String   @map("subscription_id") @db.Uuid
+  invoiceNumber    String   @unique @map("invoice_number") @db.VarChar(50)
+
+  // Invoice details
+  amount           Decimal  @db.Decimal(10, 2)
+  tax              Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
+  currency         String   @default("INR") @db.VarChar(3)
+
+  // Status
+  status           InvoiceStatus @default(DRAFT)
+
+  // Dates
+  issueDate        DateTime @map("issue_date")
+  dueDate          DateTime @map("due_date")
+  paidAt           DateTime? @map("paid_at")
+
+  // File storage
+  pdfUrl           String?  @map("pdf_url") @db.VarChar(500)
+
+  // Metadata
+  lineItems        Json     @map("line_items") // Detailed breakdown
+  metadata         Json?
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  subscription     ClientSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([issueDate])
+  @@map("invoices")
+}
+
+// License Usage Log - Track license usage metrics
+model LicenseUsageLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  licenseId        String   @map("license_id") @db.Uuid
+
+  // Usage metrics
+  eventType        UsageEventType @map("event_type")
+  serviceName      String?  @map("service_name") @db.VarChar(100)
+
+  // Metrics data
+  metricsData      Json     @map("metrics_data") // Flexible metrics storage
+
+  // Request context
+  ipAddress        String?  @map("ip_address") @db.Inet
+  machineId        String?  @map("machine_id") @db.VarChar(255)
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  license          License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@index([licenseId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("license_usage_logs")
+}
+
+// Audit Log - Track all license-related actions
+model AuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String?  @map("user_id") @db.Uuid // Admin user who performed action
+  licenseId        String?  @map("license_id") @db.Uuid
+
+  // Action details
+  action           String   @db.VarChar(100) // GENERATE_LICENSE, REVOKE_LICENSE, etc.
+  resource         String   @db.VarChar(100) // License, Subscription, etc.
+  resourceId       String?  @map("resource_id") @db.Uuid
+
+  // Change tracking
+  changes          Json?    // Before/after values
+  metadata         Json?    // Additional context
+
+  // Request context
+  ipAddress        String?  @map("ip_address") @db.Inet
+  userAgent        String?  @map("user_agent")
+  requestId        String?  @map("request_id") @db.VarChar(100)
+
+  // Result
+  success          Boolean  @default(true)
+  errorMessage     String?  @map("error_message") @db.Text
+
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  license          License? @relation(fields: [licenseId], references: [id])
+
+  @@index([userId])
+  @@index([licenseId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Enums
+enum LicenseType {
+  TRIAL
+  STANDARD
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum SubscriptionPlan {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  LIFETIME
+  COMMISSION_BASED
+  PAY_AS_YOU_GO
+}
+
+enum LicenseStatus {
+  INACTIVE
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  REVOKED
+}
+
+enum ActivationStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  LIFETIME
+  CUSTOM
+}
+
+enum PaymentMethod {
+  MANUAL
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  UPI
+  PAYPAL
+  RAZORPAY
+  STRIPE
+  CRYPTO
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum UsageEventType {
+  ACTIVATION
+  DEACTIVATION
+  HEARTBEAT
+  API_CALL
+  SERVICE_START
+  SERVICE_STOP
+  LICENSE_CHECK
+  ERROR
+}

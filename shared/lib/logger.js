@@ -237,13 +237,14 @@ try {
   });
 
   // Add event listeners for log rotation events
-  dailyRotateTransport.on("rotate", (oldFilename, newFilename) => {
-    logger.info(`Log rotated from ${oldFilename} to ${newFilename}`);
-  });
+  // NOTE: Commenting out to prevent logger recursion issues
+  // dailyRotateTransport.on("rotate", (oldFilename, newFilename) => {
+  //   logger.info(`Log rotated from ${oldFilename} to ${newFilename}`);
+  // });
 
-  dailyRotateTransport.on("new", (newFilename) => {
-    logger.info(`New log file created: ${newFilename}`);
-  });
+  // dailyRotateTransport.on("new", (newFilename) => {
+  //   logger.info(`New log file created: ${newFilename}`);
+  // });
 
   // Enhanced HTTP middleware with comprehensive request logging
   logger.httpLogger = (req, res, next) => {
