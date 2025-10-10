@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const partnerDataController = require("../controllers/partnerDataController");
-const { authenticate } = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const { validate } = require("../middleware/validate");
 const Joi = require("joi");
 
@@ -457,7 +457,8 @@ const cacheOptionsSchema = Joi.object({
  */
 router.get(
   "/partner-packages/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(packageFiltersSchema, "query"),
   partnerDataController.getPartnerPackages,
@@ -527,7 +528,8 @@ router.get(
  */
 router.get(
   "/partner-charges/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(chargeFiltersSchema, "query"),
   partnerDataController.getPartnerCharges,
@@ -594,7 +596,8 @@ router.get(
  */
 router.get(
   "/partner-discounts/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(discountFiltersSchema, "query"),
   partnerDataController.getPartnerDiscounts,
@@ -670,7 +673,8 @@ router.get(
  */
 router.get(
   "/partner-services/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(serviceFiltersSchema, "query"),
   partnerDataController.getPartnerServices,
@@ -774,7 +778,8 @@ router.get(
  */
 router.get(
   "/partners/comprehensive-data/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(comprehensiveOptionsSchema, "query"),
   partnerDataController.getComprehensivePartnerData,
@@ -834,7 +839,8 @@ router.get(
  */
 router.get(
   "/partners/:partnerId/metrics",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   partnerDataController.getPartnerMetrics,
 );
@@ -888,7 +894,8 @@ router.get(
  */
 router.get(
   "/partners/:partnerId/export",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   validate(exportOptionsSchema, "query"),
   partnerDataController.exportPartnerData,
@@ -937,7 +944,8 @@ router.get(
  */
 router.delete(
   "/partners/:partnerId/cache",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   validate(partnerIdSchema, "params"),
   validate(cacheOptionsSchema, "query"),
   partnerDataController.clearPartnerCache,
@@ -1004,7 +1012,8 @@ router.delete(
  */
 router.get(
   "/partners/:partnerId/health",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   validate(partnerIdSchema, "params"),
   partnerDataController.getPartnerDataHealth,
 );

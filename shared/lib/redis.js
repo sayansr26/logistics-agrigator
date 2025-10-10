@@ -79,4 +79,8 @@ const redisUtils = {
   },
 };
 
+// Export getRedisClient for backward compatibility with auth middleware
+const getRedisClient = () => redisUtils.getClient();
+
 module.exports = redisUtils;
+module.exports.getRedisClient = getRedisClient;

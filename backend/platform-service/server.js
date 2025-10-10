@@ -2,11 +2,13 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const swaggerUi = require("swagger-ui-express");
 require("dotenv").config();
 const { corsConfig } = require("./shared");
+const swaggerSpecs = require("./config/swagger");
 
 const app = express();
-const PORT = process.env.PORT || 8005;
+const PORT = process.env.PORT || 3008;
 
 // Middleware
 app.use(helmet());
@@ -15,6 +17,32 @@ app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Swagger API Documentation
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpecs, {
+    explorer: true,
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: "Platform Service API",
+  }),
+);
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Health check endpoint
+ *     description: Returns the health status of the platform service
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthResponse'
+ */
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -25,23 +53,66 @@ app.get("/health", (req, res) => {
   });
 });
 
-// API routes placeholder
+/**
+ * @swagger
+ * /api/platforms:
+ *   get:
+ *     tags: [Platforms]
+ *     summary: Get available platforms
+ *     description: Placeholder endpoint - ready for implementation
+ *     responses:
+ *       200:
+ *         description: Available platforms placeholder
+ */
 app.get("/api/platforms", (req, res) => {
   res.json({
     message: "Platform Service - Available platforms endpoint ready",
   });
 });
 
+/**
+ * @swagger
+ * /api/shopify/connect:
+ *   get:
+ *     tags: [Shopify]
+ *     summary: Connect Shopify store
+ *     description: Placeholder endpoint - ready for implementation
+ *     responses:
+ *       200:
+ *         description: Shopify connection endpoint placeholder
+ */
 app.get("/api/shopify/connect", (req, res) => {
   res.json({ message: "Platform Service - Shopify connection endpoint ready" });
 });
 
+/**
+ * @swagger
+ * /api/woocommerce/connect:
+ *   get:
+ *     tags: [WooCommerce]
+ *     summary: Connect WooCommerce store
+ *     description: Placeholder endpoint - ready for implementation
+ *     responses:
+ *       200:
+ *         description: WooCommerce connection endpoint placeholder
+ */
 app.get("/api/woocommerce/connect", (req, res) => {
   res.json({
     message: "Platform Service - WooCommerce connection endpoint ready",
   });
 });
 
+/**
+ * @swagger
+ * /api/integrations:
+ *   get:
+ *     tags: [Integrations]
+ *     summary: Get user integrations
+ *     description: Placeholder endpoint - ready for implementation
+ *     responses:
+ *       200:
+ *         description: User integrations endpoint placeholder
+ */
 app.get("/api/integrations", (req, res) => {
   res.json({ message: "Platform Service - User integrations endpoint ready" });
 });

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const CustomerChargeController = require("../controllers/customerChargeController");
 const { validateBody } = require("../middleware/validate");
 const {
@@ -248,7 +248,7 @@ const {
 router.get(
   "/",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "read", "all"),
   CustomerChargeController.getCustomerCharges,
 );
 
@@ -313,7 +313,7 @@ router.get(
 router.post(
   "/",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   customerChargeManagementLimiter,
   CustomerChargeController.createCustomerCharge,
 );
@@ -371,7 +371,7 @@ router.post(
 router.get(
   "/:chargeId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "read", "all"),
   CustomerChargeController.getCustomerChargeById,
 );
 
@@ -436,7 +436,7 @@ router.get(
 router.put(
   "/:chargeId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   customerChargeManagementLimiter,
   CustomerChargeController.updateCustomerCharge,
 );
@@ -491,7 +491,7 @@ router.put(
 router.delete(
   "/:chargeId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   customerChargeManagementLimiter,
   CustomerChargeController.deleteCustomerCharge,
 );
@@ -572,7 +572,7 @@ router.delete(
 router.post(
   "/bulk",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   customerChargeManagementLimiter,
   CustomerChargeController.createBulkCustomerCharges,
 );
@@ -646,7 +646,7 @@ router.post(
 router.post(
   "/calculate",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations", "client"]),
+  authMiddleware.requirePermission("partner", "read", "own"),
   CustomerChargeController.calculateCustomerCharges,
 );
 
@@ -706,7 +706,7 @@ router.post(
 router.post(
   "/preview",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations", "client"]),
+  authMiddleware.requirePermission("partner", "read", "own"),
   CustomerChargeController.previewCustomerCharges,
 );
 
@@ -771,7 +771,7 @@ router.post(
 router.get(
   "/types",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations", "client"]),
+  authMiddleware.requirePermission("partner", "read", "own"),
   CustomerChargeController.getChargeTypes,
 );
 
@@ -842,7 +842,7 @@ router.get(
 router.get(
   "/customers/:customerId/charges",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations", "client"]),
+  authMiddleware.requirePermission("partner", "read", "own"),
   CustomerChargeController.getCustomerSpecificCharges,
 );
 

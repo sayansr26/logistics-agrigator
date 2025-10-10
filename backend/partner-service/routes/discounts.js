@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const DiscountController = require("../controllers/discountController");
 const { validateBody } = require("../middleware/validate");
 const {
@@ -466,10 +466,16 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.get("/", authMiddleware.authenticate, DiscountController.getDiscounts);
+router.get(
+  "/",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
+  DiscountController.getDiscounts,
+);
 router.post(
   "/",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   discountManagementLimiter,
   DiscountController.createDiscount,
 );
@@ -532,6 +538,7 @@ router.post(
 router.post(
   "/bulk",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   discountManagementLimiter,
   DiscountController.bulkCreateDiscounts,
 );
@@ -584,6 +591,7 @@ router.post(
 router.post(
   "/calculate",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
   DiscountController.calculateDiscount,
 );
 
@@ -641,6 +649,7 @@ router.post(
 router.get(
   "/active",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
   DiscountController.getActiveDiscounts,
 );
 
@@ -699,6 +708,7 @@ router.get(
 router.get(
   "/analytics",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   DiscountController.getDiscountAnalytics,
 );
 
@@ -778,6 +788,7 @@ router.get(
 router.post(
   "/validate-conflicts",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   DiscountController.validateDiscountConflicts,
 );
 
@@ -946,17 +957,20 @@ router.post(
 router.get(
   "/:id",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   DiscountController.getDiscountById,
 );
 router.put(
   "/:id",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   discountManagementLimiter,
   DiscountController.updateDiscount,
 );
 router.delete(
   "/:id",
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   discountManagementLimiter,
   DiscountController.deleteDiscount,
 );

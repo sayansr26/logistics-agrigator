@@ -1,9 +1,10 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const activationController = require('../controllers/activationController');
-const { rateLimitLicense, adminOnly } = require('../middleware/licenseMiddleware');
-const { validateRequest } = require('../middleware/validation');
-const Joi = require('joi');
+const activationController = require("../controllers/activationController");
+const { authMiddleware } = require("../shared/lib/auth");
+const { rateLimitLicense } = require("../middleware/licenseMiddleware");
+const { validateRequest } = require("../middleware/validation");
+const Joi = require("joi");
 
 // Validation schemas
 const activateLicenseSchema = Joi.object({
@@ -14,24 +15,24 @@ const activateLicenseSchema = Joi.object({
   services: Joi.array().items(Joi.string()).default([]),
   nodeVersion: Joi.string().optional(),
   dockerVersion: Joi.string().optional(),
-  osInfo: Joi.object().optional()
+  osInfo: Joi.object().optional(),
 });
 
 const deactivateLicenseSchema = Joi.object({
   licenseKey: Joi.string().required(),
   machineId: Joi.string().required(),
-  reason: Joi.string().optional()
+  reason: Joi.string().optional(),
 });
 
 const heartbeatSchema = Joi.object({
   licenseKey: Joi.string().required(),
   machineId: Joi.string().required(),
-  metrics: Joi.object().default({})
+  metrics: Joi.object().default({}),
 });
 
 const activationStatusSchema = Joi.object({
   licenseKey: Joi.string().required(),
-  machineId: Joi.string().required()
+  machineId: Joi.string().required(),
 });
 
 /**
@@ -102,10 +103,10 @@ const activationStatusSchema = Joi.object({
  *         description: Too many activation attempts
  */
 router.post(
-  '/',
+  "/",
   rateLimitLicense,
   validateRequest(activateLicenseSchema),
-  activationController.activateLicense
+  activationController.activateLicense,
 );
 
 /**
@@ -137,9 +138,9 @@ router.post(
  *         description: License or activation not found
  */
 router.post(
-  '/deactivate',
+  "/deactivate",
   validateRequest(deactivateLicenseSchema),
-  activationController.deactivateLicense
+  activationController.deactivateLicense,
 );
 
 /**
@@ -184,9 +185,9 @@ router.post(
  *         description: Activation not found
  */
 router.post(
-  '/heartbeat',
+  "/heartbeat",
   validateRequest(heartbeatSchema),
-  activationController.sendHeartbeat
+  activationController.sendHeartbeat,
 );
 
 /**
@@ -223,9 +224,9 @@ router.post(
  *         description: License or activation not found
  */
 router.get(
-  '/status',
-  validateRequest(activationStatusSchema, 'query'),
-  activationController.getActivationStatus
+  "/status",
+  validateRequest(activationStatusSchema, "query"),
+  activationController.getActivationStatus,
 );
 
 /**
@@ -267,9 +268,10 @@ router.get(
  *         description: Admin access required
  */
 router.get(
-  '/list/:licenseId',
-  adminOnly,
-  activationController.listActivations
+  "/list/:licenseId",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "read", "assigned"),
+  activationController.listActivations,
 );
 
 module.exports = router;

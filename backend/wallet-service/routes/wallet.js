@@ -13,7 +13,7 @@ const {
   getPaymentStatus,
   getDetailedHealth,
 } = require("../controllers/walletController");
-const { authenticate, authorize } = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const {
   validateParams,
   validateBody,
@@ -96,7 +96,8 @@ const router = express.Router();
  */
 router.get(
   "/:userId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
   balanceLimiter,
   validateParams(userIdParamsSchema),
   getWallet,
@@ -151,7 +152,8 @@ router.get(
  */
 router.get(
   "/:userId/balance",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "assigned"),
   balanceLimiter,
   validateParams(userIdParamsSchema),
   getBalance,
@@ -246,7 +248,8 @@ router.get(
  */
 router.post(
   "/:userId/debit",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "debit", "all"),
   transactionLimiter,
   validateParams(userIdParamsSchema),
   validateBody(debitWalletSchema),
@@ -327,7 +330,8 @@ router.post(
  */
 router.post(
   "/:userId/credit",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "credit", "all"),
   transactionLimiter,
   validateParams(userIdParamsSchema),
   validateBody(creditWalletSchema),
@@ -413,8 +417,8 @@ router.post(
  */
 router.post(
   "/:userId/load-balance",
-  authenticate,
-  authorize(["admin", "finance"]), // Admin or finance role required
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "load_balance", "all"),
   strictLimiter,
   validateParams(userIdParamsSchema),
   validateBody(loadBalanceSchema),
@@ -525,7 +529,8 @@ router.post(
  */
 router.get(
   "/:userId/transactions",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "assigned"),
   balanceLimiter,
   validateParams(userIdParamsSchema),
   validateQuery(transactionHistoryQuerySchema),
@@ -595,8 +600,8 @@ router.get(
  */
 router.get(
   "/admin/all-wallets",
-  authenticate,
-  authorize(["admin", "finance"]),
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
   strictLimiter,
   validateQuery(adminWalletsQuerySchema),
   getAllWallets,
@@ -683,8 +688,8 @@ router.get(
  */
 router.get(
   "/admin/transactions",
-  authenticate,
-  authorize(["admin", "finance"]),
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
   strictLimiter,
   validateQuery(adminTransactionsQuerySchema),
   getAllTransactions,
@@ -742,7 +747,8 @@ router.get(
  */
 router.post(
   "/payment-gateway/initiate",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "create", "own"),
   transactionLimiter,
   validateBody(paymentGatewayInitiateSchema),
   initiatePayment,
@@ -835,7 +841,8 @@ router.post(
  */
 router.get(
   "/payment-gateway/status/:paymentId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
   balanceLimiter,
   validateParams(paymentIdParamsSchema),
   getPaymentStatus,
@@ -884,6 +891,6 @@ router.get(
  *       500:
  *         $ref: '#/components/responses/InternalError'
  */
-router.get("/health", authenticate, getDetailedHealth);
+router.get("/health", authMiddleware.authenticate, getDetailedHealth);
 
 module.exports = router;

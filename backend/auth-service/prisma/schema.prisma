@@ -9,21 +9,44 @@ datasource db {
 }
 
 model User {
-  id                   String   @id @default(uuid()) @db.Uuid
-  email                String   @unique @db.VarChar(255)
-  passwordHash         String   @map("password_hash") @db.VarChar(255)
-  role                 Role
-  clientId             String?  @map("client_id") @db.Uuid
-  isActive             Boolean  @default(true) @map("is_active")
-  twoFactorEnabled     Boolean  @default(false) @map("two_factor_enabled")
-  twoFactorSecret      String?  @map("two_factor_secret") @db.VarChar(255)
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id               String  @id @default(uuid()) @db.Uuid
+  email            String  @unique @db.VarChar(255)
+  passwordHash     String  @map("password_hash") @db.VarChar(255)
+  role             Role
+  clientId         String? @map("client_id") @db.Uuid
+  isActive         Boolean @default(true) @map("is_active")
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret") @db.VarChar(255)
+
+  // RBAC Hierarchy Fields
+  parentClientId String? @map("parent_client_id") @db.Uuid
+  parentUserId   String? @map("parent_user_id") @db.Uuid
+
+  // Access Control
+  accessLevel         AccessLevel @default(FULL) @map("access_level")
+  assignedCustomerIds String[]    @map("assigned_customer_ids") @db.Uuid
+
+  // License Integration
+  licenseId         String?   @map("license_id") @db.Uuid
+  isLicenseActive   Boolean   @default(false) @map("is_license_active")
+  licenseValidUntil DateTime? @map("license_valid_until")
+
+  // Affiliate Fields
+  commissionRate Float?          @map("commission_rate")
+  commissionType CommissionType? @map("commission_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  sessions             Session[]
-  auditLogs            AuditLog[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  userPermissions UserPermission[]
 
+  @@index([clientId])
+  @@index([parentClientId])
+  @@index([licenseId])
+  @@index([role])
   @@map("users")
 }
 
@@ -63,10 +86,74 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  module      String   @db.VarChar(50)
+  action      String   @db.VarChar(50)
+  scope       String   @db.VarChar(50)
+  description String
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@unique([module, action, scope])
+  @@index([module])
+  @@index([isActive])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  role         Role
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  isGranted    Boolean  @default(true) @map("is_granted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@map("user_permissions")
+}
+
 enum Role {
+  superadmin
   admin
-  finance
-  operations
   client
+  accounts
+  sales
   support
+  customer
+  customer_account
+  customer_sales
+  customer_support
+  affiliate
+}
+
+enum AccessLevel {
+  FULL
+  RESTRICTED
+}
+
+enum CommissionType {
+  FLAT
+  PERCENTAGE
 }

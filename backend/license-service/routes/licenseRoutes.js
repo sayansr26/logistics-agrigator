@@ -1,16 +1,30 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const licenseController = require('../controllers/licenseController');
-const { adminOnly, rateLimitLicense } = require('../middleware/licenseMiddleware');
-const { validateRequest } = require('../middleware/validation');
-const Joi = require('joi');
+const licenseController = require("../controllers/licenseController");
+const { authMiddleware } = require("../shared/lib/auth");
+const { rateLimitLicense } = require("../middleware/licenseMiddleware");
+const { validateRequest } = require("../middleware/validation");
+const Joi = require("joi");
 
 // Validation schemas
 const generateLicenseSchema = Joi.object({
   clientId: Joi.string().uuid().required(),
-  type: Joi.string().valid('TRIAL', 'STANDARD', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM').default('STANDARD'),
-  plan: Joi.string().valid('MONTHLY', 'QUARTERLY', 'YEARLY', 'LIFETIME', 'COMMISSION_BASED', 'PAY_AS_YOU_GO').default('MONTHLY'),
-  allowedServices: Joi.array().items(Joi.string()).default(['auth-service', 'user-service', 'api-gateway']),
+  type: Joi.string()
+    .valid("TRIAL", "STANDARD", "PROFESSIONAL", "ENTERPRISE", "CUSTOM")
+    .default("STANDARD"),
+  plan: Joi.string()
+    .valid(
+      "MONTHLY",
+      "QUARTERLY",
+      "YEARLY",
+      "LIFETIME",
+      "COMMISSION_BASED",
+      "PAY_AS_YOU_GO",
+    )
+    .default("MONTHLY"),
+  allowedServices: Joi.array()
+    .items(Joi.string())
+    .default(["auth-service", "user-service", "api-gateway"]),
   maxActivations: Joi.number().integer().min(1).default(1),
   validityDays: Joi.number().integer().min(1).default(30),
   allowedIPs: Joi.array().items(Joi.string().ip()).default([]),
@@ -18,28 +32,36 @@ const generateLicenseSchema = Joi.object({
   features: Joi.object().default({}),
   limits: Joi.object().default({}),
   commissionRate: Joi.number().min(0).max(1).optional(),
-  encryptedConfig: Joi.object().optional()
+  encryptedConfig: Joi.object().optional(),
 });
 
 const validateLicenseSchema = Joi.object({
   licenseKey: Joi.string().required(),
   machineId: Joi.string().optional(),
-  serverIP: Joi.string().ip().optional()
+  serverIP: Joi.string().ip().optional(),
 });
 
 const extendLicenseSchema = Joi.object({
-  days: Joi.number().integer().min(1).default(30)
+  days: Joi.number().integer().min(1).default(30),
 });
 
 const listLicensesSchema = Joi.object({
   clientId: Joi.string().uuid().optional(),
-  status: Joi.string().valid('INACTIVE', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED').optional(),
-  type: Joi.string().valid('TRIAL', 'STANDARD', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM').optional(),
-  plan: Joi.string().valid('MONTHLY', 'QUARTERLY', 'YEARLY', 'LIFETIME', 'COMMISSION_BASED').optional(),
+  status: Joi.string()
+    .valid("INACTIVE", "ACTIVE", "SUSPENDED", "EXPIRED", "REVOKED")
+    .optional(),
+  type: Joi.string()
+    .valid("TRIAL", "STANDARD", "PROFESSIONAL", "ENTERPRISE", "CUSTOM")
+    .optional(),
+  plan: Joi.string()
+    .valid("MONTHLY", "QUARTERLY", "YEARLY", "LIFETIME", "COMMISSION_BASED")
+    .optional(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
-  sortBy: Joi.string().valid('createdAt', 'validUntil', 'type', 'plan').default('createdAt'),
-  sortOrder: Joi.string().valid('asc', 'desc').default('desc')
+  sortBy: Joi.string()
+    .valid("createdAt", "validUntil", "type", "plan")
+    .default("createdAt"),
+  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
 });
 
 /**
@@ -65,11 +87,12 @@ const listLicensesSchema = Joi.object({
  *         description: Forbidden - Admin access required
  */
 router.post(
-  '/generate',
-  adminOnly,
+  "/generate",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "generate", "all"),
   rateLimitLicense,
   validateRequest(generateLicenseSchema),
-  licenseController.generateLicense
+  licenseController.generateLicense,
 );
 
 /**
@@ -102,10 +125,10 @@ router.post(
  *         description: License validation failed
  */
 router.post(
-  '/validate',
+  "/validate",
   rateLimitLicense,
   validateRequest(validateLicenseSchema),
-  licenseController.validateLicense
+  licenseController.validateLicense,
 );
 
 /**
@@ -130,9 +153,10 @@ router.post(
  *         description: License not found
  */
 router.get(
-  '/:id',
-  adminOnly,
-  licenseController.getLicenseDetails
+  "/:id",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "read", "own"),
+  licenseController.getLicenseDetails,
 );
 
 /**
@@ -165,9 +189,10 @@ router.get(
  *         description: License not found
  */
 router.put(
-  '/:id/revoke',
-  adminOnly,
-  licenseController.revokeLicense
+  "/:id/revoke",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "delete", "all"),
+  licenseController.revokeLicense,
 );
 
 /**
@@ -202,10 +227,11 @@ router.put(
  *         description: License not found
  */
 router.put(
-  '/:id/extend',
-  adminOnly,
+  "/:id/extend",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "update", "all"),
   validateRequest(extendLicenseSchema),
-  licenseController.extendLicense
+  licenseController.extendLicense,
 );
 
 /**
@@ -247,10 +273,11 @@ router.put(
  *         description: List of licenses
  */
 router.get(
-  '/',
-  adminOnly,
-  validateRequest(listLicensesSchema, 'query'),
-  licenseController.listLicenses
+  "/",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("license", "read", "assigned"),
+  validateRequest(listLicensesSchema, "query"),
+  licenseController.listLicenses,
 );
 
 module.exports = router;

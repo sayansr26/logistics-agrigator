@@ -26,6 +26,9 @@ const APIResponse = require("./shared/lib/response");
 // Import routes
 const userRoutes = require("./routes/users");
 const clientRoutes = require("./routes/clients");
+const customerRoutes = require("./routes/customers");
+const assignmentRoutes = require("./routes/assignments");
+const dashboardRoutes = require("./routes/dashboard");
 
 const app = express();
 const PORT = process.env.PORT || 8002;
@@ -560,6 +563,9 @@ app.get("/api/test/pagination", validatePaginationQuery, (req, res) => {
 // API Routes
 app.use("/api", userRoutes);
 app.use("/api", clientRoutes);
+app.use("/api", customerRoutes);
+app.use("/api", assignmentRoutes);
+app.use("/api", dashboardRoutes);
 
 // 404 handler
 app.use("*", notFoundHandler);

@@ -4,9 +4,11 @@
 const express = require("express");
 const { asyncHandler } = require("../middleware/errorHandler");
 const auth = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const {
   validateCreateClient,
   validateUpdateClient,
+  validateRegisterClient,
   validateCreateClientSettings,
   validateUpdateClientSettings,
   validateCreateUserInvitation,
@@ -24,6 +26,240 @@ const router = express.Router();
 // ============================================================================
 // CLIENT MANAGEMENT ROUTES
 // ============================================================================
+
+/**
+ * @swagger
+ * /api/clients/register:
+ *   post:
+ *     summary: Register a new license-based client with secure deployment
+ *     description: |
+ *       Creates a new license-based client with complete deployment package.
+ *       This endpoint performs the following operations:
+ *       1. Creates client record with clientType=LICENSE_BASED
+ *       2. Creates admin user in auth-service
+ *       3. Generates license via license-service
+ *       4. Builds secure Docker image
+ *       5. Returns deployment instructions and credentials
+ *
+ *       **SUPERADMIN ONLY** - Requires superadmin role for access.
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Client company name
+ *                 example: "Acme Corporation"
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Admin user email address
+ *                 example: "admin@acme.com"
+ *               contactPerson:
+ *                 type: string
+ *                 description: Primary contact person name
+ *                 example: "John Doe"
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: Admin user password (if not provided, auto-generated)
+ *                 example: "SecureP@ss123!"
+ *               licenseType:
+ *                 type: string
+ *                 enum: [TRIAL, STANDARD, PROFESSIONAL, ENTERPRISE]
+ *                 default: STANDARD
+ *                 description: License tier
+ *               plan:
+ *                 type: string
+ *                 enum: [MONTHLY, QUARTERLY, YEARLY, LIFETIME]
+ *                 default: MONTHLY
+ *                 description: Billing plan
+ *               services:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [auth-service, user-service, api-gateway, shipment-service, partner-service, wallet-service, platform-service, support-service]
+ *                 description: Services to include in Docker build
+ *                 example: ["auth-service", "user-service", "api-gateway", "shipment-service"]
+ *               maxActivations:
+ *                 type: integer
+ *                 minimum: 1
+ *                 default: 1
+ *                 description: Maximum number of license activations allowed
+ *               validityDays:
+ *                 type: integer
+ *                 minimum: 1
+ *                 default: 30
+ *                 description: License validity period in days
+ *               features:
+ *                 type: object
+ *                 description: Feature flags for the license
+ *                 properties:
+ *                   multiTenant:
+ *                     type: boolean
+ *                     default: false
+ *                   whiteLabel:
+ *                     type: boolean
+ *                     default: false
+ *                   apiAccess:
+ *                     type: boolean
+ *                     default: true
+ *                   customDomain:
+ *                     type: boolean
+ *                     default: false
+ *                   ssoEnabled:
+ *                     type: boolean
+ *                     default: false
+ *                   advancedAnalytics:
+ *                     type: boolean
+ *                     default: false
+ *               limits:
+ *                 type: object
+ *                 description: Resource limits for the client
+ *                 properties:
+ *                   maxUsers:
+ *                     type: integer
+ *                     description: Maximum number of users
+ *                   maxShipments:
+ *                     type: integer
+ *                     description: Maximum number of shipments per month
+ *                   maxCustomers:
+ *                     type: integer
+ *                     description: Maximum number of customers
+ *                   maxApiCalls:
+ *                     type: integer
+ *                     description: Maximum API calls per day
+ *               registry:
+ *                 type: string
+ *                 description: Docker registry URL (optional)
+ *                 example: "docker.io/myorg"
+ *               enableMonitoring:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Enable monitoring in deployment
+ *     responses:
+ *       201:
+ *         description: Client registered successfully with deployment package
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     client:
+ *                       type: object
+ *                       description: Created client details
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           format: uuid
+ *                         name:
+ *                           type: string
+ *                         contactEmail:
+ *                           type: string
+ *                         clientType:
+ *                           type: string
+ *                           example: LICENSE_BASED
+ *                         licenseStatus:
+ *                           type: string
+ *                           example: INACTIVE
+ *                         dockerImageTag:
+ *                           type: string
+ *                     license:
+ *                       type: object
+ *                       description: Generated license details
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           format: uuid
+ *                         key:
+ *                           type: string
+ *                           description: License key
+ *                         type:
+ *                           type: string
+ *                           example: STANDARD
+ *                         validUntil:
+ *                           type: string
+ *                           format: date-time
+ *                     deployment:
+ *                       type: object
+ *                       description: Docker deployment details
+ *                       properties:
+ *                         imageName:
+ *                           type: string
+ *                           example: "logistics/secure-client:acme-1234567890"
+ *                         imageSize:
+ *                           type: string
+ *                           example: "2.5GB"
+ *                         buildStatus:
+ *                           type: string
+ *                           example: completed
+ *                     credentials:
+ *                       type: object
+ *                       description: Admin user credentials
+ *                       properties:
+ *                         adminEmail:
+ *                           type: string
+ *                         temporaryPassword:
+ *                           type: string
+ *                         activationCode:
+ *                           type: string
+ *                           description: License activation code
+ *                     instructions:
+ *                       type: string
+ *                       description: Deployment instructions in Markdown format
+ *       400:
+ *         description: Validation error or invalid request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Superadmin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Client with this email already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Registration failed (license generation or Docker build error)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post(
+  "/clients/register",
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "create", "all"),
+  validateRegisterClient,
+  asyncHandler(ClientController.registerClient),
+);
 
 /**
  * @swagger
@@ -90,7 +326,8 @@ const router = express.Router();
  */
 router.post(
   "/clients",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "create", "all"),
   validateCreateClient,
   asyncHandler(ClientController.createClient),
 );
@@ -181,7 +418,8 @@ router.post(
  */
 router.get(
   "/clients",
-  auth.requireRole(["admin", "support", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "read", "all"),
   validatePaginationQuery,
   asyncHandler(ClientController.listClients),
 );
@@ -304,6 +542,7 @@ router.get(
 router.get(
   "/clients/:id",
   auth.authenticate,
+  authMiddleware.requirePermission("client", "read", "all"),
   validateUuidParam,
   asyncHandler(ClientController.getClient),
 );
@@ -311,6 +550,7 @@ router.get(
 router.put(
   "/clients/:id",
   auth.authenticate,
+  authMiddleware.requirePermission("client", "update", "all"),
   validateUuidParam,
   validateUpdateClient,
   asyncHandler(ClientController.updateClient),
@@ -369,7 +609,8 @@ router.put(
  */
 router.delete(
   "/clients/:id",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "delete", "all"),
   validateUuidParam,
   asyncHandler(ClientController.deleteClient),
 );
@@ -441,7 +682,8 @@ router.delete(
  */
 router.put(
   "/clients/:id/activate",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "update", "all"),
   validateUuidParam,
   asyncHandler(ClientController.activateClient),
 );
@@ -510,7 +752,8 @@ router.put(
  */
 router.get(
   "/clients/stats",
-  auth.requireRole(["admin", "support"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("client", "read", "all"),
   asyncHandler(ClientController.getClientStats),
 );
 
@@ -587,7 +830,8 @@ router.get(
  */
 router.post(
   "/client-settings",
-  auth.requireRole(["admin", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("settings", "create", "parent"),
   validateCreateClientSettings,
   asyncHandler(ClientSettingsController.createClientSettings),
 );
@@ -646,6 +890,7 @@ router.post(
 router.get(
   "/client-settings/:clientId",
   auth.authenticate,
+  authMiddleware.requirePermission("settings", "read", "parent"),
   validateUuidParam,
   asyncHandler(ClientSettingsController.getClientSettings),
 );
@@ -759,7 +1004,8 @@ router.get(
  */
 router.put(
   "/client-settings/:clientId",
-  auth.requireRole(["admin", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("settings", "update", "parent"),
   validateUuidParam,
   validateUpdateClientSettings,
   asyncHandler(ClientSettingsController.updateClientSettings),
@@ -819,7 +1065,8 @@ router.put(
  */
 router.delete(
   "/client-settings/:clientId",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("settings", "delete", "all"),
   validateUuidParam,
   asyncHandler(ClientSettingsController.deleteClientSettings),
 );
@@ -910,6 +1157,7 @@ router.delete(
 router.get(
   "/client-settings/:clientId/validate",
   auth.authenticate,
+  authMiddleware.requirePermission("settings", "read", "parent"),
   validateUuidParam,
   asyncHandler(ClientSettingsController.validateBranding),
 );
@@ -1118,14 +1366,16 @@ router.get(
  */
 router.post(
   "/invitations",
-  auth.requireRole(["admin", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "create", "parent"),
   validateCreateUserInvitation,
   asyncHandler(UserInvitationController.createInvitation),
 );
 
 router.get(
   "/invitations",
-  auth.requireRole(["admin", "support", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "parent"),
   validatePaginationQuery,
   asyncHandler(UserInvitationController.listInvitations),
 );
@@ -1138,6 +1388,7 @@ router.get(
 router.get(
   "/invitations/:id",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "parent"),
   validateUuidParam,
   asyncHandler(UserInvitationController.getInvitation),
 );
@@ -1149,7 +1400,8 @@ router.get(
  */
 router.put(
   "/invitations/:id",
-  auth.requireRole(["admin", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "update", "parent"),
   validateUuidParam,
   asyncHandler(UserInvitationController.updateInvitation),
 );
@@ -1162,6 +1414,7 @@ router.put(
 router.post(
   "/invitations/:id/cancel",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "update", "parent"),
   validateUuidParam,
   asyncHandler(UserInvitationController.cancelInvitation),
 );
@@ -1173,7 +1426,8 @@ router.post(
  */
 router.post(
   "/invitations/:id/resend",
-  auth.requireRole(["admin", "operations"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "create", "parent"),
   validateUuidParam,
   asyncHandler(UserInvitationController.resendInvitation),
 );
@@ -1185,7 +1439,8 @@ router.post(
  */
 router.get(
   "/invitations/stats",
-  auth.requireRole(["admin", "support"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "all"),
   asyncHandler(UserInvitationController.getInvitationStats),
 );
 
@@ -1294,7 +1549,7 @@ router.get(
 router.get(
   "/clients/:clientId/users",
   auth.authenticate,
-  auth.requireClientAccess(["operations", "admin", "support"]),
+  authMiddleware.requirePermission("user", "read", "parent"),
   auth.requireOwnClientOrAdmin,
   validatePaginationQuery,
   asyncHandler(ClientController.getClientUsers),
@@ -1383,7 +1638,7 @@ router.get(
 router.get(
   "/clients/:clientId/invitations",
   auth.authenticate,
-  auth.requireClientAccess(["operations", "admin", "support"]),
+  authMiddleware.requirePermission("user", "read", "parent"),
   auth.requireOwnClientOrAdmin,
   validatePaginationQuery,
   asyncHandler(ClientController.getClientInvitations),
@@ -1481,7 +1736,7 @@ router.get(
 router.get(
   "/clients/:clientId/stats",
   auth.authenticate,
-  auth.requireClientAccess(["operations", "admin", "support"]),
+  authMiddleware.requirePermission("client", "read", "parent"),
   auth.requireOwnClientOrAdmin,
   validateUuidParam,
   asyncHandler(ClientController.getClientDetailedStats),

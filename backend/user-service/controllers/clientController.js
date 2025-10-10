@@ -4,6 +4,7 @@
 const { PrismaClient } = require("@prisma/client");
 const APIResponse = require("../shared/lib/response");
 const logger = require("../shared/lib/logger");
+const { authUtils } = require("../shared/lib/auth");
 const {
   ClientNotFoundError,
   UserServiceError,
@@ -160,8 +161,8 @@ class ClientController {
 
       const skip = (page - 1) * limit;
 
-      // Build where clause
-      const where = {};
+      // Build where clause with scope filtering
+      let where = {};
 
       if (search) {
         where.OR = [
@@ -190,11 +191,8 @@ class ClientController {
         if (endDate) where.createdAt.lte = new Date(endDate);
       }
 
-      // Role-based filtering
-      if (req.user.role !== "admin" && req.user.role !== "support") {
-        // Non-admin users can only see their own client
-        where.id = req.user.clientId;
-      }
+      // Apply RBAC scope filtering
+      where = authUtils.applyScopeFilter(req, where);
 
       const [clients, total] = await Promise.all([
         prisma.client.findMany({
@@ -373,10 +371,7 @@ class ClientController {
       const updateData = req.body;
 
       // Role-based access control
-      if (
-        req.user.role !== "admin" &&
-        req.user.clientId !== id
-      ) {
+      if (req.user.role !== "admin" && req.user.clientId !== id) {
         throw new UserServiceError(
           "Access denied. You can only update your own client information.",
           "CLIENT_UPDATE_DENIED",
@@ -542,7 +537,7 @@ class ClientController {
 
         // Cancel all pending invitations
         await tx.userInvitation.updateMany({
-          where: { 
+          where: {
             clientId: id,
             status: "pending",
           },
@@ -887,11 +882,16 @@ class ClientController {
 
         // Invitation stats for this client
         prisma.$transaction(async (tx) => {
-          const [totalInvitations, pendingInvitations, acceptedInvitations] = await Promise.all([
-            tx.userInvitation.count({ where: { clientId } }),
-            tx.userInvitation.count({ where: { clientId, status: "pending" } }),
-            tx.userInvitation.count({ where: { clientId, status: "accepted" } }),
-          ]);
+          const [totalInvitations, pendingInvitations, acceptedInvitations] =
+            await Promise.all([
+              tx.userInvitation.count({ where: { clientId } }),
+              tx.userInvitation.count({
+                where: { clientId, status: "pending" },
+              }),
+              tx.userInvitation.count({
+                where: { clientId, status: "accepted" },
+              }),
+            ]);
 
           return { totalInvitations, pendingInvitations, acceptedInvitations };
         }),
@@ -937,9 +937,12 @@ class ClientController {
           totalMembers: userStats.totalUsers,
           activeMembers: userStats.activeUsers,
           pendingInvitations: invitationStats.pendingInvitations,
-          membershipRate: userStats.totalUsers > 0 
-            ? Math.round((userStats.verifiedUsers / userStats.totalUsers) * 100) 
-            : 0,
+          membershipRate:
+            userStats.totalUsers > 0
+              ? Math.round(
+                  (userStats.verifiedUsers / userStats.totalUsers) * 100,
+                )
+              : 0,
         },
       };
 
@@ -957,6 +960,332 @@ class ClientController {
         clientId: req.params.clientId,
         userId: req.user.userId,
         service: "user-service",
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * RBAC-003: Register new client with auto-license generation and Docker image build
+   * Super admin only - Creates client, generates license, builds secure Docker image
+   */
+  static async registerClient(req, res) {
+    const axios = require("axios");
+    const crypto = require("crypto");
+    const licenseServiceClient = require("../services/licenseServiceClient");
+    const dockerBuilderClient = require("../services/dockerBuilderClient");
+
+    try {
+      const {
+        name,
+        email,
+        contactPerson,
+        licenseType = "STANDARD",
+        services = [
+          "auth-service",
+          "user-service",
+          "api-gateway",
+          "shipment-service",
+          "partner-service",
+          "wallet-service",
+        ],
+        registry = "docker.io/logistics-secure",
+        enableMonitoring = false,
+      } = req.body;
+
+      // SUPER ADMIN ONLY
+      if (req.user.role !== "superadmin") {
+        throw new UserServiceError(
+          "Access denied. Only super administrators can register new clients.",
+          "CLIENT_REGISTRATION_DENIED",
+          403,
+        );
+      }
+
+      logger.info("Starting client registration", {
+        name,
+        email,
+        licenseType,
+        services: services.length,
+        registeredBy: req.user.userId,
+      });
+
+      // Generate slug from name
+      const slug = name
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "");
+
+      // Check if slug already exists
+      const existingClient = await prisma.client.findUnique({
+        where: { slug },
+      });
+      if (existingClient) {
+        throw new UserServiceError(
+          `Client with slug '${slug}' already exists`,
+          "CLIENT_SLUG_EXISTS",
+          409,
+        );
+      }
+
+      // Generate temporary password for admin user (meets all validation requirements)
+      // Pattern: Uppercase + lowercase + numbers + special chars
+      const randomPart = crypto.randomBytes(8).toString("hex"); // Lowercase hex chars
+      const temporaryPassword = `Temp${randomPart}@123!`; // Meets: Upper, lower, number, special
+
+      let client, license, buildResult, adminUser;
+      let rollbackNeeded = false;
+
+      try {
+        // STEP 1: Create Client record
+        logger.info("Creating client record", { slug });
+
+        client = await prisma.client.create({
+          data: {
+            name,
+            slug,
+            contactEmail: email,
+            clientType: "LICENSE_BASED",
+            licenseStatus: "INACTIVE",
+            isActive: true,
+            subscriptionTier: "enterprise",
+          },
+        });
+
+        rollbackNeeded = true;
+        logger.info("Client created", { clientId: client.id });
+
+        // STEP 2: Create admin user in auth-service
+        logger.info("Creating admin user in auth-service", { email });
+
+        const authServiceUrl =
+          process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
+        try {
+          const authResponse = await axios.post(
+            `${authServiceUrl}/auth/register`,
+            {
+              email,
+              password: temporaryPassword,
+              name: contactPerson || name, // Use contactPerson if provided, otherwise client name
+              role: "client",
+              clientId: client.id,
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${req.headers.authorization?.split(" ")[1]}`,
+              },
+              timeout: 30000,
+            },
+          );
+
+          adminUser = authResponse.data?.data?.user || authResponse.data?.user;
+          logger.info("Admin user created", { userId: adminUser.id, email });
+        } catch (authError) {
+          logger.error("Failed to create admin user", {
+            error: authError.message,
+            response: authError.response?.data,
+          });
+          throw new UserServiceError(
+            "Failed to create admin user in auth service",
+            "ADMIN_USER_CREATION_FAILED",
+            500,
+          );
+        }
+
+        // STEP 3: Generate license via license-service
+        logger.info("Generating license", { clientId: client.id, licenseType });
+
+        license = await licenseServiceClient.generateLicense(
+          {
+            clientId: client.id,
+            type: licenseType,
+            plan: licenseType === "TRIAL" ? "MONTHLY" : "YEARLY",
+            allowedServices: services,
+            maxActivations: licenseType === "ENTERPRISE" ? 5 : 1,
+            validityDays: licenseType === "TRIAL" ? 14 : 365,
+            features: {
+              enableMonitoring,
+              services,
+            },
+            limits: {
+              maxUsers: licenseType === "ENTERPRISE" ? 100 : 25,
+              maxShipments: licenseType === "ENTERPRISE" ? 100000 : 10000,
+            },
+          },
+          req.headers.authorization?.split(" ")[1],
+        );
+
+        logger.info("License generated", {
+          licenseId: license.id,
+          validUntil: license.validUntil,
+        });
+
+        // STEP 4: Update client with license information
+        client = await prisma.client.update({
+          where: { id: client.id },
+          data: {
+            licenseId: license.id,
+            activationCode: license.key,
+            licenseValidUntil: new Date(license.validUntil),
+            licenseStatus: "ACTIVE",
+          },
+        });
+
+        logger.info("Client updated with license", { clientId: client.id });
+
+        // STEP 5: Trigger secure Docker image build (optional for Phase 1)
+        logger.info("Triggering Docker build", { clientId: client.id });
+
+        try {
+          buildResult = await dockerBuilderClient.triggerBuild({
+            clientId: client.id,
+            clientName: name,
+            licenseType,
+            services,
+            registry,
+            licenseServer:
+              process.env.LICENSE_SERVICE_URL || "http://localhost:3011",
+            enableMonitoring,
+            secretKey: crypto.randomBytes(32).toString("hex"),
+          });
+
+          logger.info("Docker build completed", {
+            imageName: buildResult.imageName,
+            size: buildResult.size,
+          });
+
+          // STEP 6: Update client with Docker image info
+          client = await prisma.client.update({
+            where: { id: client.id },
+            data: {
+              dockerImageTag: buildResult.tag,
+              deployedAt: new Date(),
+            },
+          });
+        } catch (dockerError) {
+          logger.warn("Docker build skipped (builder not available)", {
+            clientId: client.id,
+            error: dockerError.message,
+          });
+
+          // Create mock build result for Phase 1
+          buildResult = {
+            success: false,
+            imageName: `logistics/secure-${client.id}:pending`,
+            registry,
+            tag: "pending-build",
+            buildStatus: "pending",
+            error: "Docker builder not configured",
+            timestamp: new Date().toISOString(),
+            size: "N/A",
+          };
+        }
+
+        // STEP 7: Create audit log
+        await prisma.auditLog.create({
+          data: {
+            userId: req.user.userId,
+            clientId: client.id,
+            action: "REGISTER_CLIENT",
+            resource: "Client",
+            resourceId: client.id,
+            changes: {
+              created: {
+                name: client.name,
+                slug: client.slug,
+                licenseType,
+                licenseId: license.id,
+                dockerImage: buildResult.imageName,
+              },
+            },
+            metadata: {
+              source: "user-service",
+              endpoint: "/api/v1/clients/register",
+              registeredBy: req.user.role,
+              services,
+              enableMonitoring,
+            },
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+          },
+        });
+
+        // STEP 8: Generate deployment instructions
+        const deploymentInstructions =
+          dockerBuilderClient.generateDeploymentInstructions(
+            buildResult,
+            { id: client.id, name: client.name, email, licenseType },
+            license.key,
+          );
+
+        logger.info("Client registration completed successfully", {
+          clientId: client.id,
+          licenseId: license.id,
+          imageName: buildResult.imageName,
+        });
+
+        // Return deployment package
+        res.status(201).json(
+          APIResponse.success(
+            {
+              client: {
+                id: client.id,
+                name: client.name,
+                slug: client.slug,
+                clientType: client.clientType,
+                licenseStatus: client.licenseStatus,
+              },
+              license: {
+                id: license.id,
+                key: license.key,
+                type: license.type,
+                validUntil: license.validUntil,
+                maxActivations: license.maxActivations,
+              },
+              deployment: {
+                imageName: buildResult.imageName,
+                registry: buildResult.registry,
+                tag: buildResult.tag,
+                buildStatus: buildResult.buildStatus,
+                size: buildResult.size,
+              },
+              credentials: {
+                adminEmail: email,
+                temporaryPassword,
+              },
+              instructions: deploymentInstructions,
+            },
+            201,
+          ),
+        );
+      } catch (stepError) {
+        logger.error("Client registration failed", {
+          error: stepError.message,
+          clientId: client?.id,
+          rollbackNeeded,
+        });
+
+        // Rollback: Delete client if created
+        if (rollbackNeeded && client) {
+          try {
+            await prisma.client.delete({ where: { id: client.id } });
+            logger.info("Client rollback successful", { clientId: client.id });
+          } catch (rollbackError) {
+            logger.error("Client rollback failed", {
+              clientId: client.id,
+              error: rollbackError.message,
+            });
+          }
+        }
+
+        throw stepError;
+      }
+    } catch (error) {
+      logger.error("Client registration error", {
+        error: error.message,
+        userId: req.user?.userId,
+        requestBody: req.body,
       });
       throw error;
     }

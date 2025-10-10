@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 // Import middleware
-const authMiddleware = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const { validate } = require("../middleware/validate");
 const {
   createShipmentLimiter,
@@ -153,6 +153,7 @@ router.post(
   createShipmentLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "create", "parent"),
   validate(createShipmentSchema),
   createShipment,
 );
@@ -242,6 +243,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   validate(getShipmentsQuerySchema, "query"),
   getShipments,
 );
@@ -297,6 +299,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   getShipmentById,
 );
 
@@ -358,6 +361,7 @@ router.put(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "parent"),
   validate(updateShipmentSchema),
   updateShipment,
 );
@@ -417,6 +421,7 @@ router.post(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "cancel", "assigned"),
   cancelShipment,
 );
 
@@ -488,6 +493,8 @@ router.get(
   "/:id/tracking",
   trackingLimiter,
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   getShipmentTracking,
 );
 
@@ -568,7 +575,8 @@ router.post(
   "/:id/tracking/events",
   generalLimiter,
   authMiddleware.authenticate,
-  authMiddleware.operationsOrHigher,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "all"),
   validate(trackingEventSchema),
   addTrackingEvent,
 );
@@ -673,6 +681,8 @@ router.post(
   "/calculate-rates",
   generalLimiter,
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(rateCalculationSchema),
   calculateRates,
 );
@@ -771,6 +781,8 @@ router.post(
   "/select-partner",
   generalLimiter,
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(partnerSelectionSchema),
   selectPartner,
 );
@@ -855,6 +867,8 @@ router.post(
   "/serviceability",
   generalLimiter,
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(serviceabilitySchema),
   checkServiceability,
 );
@@ -1050,7 +1064,8 @@ router.post(
   "/:id/delivery-confirmation",
   trackingLimiter,
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "all"),
   validate(deliveryConfirmationSchema),
   recordDeliveryConfirmation,
 );
@@ -1151,6 +1166,8 @@ router.get(
   "/analytics/tracking",
   generalLimiter,
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("analytics", "read", "parent"),
   validate(analyticsQuerySchema, "query"),
   getTrackingAnalytics,
 );
@@ -1190,6 +1207,8 @@ router.get(
 router.post(
   "/bulk",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "bulk_create", "assigned"),
   validate(processBulkShipmentsSchema),
   processBulkShipments,
 );
@@ -1215,6 +1234,8 @@ router.post(
 router.get(
   "/bulk/:jobId/status",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   getBulkJobStatus,
 );
 
@@ -1258,6 +1279,8 @@ router.get(
 router.post(
   "/:shipmentId/ndr",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
   validate(createNDRCaseSchema),
   createNDRCase,
 );
@@ -1285,7 +1308,13 @@ router.post(
  *       200:
  *         description: NDR cases retrieved
  */
-router.get("/ndr", authMiddleware.authenticate, getNDRCases);
+router.get(
+  "/ndr",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getNDRCases,
+);
 
 /**
  * @swagger
@@ -1327,6 +1356,8 @@ router.get("/ndr", authMiddleware.authenticate, getNDRCases);
 router.post(
   "/ndr/:ndrCaseId/action",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
   validate(takeNDRActionSchema),
   takeNDRAction,
 );
@@ -1370,6 +1401,8 @@ router.post(
 router.post(
   "/:shipmentId/label",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   validate(generateShippingLabelSchema),
   generateShippingLabel,
 );
@@ -1407,6 +1440,8 @@ router.post(
 router.post(
   "/labels/bulk",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   validate(generateBulkLabelsSchema),
   generateBulkLabels,
 );
@@ -1443,6 +1478,8 @@ router.post(
 router.post(
   "/manifest",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "manage", "assigned"),
   validate(createManifestSchema),
   createManifest,
 );
@@ -1487,6 +1524,8 @@ router.post(
 router.post(
   "/pickup/schedule",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "create", "assigned"),
   validate(schedulePickupSchema),
   schedulePickup,
 );
@@ -1516,6 +1555,8 @@ router.post(
 router.get(
   "/pickup/schedules",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
   getPickupSchedules,
 );
 
@@ -1556,6 +1597,8 @@ router.get(
 router.put(
   "/pickup/:pickupScheduleId",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
   validate(updatePickupStatusSchema),
   updatePickupStatus,
 );
@@ -1585,6 +1628,8 @@ router.put(
 router.delete(
   "/pickup/:pickupScheduleId",
   authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
   cancelPickup,
 );
 
@@ -1612,6 +1657,12 @@ router.delete(
  *       200:
  *         description: Available time slots retrieved
  */
-router.get("/pickup/slots", authMiddleware.authenticate, getAvailableTimeSlots);
+router.get(
+  "/pickup/slots",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getAvailableTimeSlots,
+);
 
 module.exports = router;

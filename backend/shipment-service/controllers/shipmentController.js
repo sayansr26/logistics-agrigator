@@ -7,6 +7,7 @@ const {
   NotFoundError,
   APIError,
 } = require("../shared/lib/errors");
+const { authUtils } = require("../shared/lib/auth");
 const partnerIntegrationService = require("../services/partnerIntegrationService");
 const paymentProcessingService = require("../services/paymentProcessingService");
 const trackingService = require("../services/trackingService");
@@ -347,7 +348,6 @@ async function getShipments(req, res) {
   try {
     const userId = req.user.userId;
     const clientId = req.user.clientId;
-    const isAdmin = req.user.isAdmin;
 
     const {
       page = 1,
@@ -360,14 +360,10 @@ async function getShipments(req, res) {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    // Build where clause
-    const where = {};
+    // Build base where clause
+    let where = {};
 
-    // Multi-tenant filtering - admin can see all, others only their own
-    if (!isAdmin) {
-      where.clientId = clientId;
-    }
-
+    // Add filters from query params
     if (status) {
       where.status = status;
     }
@@ -385,6 +381,9 @@ async function getShipments(req, res) {
         where.createdAt.lte = new Date(dateTo);
       }
     }
+
+    // CRITICAL: Apply scope-based filtering for multi-tenant isolation
+    where = authUtils.applyScopeFilter(req, where);
 
     // Get shipments with pagination
     const [shipments, totalCount] = await Promise.all([
@@ -487,14 +486,11 @@ async function getShipmentById(req, res) {
   try {
     const userId = req.user.userId;
     const clientId = req.user.clientId;
-    const isAdmin = req.user.isAdmin;
     const { id } = req.params;
 
-    // Build where clause for multi-tenant access
-    const where = { id };
-    if (!isAdmin) {
-      where.clientId = clientId;
-    }
+    // Build where clause with scope filtering for multi-tenant access
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
 
     const shipment = await prisma.shipment.findFirst({
       where,
@@ -585,15 +581,12 @@ async function updateShipment(req, res) {
   try {
     const userId = req.user.userId;
     const clientId = req.user.clientId;
-    const isAdmin = req.user.isAdmin;
     const { id } = req.params;
     const updateData = req.body;
 
-    // Build where clause for multi-tenant access
-    const where = { id };
-    if (!isAdmin) {
-      where.clientId = clientId;
-    }
+    // Build where clause with scope filtering for multi-tenant access
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
 
     // Check if shipment exists
     const existingShipment = await prisma.shipment.findFirst({
@@ -722,15 +715,12 @@ async function cancelShipment(req, res) {
   try {
     const userId = req.user.userId;
     const clientId = req.user.clientId;
-    const isAdmin = req.user.isAdmin;
     const { id } = req.params;
     const { reason = "User requested cancellation" } = req.body;
 
-    // Build where clause for multi-tenant access
-    const where = { id };
-    if (!isAdmin) {
-      where.clientId = clientId;
-    }
+    // Build where clause with scope filtering for multi-tenant access
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
 
     // Get shipment details
     const shipment = await prisma.shipment.findFirst({

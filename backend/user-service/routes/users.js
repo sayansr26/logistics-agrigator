@@ -4,6 +4,7 @@
 const express = require("express");
 const UserController = require("../controllers/userController");
 const auth = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const { asyncHandler } = require("../middleware/errorHandler");
 const {
   validateCreateProfile,
@@ -77,6 +78,7 @@ const router = express.Router();
 router.post(
   "/profiles",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "create", "own"),
   validateCreateProfile,
   asyncHandler(UserController.createProfile),
 );
@@ -121,6 +123,7 @@ router.post(
 router.get(
   "/profiles/me",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "own"),
   asyncHandler(UserController.getMyProfile),
 );
 
@@ -216,7 +219,7 @@ router.get(
 router.get(
   "/profiles",
   auth.authenticate,
-  auth.requireClientAccess(["client", "operations", "admin", "support"]),
+  authMiddleware.requirePermission("user", "read", "parent"),
   validatePaginationQuery,
   asyncHandler(UserController.listProfiles),
 );
@@ -275,6 +278,7 @@ router.get(
 router.get(
   "/profiles/:id",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "parent"),
   validateUuidParam,
   asyncHandler(UserController.getProfile),
 );
@@ -390,6 +394,7 @@ router.get(
 router.put(
   "/profiles/:id",
   auth.authenticate,
+  authMiddleware.requirePermission("user", "update", "parent"),
   validateUuidParam,
   validateUpdateProfile,
   asyncHandler(UserController.updateProfile),
@@ -398,7 +403,7 @@ router.put(
 router.delete(
   "/profiles/:id",
   auth.authenticate,
-  auth.requireRole(["admin", "client"]), // Only admin or profile owner
+  authMiddleware.requirePermission("user", "delete", "parent"),
   validateUuidParam,
   asyncHandler(UserController.deleteProfile),
 );
@@ -485,7 +490,8 @@ router.delete(
  */
 router.get(
   "/admin/profiles",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "all"),
   validatePaginationQuery,
   asyncHandler(UserController.listProfiles),
 );
@@ -546,7 +552,8 @@ router.get(
  */
 router.put(
   "/admin/profiles/:id/verify",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "update", "all"),
   validateUuidParam,
   asyncHandler(UserController.verifyProfile),
 );
@@ -607,7 +614,8 @@ router.put(
  */
 router.put(
   "/admin/profiles/:id/activate",
-  auth.adminOnly,
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "update", "all"),
   validateUuidParam,
   asyncHandler(UserController.toggleProfileActivation),
 );
@@ -684,7 +692,8 @@ router.put(
  */
 router.get(
   "/support/profiles/search",
-  auth.requireRole(["support", "admin"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "all"),
   validatePaginationQuery,
   asyncHandler(UserController.listProfiles),
 );
@@ -770,7 +779,7 @@ router.get(
 router.get(
   "/clients/:clientId/profiles",
   auth.authenticate,
-  auth.requireClientAccess(["operations", "admin", "support"]),
+  authMiddleware.requirePermission("user", "read", "parent"),
   auth.requireOwnClientOrAdmin,
   validatePaginationQuery,
   asyncHandler(async (req, res) => {
@@ -847,7 +856,8 @@ router.get(
  */
 router.get(
   "/profiles/stats",
-  auth.requireRole(["operations", "finance", "admin", "support"]),
+  auth.authenticate,
+  authMiddleware.requirePermission("analytics", "read", "parent"),
   asyncHandler(UserController.getProfileStats),
 );
 

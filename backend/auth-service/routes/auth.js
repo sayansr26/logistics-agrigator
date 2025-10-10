@@ -11,6 +11,7 @@ const {
   registrationLimiter,
   loginLimiter,
 } = require("../middleware/rateLimiter");
+const { authMiddleware: sharedAuthMiddleware } = require("../shared/lib/auth");
 
 const router = express.Router();
 
@@ -403,13 +404,13 @@ router.post("/logout-all", authenticate, AuthController.logoutAllDevices);
 router.post(
   "/admin/cleanup-sessions",
   authenticate,
-  adminOnly,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
   AuthController.cleanupExpiredSessions,
 );
 router.post(
   "/admin/blacklist-token",
   authenticate,
-  adminOnly,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
   validate(blacklistTokenSchema),
   AuthController.blacklistToken,
 );
@@ -543,6 +544,11 @@ router.get("/me", authenticate, AuthController.getCurrentUser);
  *         $ref: '#/components/responses/UnauthorizedError'
  */
 // Enhanced user profile with capabilities
-router.get("/profile", authenticate, enrichUserContext, AuthController.getUserProfile);
+router.get(
+  "/profile",
+  authenticate,
+  enrichUserContext,
+  AuthController.getUserProfile,
+);
 
 module.exports = router;

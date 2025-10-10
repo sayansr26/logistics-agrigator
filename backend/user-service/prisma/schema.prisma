@@ -39,6 +39,10 @@ model UserProfile {
   // Client association for multi-tenancy
   clientId String? @map("client_id") @db.Uuid
 
+  // Customer association for RBAC
+  customerId   String? @map("customer_id") @db.Uuid
+  customerRole String? @map("customer_role") @db.VarChar(50)
+
   // Timestamps
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -46,10 +50,12 @@ model UserProfile {
 
   // Relationships
   client    Client?    @relation(fields: [clientId], references: [id])
+  customer  Customer?  @relation(fields: [customerId], references: [id])
   auditLogs AuditLog[]
 
   @@index([userId])
   @@index([clientId])
+  @@index([customerId])
   @@index([isActive])
   @@map("user_profiles")
 }
@@ -77,6 +83,19 @@ model Client {
   isActive         Boolean @default(true) @map("is_active")
   subscriptionTier String  @default("basic") @map("subscription_tier") @db.VarChar(50)
 
+  // License integration for RBAC
+  licenseId         String?       @unique @map("license_id") @db.Uuid
+  licenseStatus     LicenseStatus @default(INACTIVE) @map("license_status")
+  licenseValidUntil DateTime?     @map("license_valid_until")
+  clientType        ClientType    @default(STANDARD) @map("client_type")
+  dockerImageTag    String?       @map("docker_image_tag") @db.VarChar(100)
+  deployedAt        DateTime?     @map("deployed_at")
+  activationCode    String?       @unique @map("activation_code") @db.VarChar(1000) // License key for activation (JWT-style, ~500-800 chars)
+
+  // Reseller fields
+  isReseller     Boolean @default(false) @map("is_reseller")
+  commissionRate Float?  @map("commission_rate") // Decimal as Float for commission percentage
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -86,9 +105,13 @@ model Client {
   clientSettings  ClientSettings?
   userInvitations UserInvitation[]
   auditLogs       AuditLog[]
+  clientUsers     ClientUser[]
+  customers       Customer[]
 
   @@index([slug])
   @@index([isActive])
+  @@index([licenseId])
+  @@index([clientType])
   @@map("clients")
 }
 
@@ -190,13 +213,84 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// ClientUser - Links users to clients with specific roles (accounts, sales, support)
+model ClientUser {
+  id                  String   @id @default(uuid()) @db.Uuid
+  clientId            String   @map("client_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid // Reference to auth-service User
+  role                String   @db.VarChar(50) // accounts, sales, support
+  accessLevel         String   @default("FULL") @map("access_level") @db.VarChar(20) // FULL or RESTRICTED
+  assignedCustomerIds String[] @map("assigned_customer_ids") @db.Uuid
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([clientId])
+  @@index([userId])
+  @@map("client_users")
+}
+
+// Customer - End customers of a client (B2B customers using the logistics platform)
+model Customer {
+  id       String  @id @default(uuid()) @db.Uuid
+  clientId String  @map("client_id") @db.Uuid
+  name     String  @db.VarChar(200)
+  email    String  @db.VarChar(255)
+  phone    String? @db.VarChar(20)
+
+  // Feature access control
+  monthlyShipmentLimit Int?     @map("monthly_shipment_limit")
+  enabledModules       String[] @map("enabled_modules") // ['shipment', 'billing', 'wallet', 'analytics']
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userProfiles  UserProfile[]
+  customerUsers CustomerUser[]
+
+  @@unique([clientId, email])
+  @@index([clientId])
+  @@index([email])
+  @@map("customers")
+}
+
+// CustomerUser - Links users to customers with specific roles (customer, customer_account, customer_sales, customer_support)
+model CustomerUser {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid // Reference to auth-service User
+  role           String   @db.VarChar(50) // customer, customer_account, customer_sales, customer_support
+  enabledModules String[] @map("enabled_modules") // Sub-access control within customer
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, userId])
+  @@index([customerId])
+  @@index([userId])
+  @@map("customer_users")
+}
+
 // Enums
 enum Role {
+  superadmin
   admin
-  finance
-  operations
   client
+  accounts
+  sales
   support
+  customer
+  customer_account
+  customer_sales
+  customer_support
+  affiliate
 }
 
 enum InvitationStatus {
@@ -204,4 +298,17 @@ enum InvitationStatus {
   accepted
   expired
   cancelled
+}
+
+enum ClientType {
+  STANDARD // Regular platform user
+  LICENSE_BASED // Secure Docker deployment
+  RESELLER // Commission-based partner
+}
+
+enum LicenseStatus {
+  INACTIVE // Not activated yet
+  ACTIVE // Currently active
+  SUSPENDED // Temporarily suspended
+  EXPIRED // License expired
 }

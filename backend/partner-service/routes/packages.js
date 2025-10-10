@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const PackageController = require("../controllers/packageController");
 const { validateBody } = require("../middleware/validate");
 const {
@@ -181,7 +181,7 @@ const {
 router.get(
   "/charges",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "read", "all"),
   PackageController.getPackageCharges,
 );
 
@@ -237,7 +237,7 @@ router.get(
 router.post(
   "/charges",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   packageManagementLimiter,
   PackageController.createPackageCharge,
 );
@@ -295,7 +295,7 @@ router.post(
 router.get(
   "/charges/:packageId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "read", "all"),
   PackageController.getPackageChargeById,
 );
 
@@ -360,7 +360,7 @@ router.get(
 router.put(
   "/charges/:packageId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   packageManagementLimiter,
   PackageController.updatePackageCharge,
 );
@@ -415,7 +415,7 @@ router.put(
 router.delete(
   "/charges/:packageId",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   packageManagementLimiter,
   PackageController.deletePackageCharge,
 );
@@ -496,7 +496,7 @@ router.delete(
 router.post(
   "/charges/bulk",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "manage", "all"),
   packageManagementLimiter,
   PackageController.createBulkPackageCharges,
 );
@@ -565,7 +565,7 @@ router.post(
 router.post(
   "/charges/calculate",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations", "client"]),
+  authMiddleware.requirePermission("partner", "read", "own"),
   PackageController.calculatePackageCharges,
 );
 
@@ -637,7 +637,7 @@ router.post(
 router.get(
   "/:partnerId/charges",
   authMiddleware.authenticate,
-  authMiddleware.authorize(["admin", "operations"]),
+  authMiddleware.requirePermission("partner", "read", "all"),
   PackageController.getPartnerPackageCharges,
 );
 

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const APIResponse = require("../shared/lib/response");
 const partnerController = require("../controllers/partnerController");
 const { validateBody } = require("../middleware/validate");
@@ -59,25 +59,30 @@ const {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get("/", authMiddleware.authenticate, async (req, res, next) => {
-  try {
-    const { isActive, supportsCOD, supportsReverse } = req.query;
-    const filters = {
-      ...(typeof isActive === "string" && { isActive: isActive === "true" }),
-      ...(typeof supportsCOD === "string" && {
-        supportsCOD: supportsCOD === "true",
-      }),
-      ...(typeof supportsReverse === "string" && {
-        supportsReverse: supportsReverse === "true",
-      }),
-    };
+router.get(
+  "/",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
+  async (req, res, next) => {
+    try {
+      const { isActive, supportsCOD, supportsReverse } = req.query;
+      const filters = {
+        ...(typeof isActive === "string" && { isActive: isActive === "true" }),
+        ...(typeof supportsCOD === "string" && {
+          supportsCOD: supportsCOD === "true",
+        }),
+        ...(typeof supportsReverse === "string" && {
+          supportsReverse: supportsReverse === "true",
+        }),
+      };
 
-    const partners = await partnerController.getAllPartners(filters);
-    res.json(APIResponse.success({ partners }));
-  } catch (error) {
-    next(error);
-  }
-});
+      const partners = await partnerController.getAllPartners(filters);
+      res.json(APIResponse.success({ partners }));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 /**
  * @swagger
@@ -107,14 +112,19 @@ router.get("/", authMiddleware.authenticate, async (req, res, next) => {
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  */
-router.get("/:id", authMiddleware.authenticate, async (req, res, next) => {
-  try {
-    const partner = await partnerController.getPartnerById(req.params.id);
-    res.json(APIResponse.success({ partner }));
-  } catch (error) {
-    next(error);
-  }
-});
+router.get(
+  "/:id",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
+  async (req, res, next) => {
+    try {
+      const partner = await partnerController.getPartnerById(req.params.id);
+      res.json(APIResponse.success({ partner }));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 /**
  * @swagger
@@ -147,7 +157,7 @@ router.post(
   "/",
   partnerManagementLimiter,
   authMiddleware.authenticate,
-  authMiddleware.adminOnly,
+  authMiddleware.requirePermission("partner", "create", "all"),
   validateBody(partnerSchema.create),
   async (req, res, next) => {
     try {
@@ -199,7 +209,7 @@ router.put(
   "/:id",
   partnerManagementLimiter,
   authMiddleware.authenticate,
-  authMiddleware.adminOnly,
+  authMiddleware.requirePermission("partner", "update", "all"),
   validateBody(partnerSchema.update),
   async (req, res, next) => {
     try {
@@ -247,7 +257,7 @@ router.delete(
   "/:id",
   partnerManagementLimiter,
   authMiddleware.authenticate,
-  authMiddleware.adminOnly,
+  authMiddleware.requirePermission("partner", "delete", "all"),
   async (req, res, next) => {
     try {
       await partnerController.deletePartner(req.params.id, req);
@@ -291,6 +301,7 @@ router.post(
   "/calculate",
   rateCalculationLimiter,
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
   async (req, res, next) => {
     try {
       const rates = await partnerController.calculateRates(req.body);
@@ -521,6 +532,7 @@ router.post(
   "/calculate-with-discounts",
   rateCalculationLimiter,
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
   async (req, res, next) => {
     try {
       const { discountParams, ...rateParams } = req.body;
@@ -617,6 +629,7 @@ router.post(
   "/serviceability",
   serviceabilityLimiter,
   authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
   async (req, res, next) => {
     try {
       const serviceability = await partnerController.checkServiceability(

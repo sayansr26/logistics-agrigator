@@ -17,7 +17,7 @@
 const express = require("express");
 const router = express.Router();
 const zoneController = require("../controllers/zoneController");
-const { authenticate } = require("../middleware/auth");
+const { authMiddleware } = require("../shared/lib/auth");
 const { zoneManagementLimiter } = require("../middleware/rateLimiter");
 
 /**
@@ -333,7 +333,8 @@ const { zoneManagementLimiter } = require("../middleware/rateLimiter");
  */
 router.get(
   "/zones",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   zoneManagementLimiter,
   zoneController.getAllZones,
 );
@@ -446,7 +447,8 @@ router.get(
  */
 router.post(
   "/zones",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   zoneManagementLimiter,
   zoneController.createZone,
 );
@@ -536,7 +538,8 @@ router.post(
  */
 router.get(
   "/service-types",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   zoneManagementLimiter,
   zoneController.getServiceTypes,
 );
@@ -619,7 +622,8 @@ router.get(
  */
 router.post(
   "/service-types",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
   zoneManagementLimiter,
   zoneController.createServiceType,
 );
@@ -716,7 +720,8 @@ router.post(
  */
 router.get(
   "/partner-zones/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   zoneManagementLimiter,
   zoneController.getPartnerZones,
 );
@@ -784,7 +789,8 @@ router.get(
  */
 router.get(
   "/partners/comprehensive-data/:partnerId",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   zoneManagementLimiter,
   zoneController.getComprehensivePartnerData,
 );
@@ -832,7 +838,8 @@ router.get(
  */
 router.post(
   "/zones/coverage/validate",
-  authenticate,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
   zoneManagementLimiter,
   zoneController.validateZoneCoverage,
 );
