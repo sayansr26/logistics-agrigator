@@ -1,10 +1,10 @@
 # Active Development Context
 
-## Current Sprint: API Gateway Security & RBAC Implementation
+## Current Sprint: Frontend Architecture Migration (Redux/RTK Query)
 
 ### Overview
 
-Implementing comprehensive security overhaul with API Gateway protection, building on the already-completed 11-role RBAC system.
+Migrating frontend from direct service calls to API Gateway-only architecture with Redux Toolkit and RTK Query. Backend API Gateway security is 100% complete (8/8 tasks). Focus is now on frontend state management migration.
 
 ### PRD Reference
 
@@ -140,22 +140,28 @@ NODE_ENV=development
 SWAGGER_ENABLED=true
 ```
 
-### Next Immediate Steps
+### Next Immediate Steps (CURRENT PRIORITY)
 
-1. **Implement RBAC-002**: Update Auth Service Schema
-   - Add Permission, RolePermission, UserPermission models
-   - Create migration for RBAC tables
-   - Seed default permissions and role mappings
-   - Test permission queries
+1. **FE-001**: Remove All Direct Service URLs (P0 - HIGHEST PRIORITY)
+   - Audit all API calls in frontend codebase
+   - Identify all direct service URL references (localhost:3002-3011)
+   - Replace with API Gateway URLs (localhost:3001)
+   - Update environment variables
+   - Test all API endpoints through gateway
 
-2. **Prepare for Frontend Migration**: FE-001 and FE-002
-   - Remove direct service URLs
-   - Setup Redux Toolkit with RTK Query
-   - Migrate auth flow first
+2. **FE-002**: Setup Redux Store with RTK Query (P0)
+   - Install Redux Toolkit and RTK Query dependencies
+   - Create store configuration
+   - Setup API slice with baseQuery
+   - Configure Redux Provider
+   - Add Redux DevTools
 
-3. **Swagger Documentation**: SWAG-001 and SWAG-002
-   - Remove Swagger UI from services
-   - Create gateway aggregation endpoint
+3. **FE-003 to FE-010**: Continue Frontend Migration
+   - Migrate authentication flow
+   - Migrate user management
+   - Migrate shipment operations
+   - Migrate wallet operations
+   - Complete all 10 frontend tasks
 
 ### Risk Mitigation
 
@@ -191,11 +197,13 @@ SWAGGER_ENABLED=true
 
 ### Daily Checklist
 
-- [ ] Update task status in respective .md files
-- [ ] Test completed tasks before marking done
-- [ ] Document any bugs found
+- [ ] Update task status in FRONTEND_ARCHITECTURE_TASK.md
+- [ ] Test frontend changes in browser
+- [ ] Verify API calls go through gateway (port 3001)
+- [ ] Check Redux DevTools for state updates
+- [ ] Test authentication flows
 - [ ] Update progress.md at end of day
-- [ ] Communicate blockers immediately
+- [ ] Document any bugs or blockers
 
 ### Rollback Plan
 
@@ -224,4 +232,5 @@ If critical issues arise:
 **Last Updated**: January 2025 (2025-10-15)
 **Sprint Duration**: 2 weeks
 **Current Day**: Day 6 of 14
-**Previous Work**: GATE-001, GATE-002, GATE-003, and RBAC-001 complete (4/8 backend tasks done)
+**Backend Work**: ALL COMPLETE ✅ (8/8 tasks - GATE-001, GATE-002, GATE-003, RBAC-001, RBAC-002, RBAC-003, SWAG-001, SWAG-002)
+**Current Focus**: Frontend Migration (0/10 tasks - Priority: FE-001)
