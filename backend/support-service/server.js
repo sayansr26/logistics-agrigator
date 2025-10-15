@@ -7,6 +7,9 @@ require("dotenv").config();
 const { corsConfig } = require("./shared");
 const swaggerSpecs = require("./config/swagger");
 
+// Import logger for security logging
+const logger = console; // Support service uses console for now
+
 const app = express();
 const PORT = process.env.PORT || 3007;
 
@@ -16,6 +19,46 @@ app.use(cors(corsConfig.getCorsOptions()));
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Internal request validation middleware
+// Only allow requests from API Gateway or health checks
+app.use((req, res, next) => {
+  // Allow health checks from Docker
+  if (req.path === "/health" && req.method === "GET") {
+    return next();
+  }
+
+  // Allow openapi.json but require internal header
+  if (req.path === "/openapi.json" || req.path === "/api-docs.json") {
+    if (!req.headers["x-internal-request"]) {
+      return res.status(403).json({
+        status: "error",
+        error: {
+          code: "DIRECT_ACCESS_FORBIDDEN",
+          message:
+            "Swagger documentation accessible only through API Gateway at port 3001",
+        },
+      });
+    }
+    return next();
+  }
+
+  // Validate internal requests for all other endpoints
+  const internalHeader = req.headers["x-internal-request"];
+
+  if (!internalHeader || internalHeader !== process.env.INTERNAL_SECRET) {
+    logger.warn(`Direct access attempt blocked from ${req.ip} to ${req.path}`);
+    return res.status(403).json({
+      status: "error",
+      error: {
+        code: "DIRECT_ACCESS_FORBIDDEN",
+        message: "Service accessible only through API Gateway at port 3001",
+      },
+    });
+  }
+
+  next();
+});
 
 // Swagger API Documentation
 app.use(

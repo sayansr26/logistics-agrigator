@@ -109,6 +109,93 @@ To prevent crash loops from log file watching and ensure stable development:
 
 **Impact**: Services remain stable after `docker-compose down -v && docker-compose up --build`
 
+## Security Patterns
+
+### Internal Service Validation Pattern (GATE-002)
+
+**1. Zero-Trust Service Architecture**
+
+All microservices implement internal request validation to prevent direct access:
+
+```javascript
+// Internal request validation middleware
+// Applied after body parsing, before routes
+app.use((req, res, next) => {
+  // Allow health checks from Docker (monitoring requirement)
+  if (req.path === "/health" && req.method === "GET") {
+    return next();
+  }
+
+  // Protect Swagger docs (require internal header)
+  if (req.path === "/openapi.json" || req.path === "/api-docs.json") {
+    if (!req.headers["x-internal-request"]) {
+      return res.status(403).json({
+        status: "error",
+        error: {
+          code: "DIRECT_ACCESS_FORBIDDEN",
+          message:
+            "Swagger documentation accessible only through API Gateway at port 3001",
+        },
+      });
+    }
+    return next();
+  }
+
+  // Validate all other endpoints
+  const internalHeader = req.headers["x-internal-request"];
+
+  if (!internalHeader || internalHeader !== process.env.INTERNAL_SECRET) {
+    logger.warn(`Direct access attempt blocked from ${req.ip} to ${req.path}`);
+    return res.status(403).json({
+      status: "error",
+      error: {
+        code: "DIRECT_ACCESS_FORBIDDEN",
+        message: "Service accessible only through API Gateway at port 3001",
+      },
+    });
+  }
+
+  next();
+});
+```
+
+**Benefits:**
+
+- Defense-in-depth security (even if ports exposed, access blocked)
+- Zero-trust internal architecture
+- Audit trail of blocked access attempts
+- Maintains health check compatibility for Docker
+
+**Implementation in All Services:**
+
+- auth-service: lines 45-82
+- user-service: lines 58-95
+- shipment-service: lines 49-86
+- partner-service: lines 49-86
+- wallet-service: lines 50-87
+- license-service: lines 35-72
+- support-service: lines 23-60
+- platform-service: lines 23-60
+
+**Environment Configuration:**
+
+```env
+# Shared secret for internal service communication
+INTERNAL_SECRET=<64-character-hex-string>
+```
+
+**Security Response Format:**
+
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "DIRECT_ACCESS_FORBIDDEN",
+    "message": "Service accessible only through API Gateway at port 3001"
+  }
+}
+```
+
 ## Microservices Architecture Patterns
 
 ### Service Design Principles
