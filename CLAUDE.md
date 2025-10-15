@@ -295,6 +295,38 @@ echo "✓ Error handling implemented"
 ⚠️ NO EXCEPTIONS, NO BYPASSING
 ```
 
+### Frontend Verification Protocol (MANDATORY)
+
+**CRITICAL**: After ANY frontend changes, MUST run build to verify no breakage
+
+```bash
+# Frontend Verification (REQUIRED after EVERY task)
+cd frontend
+
+# 1. Run build (MUST SUCCEED or identify PRE-EXISTING errors)
+pnpm run build
+
+# Build Success Criteria:
+# ✅ "Compiled successfully" appears
+# ✅ Linting errors ONLY in pre-existing files (not your changes)
+# ❌ Compilation errors in your new files = FAIL
+# ❌ Module not found errors = FAIL
+
+# 2. If build fails on YOUR files:
+#    - Fix ESLint/TypeScript errors immediately
+#    - Re-run build until success
+#    - NEVER commit broken code
+
+# 3. Document pre-existing errors:
+#    - Note which OLD files have errors
+#    - These will be fixed in future tasks
+#    - Your task only needs YOUR files working
+
+⚠️ FRONTEND STOPPED WORKING = IMMEDIATE FIX REQUIRED
+⚠️ NO EXCEPTIONS - BUILD MUST PASS FOR YOUR CODE
+⚠️ PRE-EXISTING ERRORS ARE ACCEPTABLE IF DOCUMENTED
+```
+
 ### Rule Violation = Automatic Failure
 
 - Inline route handler found → FAIL

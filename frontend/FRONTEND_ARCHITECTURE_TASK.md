@@ -142,9 +142,65 @@ curl http://localhost:3001/swagger/auth.json
 
 **Task Name**: Setup Redux Store with RTK Query
 **Priority**: P0
-**Status**: NOT_STARTED
-**Dependencies**: FE-001
+**Status**: COMPLETED
+**Dependencies**: FE-001 ✅
 **Estimated Time**: 3 hours
+**Actual Time**: 2 hours
+**Started**: 2025-10-15
+**Completed**: 2025-10-15
+
+**Files Created**:
+
+- ✅ `src/store/index.ts` - Redux store configuration with RTK Query
+- ✅ `src/store/hooks.ts` - Typed Redux hooks (useAppDispatch, useAppSelector)
+- ✅ `src/store/api/baseApi.ts` - RTK Query base API configuration
+- ✅ `src/store/slices/authSlice.ts` - Authentication state management
+- ✅ `src/store/slices/permissionSlice.ts` - Permission state with RBAC helpers
+- ✅ `src/store/slices/uiSlice.ts` - UI state (sidebar, theme, notifications, modals)
+- ✅ `src/providers/ReduxProvider.tsx` - Client-side Redux Provider wrapper
+- ✅ `src/app/layout.tsx` - Updated with ReduxProvider
+
+**Implementation Completed**:
+
+```typescript
+// Store Configuration (src/store/index.ts)
+export const store = configureStore({
+  reducer: {
+    [baseApi.reducerPath]: baseApi.reducer,
+    auth: authReducer,
+    permission: permissionReducer,
+    ui: uiReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(baseApi.middleware),
+  devTools: process.env.NODE_ENV !== "production", // Redux DevTools enabled
+});
+```
+
+**Redux DevTools Integration**: ✅ Configured and ready (development mode only)
+
+**Validation Results**:
+
+- TypeScript compilation: ✅ No Redux-related errors
+- Dependencies installed: ✅ @reduxjs/toolkit@2.9.0, react-redux@9.2.0
+- Store configuration: ✅ Proper reducer setup with RTK Query
+- Typed hooks: ✅ Type-safe dispatch and selector hooks
+- Base API: ✅ Gateway integration with JWT auth headers
+- Auth slice: ✅ Complete authentication state management
+- Permission slice: ✅ RBAC permission checking with wildcard support
+- UI slice: ✅ Comprehensive UI state (sidebar, theme, notifications, modals)
+- Provider setup: ✅ ReduxProvider wrapping app layout
+
+**Impact**:
+
+- Redux Toolkit and RTK Query foundation complete
+- Type-safe state management across entire application
+- Automatic JWT token injection in API headers
+- Permission checking system with RBAC wildcard matching
+- UI state management (sidebar, theme, notifications, modals)
+- Redux DevTools available in development for debugging
+- Ready for FE-003 (Authentication Flow implementation)
+- Ready for FE-005 (API service migration to RTK Query)
 
 **Installation**:
 
@@ -770,11 +826,11 @@ npm run test:e2e
 
 | Priority | Total | Not Started | In Progress | Completed | Blocked |
 | -------- | ----- | ----------- | ----------- | --------- | ------- |
-| P0       | 5     | 4           | 0           | 1         | 0       |
+| P0       | 5     | 3           | 0           | 2         | 0       |
 | P1       | 4     | 4           | 0           | 0         | 0       |
 | P2       | 1     | 1           | 0           | 0         | 0       |
 
-**Progress**: 1/10 tasks completed (10%) - FE-001 ✅
+**Progress**: 2/10 tasks completed (20%) - FE-001 ✅, FE-002 ✅
 
 ## Dependencies Flow
 
