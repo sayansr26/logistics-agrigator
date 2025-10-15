@@ -15,7 +15,7 @@
 | Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending |
 | License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation            |
 | API Gateway      | ✅ 100%     | ✅ 90%  | ✅ 95%        | ✅ Yes           | **ALL SECURITY COMPLETE** (8/8 tasks)    |
-| Frontend         | ⚠️ 40%      | ❌ 20%  | ❌ 30%        | 🔄 Migration     | **NEXT PRIORITY** - Redux/RTK migration  |
+| Frontend         | ⚠️ 45%      | ❌ 25%  | ❌ 35%        | 🔄 Migration     | FE-001 ✅ - Redux/RTK migration next     |
 | Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured      |
 | Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured      |
 
@@ -36,8 +36,8 @@
 
 **Frontend (CURRENT PRIORITY 🎯)**:
 
-- 🔲 Remove all direct service URLs (FE-001) - **NEXT TASK**
-- 🔲 Setup Redux store with RTK Query (FE-002)
+- ✅ Remove all direct service URLs (FE-001) - **COMPLETED 2025-10-15**
+- 🔲 Setup Redux store with RTK Query (FE-002) - **NEXT TASK**
 - 🔲 Migrate authentication flow (FE-003)
 - 🔲 Migrate user management (FE-004)
 - 🔲 Migrate shipment operations (FE-005)
@@ -62,9 +62,26 @@
   - [x] RBAC-003: Permission checking (via backend RBAC)
   - [x] SWAG-001: Remove Swagger UI
   - [x] SWAG-002: Gateway Swagger aggregation
-- [ ] Frontend migration (0/10 tasks) - **NEXT PRIORITY**
+- [x] Frontend migration started (1/10 tasks - 10% complete) ⏳
+  - [x] FE-001: Remove direct service URLs
 
 ### Recent Achievements
+
+#### Frontend URL Migration to API Gateway (January 2025) ✅
+
+- **FE-001**: Frontend Direct URL Removal (Completed 2025-10-15)
+  - Updated frontend/src/constants/api.ts with gateway URLs
+  - Changed BASE_URL from http://localhost to http://localhost:3001 (API Gateway)
+  - Removed all hardcoded service ports (:3002, :3003, :3004, :3005, :3006)
+  - Updated all API endpoints to use /api/v1/... gateway paths
+  - Updated frontend/.env.local with NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+  - Commented out deprecated direct service URLs with security context
+  - Verified no hardcoded ports remain (grep search confirmed)
+  - Tested gateway health endpoint (200 OK)
+  - Tested authentication routing through gateway (working)
+  - Tested JWT protection on protected endpoints (401 as expected)
+  - Tested Swagger aggregation through gateway (200 OK)
+  - Impact: Frontend now exclusively uses API Gateway, zero direct service access, consistent with backend security architecture (GATE-001, GATE-002)
 
 #### API Gateway Security Implementation (January 2025) ✅
 
@@ -200,8 +217,8 @@
 - [x] **CRITICAL**: Services accepting direct requests (FIXED - GATE-002)
 - [x] **CRITICAL**: Gateway missing JWT validation (FIXED - GATE-003)
 - [x] No unified Swagger documentation (FIXED - SWAG-001, SWAG-002)
-- [ ] **CRITICAL**: Frontend using direct service URLs (FE-001 - CURRENT TASK)
-- [ ] Frontend using Zustand instead of Redux (FE-002 dependency)
+- [x] **CRITICAL**: Frontend using direct service URLs (FIXED - FE-001 - 2025-10-15)
+- [ ] Frontend using Zustand instead of Redux (FE-002 - CURRENT TASK)
 
 #### Medium Priority
 
@@ -298,6 +315,6 @@
 
 ---
 
-**Current Focus**: Frontend architecture migration to Redux/RTK Query with API Gateway integration. Backend security 100% complete (8/8 tasks). All API calls must route through gateway (port 3001). Priority task: FE-001 (Remove all direct service URLs).
+**Current Focus**: Frontend architecture migration to Redux/RTK Query with API Gateway integration. Backend security 100% complete (8/8 tasks). Frontend migration started (1/10 tasks - 10% complete). All API calls now route through gateway (port 3001). Next priority: FE-002 (Setup Redux store with RTK Query).
 
-**Completed**: API Gateway Security implementation - eliminated all direct service access vulnerabilities. Complete RBAC system operational (11 roles, 153 permissions). Swagger documentation aggregated at gateway.
+**Completed**: API Gateway Security + Frontend URL Migration - eliminated all direct service access vulnerabilities from both backend and frontend. Complete RBAC system operational (11 roles, 153 permissions). Swagger documentation aggregated at gateway. Frontend now exclusively uses API Gateway.

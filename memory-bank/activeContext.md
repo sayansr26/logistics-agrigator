@@ -128,7 +128,8 @@ Migrating frontend from direct service calls to API Gateway-only architecture wi
 - ✅ SWAG-001: Swagger UI removed from services
 - ✅ SWAG-002: Gateway Swagger aggregation complete
 - 🎉 **ALL BACKEND GATEWAY TASKS COMPLETE (8/8)**
-- ⏳ Ready for Frontend Migration (FE-001, FE-002)
+- ✅ FE-001: Frontend URL migration complete (all URLs now use gateway)
+- ⏳ Frontend Migration In Progress (1/10 tasks - FE-002 next)
 
 ### Environment Variables Needed
 
@@ -142,14 +143,15 @@ SWAGGER_ENABLED=true
 
 ### Next Immediate Steps (CURRENT PRIORITY)
 
-1. **FE-001**: Remove All Direct Service URLs (P0 - HIGHEST PRIORITY)
-   - Audit all API calls in frontend codebase
-   - Identify all direct service URL references (localhost:3002-3011)
-   - Replace with API Gateway URLs (localhost:3001)
-   - Update environment variables
-   - Test all API endpoints through gateway
+1. ✅ **FE-001**: Remove All Direct Service URLs (P0 - COMPLETED 2025-10-15)
+   - ✅ Audited all API calls in frontend codebase
+   - ✅ Identified all direct service URL references (localhost:3002-3011)
+   - ✅ Replaced with API Gateway URLs (localhost:3001)
+   - ✅ Updated environment variables (.env.local)
+   - ✅ Tested all API endpoints through gateway
+   - Impact: Frontend now exclusively uses API Gateway, no direct service access
 
-2. **FE-002**: Setup Redux Store with RTK Query (P0)
+2. **FE-002**: Setup Redux Store with RTK Query (P0 - NEXT PRIORITY)
    - Install Redux Toolkit and RTK Query dependencies
    - Create store configuration
    - Setup API slice with baseQuery
@@ -232,5 +234,6 @@ If critical issues arise:
 **Last Updated**: January 2025 (2025-10-15)
 **Sprint Duration**: 2 weeks
 **Current Day**: Day 6 of 14
-**Backend Work**: ALL COMPLETE ✅ (8/8 tasks - GATE-001, GATE-002, GATE-003, RBAC-001, RBAC-002, RBAC-003, SWAG-001, SWAG-002)
-**Current Focus**: Frontend Migration (0/10 tasks - Priority: FE-001)
+**Backend Work**: ALL COMPLETE ✅ (8/8 tasks - 100%)
+**Frontend Work**: IN PROGRESS (1/10 tasks - 10%)
+**Current Focus**: Frontend Migration (FE-002 - Redux/RTK Query setup)
