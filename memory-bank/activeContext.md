@@ -123,15 +123,15 @@ If critical issues arise:
 
 ### Services Status Summary
 
-- ✅ Auth Service (3002) - RBAC complete, needs port removal
-- ✅ User Service (3003) - Customer management complete, needs port removal
-- ✅ Shipment Service (3004) - 90% complete, needs port removal
-- ✅ Partner Service (3005) - 75+ endpoints complete, needs port removal
-- ✅ Wallet Service (3006) - Commission system complete, needs port removal
-- ❌ Support Service (3007) - Not started
-- ❌ Platform Service (3008) - Not started
-- ✅ License Service (3011) - Complete, needs port removal
-- ✅ API Gateway (3001) - Keep exposed
+- ✅ Auth Service (3002) - RBAC complete, stable with nodemon config, needs port removal
+- ✅ User Service (3003) - Customer management complete, stable with nodemon config, needs port removal
+- ✅ Shipment Service (3004) - 100% stable, crash loop fixed, nodemon configured, needs port removal
+- ✅ Partner Service (3005) - 75+ endpoints complete, stable with nodemon config, needs port removal
+- ✅ Wallet Service (3006) - Commission system complete, stable with nodemon config, needs port removal
+- ❌ Support Service (3007) - Not started, nodemon pre-configured
+- ❌ Platform Service (3008) - Not started, nodemon pre-configured
+- ✅ License Service (3011) - Complete, stable with nodemon config, needs port removal
+- ✅ API Gateway (3001) - Keep exposed, stable with nodemon config
 - ✅ Frontend (3000) - Keep exposed, needs URL migration
 
 ---

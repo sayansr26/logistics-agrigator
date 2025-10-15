@@ -1,0 +1,20 @@
+{
+  "watch": [
+    "*.js",
+    "routes/**/*.js",
+    "controllers/**/*.js",
+    "middleware/**/*.js",
+    "services/**/*.js",
+    "config/**/*.js",
+    "shared/**/*.js"
+  ],
+  "ignore": [
+    "logs/*",
+    "*.log",
+    "node_modules/*",
+    "prisma/migrations/*",
+    ".git/*"
+  ],
+  "ext": "js,json",
+  "delay": "1000"
+}

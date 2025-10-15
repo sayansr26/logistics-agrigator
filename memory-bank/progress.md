@@ -6,18 +6,18 @@
 
 ### Service Status Dashboard
 
-| Service          | Development | Testing | Documentation | Production Ready    | Notes                              |
-| ---------------- | ----------- | ------- | ------------- | ------------------- | ---------------------------------- |
-| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 10 endpoints, JWT + RBAC complete  |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 25+ endpoints, customer management |
-| Partner Service  | ✅ 100%     | ✅ 100% | ⚠️ 70%        | ✅ Yes              | 75+ endpoints, needs full docs     |
-| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 14 endpoints, commission system    |
-| Shipment Service | ✅ 90%      | ⚠️ 70%  | ⚠️ 70%        | 🔄 Almost           | Tracking operational, bulk pending |
-| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes              | 12 endpoints, auto-generation      |
-| API Gateway      | ⚠️ 70%      | ⚠️ 50%  | ⚠️ 60%        | 🔒 Security Upgrade | **ACTIVE WORK**                    |
-| Frontend         | ⚠️ 40%      | ❌ 20%  | ❌ 30%        | 🔄 Migration        | **ACTIVE WORK**                    |
-| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No               | Not started                        |
-| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No               | Not started                        |
+| Service          | Development | Testing | Documentation | Production Ready    | Notes                                    |
+| ---------------- | ----------- | ------- | ------------- | ------------------- | ---------------------------------------- |
+| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 10 endpoints, JWT + RBAC complete        |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 25+ endpoints, customer management       |
+| Partner Service  | ✅ 100%     | ✅ 100% | ⚠️ 70%        | ✅ Yes              | 75+ endpoints, needs full docs           |
+| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes              | 14 endpoints, commission system          |
+| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes              | Stable, nodemon configured, bulk pending |
+| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes              | 12 endpoints, auto-generation            |
+| API Gateway      | ⚠️ 70%      | ⚠️ 50%  | ⚠️ 60%        | 🔒 Security Upgrade | **ACTIVE WORK**, nodemon configured      |
+| Frontend         | ⚠️ 40%      | ❌ 20%  | ❌ 30%        | 🔄 Migration        | **ACTIVE WORK**                          |
+| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No               | Not started, nodemon pre-configured      |
+| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No               | Not started, nodemon pre-configured      |
 
 ### Current Sprint: API Gateway Security & RBAC
 
@@ -41,6 +41,20 @@
 - [ ] Documentation updates (0/2 tasks)
 
 ### Recent Achievements
+
+#### Development Environment Stability (January 2025) ✅
+
+- **DEV-001**: Fixed shipment service crash loop after Docker clean rebuild
+  - Root cause: Missing dependencies (axios) after volume cleanup
+  - Root cause: Nodemon watching log files causing infinite restart loop
+  - Solution: Created `nodemon.json` configuration for all 9 services
+  - Impact: Prevents crash loops on fresh installs permanently
+
+- **DEV-002**: Standardized nodemon configuration across all services
+  - Added `nodemon.json` to: api-gateway, auth-service, partner-service, platform-service, shipment-service, support-service, user-service, wallet-service, license-service
+  - Configured to ignore: logs/_, _.log, node_modules/_, prisma/migrations/_
+  - Added 1-second delay to prevent rapid restarts
+  - Pattern documented in systemPatterns.md
 
 #### RBAC System (100% Complete) ✅
 

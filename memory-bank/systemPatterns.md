@@ -55,6 +55,60 @@ SHIP-005: Bulk Operations and Advanced Features (2 days) - FINAL PHASE
 **API Endpoints**: Specific endpoints to implement
 ```
 
+## Development Environment Patterns
+
+### Nodemon Configuration (Mandatory for All Services)
+
+**1. Standard nodemon.json Configuration**
+
+To prevent crash loops from log file watching and ensure stable development:
+
+```json
+{
+  "watch": [
+    "*.js",
+    "routes/**/*.js",
+    "controllers/**/*.js",
+    "middleware/**/*.js",
+    "services/**/*.js",
+    "config/**/*.js",
+    "shared/**/*.js"
+  ],
+  "ignore": [
+    "logs/*",
+    "*.log",
+    "node_modules/*",
+    "prisma/migrations/*",
+    ".git/*"
+  ],
+  "ext": "js,json",
+  "delay": "1000"
+}
+```
+
+**Problem Solved**: After clean Docker rebuilds, services using the shared logger would crash in infinite restart loops because nodemon watched all files including logs being written in real-time.
+
+**Services with nodemon.json**:
+
+- api-gateway
+- auth-service
+- partner-service
+- platform-service
+- shipment-service
+- support-service
+- user-service
+- wallet-service
+- license-service
+
+**Key Configuration Points**:
+
+- `watch`: Only source code directories (not logs or generated files)
+- `ignore`: Logs, lock files, migrations, node_modules
+- `delay`: 1-second delay prevents rapid restart cascades
+- `ext`: Watch .js and .json files only
+
+**Impact**: Services remain stable after `docker-compose down -v && docker-compose up --build`
+
 ## Microservices Architecture Patterns
 
 ### Service Design Principles
