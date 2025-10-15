@@ -249,6 +249,63 @@ const logger = require("./shared/lib/logger");
 - **Frontend Work**: MUST use `frontend-developer` agent
 - **Documentation**: MUST use `documentation-updater` agent
 
+### 6. API Testing with curl (MANDATORY BEFORE UI)
+
+**CRITICAL**: ALWAYS test backend APIs with curl BEFORE updating or adding UI components
+
+```bash
+# REQUIRED WORKFLOW FOR ANY API WORK:
+
+# 1. Test the API endpoint with curl FIRST
+curl -X POST http://localhost:3001/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# 2. Verify response is correct (200/201 status, valid JSON)
+# 3. Test with invalid data to verify error handling
+# 4. Test with missing authentication to verify security
+# 5. ONLY THEN update or create UI components
+
+# Common API Testing Patterns:
+# GET request:
+curl http://localhost:3001/api/v1/users \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# POST with authentication:
+curl -X POST http://localhost:3001/api/v1/shipments \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"field":"value"}'
+
+# PUT/PATCH request:
+curl -X PUT http://localhost:3001/api/v1/users/123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"field":"newvalue"}'
+
+# DELETE request:
+curl -X DELETE http://localhost:3001/api/v1/users/123 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Why This Rule Exists:**
+
+- Prevents building UI for broken APIs
+- Catches backend issues early (missing tables, wrong endpoints, auth errors)
+- Saves time by testing at API level first
+- Ensures API contract matches UI expectations
+- Verifies authentication and authorization work correctly
+
+**Example Failure Prevented:**
+
+- User complained login UI not working
+- Investigation revealed `users` table didn't exist in database
+- Should have been caught with curl test BEFORE updating UI
+- Lesson: Test API → Fix backend → Then update UI
+
+⚠️ **NEVER update UI for an API you haven't tested with curl first**
+⚠️ **Backend API must work perfectly before frontend work begins**
+
 ## Verification Protocol (MANDATORY - NO BYPASSING)
 
 **Task is NOT complete without ALL verifications passing. Use `task-verifier` agent to ensure compliance.**
@@ -336,6 +393,7 @@ pnpm run build
 - Wrong ID format → FAIL
 - Skipped verification → FAIL
 - Agent not used → FAIL
+- UI updated without testing API with curl first → FAIL
 
 ## Common Pitfalls (AVOID AT ALL COSTS)
 
@@ -369,14 +427,20 @@ pnpm run build
    - NO! Use UUID with @db.Uuid ONLY
    - Wrong format = migration failures
 
+8. **"I'll test the API after updating the UI"**
+   - NO! ALWAYS test API with curl FIRST
+   - Backend must work before frontend work begins
+   - Prevents wasting time on UI for broken APIs
+
 ### ✅ Correct Approach (ALWAYS)
 
 1. **Read memory bank** → Understand context
 2. **Use appropriate agent** → Ensure compliance
-3. **Follow auth-service patterns** → Maintain consistency
-4. **Implement with rules** → No shortcuts
-5. **Run verification protocol** → All steps must pass
-6. **Update documentation** → Keep memory bank current
+3. **Test API with curl** → Verify backend works first
+4. **Follow auth-service patterns** → Maintain consistency
+5. **Implement with rules** → No shortcuts
+6. **Run verification protocol** → All steps must pass
+7. **Update documentation** → Keep memory bank current
 
 ## 11-Role RBAC System
 
@@ -593,15 +657,16 @@ Task is complete when:
 **REMEMBER**:
 
 1. **ALWAYS** read memory bank files at session start
-2. **ALWAYS** use available agents in `.claude/agents/` for specialized tasks (they can work in parallel)
-3. **NEVER** skip Docker verification protocol - ALL steps must pass
-4. **NEVER** bypass any rules or patterns - follow auth-service as reference
-5. **ALWAYS** use controller pattern - NO inline route handlers ever
-6. **ALWAYS** include audit logging for ALL CRUD operations
-7. **ALWAYS** use Prisma ORM - NO raw SQL queries
-8. **ALWAYS** validate inputs with Joi schemas
-9. **ALWAYS** use UUID format with @db.Uuid
-10. Quality > Speed for production system
+2. **ALWAYS** test APIs with curl BEFORE updating/creating UI
+3. **ALWAYS** use available agents in `.claude/agents/` for specialized tasks (they can work in parallel)
+4. **NEVER** skip Docker verification protocol - ALL steps must pass
+5. **NEVER** bypass any rules or patterns - follow auth-service as reference
+6. **ALWAYS** use controller pattern - NO inline route handlers ever
+7. **ALWAYS** include audit logging for ALL CRUD operations
+8. **ALWAYS** use Prisma ORM - NO raw SQL queries
+9. **ALWAYS** validate inputs with Joi schemas
+10. **ALWAYS** use UUID format with @db.Uuid
+11. Quality > Speed for production system
 
 **Available Agents (USE THEM):**
 

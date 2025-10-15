@@ -22,6 +22,7 @@ const {
   seedRolePermissions,
   getRolePermissionSummary,
 } = require("./seeds/rolePermissions");
+const { seedSuperadmin } = require("./seeds/superadmin");
 
 const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"],
@@ -78,7 +79,10 @@ async function main() {
     // Step 3: Seed role-permission mappings
     const rolePermStats = await seedRolePermissions(prisma, createdPermissions);
 
-    // Step 4: Display summary
+    // Step 4: Seed superadmin user
+    await seedSuperadmin(prisma);
+
+    // Step 5: Display summary
     console.log("\n📈 Role-permission summary:");
     Object.entries(rolePermStats.byRole)
       .sort((a, b) => b[1] - a[1])
@@ -86,7 +90,7 @@ async function main() {
         console.log(`  ${role.padEnd(20)} : ${count} permissions`);
       });
 
-    // Step 5: Verify and display examples
+    // Step 6: Verify and display examples
     console.log("\n🔍 Verification - Sample permissions by role:");
     const summary = await getRolePermissionSummary(prisma);
     for (const [role, data] of Object.entries(summary)) {

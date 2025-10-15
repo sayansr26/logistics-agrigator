@@ -68,11 +68,12 @@ export default function LoginPage() {
 
   async function onSubmit(data) {
     try {
-      await login(data.email, data.password, data.rememberMe);
-      // Login successful, redirect to dashboard
+      await login({
+        email: data.email,
+        password: data.password,
+      });
       router.push("/dashboard");
     } catch (error) {
-      // Error is handled by the auth store
       console.error("Login failed:", error);
     }
   }
@@ -227,16 +228,13 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Sign Up Link */}
+            {/* Contact Admin */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <Link
-                  href="/auth/register"
-                  className="text-logistics-600 hover:text-logistics-700 font-medium"
-                >
-                  Sign up
-                </Link>
+                <span className="text-logistics-600 font-medium">
+                  Contact your administrator
+                </span>
               </p>
             </div>
           </CardContent>
