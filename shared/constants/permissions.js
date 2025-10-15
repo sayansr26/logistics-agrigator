@@ -16,6 +16,31 @@
  */
 
 /**
+ * System Roles (11-Role RBAC System)
+ * Defines all available roles in the platform
+ */
+const ROLES = {
+  // System Level
+  SUPERADMIN: "superadmin", // System owner, full access
+  ADMIN: "admin", // Platform administrator
+
+  // Client Level (License Holders)
+  CLIENT: "client", // License holder (company)
+  ACCOUNTS: "accounts", // Finance team
+  SALES: "sales", // Sales team
+  SUPPORT: "support", // Support team
+
+  // Customer Level (End Users)
+  CUSTOMER: "customer", // End customer
+  CUSTOMER_ACCOUNT: "customer_account", // Customer finance
+  CUSTOMER_SALES: "customer_sales", // Customer sales
+  CUSTOMER_SUPPORT: "customer_support", // Customer support
+
+  // Partner Level
+  AFFILIATE: "affiliate", // Commission partner
+};
+
+/**
  * Permission Modules (Resources)
  * Defines the resource types that can be accessed in the system
  */
@@ -222,28 +247,78 @@ function parsePermission(permission) {
 
 /**
  * Helper function to check if permission matches pattern (supports wildcards)
- * @param {string} permission - Permission to check (e.g., 'shipment:create:own')
- * @param {string} pattern - Pattern to match against (e.g., 'shipment:*:own' or '*:*:*')
- * @returns {boolean} True if permission matches pattern
+ * @param {string} required - Required permission to check (e.g., 'shipment:create:own')
+ * @param {string} userPermission - User's permission pattern (e.g., 'shipment:*:own' or '*:*:*')
+ * @returns {boolean} True if user permission grants access to required permission
  */
-function matchesPermission(permission, pattern) {
-  const permParts = parsePermission(permission);
-  const patternParts = parsePermission(pattern);
+function matchesPermission(required, userPermission) {
+  if (!required || !userPermission) return false;
 
-  return (
-    (patternParts.module === "*" || patternParts.module === permParts.module) &&
-    (patternParts.action === "*" || patternParts.action === permParts.action) &&
-    (patternParts.scope === "*" || patternParts.scope === permParts.scope)
+  const reqParts = parsePermission(required);
+  const userParts = parsePermission(userPermission);
+
+  // Check module match (wildcard or exact)
+  if (userParts.module !== "*" && userParts.module !== reqParts.module)
+    return false;
+
+  // Check action match (wildcard or exact)
+  if (userParts.action !== "*" && userParts.action !== reqParts.action)
+    return false;
+
+  // Check scope match (wildcard or exact)
+  if (userParts.scope !== "*" && userParts.scope !== reqParts.scope)
+    return false;
+
+  return true;
+}
+
+/**
+ * Check if user has required permission from their permission list
+ * @param {string} required - Required permission
+ * @param {string[]} userPermissions - Array of user's permissions
+ * @returns {boolean} True if user has permission
+ */
+function hasPermission(required, userPermissions) {
+  if (!Array.isArray(userPermissions)) return false;
+  return userPermissions.some((permission) =>
+    matchesPermission(required, permission),
   );
 }
 
+/**
+ * Get all permissions for a given role
+ * @param {string} role - Role name (from ROLES)
+ * @returns {string[]} Array of permission strings
+ */
+function getPermissionsForRole(role) {
+  return DEFAULT_ROLE_PERMISSIONS[role] || [];
+}
+
+/**
+ * Check if a role has a specific permission
+ * @param {string} role - Role name
+ * @param {string} required - Required permission
+ * @returns {boolean} True if role has permission
+ */
+function roleHasPermission(role, required) {
+  const permissions = getPermissionsForRole(role);
+  return hasPermission(required, permissions);
+}
+
 module.exports = {
+  // Constants
+  ROLES,
   PERMISSION_MODULES,
   PERMISSION_ACTIONS,
   PERMISSION_SCOPES,
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_DESCRIPTIONS,
+
+  // Helper Functions
   buildPermission,
   parsePermission,
   matchesPermission,
+  hasPermission,
+  getPermissionsForRole,
+  roleHasPermission,
 };
