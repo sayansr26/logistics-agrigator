@@ -57,6 +57,43 @@ SHIP-005: Bulk Operations and Advanced Features (2 days) - FINAL PHASE
 
 ## Development Environment Patterns
 
+### Docker Dependency Synchronization (Permanent Fix) ⭐ NEW
+
+**Critical Issue Resolved**: MODULE_NOT_FOUND errors after package.json changes or Docker cleanup
+
+**Solution**: Automatic dependency synchronization via enhanced entrypoint script
+
+```dockerfile
+# Enhanced entrypoint pattern (all services)
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["pnpm", "run", "dev"]
+```
+
+**Features**:
+
+- ✅ Auto-detects package.json changes
+- ✅ Installs missing dependencies on startup
+- ✅ Handles Prisma client generation
+- ✅ Works after volume cleanup
+- ✅ Zero manual intervention needed
+
+**Documentation**: See [dockerDependencyFix.md](./dockerDependencyFix.md) for complete details
+
+**Usage**:
+
+```bash
+# Just restart the container - dependencies auto-sync!
+docker-compose restart [service-name]
+
+# Even after clean:
+docker-compose down -v && docker-compose up -d
+# ↑ No manual pnpm install needed!
+```
+
+**Implementation Status**: ✅ All 9 services (api-gateway, auth, user, shipment, partner, wallet, license, support, platform)
+
 ### Nodemon Configuration (Mandatory for All Services)
 
 **1. Standard nodemon.json Configuration**
@@ -110,6 +147,140 @@ To prevent crash loops from log file watching and ensure stable development:
 **Impact**: Services remain stable after `docker-compose down -v && docker-compose up --build`
 
 ## Security Patterns
+
+### Gateway JWT Validation Pattern (GATE-003)
+
+**1. Centralized Authentication at Gateway**
+
+All API requests are validated at the API Gateway before proxying to backend services:
+
+```javascript
+// authValidator.js - JWT validation middleware
+const jwt = require("jsonwebtoken");
+const logger = require("../shared/lib/logger");
+
+const publicPaths = [
+  "/health",
+  "/api/v1/auth/login",
+  "/api/v1/auth/register",
+  "/api/v1/auth/forgot-password",
+  "/swagger",
+  "/openapi.json",
+];
+
+exports.validateJWT = async (req, res, next) => {
+  // Skip auth for public endpoints
+  if (publicPaths.some((path) => req.path.startsWith(path))) {
+    return next();
+  }
+
+  // Extract token from Authorization header
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      status: "error",
+      error: {
+        code: "INVALID_TOKEN_FORMAT",
+        message: "Authorization header must be in format: Bearer <token>",
+      },
+    });
+  }
+
+  const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+
+    // Add user context to headers for backend services
+    req.headers["x-user-id"] = decoded.userId;
+    req.headers["x-user-role"] = decoded.role;
+    req.headers["x-user-email"] = decoded.email;
+
+    next();
+  } catch (error) {
+    logger.error("JWT validation failed:", error);
+
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        status: "error",
+        error: {
+          code: "TOKEN_EXPIRED",
+          message: "Authentication token has expired",
+        },
+      });
+    }
+
+    return res.status(401).json({
+      status: "error",
+      error: {
+        code: "INVALID_TOKEN",
+        message: "Invalid authentication token",
+      },
+    });
+  }
+};
+```
+
+**2. Body Parsing Configuration**
+
+Critical fix to prevent request abortion when proxying:
+
+```javascript
+// IMPORTANT: Skip body parsing for proxy routes
+// Express body parsing consumes request body, preventing proxy from forwarding it
+app.use((req, res, next) => {
+  // Skip body parsing for API routes that will be proxied
+  if (req.path.startsWith("/api/v1/")) {
+    return next();
+  }
+  // Apply body parsing only for non-proxied routes
+  express.json({ limit: "10mb" })(req, res, next);
+});
+```
+
+**3. User Context Forwarding**
+
+Backend services receive validated user information without re-validating JWT:
+
+```javascript
+// In gateway's onProxyReq handler
+onProxyReq: (proxyReq, req, res) => {
+  // Add internal request header for service validation
+  proxyReq.setHeader("X-Internal-Request", process.env.INTERNAL_SECRET);
+
+  // Forward user context from JWT (if authenticated)
+  if (req.user) {
+    proxyReq.setHeader("x-user-id", req.user.userId);
+    proxyReq.setHeader("x-user-role", req.user.role);
+    proxyReq.setHeader("x-user-email", req.user.email);
+  }
+};
+```
+
+**4. Public Path Handling**
+
+Flexible path matching for public endpoints:
+
+```javascript
+// Supports both exact matches and prefix matches
+const isPublicPath = publicPaths.some((path) => req.path.startsWith(path));
+// Handles: /health, /api/v1/auth/login, /api/v1/auth/register/:token, etc.
+```
+
+**Benefits:**
+
+- Single point of authentication (no JWT validation needed in backend services)
+- Consistent error responses across all APIs
+- User context available in request headers
+- Public endpoints accessible without authentication
+- Comprehensive error handling for all JWT error types
+
+**Implementation in Gateway:**
+
+- Location: `backend/api-gateway/middleware/authValidator.js`
+- Applied: In `server.js` before proxy middleware
+- Config: Public paths list easily extensible
 
 ### Internal Service Validation Pattern (GATE-002)
 

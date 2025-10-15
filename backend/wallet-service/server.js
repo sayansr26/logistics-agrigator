@@ -6,7 +6,8 @@ process.env.SERVICE_NAME = "wallet-service";
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const swaggerUi = require("swagger-ui-express");
+// Swagger UI removed - documentation available via API Gateway only
+// const swaggerUi = require("swagger-ui-express");
 const logger = require("./shared/lib/logger");
 
 const walletRoutes = require("./routes/wallet");
@@ -87,32 +88,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// API Documentation
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpecs, {
-    explorer: true,
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "Logistics Wallet Service API",
-    // Disable external CDN resources to prevent HTTPS/CORS issues
-    customCssUrl: null,
-    customfavIcon: null,
-    customJs: null,
-    swaggerOptions: {
-      // Force HTTP protocol for development to avoid SSL errors with IP access
-      url:
-        process.env.NODE_ENV === "production"
-          ? undefined
-          : `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8006}/openapi.json`,
-      // Disable "Try it out" HTTPS enforcement
-      supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
-      // Force HTTP scheme for development
-      schemes:
-        process.env.NODE_ENV === "production" ? ["https", "http"] : ["http"],
-    },
-  }),
-);
+// API Documentation - Swagger UI removed, only JSON endpoint available
+// Access Swagger UI through API Gateway at http://localhost:3001/swagger/wallet-service
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {...}));
 
 // OpenAPI JSON endpoint with dynamic server URLs
 app.get("/openapi.json", (req, res) => {
@@ -373,7 +351,9 @@ async function startServer() {
         `🚀 Wallet Service running on port ${PORT} (LIVE RELOAD ENABLED)`,
       );
       logger.info(`Health check: http://localhost:3006/health`);
-      logger.info(`Swagger docs: http://localhost:3006/api-docs`);
+      logger.info(
+        `Swagger docs: http://localhost:3001/swagger/wallet-service (via API Gateway)`,
+      );
     });
   } catch (error) {
     logger.error("Failed to start server:", error);

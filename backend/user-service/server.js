@@ -6,7 +6,8 @@ process.env.SERVICE_NAME = "user-service";
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const swaggerUi = require("swagger-ui-express");
+// Swagger UI removed - documentation available via API Gateway only
+// const swaggerUi = require("swagger-ui-express");
 const { PrismaClient } = require("@prisma/client");
 const logger = require("./shared/lib/logger");
 
@@ -95,32 +96,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Swagger API Documentation
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpecs, {
-    explorer: true,
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "User Service API Documentation",
-    // Disable external CDN resources to prevent HTTPS/CORS issues
-    customCssUrl: null,
-    customfavIcon: null,
-    customJs: null,
-    swaggerOptions: {
-      // Force HTTP protocol for development to avoid SSL errors with IP access
-      url:
-        process.env.NODE_ENV === "production"
-          ? undefined
-          : `http://${process.env.HOST || "localhost"}:${process.env.PORT || 8002}/api-docs.json`,
-      // Disable "Try it out" HTTPS enforcement
-      supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
-      // Force HTTP scheme for development
-      schemes:
-        process.env.NODE_ENV === "production" ? ["https", "http"] : ["http"],
-    },
-  }),
-);
+// API Documentation - Swagger UI removed, only JSON endpoint available
+// Access Swagger UI through API Gateway at http://localhost:3001/swagger/user-service
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {...}));
 
 // Swagger JSON endpoint with dynamic server URLs
 app.get("/api-docs.json", (req, res) => {
@@ -626,7 +604,9 @@ app.listen(PORT, "0.0.0.0", () => {
   );
   logger.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   logger.info(`🔗 Health check: http://localhost:${PORT}/health`);
-  logger.info(`📚 Swagger docs: http://localhost:${PORT}/api-docs`);
+  logger.info(
+    `📚 Swagger docs: http://localhost:3001/swagger/user-service (via API Gateway)`,
+  );
 });
 
 module.exports = app;

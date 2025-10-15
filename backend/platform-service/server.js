@@ -2,7 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const swaggerUi = require("swagger-ui-express");
+// Swagger UI removed - documentation available via API Gateway only
+// const swaggerUi = require("swagger-ui-express");
 require("dotenv").config();
 const { corsConfig } = require("./shared");
 const swaggerSpecs = require("./config/swagger");
@@ -60,16 +61,39 @@ app.use((req, res, next) => {
   next();
 });
 
-// Swagger API Documentation
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpecs, {
-    explorer: true,
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "Platform Service API",
-  }),
-);
+// API Documentation - Swagger UI removed, only JSON endpoint available
+// Access Swagger UI through API Gateway at http://localhost:3001/swagger/platform-service
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {...}));
+
+// OpenAPI JSON endpoint with dynamic server URLs
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+
+  // Create dynamic swagger specs with current host
+  const dynamicSpecs = {
+    ...swaggerSpecs,
+    servers: [
+      {
+        url: `http://${req.get("host")}`,
+        description: "Current server",
+      },
+      {
+        url: "http://localhost:3008",
+        description: "Development server (localhost)",
+      },
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              url: "https://api.logistics.com",
+              description: "Production server",
+            },
+          ]
+        : []),
+    ],
+  };
+
+  res.json(dynamicSpecs);
+});
 
 /**
  * @swagger
@@ -169,7 +193,7 @@ app.use("*", (req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error(err.stack);
   res.status(500).json({
     error: "Internal Server Error",
@@ -184,6 +208,9 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Platform Service running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(
+    `📚 Swagger docs: http://localhost:3001/swagger/platform-service (via API Gateway)`,
+  );
 });
 
 module.exports = app;

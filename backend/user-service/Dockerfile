@@ -2,8 +2,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install OpenSSL and pnpm  
-RUN apk add --no-cache openssl
+# Install OpenSSL, pnpm, and bash
+RUN apk add --no-cache openssl bash
 RUN npm install -g pnpm@8.15.1
 
 # Copy shared library first (from build context root)
@@ -12,19 +12,26 @@ COPY shared ./shared
 # Copy service source code
 COPY backend/user-service .
 
-# Install dependencies and generate Prisma client
-RUN pnpm install
+# Copy the enhanced entrypoint script
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Install dependencies after copying source
+# This creates a baseline, but entrypoint will re-sync if needed
+RUN pnpm install --frozen-lockfile || pnpm install
+
+# Generate Prisma client
 RUN npx prisma generate
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
-# Create logs directory with proper ownership BEFORE switching user
+# Create logs directory with proper ownership
 RUN mkdir -p /app/logs/user-service && chown -R nodejs:nodejs /app/logs
 
-# CRITICAL FIX: Ensure /app directory and all subdirectories are writable by nodejs user
-# This allows pnpm to create temp files and install dependencies when running as nodejs user
+# CRITICAL: Ensure /app directory is writable by nodejs user
+# This allows pnpm to install/update dependencies at runtime
 RUN chown -R nodejs:nodejs /app
 RUN chmod -R 755 /app
 RUN chmod -R 775 /app/node_modules 2>/dev/null || true
@@ -32,20 +39,16 @@ RUN chmod -R 775 /app/node_modules 2>/dev/null || true
 # Create .pnpm-store directory for pnpm cache with proper permissions
 RUN mkdir -p /app/.pnpm-store && chown -R nodejs:nodejs /app/.pnpm-store && chmod 775 /app/.pnpm-store
 
-# Create startup script that ensures dependencies are installed before starting
-RUN printf '#!/bin/sh\necho "Checking and installing dependencies if needed..."\npnpm install --frozen-lockfile 2>/dev/null || pnpm install\necho "Running Prisma migrations..."\nnpx prisma migrate deploy || echo "Migration failed or no migrations to apply"\necho "Starting server with auto-reload..."\nexec pnpm run dev\n' > /app/start.sh
-RUN chmod +x /app/start.sh
-RUN chown nodejs:nodejs /app/start.sh
-
-# Switch to non-root user
 USER nodejs
 
-# Expose port
 EXPOSE 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8002/health || exit 1
 
-# Start the application
-CMD ["/app/start.sh"]
+# Use enhanced entrypoint that auto-syncs dependencies
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Default command (can be overridden)
+CMD ["pnpm", "run", "dev"]

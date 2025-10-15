@@ -80,7 +80,8 @@ temp/
 
 # Development and tooling
 .husky/
-scripts/
+scripts/*
+!scripts/entrypoint.sh
 .eslintcache
 .prettierrc*
 .editorconfig

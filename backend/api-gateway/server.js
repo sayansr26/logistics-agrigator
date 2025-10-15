@@ -12,6 +12,7 @@ const swaggerUi = require("swagger-ui-express");
 const logger = require("./shared/lib/logger");
 const { connectRedis, getRedisClient } = require("./config/redis");
 const { errorHandler } = require("./middleware/errorHandler");
+const { validateJWT } = require("./middleware/authValidator");
 const swaggerSpecs = require("./config/swagger");
 const corsConfig = require("./shared/lib/corsConfig");
 
@@ -25,9 +26,22 @@ app.use(cors(corsConfig.getCorsOptions()));
 // Logging - use shared logger
 app.use(logger.httpLogger);
 
-// Body parsing
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// Body parsing - only for non-proxy routes (health, swagger, etc.)
+// Proxy routes should not have body parsed here as it prevents forwarding
+app.use((req, res, next) => {
+  // Skip body parsing for API routes that will be proxied
+  if (req.path.startsWith("/api/v1/")) {
+    return next();
+  }
+  // Apply body parsing for other routes
+  express.json({ limit: "10mb" })(req, res, next);
+});
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/v1/")) {
+    return next();
+  }
+  express.urlencoded({ extended: true })(req, res, next);
+});
 
 // Rate limiting
 const limiter = rateLimit({
@@ -118,6 +132,14 @@ app.get("/openapi.json", (req, res) => {
   };
   res.json(dynamicSpecs);
 });
+
+/**
+ * JWT Validation Middleware
+ * Applied to all API routes to validate JWT tokens
+ * Public paths (login, register, etc.) are exempted in the middleware
+ */
+logger.info("🔒 Applying JWT validation middleware to all API routes");
+app.use(validateJWT);
 
 /**
  * @swagger
@@ -222,6 +244,16 @@ app.get("/health", async (req, res) => {
 
   res.json(healthStatus);
 });
+
+// Swagger aggregation routes (dev only)
+if (
+  process.env.NODE_ENV === "development" ||
+  process.env.SWAGGER_ENABLED === "true"
+) {
+  const swaggerRoutes = require("./routes/swagger");
+  app.use("/swagger", swaggerRoutes);
+  logger.info("📚 Swagger aggregation enabled at /swagger");
+}
 
 // Service routing configuration using environment variables
 logger.info("🔗 API Gateway Service Configuration:", {
@@ -623,6 +655,9 @@ Object.keys(services).forEach((service) => {
       target: config.target,
       changeOrigin: true,
       pathRewrite: config.pathRewrite,
+      // Don't parse body in Express for proxy requests
+      // This prevents body consumption before proxying
+      parseReqBody: false,
       onError: (err, req, res) => {
         logger.error(`Proxy error for ${service}:`, {
           error: err.message,
@@ -641,9 +676,23 @@ Object.keys(services).forEach((service) => {
           },
         });
       },
-      onProxyReq: (proxyReq, req, res) => {
+      onProxyReq: (proxyReq, req, _res) => {
+        // Add internal secret header for backend service validation
+        const internalSecret = process.env.INTERNAL_SECRET;
+        if (!internalSecret) {
+          logger.error("INTERNAL_SECRET not configured!");
+        }
+        proxyReq.setHeader("X-Internal-Request", internalSecret);
+
         // Log proxy requests
-        logger.info(`Proxying ${req.method} ${req.path} to ${service} service`);
+        logger.info(
+          `Proxying ${req.method} ${req.path} to ${service} service`,
+          {
+            userId: req.user?.userId,
+            role: req.user?.role,
+            hasInternalSecret: !!internalSecret,
+          },
+        );
       },
     }),
   );

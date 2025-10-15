@@ -6,7 +6,8 @@ process.env.SERVICE_NAME = "license-service";
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const swaggerUi = require("swagger-ui-express");
+// Swagger UI removed - documentation available via API Gateway only
+// const swaggerUi = require("swagger-ui-express");
 const logger = require("./shared/lib/logger");
 
 const licenseRoutes = require("./routes/licenseRoutes");
@@ -87,16 +88,39 @@ app.use((req, res, next) => {
   next();
 });
 
-// API Documentation
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpecs, {
-    explorer: true,
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "License Service API",
-  }),
-);
+// API Documentation - Swagger UI removed, only JSON endpoint available
+// Access Swagger UI through API Gateway at http://localhost:3001/swagger/license-service
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {...}));
+
+// OpenAPI JSON endpoint with dynamic server URLs
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+
+  // Create dynamic swagger specs with current host
+  const dynamicSpecs = {
+    ...swaggerSpecs,
+    servers: [
+      {
+        url: `http://${req.get("host")}`,
+        description: "Current server",
+      },
+      {
+        url: "http://localhost:3011",
+        description: "Development server (localhost)",
+      },
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              url: "https://api.logistics.com",
+              description: "Production server",
+            },
+          ]
+        : []),
+    ],
+  };
+
+  res.json(dynamicSpecs);
+});
 
 // Service info endpoint
 app.get("/", (req, res) => {
@@ -248,7 +272,9 @@ async function startServer() {
     app.listen(PORT, () => {
       logger.info(`🚀 License Service running on port ${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
-      logger.info(`Swagger docs: http://localhost:${PORT}/api-docs`);
+      logger.info(
+        `Swagger docs: http://localhost:3001/swagger/license-service (via API Gateway)`,
+      );
     });
   } catch (error) {
     logger.error("Failed to start server:", error);
