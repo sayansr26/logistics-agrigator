@@ -20,6 +20,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -31,7 +39,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { mockUsers, getRoleColor, getUserStatusColor } from "@/lib/mock-data";
+import {
+  useGetUsersQuery,
+  useActivateUserMutation,
+  useDeactivateUserMutation,
+  useDeleteUserMutation,
+} from "@/store/api/endpoints/userApi";
+import { getRoleColor, getUserStatusColor } from "@/lib/mock-data";
 import {
   Users,
   UserPlus,
@@ -46,10 +60,24 @@ import {
   Shield,
   Activity,
   Mail,
+  Phone,
   HelpCircle,
   X,
   CheckCircle,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
+
+interface User {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  role: string;
+  isActive: boolean;
+  permissions?: string[];
+}
 
 export default function UsersPage() {
   const router = useRouter();
@@ -69,6 +97,30 @@ export default function UsersPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const itemsPerPage = 10;
 
+  // RTK Query - Fetch users from API
+  const {
+    data: usersData,
+    isLoading,
+    error,
+    refetch,
+  } = useGetUsersQuery({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchTerm || undefined,
+    role: roleFilter !== "all" ? roleFilter : undefined,
+    isActive:
+      statusFilter !== "all"
+        ? statusFilter === "active"
+          ? true
+          : false
+        : undefined,
+  });
+
+  // Extract users from API response
+  const users = usersData?.data?.users || [];
+  const totalUsers = usersData?.data?.pagination?.total || 0;
+  const totalPages = usersData?.data?.pagination?.totalPages || 1;
+
   // Check for success message in URL
   useEffect(() => {
     const success = searchParams.get("success");
@@ -78,39 +130,21 @@ export default function UsersPage() {
       router.replace("/users", { scroll: false });
       // Auto-hide success message after 5 seconds
       setTimeout(() => setShowSuccessMessage(false), 5000);
+      // Refetch users to show newly created user
+      refetch();
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, refetch]);
 
-  // Filter data based on search term and filters
-  const filteredUsers = mockUsers.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "all" || user.status === statusFilter;
-    const matchesRole = roleFilter === "all" || user.role === roleFilter;
-
-    return matchesSearch && matchesStatus && matchesRole;
-  });
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredUsers.slice(startIndex, endIndex);
-
-  const handlePageChange = (page) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
-  const handleStatusFilterChange = (status) => {
+  const handleStatusFilterChange = (status: string) => {
     setStatusFilter(status);
     setCurrentPage(1);
   };
 
-  const handleRoleFilterChange = (role) => {
+  const handleRoleFilterChange = (role: string) => {
     setRoleFilter(role);
     setCurrentPage(1);
   };
@@ -129,17 +163,56 @@ export default function UsersPage() {
   const hasActiveFilters =
     statusFilter !== "all" || roleFilter !== "all" || searchTerm !== "";
 
-  // Statistics
-  const totalUsers = mockUsers.length;
-  const activeUsers = mockUsers.filter((u) => u.status === "active").length;
-  const inactiveUsers = mockUsers.filter((u) => u.status === "inactive").length;
-  const suspendedUsers = mockUsers.filter(
-    (u) => u.status === "suspended",
-  ).length;
+  // Calculate statistics from all users (not filtered)
+  const activeUsers = users.filter((u: User) => u.isActive).length;
+  const inactiveUsers = users.filter((u: User) => !u.isActive).length;
 
   const handleAddNewUser = () => {
     router.push("/users/add");
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+              <p className="text-muted-foreground">Loading users...</p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-96">
+            <Card className="w-full max-w-md">
+              <CardContent className="pt-6">
+                <div className="text-center space-y-4">
+                  <AlertCircle className="h-12 w-12 text-red-600 mx-auto" />
+                  <h3 className="text-lg font-semibold">
+                    Failed to Load Users
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {(error as any)?.data?.error?.message ||
+                      "An error occurred while fetching users"}
+                  </p>
+                  <Button onClick={() => refetch()}>Try Again</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -243,7 +316,9 @@ export default function UsersPage() {
                   <p className="text-sm font-medium text-muted-foreground">
                     Suspended Users
                   </p>
-                  <p className="text-2xl font-bold">{suspendedUsers}</p>
+                  <p className="text-2xl font-bold">
+                    {totalUsers - activeUsers - inactiveUsers}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -301,7 +376,7 @@ export default function UsersPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Enhanced Filter Section - Show/Hide based on state */}
+            {/* Enhanced Filter Section */}
             {showFilters && (
               <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 {/* Status Filter */}
@@ -357,21 +432,6 @@ export default function UsersPage() {
                     >
                       <div className="h-2 w-2 rounded-full bg-current mr-2"></div>
                       Inactive
-                    </Button>
-                    <Button
-                      variant={
-                        statusFilter === "suspended" ? "default" : "outline"
-                      }
-                      size="sm"
-                      onClick={() => handleStatusFilterChange("suspended")}
-                      className={`transition-all duration-200 ${
-                        statusFilter === "suspended"
-                          ? "bg-red-600 hover:bg-red-700 text-white shadow-md"
-                          : "hover:bg-red-50 border-red-300 text-red-700"
-                      }`}
-                    >
-                      <div className="h-2 w-2 rounded-full bg-current mr-2"></div>
-                      Suspended
                     </Button>
                   </div>
                 </div>
@@ -508,8 +568,7 @@ export default function UsersPage() {
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4 text-blue-600" />
                 <span className="text-sm font-medium text-blue-800">
-                  {filteredUsers.length} user
-                  {filteredUsers.length !== 1 ? "s" : ""} found
+                  {users.length} user{users.length !== 1 ? "s" : ""} found
                 </span>
                 {hasActiveFilters && (
                   <span className="text-xs text-blue-600">
@@ -531,19 +590,13 @@ export default function UsersPage() {
             </div>
 
             {/* Users Table */}
-            <UsersTable
-              users={paginatedData}
-              searchTerm={searchTerm}
-              router={router}
-            />
+            <UsersTable users={users} searchTerm={searchTerm} router={router} />
 
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-6">
                 <div className="text-sm text-muted-foreground">
-                  Showing {startIndex + 1} to{" "}
-                  {Math.min(endIndex, filteredUsers.length)} of{" "}
-                  {filteredUsers.length} results
+                  Showing page {currentPage} of {totalPages}
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -588,124 +641,404 @@ export default function UsersPage() {
   );
 }
 
-function UsersTable({ users, searchTerm, router }) {
+interface UsersTableProps {
+  users: User[];
+  searchTerm: string;
+  router: any;
+}
+
+function UsersTable({ users, searchTerm, router }: UsersTableProps) {
+  // RTK Query mutations
+  const [activateUser, { isLoading: isActivating }] = useActivateUserMutation();
+  const [deactivateUser, { isLoading: isDeactivating }] =
+    useDeactivateUserMutation();
+  const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation();
+
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{
+    id: string;
+    email: string;
+    isActive: boolean;
+    role?: string;
+  } | null>(null);
+
+  // Helper to determine status string from isActive
+  const getStatus = (isActive: boolean) => (isActive ? "active" : "inactive");
+
+  // Open confirmation dialog
+  const openConfirmDialog = (
+    userId: string,
+    userEmail: string,
+    isActive: boolean,
+  ) => {
+    setSelectedUser({ id: userId, email: userEmail, isActive });
+    setShowConfirmDialog(true);
+  };
+
+  // Close confirmation dialog
+  const closeConfirmDialog = () => {
+    setShowConfirmDialog(false);
+    setSelectedUser(null);
+  };
+
+  // Handle activate/deactivate user after confirmation
+  const handleConfirmToggleStatus = async () => {
+    if (!selectedUser) return;
+
+    try {
+      if (selectedUser.isActive) {
+        await deactivateUser(selectedUser.id).unwrap();
+      } else {
+        await activateUser(selectedUser.id).unwrap();
+      }
+      closeConfirmDialog();
+    } catch (error) {
+      console.error("Failed to toggle user status:", error);
+      // You can add a toast notification here
+    }
+  };
+
+  // Open delete confirmation dialog
+  const openDeleteDialog = (
+    userId: string,
+    userEmail: string,
+    userRole: string,
+  ) => {
+    setSelectedUser({
+      id: userId,
+      email: userEmail,
+      isActive: false,
+      role: userRole,
+    });
+    setShowDeleteDialog(true);
+  };
+
+  // Close delete confirmation dialog
+  const closeDeleteDialog = () => {
+    setShowDeleteDialog(false);
+    setSelectedUser(null);
+  };
+
+  // Handle delete user after confirmation
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+
+    try {
+      await deleteUser(selectedUser.id).unwrap();
+      closeDeleteDialog();
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      // You can add a toast notification here
+    }
+  };
+
   return (
-    <Table>
-      <TableCaption>
-        {searchTerm
-          ? `Filtered users for &quot;${searchTerm}&quot;`
-          : "A list of all system users"}
-      </TableCaption>
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Contact</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Shipments</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {users.map((user) => (
-          <TableRow key={user.id}>
-            <TableCell>
-              <div className="flex items-center space-x-3">
-                <Avatar>
-                  <AvatarFallback className="bg-blue-100 text-blue-600">
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="font-medium">{user.name}</div>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2 text-sm">
-                  <Mail className="h-3 w-3 text-muted-foreground" />
-                  <span>{user.email}</span>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <Badge className={getRoleColor(user.role)}>
-                <Shield className="mr-1 h-3 w-3" />
-                {user.role}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <Badge className={getUserStatusColor(user.status)}>
-                <Activity className="mr-1 h-3 w-3" />
-                {user.status}
-              </Badge>
-            </TableCell>
-            {/* <TableCell>
-              <div className="text-sm">
-                <div className="flex items-center space-x-1">
-                  <Calendar className="h-3 w-3 text-muted-foreground" />
-                  <span>Last active: {formatDate(user.lastLogin)}</span>
-                </div>
-              </div>
-            </TableCell> */}
-            <TableCell>
-              <div className="text-center">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                  {user.shipmentsCount}
-                </Badge>
-              </div>
-            </TableCell>
-            {/* <TableCell className="text-sm">
-              {formatDate(user.lastLogin)}
-            </TableCell> */}
-            <TableCell className="text-right">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-8 w-8 p-0">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/users/${user.id}`)}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    View Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/users/${user.id}/edit`)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit User
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/users/${user.id}/permissions`)}
-                  >
-                    <Shield className="mr-2 h-4 w-4" />
-                    Manage Permissions
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-yellow-600">
-                    <Activity className="mr-2 h-4 w-4" />
-                    {user.status === "active" ? "Deactivate" : "Activate"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {user.status === "suspended"
-                      ? "Delete User"
-                      : "Suspend User"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TableCell>
+    <>
+      <Table>
+        <TableCaption>
+          {searchTerm
+            ? `Filtered users for &quot;${searchTerm}&quot;`
+            : "A list of all system users"}
+        </TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>User</TableHead>
+            <TableHead>Contact</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Permissions</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {users.map((user) => (
+            <TableRow key={user.id}>
+              <TableCell>
+                <div className="flex items-center space-x-3">
+                  <Avatar>
+                    <AvatarFallback className="bg-blue-100 text-blue-600">
+                      {user.firstName && user.lastName
+                        ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+                        : user.email[0].toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">
+                      {user.firstName || user.lastName
+                        ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                        : user.email}
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Mail className="h-3 w-3 text-muted-foreground" />
+                    <span>{user.email}</span>
+                  </div>
+                  {user.phone && (
+                    <div className="flex items-center space-x-2 text-sm">
+                      <Phone className="h-3 w-3 text-muted-foreground" />
+                      <span>{user.phone}</span>
+                    </div>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge className={getRoleColor(user.role)}>
+                  <Shield className="mr-1 h-3 w-3" />
+                  {user.role}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {user.role === "superadmin" || user.role === "admin" ? (
+                    <Badge variant="secondary" className="text-xs">
+                      All Permissions
+                    </Badge>
+                  ) : user.permissions && user.permissions.length > 0 ? (
+                    <>
+                      {user.permissions.slice(0, 2).map((permission) => (
+                        <Badge
+                          key={permission}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {permission}
+                        </Badge>
+                      ))}
+                      {user.permissions.length > 2 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{user.permissions.length - 2} more
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      No permissions
+                    </span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge className={getUserStatusColor(getStatus(user.isActive))}>
+                  <Activity className="mr-1 h-3 w-3" />
+                  {user.isActive ? "Active" : "Inactive"}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/users/${user.id}`)}
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/users/${user.id}/edit`)}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit User
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() =>
+                        router.push(`/users/${user.id}/permissions`)
+                      }
+                    >
+                      <Shield className="mr-2 h-4 w-4" />
+                      Manage Permissions
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-yellow-600"
+                      onClick={() =>
+                        openConfirmDialog(user.id, user.email, user.isActive)
+                      }
+                      disabled={isActivating || isDeactivating}
+                    >
+                      <Activity className="mr-2 h-4 w-4" />
+                      {user.isActive ? "Deactivate" : "Activate"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-red-600"
+                      onClick={() =>
+                        openDeleteDialog(user.id, user.email, user.role)
+                      }
+                      disabled={isDeleting || user.role === "superadmin"}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete User
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <span>Confirm Action</span>
+            </DialogTitle>
+            <DialogDescription className="pt-4">
+              {selectedUser?.isActive ? (
+                <div className="space-y-3">
+                  <p className="text-base">
+                    Are you sure you want to{" "}
+                    <span className="font-semibold text-yellow-700">
+                      deactivate
+                    </span>{" "}
+                    this user?
+                  </p>
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 font-medium">
+                      {selectedUser?.email}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">
+                      <strong>Warning:</strong> The user will lose access to the
+                      system and won&apos;t be able to log in.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-base">
+                    Are you sure you want to{" "}
+                    <span className="font-semibold text-green-700">
+                      activate
+                    </span>{" "}
+                    this user?
+                  </p>
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800 font-medium">
+                      {selectedUser?.email}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700">
+                      The user will regain access to the system and be able to
+                      log in.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={closeConfirmDialog}
+              disabled={isActivating || isDeactivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={selectedUser?.isActive ? "destructive" : "default"}
+              onClick={handleConfirmToggleStatus}
+              disabled={isActivating || isDeactivating}
+              className={
+                selectedUser?.isActive
+                  ? "bg-yellow-600 hover:bg-yellow-700"
+                  : "bg-green-600 hover:bg-green-700"
+              }
+            >
+              {isActivating || isDeactivating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {selectedUser?.isActive ? "Deactivate User" : "Activate User"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              <span>Confirm Deletion</span>
+            </DialogTitle>
+            <DialogDescription className="pt-4">
+              <div className="space-y-4">
+                <p className="text-base font-semibold text-red-700">
+                  Are you sure you want to permanently delete this user?
+                </p>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium">
+                    {selectedUser?.email}
+                  </p>
+                  {selectedUser?.role && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Role: {selectedUser.role}
+                    </p>
+                  )}
+                </div>
+                <div className="p-4 bg-red-100 border-2 border-red-300 rounded-lg">
+                  <p className="text-sm text-red-900 font-semibold mb-2">
+                    ⚠️ Warning: This action cannot be undone!
+                  </p>
+                  <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                    <li>The user account will be permanently deleted</li>
+                    <li>All associated data will be removed</li>
+                    <li>The user will lose all access immediately</li>
+                  </ul>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete User
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

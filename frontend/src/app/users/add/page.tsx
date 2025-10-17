@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,10 +43,9 @@ import {
   userPermissions,
   getRoleByValue,
   getDefaultPermissionsForRole,
-  type UserFormData,
 } from "@/lib/mock-data";
 
-const initialFormData: UserFormData = {
+const initialFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -99,10 +98,10 @@ const steps = [
 
 export default function AddUserPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState<UserFormData>(initialFormData);
+  const [formData, setFormData] = useState(initialFormData);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Partial<UserFormData>>({});
+  const [errors, setErrors] = useState({});
 
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
@@ -110,10 +109,7 @@ export default function AddUserPage() {
     { title: "Add New User" },
   ];
 
-  const handleInputChange = (
-    field: keyof UserFormData,
-    value: string | string[],
-  ) => {
+  const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
 
     // Auto-assign default permissions when role changes
@@ -128,7 +124,7 @@ export default function AddUserPage() {
     }
   };
 
-  const handlePermissionToggle = (permission: string) => {
+  const handlePermissionToggle = (permission) => {
     setFormData((prev) => ({
       ...prev,
       permissions: prev.permissions.includes(permission)
@@ -137,8 +133,8 @@ export default function AddUserPage() {
     }));
   };
 
-  const validateCurrentStep = (): boolean => {
-    const newErrors: Partial<UserFormData> = {};
+  const validateCurrentStep = () => {
+    const newErrors = {};
 
     switch (currentStep) {
       case 1: // Basic Information
@@ -170,8 +166,8 @@ export default function AddUserPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const validateAllSteps = (): boolean => {
-    const newErrors: Partial<UserFormData> = {};
+  const validateAllSteps = () => {
+    const newErrors = {};
 
     if (!formData.firstName.trim())
       newErrors.firstName = "First name is required";
@@ -199,14 +195,14 @@ export default function AddUserPage() {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const goToStep = (step: number) => {
+  const goToStep = (step) => {
     // Only allow going to completed steps or current step
     if (step <= currentStep) {
       setCurrentStep(step);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!validateAllSteps()) {
@@ -234,16 +230,13 @@ export default function AddUserPage() {
   };
 
   // Group permissions by category for better organization
-  const permissionsByCategory = userPermissions.reduce(
-    (acc, permission) => {
-      if (!acc[permission.category]) {
-        acc[permission.category] = [];
-      }
-      acc[permission.category].push(permission);
-      return acc;
-    },
-    {} as Record<string, typeof userPermissions>,
-  );
+  const permissionsByCategory = userPermissions.reduce((acc, permission) => {
+    if (!acc[permission.category]) {
+      acc[permission.category] = [];
+    }
+    acc[permission.category].push(permission);
+    return acc;
+  }, {});
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -659,7 +652,7 @@ export default function AddUserPage() {
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
