@@ -12,11 +12,24 @@ export const baseApi = createApi({
     // Prepare headers with authentication token
     prepareHeaders: (headers, { getState }) => {
       // Get token from auth state
-      const token = (getState() as RootState).auth.token;
+      const state = getState() as RootState;
+      const token = state.auth.token;
+
+      console.log("[baseApi.prepareHeaders] Auth state check:", {
+        hasToken: !!token,
+        isAuthenticated: state.auth.isAuthenticated,
+        hasUser: !!state.auth.user,
+        userEmail: state.auth.user?.email || "N/A",
+      });
 
       // If we have a token, include it in the headers
       if (token) {
+        console.log("[baseApi.prepareHeaders] ✅ Adding Authorization header");
         headers.set("Authorization", `Bearer ${token}`);
+      } else {
+        console.log(
+          "[baseApi.prepareHeaders] ❌ NO TOKEN - Authorization header not added",
+        );
       }
 
       // Set content type
@@ -38,6 +51,7 @@ export const baseApi = createApi({
     "Partner",
     "Wallet",
     "Zone",
+    "Geo",
     "Geographical",
     "License",
     "Permission",

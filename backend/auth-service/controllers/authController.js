@@ -10,7 +10,15 @@ class AuthController {
   // User registration
   static async register(req, res) {
     try {
-      const { email, password, role = "client", clientId } = req.body;
+      const {
+        email,
+        password,
+        role = "client",
+        clientId,
+        firstName,
+        lastName,
+        phone,
+      } = req.body;
 
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
@@ -28,6 +36,9 @@ class AuthController {
       const user = await prisma.user.create({
         data: {
           email,
+          firstName,
+          lastName,
+          phone,
           passwordHash,
           role,
           clientId,
@@ -35,6 +46,9 @@ class AuthController {
         select: {
           id: true,
           email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
           role: true,
           clientId: true,
           isActive: true,
@@ -709,6 +723,830 @@ class AuthController {
           service: "auth-service",
         },
       });
+    }
+  }
+
+  // Get user by ID
+  static async getUserById(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get user without password_hash
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // Log audit entry for user access
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "GET_USER_BY_ID",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            accessedUserId: id,
+            accessedUserEmail: user.email,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          user,
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Get user by ID error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to retrieve user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Update user by ID
+  static async updateUser(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      // Get existing user
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // If password is being updated, hash it
+      if (updateData.password) {
+        const bcrypt = require("bcryptjs");
+        updateData.passwordHash = await bcrypt.hash(updateData.password, 12);
+        delete updateData.password; // Remove plain password
+      }
+
+      // Update user
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Log audit entry
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "UPDATE_USER",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            updatedUserId: id,
+            updatedFields: Object.keys(updateData),
+            before: { email: existingUser.email, role: existingUser.role },
+            after: { email: updatedUser.email, role: updatedUser.role },
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          user: updatedUser,
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Update user error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to update user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Create user (admin only)
+  static async createUser(req, res) {
+    try {
+      const {
+        email,
+        password,
+        firstName,
+        lastName,
+        phone,
+        role,
+        clientId,
+        parentClientId,
+        parentUserId,
+        licenseId,
+        accessLevel,
+        assignedCustomerIds,
+        commissionRate,
+        commissionType,
+        isActive = true,
+      } = req.body;
+
+      // Validate required fields
+      if (!email || !password || !role) {
+        return res.status(400).json({
+          status: "error",
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Email, password, and role are required",
+          },
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingUser) {
+        return res.status(409).json({
+          status: "error",
+          error: {
+            code: "USER_EXISTS",
+            message: "User with this email already exists",
+          },
+        });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      // Build user data
+      const userData = {
+        email,
+        passwordHash,
+        firstName,
+        lastName,
+        phone,
+        role,
+        isActive,
+      };
+
+      // Add optional fields if provided
+      if (clientId) userData.clientId = clientId;
+      if (parentClientId) userData.parentClientId = parentClientId;
+      if (parentUserId) userData.parentUserId = parentUserId;
+      if (licenseId) userData.licenseId = licenseId;
+      if (accessLevel) userData.accessLevel = accessLevel;
+      if (assignedCustomerIds)
+        userData.assignedCustomerIds = assignedCustomerIds;
+      if (commissionRate !== undefined)
+        userData.commissionRate = commissionRate;
+      if (commissionType) userData.commissionType = commissionType;
+
+      // Create user
+      const user = await prisma.user.create({
+        data: userData,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Log user creation
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "CREATE_USER",
+          resource: "User",
+          resourceId: user.id,
+          changes: {
+            createdUserId: user.id,
+            createdUserEmail: user.email,
+            createdUserRole: user.role,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          user,
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.status(201).json(response);
+    } catch (error) {
+      console.error("Create user error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to create user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // List users with pagination, filtering, and search
+  static async listUsers(req, res) {
+    try {
+      // Parse and validate pagination parameters
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+      const skip = (page - 1) * limit;
+
+      // Parse filter parameters
+      const {
+        role,
+        isActive,
+        search,
+        sortBy = "createdAt",
+        sortOrder = "desc",
+      } = req.query;
+
+      // Build where clause
+      const where = {};
+
+      // Filter by role
+      if (role) {
+        where.role = role;
+      }
+
+      // Filter by active status
+      if (isActive !== undefined) {
+        where.isActive = isActive === "true" || isActive === true;
+      }
+
+      // Search by email or role (case-insensitive)
+      if (search) {
+        where.OR = [
+          {
+            email: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        ];
+      }
+
+      // Get total count for pagination
+      const total = await prisma.user.count({ where });
+
+      // Get users without password_hash
+      const users = await prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          [sortBy]: sortOrder.toLowerCase() === "asc" ? "asc" : "desc",
+        },
+        skip,
+        take: limit,
+      });
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(total / limit);
+
+      // Log audit entry for this admin action
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "LIST_USERS",
+          resource: "User",
+          changes: {
+            filters: { role, isActive, search },
+            pagination: { page, limit },
+            resultCount: users.length,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response with pagination
+      const response = APIResponse.success(
+        {
+          users,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+          },
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("List users error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to retrieve users",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Deactivate user (admin only)
+  static async deactivateUser(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get existing user
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // Check if user is already inactive
+      if (!existingUser.isActive) {
+        return res.status(400).json({
+          status: "error",
+          error: {
+            code: "USER_ALREADY_INACTIVE",
+            message: "User is already inactive",
+          },
+        });
+      }
+
+      // Deactivate user
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isActive: false },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Log audit entry
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "DEACTIVATE_USER",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            userId: id,
+            userEmail: existingUser.email,
+            before: { isActive: true },
+            after: { isActive: false },
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          user: updatedUser,
+          message: "User deactivated successfully",
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Deactivate user error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to deactivate user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Activate user (admin only)
+  static async activateUser(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get existing user
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // Check if user is already active
+      if (existingUser.isActive) {
+        return res.status(400).json({
+          status: "error",
+          error: {
+            code: "USER_ALREADY_ACTIVE",
+            message: "User is already active",
+          },
+        });
+      }
+
+      // Activate user
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isActive: true },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          clientId: true,
+          isActive: true,
+          twoFactorEnabled: true,
+          parentClientId: true,
+          parentUserId: true,
+          accessLevel: true,
+          licenseId: true,
+          isLicenseActive: true,
+          licenseValidUntil: true,
+          commissionRate: true,
+          commissionType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Log audit entry
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "ACTIVATE_USER",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            userId: id,
+            userEmail: existingUser.email,
+            before: { isActive: false },
+            after: { isActive: true },
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          user: updatedUser,
+          message: "User activated successfully",
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Activate user error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to activate user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Delete user (admin only)
+  static async deleteUser(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Get existing user
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // Prevent deletion of superadmin users
+      if (existingUser.role === "superadmin") {
+        return res.status(403).json({
+          status: "error",
+          error: {
+            code: "CANNOT_DELETE_SUPERADMIN",
+            message: "Superadmin users cannot be deleted",
+          },
+        });
+      }
+
+      // Delete user
+      await prisma.user.delete({
+        where: { id },
+      });
+
+      // Log audit entry
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "DELETE_USER",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            deletedUserId: id,
+            deletedUserEmail: existingUser.email,
+            deletedUserRole: existingUser.role,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Return response
+      const response = APIResponse.success(
+        {
+          message: "User deleted successfully",
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Delete user error:", error);
+
+      // Handle Prisma errors
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode).json(errorResponse);
+      }
+
+      // Handle custom API errors
+      if (errorUtils.isOperationalError(error)) {
+        const errorResponse = errorUtils.formatErrorResponse(error);
+        return res.status(error.statusCode).json(errorResponse);
+      }
+
+      // Handle unexpected errors
+      const errorResponse = APIResponse.error(
+        "Failed to delete user",
+        "INTERNAL_ERROR",
+      );
+      res.status(500).json(errorResponse);
     }
   }
 }

@@ -23,7 +23,7 @@ interface AuthState {
   error: string | null;
 }
 
-// Initial state
+// Initial state (will be hydrated from localStorage on client-side)
 const initialState: AuthState = {
   token: null,
   refreshToken: null,
@@ -39,6 +39,51 @@ export const authSlice = createSlice({
   initialState,
 
   reducers: {
+    // Hydrate auth state from localStorage (client-side only)
+    hydrate: (state) => {
+      if (typeof window === "undefined") {
+        console.log("[authSlice.hydrate] Skipping - running on server");
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("token");
+        const refreshToken = localStorage.getItem("refreshToken");
+        const userStr = localStorage.getItem("user");
+
+        console.log(
+          "[authSlice.hydrate] Token from localStorage:",
+          token ? "EXISTS" : "NULL",
+        );
+        console.log(
+          "[authSlice.hydrate] User from localStorage:",
+          userStr ? "EXISTS" : "NULL",
+        );
+
+        if (token && userStr) {
+          const user = JSON.parse(userStr);
+          state.token = token;
+          state.refreshToken = refreshToken;
+          state.user = user;
+          state.isAuthenticated = true;
+          console.log("[authSlice.hydrate] ✅ State hydrated successfully", {
+            userId: user.id,
+            role: user.role,
+            isAuthenticated: true,
+          });
+        } else {
+          console.log(
+            "[authSlice.hydrate] ❌ No token or user in localStorage",
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[authSlice.hydrate] Error loading auth from localStorage:",
+          error,
+        );
+      }
+    },
+
     // Set credentials after successful login
     setCredentials: (
       state,
@@ -53,16 +98,41 @@ export const authSlice = createSlice({
       state.user = action.payload.user;
       state.isAuthenticated = true;
       state.error = null;
+
+      // Persist to localStorage (client-side only)
+      if (typeof window !== "undefined") {
+        console.log("[authSlice.setCredentials] Saving to localStorage", {
+          userId: action.payload.user.id,
+          role: action.payload.user.role,
+          hasToken: !!action.payload.token,
+        });
+        localStorage.setItem("token", action.payload.token);
+        localStorage.setItem("refreshToken", action.payload.refreshToken);
+        localStorage.setItem("user", JSON.stringify(action.payload.user));
+        console.log(
+          "[authSlice.setCredentials] ✅ Saved to localStorage successfully",
+        );
+      }
     },
 
     // Update access token after refresh
     setToken: (state, action: PayloadAction<string>) => {
       state.token = action.payload;
+
+      // Persist to localStorage (client-side only)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", action.payload);
+      }
     },
 
     // Update user information
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
+
+      // Persist to localStorage (client-side only)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user", JSON.stringify(action.payload));
+      }
     },
 
     // Set loading state
@@ -82,6 +152,13 @@ export const authSlice = createSlice({
       state.user = null;
       state.isAuthenticated = false;
       state.error = null;
+
+      // Clear localStorage (client-side only)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+      }
     },
 
     // Clear error
@@ -93,6 +170,7 @@ export const authSlice = createSlice({
 
 // Export actions
 export const {
+  hydrate,
   setCredentials,
   setToken,
   setUser,

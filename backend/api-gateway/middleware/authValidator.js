@@ -107,7 +107,7 @@ exports.validateJWT = async (req, res, next) => {
     // Add user information to request object
     req.user = {
       userId: decoded.userId,
-      email: decoded.email,
+      email: decoded.email, // May be undefined if not in token
       role: decoded.role,
       clientId: decoded.clientId,
       permissions: decoded.permissions || [],
@@ -116,7 +116,12 @@ exports.validateJWT = async (req, res, next) => {
     // Add user information to headers for backend services
     // This allows backend services to access user context without re-validating JWT
     req.headers["x-user-id"] = decoded.userId;
-    req.headers["x-user-email"] = decoded.email;
+
+    // Only set x-user-email if email exists in token (optional field)
+    if (decoded.email) {
+      req.headers["x-user-email"] = decoded.email;
+    }
+
     req.headers["x-user-role"] = decoded.role;
     if (decoded.clientId) {
       req.headers["x-user-client-id"] = decoded.clientId;
@@ -225,14 +230,19 @@ exports.optionalJWT = async (req, res, next) => {
 
       req.user = {
         userId: decoded.userId,
-        email: decoded.email,
+        email: decoded.email, // May be undefined if not in token
         role: decoded.role,
         clientId: decoded.clientId,
         permissions: decoded.permissions || [],
       };
 
       req.headers["x-user-id"] = decoded.userId;
-      req.headers["x-user-email"] = decoded.email;
+
+      // Only set x-user-email if email exists in token (optional field)
+      if (decoded.email) {
+        req.headers["x-user-email"] = decoded.email;
+      }
+
       req.headers["x-user-role"] = decoded.role;
       if (decoded.clientId) {
         req.headers["x-user-client-id"] = decoded.clientId;

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+</head>
+<body>
+    <h1>Test Login</h1>
+    <button onclick="testLogin()">Test Login with Superadmin</button>
+    <div id="result"></div>
+
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+
+            try {
+                const response = await fetch('http://localhost:3001/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@logistics.com',
+                        password: 'Admin@123456'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <h2>Login Successful!</h2>
+                        <p>User: ${data.data.user.email}</p>
+                        <p>Role: ${data.data.user.role}</p>
+                        <p>Token: ${data.data.accessToken.substring(0, 50)}...</p>
+                        <p>Now try navigating to <a href="http://localhost:3000/dashboard">Dashboard</a></p>
+                    `;
+
+                    // Store tokens like the app would
+                    localStorage.setItem('token', data.data.accessToken);
+                    localStorage.setItem('refreshToken', data.data.refreshToken);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                } else {
+                    resultDiv.innerHTML = `<p style="color: red;">Login failed: ${data.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

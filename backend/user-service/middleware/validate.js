@@ -8,21 +8,68 @@ const APIResponse = require("../shared/lib/response");
 const schemas = {
   // User Profile validation
   createProfile: Joi.object({
+    // Authentication fields (required for creating user in auth-service)
+    email: Joi.string().email().required(),
+    password: Joi.string()
+      .min(8)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/)
+      .required()
+      .messages({
+        "string.pattern.base":
+          "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character",
+      }),
+    role: Joi.string()
+      .valid(
+        "superadmin",
+        "admin",
+        "client",
+        "accounts",
+        "sales",
+        "support",
+        "customer",
+        "customer_account",
+        "customer_sales",
+        "customer_support",
+        "affiliate",
+      )
+      .default("client"),
+    status: Joi.string().valid("active", "inactive").default("active"),
+    // Profile fields
     firstName: Joi.string().min(1).max(100).required(),
     lastName: Joi.string().min(1).max(100).required(),
     phoneNumber: Joi.string()
       .pattern(/^\+?[1-9]\d{1,14}$/)
       .optional(),
+    // Allow 'phone' as alias for phoneNumber (from frontend)
+    phone: Joi.string()
+      .pattern(/^\+?[1-9]\d{1,14}$/)
+      .optional(),
     companyName: Joi.string().max(200).optional(),
+    // Allow 'company' as alias for companyName (from frontend)
+    company: Joi.string().max(200).optional(),
     designation: Joi.string().max(100).optional(),
+    // Allow 'position' as alias for designation (from frontend)
+    position: Joi.string().max(100).optional(),
     department: Joi.string().max(100).optional(),
-    address: Joi.object({
-      street: Joi.string().required(),
-      city: Joi.string().required(),
-      state: Joi.string().required(),
-      postalCode: Joi.string().required(),
-      country: Joi.string().required(),
-    }).optional(),
+    // Support both structured address object and individual fields
+    address: Joi.alternatives()
+      .try(
+        // Structured address object
+        Joi.object({
+          street: Joi.string().required(),
+          city: Joi.string().required(),
+          state: Joi.string().required(),
+          postalCode: Joi.string().required(),
+          country: Joi.string().required(),
+        }),
+        // Simple string address from frontend
+        Joi.string().max(500),
+      )
+      .optional(),
+    // Individual address fields from frontend
+    city: Joi.string().max(100).optional(),
+    state: Joi.string().max(100).optional(),
+    pincode: Joi.string().max(10).optional(),
     billingAddress: Joi.object({
       street: Joi.string().required(),
       city: Joi.string().required(),
@@ -41,6 +88,9 @@ const schemas = {
     }).optional(),
     timezone: Joi.string().max(50).optional(),
     language: Joi.string().valid("en", "es", "fr", "de").default("en"),
+    clientId: Joi.string().uuid().optional(),
+    notes: Joi.string().max(1000).optional(),
+    permissions: Joi.array().items(Joi.string()).optional(),
   }),
 
   updateProfile: Joi.object({

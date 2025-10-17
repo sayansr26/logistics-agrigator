@@ -3,6 +3,7 @@
 // Follows auth-service patterns and uses Prisma transactions
 
 const { PrismaClient } = require("@prisma/client");
+const axios = require("axios");
 const APIResponse = require("../shared/lib/response");
 const logger = require("../shared/lib/logger");
 const {
@@ -13,18 +14,32 @@ const {
 
 const prisma = new PrismaClient();
 
+// API Gateway URL for creating users (auth-service requires requests through gateway)
+const API_GATEWAY_URL =
+  process.env.API_GATEWAY_URL || "http://api-gateway:3001";
+
 class UserController {
   // Create user profile
   static async createProfile(req, res) {
     try {
       const {
+        email, // Required for creating auth user
+        password, // Required for creating auth user
+        role = "client", // Default role
+        status = "active",
         firstName,
         lastName,
         phoneNumber,
+        phone, // alias from frontend
         companyName,
+        company, // alias from frontend
         designation,
+        position, // alias from frontend
         department,
         address,
+        city,
+        state,
+        pincode,
         billingAddress,
         preferences,
         timezone,
@@ -32,14 +47,108 @@ class UserController {
         clientId,
       } = req.body;
 
-      const userId = req.user.userId;
+      // Email and password are required for creating auth user
+      if (!email || !password) {
+        throw new UserServiceError(
+          "Email and password are required to create a user",
+          "MISSING_CREDENTIALS",
+          400,
+        );
+      }
 
-      // Check if profile already exists
+      // Normalize field names from frontend to database schema
+      const normalizedPhoneNumber = phoneNumber || phone;
+      const normalizedCompanyName = companyName || company;
+      const normalizedDesignation = designation || position;
+
+      // Build address object if individual fields provided
+      let normalizedAddress = address;
+      if (!normalizedAddress && (city || state || pincode)) {
+        normalizedAddress = {
+          street: address || "",
+          city: city || "",
+          state: state || "",
+          postalCode: pincode || "",
+          country: "India", // Default for Indian logistics platform
+        };
+      }
+      // If normalizedAddress is already a string, no need to reassign
+
+      // Step 1: Create user in auth-service through API Gateway
+      let authUser;
+      try {
+        logger.info("Creating user in auth-service via API Gateway", {
+          email,
+          role,
+          service: "user-service",
+        });
+
+        const authResponse = await axios.post(
+          `${API_GATEWAY_URL}/api/v1/auth/users`,
+          {
+            email,
+            password,
+            firstName,
+            lastName,
+            phone: normalizedPhoneNumber,
+            role,
+            clientId,
+            isActive: status === "active",
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              // Forward the authorization token from the requesting user
+              Authorization: req.get("Authorization"),
+            },
+          },
+        );
+
+        authUser = authResponse.data.data.user;
+        logger.info("Auth user created successfully", {
+          userId: authUser.id,
+          email: authUser.email,
+          service: "user-service",
+        });
+      } catch (error) {
+        logger.error("Failed to create user in auth-service", {
+          error: error.response?.data || error.message,
+          email,
+          service: "user-service",
+        });
+
+        // Handle specific auth-service errors
+        if (error.response?.status === 409) {
+          throw new UserServiceError(
+            "User with this email already exists",
+            "USER_EXISTS",
+            409,
+          );
+        }
+
+        throw new UserServiceError(
+          error.response?.data?.error?.message ||
+            "Failed to create authentication user",
+          "AUTH_USER_CREATION_FAILED",
+          error.response?.status || 500,
+        );
+      }
+
+      // Step 2: Now create the profile using the userId from auth-service
+      const userId = authUser.id;
+
+      // Check if profile already exists (shouldn't happen, but safety check)
       const existingProfile = await prisma.userProfile.findUnique({
         where: { userId },
       });
 
       if (existingProfile) {
+        // If profile exists but auth user was just created, we have an inconsistency
+        logger.warn("Profile already exists for newly created auth user", {
+          userId,
+          email,
+          service: "user-service",
+        });
         throw new UserServiceError(
           "User profile already exists",
           "PROFILE_EXISTS",
@@ -74,11 +183,11 @@ class UserController {
             userId,
             firstName,
             lastName,
-            phoneNumber,
-            companyName,
-            designation,
+            phoneNumber: normalizedPhoneNumber,
+            companyName: normalizedCompanyName,
+            designation: normalizedDesignation,
             department,
-            address,
+            address: normalizedAddress,
             billingAddress,
             preferences,
             timezone,
@@ -112,7 +221,10 @@ class UserController {
               created: {
                 firstName,
                 lastName,
-                companyName,
+                companyName: normalizedCompanyName,
+                designation: normalizedDesignation,
+                department,
+                address: normalizedAddress,
                 clientId,
               },
             },
@@ -277,6 +389,132 @@ class UserController {
         error: error.message,
         profileId: req.params.id,
         userId: req.user?.userId,
+        service: "user-service",
+      });
+      throw error;
+    }
+  }
+
+  // Get user profile by userId
+  /**
+   * @route   GET /api/profiles/user/:userId
+   * @desc    Get user profile by userId (auth user ID)
+   * @access  Private
+   */
+  static async getProfileByUserId(req, res) {
+    try {
+      const { userId } = req.params;
+      const requestingUserId = req.user.userId;
+
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        include: {
+          client: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              isActive: true,
+              subscriptionTier: true,
+            },
+          },
+        },
+      });
+
+      // Profile might not exist for older users
+      if (!profile) {
+        logger.info(`No profile found for userId: ${userId}`);
+        return res.json(
+          APIResponse.success(
+            { profile: null, hasProfile: false },
+            {
+              service: "user-service",
+              action: "get_profile_by_user_id",
+            },
+          ),
+        );
+      }
+
+      // Check access permissions
+      const canAccess =
+        req.user.role === "admin" ||
+        req.user.role === "superadmin" ||
+        req.user.role === "support" ||
+        profile.userId === requestingUserId ||
+        (req.user.clientId && req.user.clientId === profile.clientId);
+
+      if (!canAccess) {
+        throw new UserServiceError(
+          "Access denied to this profile",
+          "PROFILE_ACCESS_DENIED",
+          403,
+        );
+      }
+
+      // Create audit log for profile access
+      await prisma.auditLog.create({
+        data: {
+          userId: requestingUserId,
+          userProfileId: profile.id,
+          clientId: profile.clientId,
+          action: "VIEW_PROFILE_BY_USER_ID",
+          resource: "UserProfile",
+          resourceId: profile.id,
+          metadata: {
+            source: "user-service",
+            accessType: "profile_view_by_user_id",
+            requestingRole: req.user.role,
+            targetUserId: userId,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+          requestId: req.id,
+        },
+      });
+
+      logger.info(
+        `Profile retrieved by userId: ${userId} by user: ${requestingUserId}`,
+      );
+
+      res.json(
+        APIResponse.success(
+          {
+            profile: {
+              id: profile.id,
+              userId: profile.userId,
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              phoneNumber: profile.phoneNumber,
+              companyName: profile.companyName,
+              designation: profile.designation,
+              department: profile.department,
+              address: profile.address,
+              billingAddress: profile.billingAddress,
+              preferences: profile.preferences,
+              timezone: profile.timezone,
+              language: profile.language,
+              isActive: profile.isActive,
+              isVerified: profile.isVerified,
+              profileComplete: profile.profileComplete,
+              clientId: profile.clientId,
+              client: profile.client,
+              createdAt: profile.createdAt,
+              updatedAt: profile.updatedAt,
+              lastLoginAt: profile.lastLoginAt,
+            },
+            hasProfile: true,
+          },
+          {
+            service: "user-service",
+            action: "get_profile_by_user_id",
+          },
+        ),
+      );
+    } catch (error) {
+      logger.error("Failed to get profile by userId", {
+        error: error.message,
+        userId: req.params.userId,
+        requestingUserId: req.user?.userId,
         service: "user-service",
       });
       throw error;

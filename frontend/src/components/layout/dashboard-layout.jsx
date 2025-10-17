@@ -19,12 +19,12 @@ export function DashboardLayout({
 
       <div className="flex">
         {/* Sidebar - Hidden on mobile, shown on desktop */}
-        <aside className="hidden md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 md:top-14 bg-background border-r z-30">
+        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:top-14 bg-background border-r z-30 overflow-y-auto">
           <Sidebar className="" />
         </aside>
 
         {/* Main Content */}
-        <main className={cn("flex-1 md:ml-72 relative z-10", className)}>
+        <main className={cn("flex-1 md:ml-64 relative z-10", className)}>
           {/* Breadcrumbs */}
           {showBreadcrumbs && (
             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

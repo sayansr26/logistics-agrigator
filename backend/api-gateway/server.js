@@ -43,10 +43,13 @@ app.use((req, res, next) => {
   express.urlencoded({ extended: true })(req, res, next);
 });
 
-// Rate limiting
+// Rate limiting - Increased limits for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // limit each IP to 1000 requests per windowMs (increased for dev)
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
@@ -279,11 +282,18 @@ const services = {
       "^/api/v1/auth": "/auth", // API endpoints → /auth/*
     },
   },
-  users: {
+  user: {
     target: process.env.USER_SERVICE_URL || "http://user-service:3003",
     pathRewrite: {
+      "^/api/v1/user/health": "/health", // Health endpoint → /health
+      "^/api/v1/user": "/api", // API endpoints → /api/* (user-service profiles, clients, etc.)
+    },
+  },
+  users: {
+    target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
+    pathRewrite: {
       "^/api/v1/users/health": "/health", // Health endpoint → /health
-      "^/api/v1/users": "/api", // API endpoints → /api/*
+      "^/api/v1/users": "/auth/users", // API endpoints → /auth/users/* (auth-service manages users table)
     },
   },
   shipments: {

@@ -129,6 +129,60 @@ router.get(
 
 /**
  * @swagger
+ * /api/profiles/user/{userId}:
+ *   get:
+ *     summary: Get user profile by userId
+ *     description: Retrieves a user profile by auth user ID. Returns null if profile doesn't exist (for older users).
+ *     tags: [User Profiles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Auth user ID
+ *     responses:
+ *       200:
+ *         description: Profile retrieved successfully or no profile found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         profile:
+ *                           $ref: '#/components/schemas/UserProfile'
+ *                         hasProfile:
+ *                           type: boolean
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Access denied - insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+  "/profiles/user/:userId",
+  auth.authenticate,
+  authMiddleware.requirePermission("user", "read", "parent"),
+  asyncHandler(UserController.getProfileByUserId),
+);
+
+/**
+ * @swagger
  * /api/profiles:
  *   get:
  *     summary: List user profiles with pagination

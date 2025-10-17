@@ -2,11 +2,7 @@ const express = require("express");
 const Joi = require("joi");
 const AuthController = require("../controllers/authController");
 const { validate } = require("../middleware/validate");
-const {
-  authenticate,
-  enrichUserContext,
-  adminOnly,
-} = require("../middleware/auth");
+const { authenticate, enrichUserContext } = require("../middleware/auth");
 const {
   registrationLimiter,
   loginLimiter,
@@ -14,6 +10,34 @@ const {
 const { authMiddleware: sharedAuthMiddleware } = require("../shared/lib/auth");
 
 const router = express.Router();
+
+// Validation schemas for user listing
+const listUsersSchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1),
+  limit: Joi.number().integer().min(1).max(100).optional().default(20),
+  role: Joi.string()
+    .valid(
+      "superadmin",
+      "admin",
+      "client",
+      "accounts",
+      "sales",
+      "support",
+      "customer",
+      "customer_account",
+      "customer_sales",
+      "customer_support",
+      "affiliate",
+    )
+    .optional(),
+  isActive: Joi.boolean().optional(),
+  search: Joi.string().min(1).max(255).optional(),
+  sortBy: Joi.string()
+    .valid("createdAt", "updatedAt", "email", "role")
+    .optional()
+    .default("createdAt"),
+  sortOrder: Joi.string().valid("asc", "desc").optional().default("desc"),
+});
 
 /**
  * @swagger
@@ -549,6 +573,589 @@ router.get(
   authenticate,
   enrichUserContext,
   AuthController.getUserProfile,
+);
+
+/**
+ * @swagger
+ * /auth/users:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List all users
+ *     description: Retrieve a paginated list of users with filtering and search (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Number of users per page
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *         description: Filter by role
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: boolean
+ *         description: Filter by active status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by email (case-insensitive)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, updatedAt, email, role]
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             format: uuid
+ *                           email:
+ *                             type: string
+ *                           role:
+ *                             type: string
+ *                           clientId:
+ *                             type: string
+ *                             nullable: true
+ *                           isActive:
+ *                             type: boolean
+ *                           twoFactorEnabled:
+ *                             type: boolean
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           example: 1
+ *                         limit:
+ *                           type: integer
+ *                           example: 20
+ *                         total:
+ *                           type: integer
+ *                           example: 50
+ *                         totalPages:
+ *                           type: integer
+ *                           example: 3
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                     service:
+ *                       type: string
+ *                       example: auth-service
+ *             example:
+ *               status: success
+ *               data:
+ *                 users:
+ *                   - id: 123e4567-e89b-12d3-a456-426614174000
+ *                     email: user1@example.com
+ *                     role: client
+ *                     clientId: CLIENT_001
+ *                     isActive: true
+ *                     twoFactorEnabled: false
+ *                     createdAt: '2024-01-01T00:00:00.000Z'
+ *                     updatedAt: '2024-01-01T00:00:00.000Z'
+ *                   - id: 223e4567-e89b-12d3-a456-426614174001
+ *                     email: user2@example.com
+ *                     role: admin
+ *                     clientId: null
+ *                     isActive: true
+ *                     twoFactorEnabled: true
+ *                     createdAt: '2024-01-02T00:00:00.000Z'
+ *                     updatedAt: '2024-01-02T00:00:00.000Z'
+ *                 pagination:
+ *                   page: 1
+ *                   limit: 20
+ *                   total: 50
+ *                   totalPages: 3
+ *               meta:
+ *                 timestamp: '2024-01-10T12:00:00.000Z'
+ *                 service: auth-service
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+// Query validation middleware for list users
+const validateQueryParams = (schema) => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.query, {
+      abortEarly: false,
+      stripUnknown: true,
+    });
+
+    if (error) {
+      return res.status(400).json({
+        status: "error",
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid query parameters",
+          details: error.details.map((d) => ({
+            field: d.path.join("."),
+            message: d.message,
+          })),
+        },
+      });
+    }
+
+    // Replace query with validated values
+    req.query = value;
+    next();
+  };
+};
+
+// List users route (admin only)
+router.get(
+  "/users",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  validateQueryParams(listUsersSchema),
+  AuthController.listUsers,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Get user by ID
+ *     description: Retrieve detailed information about a specific user by ID (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           format: uuid
+ *                         email:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                         clientId:
+ *                           type: string
+ *                           nullable: true
+ *                         isActive:
+ *                           type: boolean
+ *                         twoFactorEnabled:
+ *                           type: boolean
+ *                         parentClientId:
+ *                           type: string
+ *                           nullable: true
+ *                         parentUserId:
+ *                           type: string
+ *                           nullable: true
+ *                         accessLevel:
+ *                           type: string
+ *                           nullable: true
+ *                         licenseId:
+ *                           type: string
+ *                           nullable: true
+ *                         isLicenseActive:
+ *                           type: boolean
+ *                           nullable: true
+ *                         licenseValidUntil:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                         commissionRate:
+ *                           type: number
+ *                           nullable: true
+ *                         commissionType:
+ *                           type: string
+ *                           nullable: true
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *             example:
+ *               status: success
+ *               data:
+ *                 user:
+ *                   id: bd40eb4e-d90a-4699-9131-ff797c625231
+ *                   email: user@example.com
+ *                   role: client
+ *                   clientId: CLIENT_001
+ *                   isActive: true
+ *                   twoFactorEnabled: false
+ *                   parentClientId: null
+ *                   parentUserId: null
+ *                   accessLevel: standard
+ *                   licenseId: LIC_001
+ *                   isLicenseActive: true
+ *                   licenseValidUntil: '2025-12-31T23:59:59.999Z'
+ *                   commissionRate: 5.0
+ *                   commissionType: percentage
+ *                   createdAt: '2024-01-01T00:00:00.000Z'
+ *                   updatedAt: '2024-01-01T00:00:00.000Z'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: error
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: USER_NOT_FOUND
+ *                     message:
+ *                       type: string
+ *                       example: User not found
+ */
+// Get user by ID route (admin only)
+router.get(
+  "/users/:id",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.getUserById,
+);
+
+/**
+ * @swagger
+ * /auth/users:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Create a new user
+ *     description: Create a new user account (admin/superadmin only)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - role
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *               clientId:
+ *                 type: string
+ *                 format: uuid
+ *               parentClientId:
+ *                 type: string
+ *                 format: uuid
+ *               parentUserId:
+ *                 type: string
+ *                 format: uuid
+ *               licenseId:
+ *                 type: string
+ *               accessLevel:
+ *                 type: string
+ *                 enum: [FULL, RESTRICTED]
+ *               assignedCustomerIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *               commissionRate:
+ *                 type: number
+ *               commissionType:
+ *                 type: string
+ *                 enum: [FLAT, PERCENTAGE]
+ *               isActive:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       409:
+ *         description: User already exists
+ */
+// Create user route (admin only)
+router.post(
+  "/users",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.createUser,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Update user by ID
+ *     description: Update user information including role, status, and other details (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               role:
+ *                 type: string
+ *               clientId:
+ *                 type: string
+ *                 nullable: true
+ *               parentClientId:
+ *                 type: string
+ *                 nullable: true
+ *               parentUserId:
+ *                 type: string
+ *                 nullable: true
+ *               licenseId:
+ *                 type: string
+ *                 nullable: true
+ *               accessLevel:
+ *                 type: string
+ *                 nullable: true
+ *               commissionRate:
+ *                 type: number
+ *                 nullable: true
+ *               commissionType:
+ *                 type: string
+ *                 nullable: true
+ *               isActive:
+ *                 type: boolean
+ *               password:
+ *                 type: string
+ *                 description: New password (optional)
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ */
+// Update user by ID route (admin only)
+router.put(
+  "/users/:id",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.updateUser,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}/deactivate:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Deactivate user
+ *     description: Deactivate a user account (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deactivated successfully
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ */
+// Deactivate user route (admin only)
+router.post(
+  "/users/:id/deactivate",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.deactivateUser,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}/activate:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Activate user
+ *     description: Activate a user account (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User activated successfully
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ */
+// Activate user route (admin only)
+router.post(
+  "/users/:id/activate",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.activateUser,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Delete user
+ *     description: Permanently delete a user account (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ */
+// Delete user route (admin only)
+router.delete(
+  "/users/:id",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  AuthController.deleteUser,
 );
 
 module.exports = router;

@@ -369,12 +369,21 @@ pnpm run build
 # ❌ Compilation errors in your new files = FAIL
 # ❌ Module not found errors = FAIL
 
-# 2. If build fails on YOUR files:
+# 2. Restart frontend container (REQUIRED after successful build)
+docker-compose restart frontend
+
+# This is CRITICAL because:
+# - Next.js build creates optimized production assets
+# - Container needs to reload the new build artifacts
+# - Without restart, users see old/cached version
+# - Changes won't be visible until container restart
+
+# 3. If build fails on YOUR files:
 #    - Fix ESLint/TypeScript errors immediately
 #    - Re-run build until success
 #    - NEVER commit broken code
 
-# 3. Document pre-existing errors:
+# 4. Document pre-existing errors:
 #    - Note which OLD files have errors
 #    - These will be fixed in future tasks
 #    - Your task only needs YOUR files working
@@ -382,6 +391,7 @@ pnpm run build
 ⚠️ FRONTEND STOPPED WORKING = IMMEDIATE FIX REQUIRED
 ⚠️ NO EXCEPTIONS - BUILD MUST PASS FOR YOUR CODE
 ⚠️ PRE-EXISTING ERRORS ARE ACCEPTABLE IF DOCUMENTED
+⚠️ ALWAYS RESTART FRONTEND AFTER SUCCESSFUL BUILD
 ```
 
 ### Rule Violation = Automatic Failure

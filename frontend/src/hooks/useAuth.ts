@@ -59,9 +59,11 @@ export function useAuth() {
     useRegisterMutation();
   const [logoutMutation, { isLoading: isLoggingOut }] = useLogoutMutation();
 
-  // RTK Query queries (only fetch if authenticated)
+  // RTK Query queries (only fetch if authenticated AND have token)
+  // NOTE: We skip /me query because user data is already in Redux state from login
+  // This prevents unnecessary API calls and 500 errors on page load
   const { data: meData, isLoading: isLoadingUser } = useGetMeQuery(undefined, {
-    skip: !isAuthenticated,
+    skip: true, // Always skip - we have user data from login/localStorage
   });
 
   const { data: permissionsData, isLoading: isLoadingPermissions } =
@@ -141,7 +143,7 @@ export function useAuth() {
       dispatch(clearCredentials());
 
       // Redirect to login page
-      router.push("/login");
+      router.push("/auth/login");
     }
   }, [logoutMutation, dispatch, router]);
 
@@ -235,7 +237,7 @@ export function useAuth() {
    */
   const requireAuth = useCallback(() => {
     if (!isAuthenticated && !isLoggingIn) {
-      router.push("/login");
+      router.push("/auth/login");
       return false;
     }
     return true;

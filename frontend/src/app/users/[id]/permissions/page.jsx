@@ -17,12 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-import {
-  enhancedMockUsers,
-  permissionCategories,
-  getRoleColor,
-  getUserStatusColor,
-} from "@/lib/mock-data";
+import { permissionCategories, getRoleColor } from "@/lib/mock-data";
+import { useGetUserByIdQuery } from "@/store/api/endpoints/userApi";
 import {
   ArrowLeft,
   Save,
@@ -42,6 +38,7 @@ import {
   CreditCard,
   Globe,
   Server,
+  Loader2,
 } from "lucide-react";
 
 // Icon mapping for dynamic icon rendering
@@ -59,8 +56,11 @@ export default function ManagePermissionsPage() {
   const router = useRouter();
   const userId = params.id;
 
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use RTK Query to fetch user data
+  const { data: userData, isLoading, error } = useGetUserByIdQuery(userId);
+
+  const user = userData?.data?.user;
+
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -69,31 +69,32 @@ export default function ManagePermissionsPage() {
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    // Simulate API call
-    const fetchUser = async () => {
-      setIsLoading(true);
-      // Simulate delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (user) {
+      // Get all permission IDs from all categories
+      const allPermissionIds = permissionCategories.flatMap((cat) =>
+        cat.permissions.map((p) => p.id),
+      );
 
-      const foundUser = enhancedMockUsers.find((u) => u.id === userId);
-      if (foundUser) {
-        setUser(foundUser);
+      // Set permissions based on role
+      let initialPermissions = new Set();
 
-        // Set initial permissions
-        const initialPermissions = new Set(foundUser.permissions || []);
-        setUserPermissions(initialPermissions);
-        setOriginalPermissions(initialPermissions);
+      if (user.role === "superadmin" || user.role === "admin") {
+        // Superadmin and Admin get all permissions by default
+        initialPermissions = new Set(allPermissionIds);
+      } else {
+        // For other roles, use permissions from user data if available
+        initialPermissions = new Set(user.permissions || []);
       }
-      setIsLoading(false);
-    };
 
-    fetchUser();
-  }, [userId]);
+      setUserPermissions(initialPermissions);
+      setOriginalPermissions(initialPermissions);
+    }
+  }, [user]);
 
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
     { title: "User Management", href: "/users" },
-    { title: user?.name || "User", href: `/users/${userId}` },
+    { title: user?.email || "User", href: `/users/${userId}` },
     { title: "Manage Permissions" },
   ];
 
@@ -176,19 +177,6 @@ export default function ManagePermissionsPage() {
     return true;
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "active":
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case "inactive":
-        return <Pause className="h-4 w-4 text-yellow-600" />;
-      case "suspended":
-        return <XCircle className="h-4 w-4 text-red-600" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-600" />;
-    }
-  };
-
   const filteredCategories = permissionCategories.filter((category) => {
     if (selectedCategory !== "all" && category.id !== selectedCategory) {
       return false;
@@ -213,11 +201,42 @@ export default function ManagePermissionsPage() {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <div className="max-w-6xl mx-auto space-y-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div className="h-96 bg-gray-200 rounded"></div>
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+              <p className="text-muted-foreground">
+                Loading user permissions...
+              </p>
+            </div>
           </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+        <div className="max-w-6xl mx-auto space-y-8">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Failed to Load User
+              </h2>
+              <p className="text-gray-600 mb-6">
+                {error?.data?.error?.message ||
+                  "An error occurred while fetching user details"}
+              </p>
+              <Button
+                onClick={() => router.push("/users")}
+                className="flex items-center space-x-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to Users</span>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </DashboardLayout>
     );
@@ -251,6 +270,23 @@ export default function ManagePermissionsPage() {
     );
   }
 
+  const getStatusIcon = (isActive) => {
+    if (isActive) {
+      return <CheckCircle className="h-4 w-4 text-green-600" />;
+    }
+    return <Pause className="h-4 w-4 text-gray-600" />;
+  };
+
+  const getStatusText = (isActive) => {
+    return isActive ? "Active" : "Inactive";
+  };
+
+  const getStatusColorClass = (isActive) => {
+    return isActive
+      ? "bg-green-100 text-green-800 border-green-200"
+      : "bg-gray-100 text-gray-800 border-gray-200";
+  };
+
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="max-w-6xl mx-auto space-y-8">
@@ -269,7 +305,7 @@ export default function ManagePermissionsPage() {
             <Separator orientation="vertical" className="h-6" /> */}
             <div className="space-y-1">
               <h1 className="text-3xl font-bold text-foreground">
-                Manage Permissions: {user.name}
+                Manage Permissions: {user.email}
               </h1>
               <p className="text-muted-foreground">
                 Configure user access and permissions across the system
@@ -311,10 +347,7 @@ export default function ManagePermissionsPage() {
             <div className="flex items-center space-x-4">
               <Avatar className="h-16 w-16">
                 <AvatarFallback className="text-xl bg-blue-100 text-blue-600">
-                  {user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {user.email[0].toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="space-y-2">
@@ -326,14 +359,23 @@ export default function ManagePermissionsPage() {
                     {user.role}
                   </Badge>
                   <Badge
-                    className={`${getUserStatusColor(user.status)} text-sm px-3 py-1`}
+                    className={`${getStatusColorClass(user.isActive)} text-sm px-3 py-1`}
                   >
-                    {getStatusIcon(user.status)}
-                    <span className="ml-1">{user.status}</span>
+                    {getStatusIcon(user.isActive)}
+                    <span className="ml-1">{getStatusText(user.isActive)}</span>
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {user.position} at {user.company} • {user.email}
+                  {user.email}
+                  {(user.firstName || user.lastName) && (
+                    <>
+                      {" "}
+                      •{" "}
+                      {[user.firstName, user.lastName]
+                        .filter(Boolean)
+                        .join(" ")}
+                    </>
+                  )}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Current Permissions: {userPermissions.size} active permissions

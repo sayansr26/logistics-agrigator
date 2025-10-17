@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,224 +13,759 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { mockUsers, getRoleColor, getUserStatusColor } from "@/lib/mock-data";
 import {
-  ArrowLeft,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
   Save,
-  X,
   Shield,
-  UserCheck,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
+  User,
+  Calendar,
   AlertCircle,
-  CheckCircle,
-  XCircle,
-  Pause,
-  Eye,
-  EyeOff,
-  Edit,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  Loader2,
 } from "lucide-react";
+import {
+  userRoles,
+  userStatuses,
+  userPermissions,
+  getRoleByValue,
+  getDefaultPermissionsForRole,
+} from "@/lib/mock-data";
+import {
+  useGetUserByIdQuery,
+  useGetUserProfileByUserIdQuery,
+  useUpdateUserMutation,
+} from "@/store/api/endpoints/userApi";
+
+const steps = [
+  {
+    id: 1,
+    title: "Basic Information",
+    description: "Personal and contact details",
+    icon: User,
+  },
+  {
+    id: 2,
+    title: "Role & Status",
+    description: "User role and account status",
+    icon: Shield,
+  },
+  {
+    id: 3,
+    title: "Company Details",
+    description: "Professional information",
+    icon: Building,
+  },
+  {
+    id: 4,
+    title: "Address",
+    description: "Location details",
+    icon: MapPin,
+  },
+  {
+    id: 5,
+    title: "Permissions & Notes",
+    description: "Access rights and additional info",
+    icon: Calendar,
+  },
+];
 
 export default function EditUserPage() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id;
 
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({});
+  // RTK Query hooks
+  const {
+    data: userData,
+    isLoading: isLoadingUser,
+    error: userError,
+  } = useGetUserByIdQuery(userId);
+
+  const { data: profileData, isLoading: isLoadingProfile } =
+    useGetUserProfileByUserIdQuery(userId);
+
+  const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
+
+  const user = userData?.data?.user;
+  const profile = profileData?.data?.profile;
+
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    role: "",
+    status: "active",
+    company: "",
+    department: "",
+    position: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    notes: "",
+    permissions: [],
+  });
+
+  const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState({});
 
+  // Initialize form data when user and profile data are loaded
   useEffect(() => {
-    // Simulate API call
-    const fetchUser = async () => {
-      setIsLoading(true);
-      // Simulate delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (user) {
+      const addressData = profile?.address;
+      const addressString =
+        typeof addressData === "string"
+          ? addressData
+          : addressData?.street || "";
+      const city =
+        typeof addressData === "object" ? addressData?.city || "" : "";
+      const state =
+        typeof addressData === "object" ? addressData?.state || "" : "";
+      const pincode =
+        typeof addressData === "object" ? addressData?.postalCode || "" : "";
 
-      const foundUser = mockUsers.find((u) => u.id === userId);
-      if (foundUser) {
-        // Enhance user data with additional mock information
-        const enhancedUser = {
-          ...foundUser,
-          firstName: foundUser.name.split(" ")[0],
-          lastName: foundUser.name.split(" ").slice(1).join(" "),
-          phone: "+91 98765 43210",
-          company: "TechCorp Solutions",
-          department: "Engineering",
-          position: "Senior Developer",
-          address: "123 Tech Street, Silicon Valley",
-          city: "Bangalore",
-          state: "Karnataka",
-          pincode: "560001",
-          notes: "Experienced developer with expertise in logistics systems",
-          password: "",
-          confirmPassword: "",
-        };
-        setUser(enhancedUser);
-        setFormData(enhancedUser);
-      }
-      setIsLoading(false);
-    };
-
-    fetchUser();
-  }, [userId]);
+      setFormData({
+        firstName: user.firstName || profile?.firstName || "",
+        lastName: user.lastName || profile?.lastName || "",
+        email: user.email || "",
+        phone: user.phone || profile?.phoneNumber || "",
+        role: user.role || "",
+        status: user.isActive ? "active" : "inactive",
+        company: profile?.companyName || "",
+        department: profile?.department || "",
+        position: profile?.designation || "",
+        address: addressString,
+        city: city,
+        state: state,
+        pincode: pincode,
+        notes: "",
+        permissions: [],
+      });
+    }
+  }, [user, profile]);
 
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
     { title: "User Management", href: "/users" },
-    { title: user?.name || "User", href: `/users/${userId}` },
+    { title: user?.email || "User", href: `/users/${userId}` },
     { title: "Edit User" },
   ];
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+
+    // Auto-assign default permissions when role changes
+    if (field === "role" && typeof value === "string") {
+      const defaultPermissions = getDefaultPermissionsForRole(value);
+      setFormData((prev) => ({ ...prev, permissions: defaultPermissions }));
+    }
+
     // Clear error when user starts typing
     if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
   };
 
-  const validateForm = () => {
+  const handlePermissionToggle = (permission) => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(permission)
+        ? prev.permissions.filter((p) => p !== permission)
+        : [...prev.permissions, permission],
+    }));
+  };
+
+  const validateCurrentStep = () => {
     const newErrors = {};
 
-    if (!formData.firstName?.trim()) {
-      newErrors.firstName = "First name is required";
-    }
-
-    if (!formData.lastName?.trim()) {
-      newErrors.lastName = "Last name is required";
-    }
-
-    if (!formData.email?.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    if (!formData.phone?.trim()) {
-      newErrors.phone = "Phone number is required";
-    }
-
-    if (!formData.company?.trim()) {
-      newErrors.company = "Company is required";
-    }
-
-    if (!formData.department?.trim()) {
-      newErrors.department = "Department is required";
-    }
-
-    if (!formData.position?.trim()) {
-      newErrors.position = "Position is required";
-    }
-
-    if (!formData.address?.trim()) {
-      newErrors.address = "Address is required";
-    }
-
-    if (!formData.city?.trim()) {
-      newErrors.city = "City is required";
-    }
-
-    if (!formData.state?.trim()) {
-      newErrors.state = "State is required";
-    }
-
-    if (!formData.pincode?.trim()) {
-      newErrors.pincode = "Pincode is required";
-    } else if (!/^\d{6}$/.test(formData.pincode)) {
-      newErrors.pincode = "Pincode must be 6 digits";
-    }
-
-    // Password validation only if password is being changed
-    if (formData.password || formData.confirmPassword) {
-      if (formData.password && formData.password.length < 8) {
-        newErrors.password = "Password must be at least 8 characters long";
-      }
-      if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = "Passwords do not match";
-      }
+    switch (currentStep) {
+      case 1: // Basic Information
+        if (!formData.firstName.trim())
+          newErrors.firstName = "First name is required";
+        if (!formData.lastName.trim())
+          newErrors.lastName = "Last name is required";
+        if (!formData.email.trim()) {
+          newErrors.email = "Email is required";
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          newErrors.email = "Invalid email format";
+        }
+        if (!formData.phone.trim())
+          newErrors.phone = "Phone number is required";
+        break;
+      case 2: // Role & Status
+        if (!formData.role) newErrors.role = "Role is required";
+        break;
+      case 3: // Company Information
+        if (!formData.company.trim()) newErrors.company = "Company is required";
+        break;
+      case 4: // Address (optional)
+        break;
+      case 5: // Permissions & Notes (optional)
+        break;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = async () => {
-    if (!validateForm()) {
+  const validateAllSteps = () => {
+    const newErrors = {};
+
+    if (!formData.firstName.trim())
+      newErrors.firstName = "First name is required";
+    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Invalid email format";
+    }
+    if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
+    if (!formData.role) newErrors.role = "Role is required";
+    if (!formData.company.trim()) newErrors.company = "Company is required";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const nextStep = () => {
+    if (validateCurrentStep()) {
+      setCurrentStep((prev) => Math.min(prev + 1, steps.length));
+    }
+  };
+
+  const prevStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const goToStep = (step) => {
+    // Only allow going to completed steps or current step
+    if (step <= currentStep) {
+      setCurrentStep(step);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateAllSteps()) {
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Update user data
-      const updatedUser = {
-        ...user,
-        ...formData,
-        name: `${formData.firstName} ${formData.lastName}`.trim(),
+      // Prepare update data for auth user
+      const updateData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        role: formData.role,
+        isActive: formData.status === "active",
       };
 
-      // In a real app, you would make an API call here
-      // eslint-disable-next-line no-console
-      console.log("Saving user:", updatedUser);
+      // Call API to update user
+      await updateUser({
+        id: userId,
+        data: updateData,
+      }).unwrap();
 
-      // Redirect to user profile with success message
+      // Success - redirect to user profile
       router.push(`/users/${userId}?success=user-updated`);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Error saving user:", error);
-      setErrors({ general: "Failed to save user. Please try again." });
-    } finally {
-      setIsSaving(false);
+      console.error("Error updating user:", error);
+      setErrors({
+        general:
+          error?.data?.error?.message ||
+          "Failed to update user. Please try again.",
+      });
     }
   };
 
-  const handleCancel = () => {
+  const handleBack = () => {
     router.push(`/users/${userId}`);
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "active":
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case "inactive":
-        return <Pause className="h-4 w-4 text-yellow-600" />;
-      case "suspended":
-        return <XCircle className="h-4 w-4 text-red-600" />;
+  // Group permissions by category for better organization
+  const permissionsByCategory = userPermissions.reduce((acc, permission) => {
+    if (!acc[permission.category]) {
+      acc[permission.category] = [];
+    }
+    acc[permission.category].push(permission);
+    return acc;
+  }, {});
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <User className="h-5 w-5" />
+                <span>Basic Information</span>
+              </CardTitle>
+              <CardDescription>
+                Update the user&apos;s personal and contact information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      handleInputChange("firstName", e.target.value)
+                    }
+                    placeholder="Enter first name"
+                    className={errors.firstName ? "border-red-500" : ""}
+                  />
+                  {errors.firstName && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.firstName}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      handleInputChange("lastName", e.target.value)
+                    }
+                    placeholder="Enter last name"
+                    className={errors.lastName ? "border-red-500" : ""}
+                  />
+                  {errors.lastName && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.lastName}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address *</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      readOnly
+                      disabled
+                      className="pl-10 bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Email cannot be changed (used for login)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) =>
+                        handleInputChange("phone", e.target.value)
+                      }
+                      placeholder="Enter phone number"
+                      className={`pl-10 ${errors.phone ? "border-red-500" : ""}`}
+                    />
+                  </div>
+                  {errors.phone && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.phone}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* User Preview */}
+              {(formData.firstName || formData.lastName || formData.email) && (
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-12 w-12">
+                      <AvatarFallback className="bg-blue-100 text-blue-600 text-lg">
+                        {formData.firstName?.[0]}
+                        {formData.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h4 className="font-medium">
+                        {formData.firstName} {formData.lastName}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        {formData.email}
+                      </p>
+                      {formData.role && (
+                        <Badge className={getRoleByValue(formData.role)?.color}>
+                          {getRoleByValue(formData.role)?.label}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
+      case 2:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Shield className="h-5 w-5" />
+                <span>Role & Status</span>
+              </CardTitle>
+              <CardDescription>Update role and account status</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role *</Label>
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value) => handleInputChange("role", value)}
+                  >
+                    <SelectTrigger
+                      className={errors.role ? "border-red-500" : ""}
+                    >
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userRoles.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          <div className="flex items-center space-x-2">
+                            <Badge className={role.color}>{role.label}</Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {role.description}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.role && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.role}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) =>
+                      handleInputChange("status", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userStatuses.map((status) => (
+                        <SelectItem key={status.value} value={status.value}>
+                          <div className="flex items-center space-x-2">
+                            <Badge className={status.color}>
+                              {status.label}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {status.description}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 3:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Building className="h-5 w-5" />
+                <span>Company Information</span>
+              </CardTitle>
+              <CardDescription>
+                Update company and professional details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company">Company *</Label>
+                  <Input
+                    id="company"
+                    value={formData.company}
+                    onChange={(e) =>
+                      handleInputChange("company", e.target.value)
+                    }
+                    placeholder="Enter company name"
+                    className={errors.company ? "border-red-500" : ""}
+                  />
+                  {errors.company && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.company}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input
+                    id="department"
+                    value={formData.department}
+                    onChange={(e) =>
+                      handleInputChange("department", e.target.value)
+                    }
+                    placeholder="Enter department"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position">Position</Label>
+                <Input
+                  id="position"
+                  value={formData.position}
+                  onChange={(e) =>
+                    handleInputChange("position", e.target.value)
+                  }
+                  placeholder="Enter job position"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 4:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <MapPin className="h-5 w-5" />
+                <span>Address Information</span>
+              </CardTitle>
+              <CardDescription>
+                Update the user&apos;s address details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address">Street Address</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => handleInputChange("address", e.target.value)}
+                  placeholder="Enter street address"
+                  rows={2}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={formData.city}
+                    onChange={(e) => handleInputChange("city", e.target.value)}
+                    placeholder="Enter city"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    value={formData.state}
+                    onChange={(e) => handleInputChange("state", e.target.value)}
+                    placeholder="Enter state"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pincode">Pincode</Label>
+                  <Input
+                    id="pincode"
+                    value={formData.pincode}
+                    onChange={(e) =>
+                      handleInputChange("pincode", e.target.value)
+                    }
+                    placeholder="Enter pincode"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Shield className="h-5 w-5" />
+                  <span>Permissions</span>
+                </CardTitle>
+                <CardDescription>
+                  Update the permissions this user should have. Default
+                  permissions are automatically assigned based on the selected
+                  role.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {Object.entries(permissionsByCategory).map(
+                    ([category, permissions]) => (
+                      <div key={category} className="space-y-3">
+                        <h4 className="font-medium text-sm text-gray-700 border-b border-gray-200 pb-2">
+                          {category}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {permissions.map((permission) => (
+                            <div
+                              key={permission.value}
+                              className="flex items-start space-x-3"
+                            >
+                              <input
+                                type="checkbox"
+                                id={permission.value}
+                                checked={formData.permissions.includes(
+                                  permission.value,
+                                )}
+                                onChange={() =>
+                                  handlePermissionToggle(permission.value)
+                                }
+                                className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <div className="flex-1">
+                                <Label
+                                  htmlFor={permission.value}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  {permission.label}
+                                </Label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {permission.description}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Calendar className="h-5 w-5" />
+                  <span>Additional Notes</span>
+                </CardTitle>
+                <CardDescription>
+                  Add any additional information about this user
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={formData.notes}
+                  onChange={(e) => handleInputChange("notes", e.target.value)}
+                  placeholder="Enter any additional notes or comments..."
+                  rows={3}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        );
+
       default:
-        return <AlertCircle className="h-4 w-4 text-gray-600" />;
+        return null;
     }
   };
 
-  if (isLoading) {
+  // Loading state
+  if (isLoadingUser || isLoadingProfile) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-        <div className="max-w-4xl mx-auto space-y-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div className="h-96 bg-gray-200 rounded"></div>
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+              <p className="text-muted-foreground">Loading user details...</p>
+            </div>
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
+  // Error state
+  if (userError) {
+    return (
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+        <div className="max-w-7xl mx-auto space-y-6">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Failed to Load User
+              </h2>
+              <p className="text-gray-600 mb-6">
+                {userError?.data?.error?.message ||
+                  "An error occurred while fetching user details"}
+              </p>
+              <Button
+                onClick={() => router.push("/users")}
+                className="flex items-center space-x-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span>Back to Users</span>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // No user found
   if (!user) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto space-y-6">
           <Card>
             <CardContent className="p-8 text-center">
-              <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 User Not Found
               </h2>
@@ -243,7 +777,7 @@ export default function EditUserPage() {
                 onClick={() => router.push("/users")}
                 className="flex items-center space-x-2"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
                 <span>Back to Users</span>
               </Button>
             </CardContent>
@@ -255,45 +789,43 @@ export default function EditUserPage() {
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            {/* <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push(`/users/${userId}`)}
-              className="flex items-center space-x-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Profile</span>
-            </Button> */}
             <div className="space-y-1">
               <h1 className="text-3xl font-bold text-foreground">
-                Edit User: {user.name}
+                Edit User: {user.email}
               </h1>
               <p className="text-muted-foreground">
-                Update user information and settings
+                Update user account information and settings
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-3">
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              disabled={isSaving}
-            >
-              <X className="mr-2 h-4 w-4" />
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" onClick={handleBack}>
               Cancel
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center space-x-2"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
+            {currentStep === steps.length && (
+              <Button
+                type="submit"
+                form="user-form"
+                disabled={isUpdating}
+                className="flex items-center space-x-2"
+              >
+                {isUpdating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Updating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Update User</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -309,351 +841,115 @@ export default function EditUserPage() {
           </Card>
         )}
 
-        {/* Current User Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <UserCheck className="h-5 w-5" />
-              <span>Current User Information</span>
-            </CardTitle>
-            <CardDescription>Basic information about the user</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="text-xl bg-blue-100 text-blue-600">
-                  {user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-3">
-                  <Badge
-                    className={`${getRoleColor(user.role)} text-sm px-3 py-1`}
+        {/* Stepper */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-8">
+            {steps.map((step, index) => {
+              const isCompleted = currentStep > step.id;
+              const isCurrent = currentStep === step.id;
+              const Icon = step.icon;
+
+              return (
+                <div key={step.id} className="flex items-center">
+                  <button
+                    onClick={() => goToStep(step.id)}
+                    disabled={step.id > currentStep}
+                    className={`flex flex-col items-center space-y-2 ${
+                      step.id <= currentStep
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-50"
+                    }`}
                   >
-                    <Shield className="mr-1 h-3 w-3" />
-                    {user.role}
-                  </Badge>
-                  <Badge
-                    className={`${getUserStatusColor(user.status)} text-sm px-3 py-1`}
-                  >
-                    {getStatusIcon(user.status)}
-                    <span className="ml-1">{user.status}</span>
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  User ID: {user.id} • Last updated: August 18, 2024
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Edit Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Edit className="h-5 w-5" />
-              <span>Edit User Information</span>
-            </CardTitle>
-            <CardDescription>
-              Update user details, contact information, and settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Personal Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Personal Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name *</Label>
-                  <Input
-                    id="firstName"
-                    value={formData.firstName || ""}
-                    onChange={(e) =>
-                      handleInputChange("firstName", e.target.value)
-                    }
-                    placeholder="Enter first name"
-                    className={errors.firstName ? "border-red-500" : ""}
-                  />
-                  {errors.firstName && (
-                    <p className="text-sm text-red-600">{errors.firstName}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name *</Label>
-                  <Input
-                    id="lastName"
-                    value={formData.lastName || ""}
-                    onChange={(e) =>
-                      handleInputChange("lastName", e.target.value)
-                    }
-                    placeholder="Enter last name"
-                    className={errors.lastName ? "border-red-500" : ""}
-                  />
-                  {errors.lastName && (
-                    <p className="text-sm text-red-600">{errors.lastName}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Contact Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email || ""}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    placeholder="Enter email address"
-                    className={errors.email ? "border-red-500" : ""}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-red-600">{errors.email}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number *</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone || ""}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                    placeholder="Enter phone number"
-                    className={errors.phone ? "border-red-500" : ""}
-                  />
-                  {errors.phone && (
-                    <p className="text-sm text-red-600">{errors.phone}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Professional Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Professional Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company *</Label>
-                  <Input
-                    id="company"
-                    value={formData.company || ""}
-                    onChange={(e) =>
-                      handleInputChange("company", e.target.value)
-                    }
-                    placeholder="Enter company name"
-                    className={errors.company ? "border-red-500" : ""}
-                  />
-                  {errors.company && (
-                    <p className="text-sm text-red-600">{errors.company}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department *</Label>
-                  <Input
-                    id="department"
-                    value={formData.department || ""}
-                    onChange={(e) =>
-                      handleInputChange("department", e.target.value)
-                    }
-                    placeholder="Enter department"
-                    className={errors.department ? "border-red-500" : ""}
-                  />
-                  {errors.department && (
-                    <p className="text-sm text-red-600">{errors.department}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position *</Label>
-                  <Input
-                    id="position"
-                    value={formData.position || ""}
-                    onChange={(e) =>
-                      handleInputChange("position", e.target.value)
-                    }
-                    placeholder="Enter position"
-                    className={errors.position ? "border-red-500" : ""}
-                  />
-                  {errors.position && (
-                    <p className="text-sm text-red-600">{errors.position}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Address Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Address Information
-              </h3>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Street Address *</Label>
-                  <Input
-                    id="address"
-                    value={formData.address || ""}
-                    onChange={(e) =>
-                      handleInputChange("address", e.target.value)
-                    }
-                    placeholder="Enter street address"
-                    className={errors.address ? "border-red-500" : ""}
-                  />
-                  {errors.address && (
-                    <p className="text-sm text-red-600">{errors.address}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City *</Label>
-                    <Input
-                      id="city"
-                      value={formData.city || ""}
-                      onChange={(e) =>
-                        handleInputChange("city", e.target.value)
-                      }
-                      placeholder="Enter city"
-                      className={errors.city ? "border-red-500" : ""}
-                    />
-                    {errors.city && (
-                      <p className="text-sm text-red-600">{errors.city}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State *</Label>
-                    <Input
-                      id="state"
-                      value={formData.state || ""}
-                      onChange={(e) =>
-                        handleInputChange("state", e.target.value)
-                      }
-                      placeholder="Enter state"
-                      className={errors.state ? "border-red-500" : ""}
-                    />
-                    {errors.state && (
-                      <p className="text-sm text-red-600">{errors.state}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pincode">Pincode *</Label>
-                    <Input
-                      id="pincode"
-                      value={formData.pincode || ""}
-                      onChange={(e) =>
-                        handleInputChange("pincode", e.target.value)
-                      }
-                      placeholder="Enter pincode"
-                      className={errors.pincode ? "border-red-500" : ""}
-                    />
-                    {errors.pincode && (
-                      <p className="text-sm text-red-600">{errors.pincode}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Password Change (Optional) */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Password Change (Optional)
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Leave blank if you don&apos;t want to change the password
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={formData.password || ""}
-                      onChange={(e) =>
-                        handleInputChange("password", e.target.value)
-                      }
-                      placeholder="Enter new password"
-                      className={
-                        errors.password ? "border-red-500 pr-10" : "pr-10"
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowPassword(!showPassword)}
+                    <div
+                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                        isCompleted
+                          ? "bg-green-500 border-green-500 text-white"
+                          : isCurrent
+                            ? "bg-blue-500 border-blue-500 text-white"
+                            : "bg-gray-100 border-gray-300 text-gray-500"
+                      }`}
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      {isCompleted ? (
+                        <Check className="h-6 w-6" />
                       ) : (
-                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <Icon className="h-6 w-6" />
                       )}
-                    </Button>
-                  </div>
-                  {errors.password && (
-                    <p className="text-sm text-red-600">{errors.password}</p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-sm font-medium ${
+                          isCurrent ? "text-blue-600" : "text-gray-600"
+                        }`}
+                      >
+                        {step.title}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {step.description}
+                      </p>
+                    </div>
+                  </button>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`w-16 h-0.5 mx-4 ${
+                        isCompleted ? "bg-green-500" : "bg-gray-300"
+                      }`}
+                    />
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={formData.confirmPassword || ""}
-                    onChange={(e) =>
-                      handleInputChange("confirmPassword", e.target.value)
-                    }
-                    placeholder="Confirm new password"
-                    className={errors.confirmPassword ? "border-red-500" : ""}
-                  />
-                  {errors.confirmPassword && (
-                    <p className="text-sm text-red-600">
-                      {errors.confirmPassword}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+              );
+            })}
+          </div>
+        </div>
 
-            <Separator />
+        {/* Navigation */}
+        <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+          <Button
+            variant="outline"
+            onClick={prevStep}
+            disabled={currentStep === 1}
+            className="flex items-center space-x-2"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Previous</span>
+          </Button>
 
-            {/* Additional Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Additional Information
-              </h3>
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes || ""}
-                  onChange={(e) => handleInputChange("notes", e.target.value)}
-                  placeholder="Enter any additional notes about the user"
-                  rows={3}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-500 font-medium">
+              Step {currentStep} of {steps.length}
+            </span>
+          </div>
+
+          {currentStep < steps.length ? (
+            <Button onClick={nextStep} className="flex items-center space-x-2">
+              <span>Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              form="user-form"
+              disabled={isUpdating}
+              className="flex items-center space-x-2"
+            >
+              {isUpdating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Updating...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Update User</span>
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {/* Step Content */}
+        <form id="user-form" onSubmit={handleSubmit}>
+          {renderStepContent()}
+        </form>
       </div>
     </DashboardLayout>
   );
