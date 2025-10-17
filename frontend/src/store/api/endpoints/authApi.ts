@@ -58,11 +58,24 @@ interface Permission {
   description?: string;
 }
 
+// Backend response interface (what API actually returns)
+interface BackendAuthResponse {
+  status: string;
+  message?: string;
+  data: {
+    accessToken: string; // Backend returns accessToken
+    refreshToken: string;
+    user: User;
+    expiresIn?: number;
+  };
+}
+
+// Frontend interface (normalized format)
 interface AuthResponse {
   status: string;
   message: string;
   data: {
-    token: string;
+    token: string; // We normalize to 'token' for consistency
     refreshToken: string;
     user: User;
   };
@@ -105,15 +118,51 @@ export const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: credentials,
       }),
-      transformResponse: (response: AuthResponse) => {
+      transformResponse: (response: BackendAuthResponse) => {
+        console.log("[authApi.login] Backend response:", {
+          hasAccessToken: !!response.data?.accessToken,
+          hasRefreshToken: !!response.data?.refreshToken,
+          hasUser: !!response.data?.user,
+        });
+
+        // Transform backend response (accessToken) to frontend format (token)
+        const normalizedResponse: AuthResponse = {
+          status: response.status,
+          message: response.message || "Login successful",
+          data: {
+            token: response.data.accessToken, // Transform accessToken -> token
+            refreshToken: response.data.refreshToken,
+            user: response.data.user,
+          },
+        };
+
         // Store tokens in localStorage for persistence
-        if (response.data?.token) {
-          localStorage.setItem("token", response.data.token);
+        if (normalizedResponse.data?.token) {
+          console.log("[authApi.login] ✅ Saving token to localStorage");
+          localStorage.setItem("token", normalizedResponse.data.token);
+
+          // Also set cookies for middleware authentication
+          document.cookie = `token=${normalizedResponse.data.token}; path=/; max-age=86400; SameSite=Lax`;
         }
-        if (response.data?.refreshToken) {
-          localStorage.setItem("refreshToken", response.data.refreshToken);
+        if (normalizedResponse.data?.refreshToken) {
+          console.log("[authApi.login] ✅ Saving refreshToken to localStorage");
+          localStorage.setItem(
+            "refreshToken",
+            normalizedResponse.data.refreshToken,
+          );
         }
-        return response;
+        if (normalizedResponse.data?.user) {
+          console.log("[authApi.login] ✅ Saving user to localStorage");
+          localStorage.setItem(
+            "user",
+            JSON.stringify(normalizedResponse.data.user),
+          );
+
+          // Also set userRole cookie for middleware
+          document.cookie = `userRole=${normalizedResponse.data.user.role}; path=/; max-age=86400; SameSite=Lax`;
+        }
+
+        return normalizedResponse;
       },
       invalidatesTags: ["Auth", "User"],
     }),
@@ -127,15 +176,53 @@ export const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: userData,
       }),
-      transformResponse: (response: AuthResponse) => {
-        // Auto-login after registration
-        if (response.data?.token) {
-          localStorage.setItem("token", response.data.token);
+      transformResponse: (response: BackendAuthResponse) => {
+        console.log("[authApi.register] Backend response:", {
+          hasAccessToken: !!response.data?.accessToken,
+          hasRefreshToken: !!response.data?.refreshToken,
+          hasUser: !!response.data?.user,
+        });
+
+        // Transform backend response (accessToken) to frontend format (token)
+        const normalizedResponse: AuthResponse = {
+          status: response.status,
+          message: response.message || "Registration successful",
+          data: {
+            token: response.data.accessToken, // Transform accessToken -> token
+            refreshToken: response.data.refreshToken,
+            user: response.data.user,
+          },
+        };
+
+        // Auto-login after registration - store tokens
+        if (normalizedResponse.data?.token) {
+          console.log("[authApi.register] ✅ Saving token to localStorage");
+          localStorage.setItem("token", normalizedResponse.data.token);
+
+          // Also set cookies for middleware authentication
+          document.cookie = `token=${normalizedResponse.data.token}; path=/; max-age=86400; SameSite=Lax`;
         }
-        if (response.data?.refreshToken) {
-          localStorage.setItem("refreshToken", response.data.refreshToken);
+        if (normalizedResponse.data?.refreshToken) {
+          console.log(
+            "[authApi.register] ✅ Saving refreshToken to localStorage",
+          );
+          localStorage.setItem(
+            "refreshToken",
+            normalizedResponse.data.refreshToken,
+          );
         }
-        return response;
+        if (normalizedResponse.data?.user) {
+          console.log("[authApi.register] ✅ Saving user to localStorage");
+          localStorage.setItem(
+            "user",
+            JSON.stringify(normalizedResponse.data.user),
+          );
+
+          // Also set userRole cookie for middleware
+          document.cookie = `userRole=${normalizedResponse.data.user.role}; path=/; max-age=86400; SameSite=Lax`;
+        }
+
+        return normalizedResponse;
       },
       invalidatesTags: ["Auth", "User"],
     }),
@@ -155,6 +242,13 @@ export const authApi = baseApi.injectEndpoints({
           // Clear tokens regardless of API success
           localStorage.removeItem("token");
           localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+
+          // Clear cookies
+          document.cookie =
+            "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          document.cookie =
+            "userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
           // Reset entire API cache
           dispatch(baseApi.util.resetApiState());
@@ -175,12 +269,30 @@ export const authApi = baseApi.injectEndpoints({
           body: { refreshToken },
         };
       },
-      transformResponse: (response: AuthResponse) => {
+      transformResponse: (response: BackendAuthResponse) => {
+        console.log("[authApi.refreshToken] Backend response:", {
+          hasAccessToken: !!response.data?.accessToken,
+        });
+
+        // Transform backend response (accessToken) to frontend format (token)
+        const normalizedResponse: AuthResponse = {
+          status: response.status,
+          message: response.message || "Token refreshed",
+          data: {
+            token: response.data.accessToken, // Transform accessToken -> token
+            refreshToken: response.data.refreshToken,
+            user: response.data.user,
+          },
+        };
+
         // Update stored access token
-        if (response.data?.token) {
-          localStorage.setItem("token", response.data.token);
+        if (normalizedResponse.data?.token) {
+          console.log(
+            "[authApi.refreshToken] ✅ Updating token in localStorage",
+          );
+          localStorage.setItem("token", normalizedResponse.data.token);
         }
-        return response;
+        return normalizedResponse;
       },
     }),
 
