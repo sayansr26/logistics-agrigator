@@ -145,13 +145,14 @@ SWAGGER_ENABLED=true
 
 ### Next Immediate Steps (CURRENT PRIORITY)
 
-**🔴 ACTIVE FOCUS: Courier Partner CRUD Module (Started: 2025-10-20)**
+**🔴 ACTIVE FOCUS: Service Management CRUD Module (Started: 2025-10-20)**
 
-- Migrating Partner Management from old patterns to Redux/RTK Query
+- Implementing Service Management module for monitoring and managing microservices
 - Following User Management CRUD patterns exactly
-- TypeScript migration for all partner pages
-- Multi-step forms with validation
-- Permission-based access control
+- TypeScript components with full type safety
+- Real-time service status monitoring
+- Permission-based access control for admin operations
+- Task documentation: [SERVICE_MANAGEMENT_TASK.md](../frontend/SERVICE_MANAGEMENT_TASK.md)
 
 1. ✅ **FE-001**: Remove All Direct Service URLs (P0 - COMPLETED 2025-10-15)
    - ✅ Audited all API calls in frontend codebase

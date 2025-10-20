@@ -310,6 +310,61 @@ const services = {
       "^/api/v1/partners": "/api/partners", // API endpoints → /api/partners/*
     },
   },
+  // System management endpoints (also in partner service)
+  "services-status": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/services-status": "/api/v1/services-status",
+    },
+  },
+  "system-health": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-health": "/api/v1/system-health",
+    },
+  },
+  "system-configuration": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-configuration": "/api/v1/system-configuration",
+    },
+  },
+  "system-cache": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-cache": "/api/v1/system-cache",
+    },
+  },
+  "system-statistics": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-statistics": "/api/v1/system-statistics",
+    },
+  },
+  "system-alerts": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-alerts": "/api/v1/system-alerts",
+    },
+  },
+  "system-maintenance": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/system-maintenance": "/api/v1/system-maintenance",
+    },
+  },
+  webhooks: {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/webhooks": "/api/v1/webhooks",
+    },
+  },
+  audit: {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/audit": "/api/v1/audit",
+    },
+  },
   wallet: {
     target: process.env.WALLET_SERVICE_URL || "http://wallet-service:3006",
     pathRewrite: {

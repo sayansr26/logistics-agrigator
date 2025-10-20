@@ -60,6 +60,8 @@ const getNavigationSections = () => {
           title: "Dashboard",
           href: "/dashboard",
           icon: Home,
+          disabled: true, // Dashboard not implemented yet
+          tooltip: "Coming Soon",
           // Everyone can see dashboard
         },
         {
@@ -68,6 +70,8 @@ const getNavigationSections = () => {
           icon: Package,
           badge: "89",
           permission: "shipment:list:own",
+          disabled: true, // Shipments module not ready
+          tooltip: "Under Development",
         },
       ].filter(canSeeMenuItem),
     },
@@ -79,12 +83,16 @@ const getNavigationSections = () => {
           href: "/services",
           icon: Settings,
           permission: "partner:read:own",
+          disabled: false, // Currently working on this
+          tooltip: "In Progress",
         },
         {
           title: "Zone Management",
           href: "/zones",
           icon: Globe,
           permission: "partner:read:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
         {
           title: "Charges Management",
@@ -92,6 +100,8 @@ const getNavigationSections = () => {
           icon: IndianRupee,
           permission: "billing:list:own",
           roles: ["superadmin", "admin", "accounts", "customer_account"],
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },
@@ -103,6 +113,8 @@ const getNavigationSections = () => {
           href: "/wallet",
           icon: CreditCard,
           permission: "wallet:read:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
         {
           title: "Remittance",
@@ -110,6 +122,8 @@ const getNavigationSections = () => {
           icon: CreditCard,
           permission: "billing:manage:own",
           roles: ["superadmin", "admin", "accounts", "customer_account"],
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },
@@ -122,6 +136,7 @@ const getNavigationSections = () => {
           icon: Users,
           permission: "user:list:all",
           roles: ["superadmin", "admin"],
+          disabled: false, // Working and completed
         },
         {
           title: "Client Management",
@@ -129,6 +144,8 @@ const getNavigationSections = () => {
           icon: Briefcase,
           permission: "client:list:all",
           roles: ["superadmin"],
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
         {
           title: "Courier Partners",
@@ -136,12 +153,15 @@ const getNavigationSections = () => {
           icon: Truck,
           permission: "partner:list:all",
           roles: ["superadmin", "admin", "client"],
+          disabled: false, // Working and completed
         },
         {
           title: "Outlets",
           href: "/outlets",
           icon: Store,
           permission: "customer:list:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },
@@ -153,6 +173,8 @@ const getNavigationSections = () => {
           href: "/reports",
           icon: BarChart3,
           permission: "analytics:read:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },
@@ -164,6 +186,8 @@ const getNavigationSections = () => {
           href: "/platforms",
           icon: Globe,
           permission: "platform:read:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
         {
           title: "Disputes & Support",
@@ -171,6 +195,8 @@ const getNavigationSections = () => {
           icon: AlertTriangle,
           badge: "3",
           permission: "support:list:own",
+          disabled: true, // Not implemented
+          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },
@@ -232,6 +258,34 @@ function NavItemComponent({ item, pathname }) {
   const isActive =
     pathname === item.href || pathname.startsWith(item.href + "/");
 
+  // Handle disabled items
+  if (item.disabled) {
+    return (
+      <div className="relative group">
+        <Button
+          variant="ghost"
+          className="w-full justify-start h-8 text-sm px-2 opacity-50 cursor-not-allowed"
+          disabled
+        >
+          <item.icon className="mr-2 h-3.5 w-3.5" />
+          <span className="truncate">{item.title}</span>
+          {item.badge && (
+            <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
+              {item.badge}
+            </span>
+          )}
+        </Button>
+        {/* Tooltip for disabled items */}
+        {item.tooltip && (
+          <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
+            {item.tooltip}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Regular active items
   return (
     <Button
       variant={isActive ? "secondary" : "ghost"}
