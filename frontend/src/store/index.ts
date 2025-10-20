@@ -4,6 +4,10 @@ import { baseApi } from "./api/baseApi";
 import authReducer from "./slices/authSlice";
 import permissionReducer from "./slices/permissionSlice";
 import uiReducer from "./slices/uiSlice";
+import {
+  errorMiddleware,
+  successMiddleware,
+} from "./middleware/errorMiddleware";
 
 export const store = configureStore({
   reducer: {
@@ -18,8 +22,12 @@ export const store = configureStore({
 
   // Adding the api middleware enables caching, invalidation, polling,
   // and other useful features of RTK Query
+  // Adding error and success middleware for global error handling and notifications
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(baseApi.middleware),
+    getDefaultMiddleware()
+      .concat(baseApi.middleware)
+      .concat(errorMiddleware)
+      .concat(successMiddleware),
 
   // Enable Redux DevTools in development only
   devTools: process.env.NODE_ENV !== "production",

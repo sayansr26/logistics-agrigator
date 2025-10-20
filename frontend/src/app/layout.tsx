@@ -1,6 +1,8 @@
 import React from "react";
 import type { Metadata } from "next";
 import { ReduxProvider } from "@/providers/ReduxProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ToastContainer } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +19,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ReduxProvider>{children}</ReduxProvider>
+        <ReduxProvider>
+          <ErrorBoundary>
+            {children}
+            <ToastContainer />
+          </ErrorBoundary>
+        </ReduxProvider>
       </body>
     </html>
   );

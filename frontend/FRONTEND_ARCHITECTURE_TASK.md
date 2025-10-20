@@ -707,18 +707,123 @@ const response = await createShipment(data).unwrap();
 
 **Task Name**: Add Error Handling
 **Priority**: P1
-**Status**: NOT_STARTED
-**Dependencies**: FE-002
+**Status**: COMPLETED
+**Dependencies**: FE-002 ✅
 **Estimated Time**: 2 hours
+**Actual Time**: 1.5 hours
+**Started**: 2025-10-20
+**Completed**: 2025-10-20
 
-**Files to Create**:
+**Files Created**:
 
-- `src/components/ErrorBoundary.tsx`
-- `src/store/middleware/errorMiddleware.ts`
-- `src/components/ErrorFallback.tsx`
-- `src/utils/errorHandler.ts`
+- ✅ `src/components/ErrorBoundary.tsx` - React error boundary with reset functionality
+- ✅ `src/store/middleware/errorMiddleware.ts` - Redux middleware for RTK Query errors
+- ✅ `src/components/ErrorFallback.tsx` - User-friendly error display component
+- ✅ `src/utils/errorHandler.ts` - Centralized error parsing and mapping
+- ✅ `src/components/ui/toast.tsx` - Toast notification component
 
-**Implementation for ErrorBoundary.tsx**:
+**Files Modified**:
+
+- ✅ `src/store/index.ts` - Added error and success middleware
+- ✅ `src/app/layout.tsx` - Wrapped app with ErrorBoundary and added ToastContainer
+
+**Implementation Completed**:
+
+1. **Error Handler Utilities** (`src/utils/errorHandler.ts`):
+   - Centralized error parsing from RTK Query errors
+   - User-friendly error message mapping for 30+ error codes
+   - Error type detection (auth, validation, server, network)
+   - Validation error formatting
+   - Error logging for debugging (development only)
+   - Error report creation for support
+
+2. **Error Boundary Component** (`src/components/ErrorBoundary.tsx`):
+   - React class component for catching component errors
+   - Static getDerivedStateFromError method
+   - componentDidCatch with error logging
+   - Reset functionality to retry rendering
+   - withErrorBoundary HOC for wrapping components
+   - useErrorHandler hook for manual error throwing
+
+3. **Error Fallback UI** (`src/components/ErrorFallback.tsx`):
+   - User-friendly error display with icon
+   - Error message display
+   - Stack trace display (development only)
+   - Support information section
+   - "Try Again" button with reset
+   - "Return to Dashboard" button
+   - MinimalErrorFallback for inline errors
+
+4. **Error Middleware** (`src/store/middleware/errorMiddleware.ts`):
+   - Redux middleware to intercept RTK Query errors
+   - Automatic toast notifications for all API errors
+   - 401 handling: Clear auth state + redirect to login
+   - 403 handling: Show permission denied toast
+   - 500+ handling: Show server error + log for monitoring
+   - Network error handling: Show connection error
+   - Success middleware: Show success toasts for mutations
+
+5. **Toast Notification System** (`src/components/ui/toast.tsx`):
+   - ToastContainer component for rendering notifications
+   - Individual Toast component with auto-dismiss
+   - 4 toast types: success, error, warning, info
+   - Custom icons and colors per type
+   - Manual close button
+   - useToast hook for easy usage: `toast.success("message")`
+
+**Error Handling Flow**:
+
+```
+API Error → RTK Query → Error Middleware → Toast Notification
+                                ↓
+                         Handle by Type:
+                         - 401: Redirect to login
+                         - 403: Show permission denied
+                         - 500: Log + show error
+                         - Network: Show connection error
+```
+
+**React Component Error**:
+
+```
+Component Error → ErrorBoundary → ErrorFallback UI
+                         ↓
+                  Log to console (dev)
+                  Send to monitoring (prod)
+```
+
+**Validation Results**:
+
+- ✅ Frontend build: Success (42 pages generated)
+- ✅ TypeScript compilation: Pass (no errors)
+- ✅ Error middleware integrated with Redux store
+- ✅ ErrorBoundary wrapping entire app
+- ✅ ToastContainer added to layout
+- ✅ All error codes mapped to user-friendly messages
+
+**Testing Checklist**:
+
+- [ ] Test invalid API calls (should show error toast)
+- [ ] Test network errors (disconnect and try API call)
+- [ ] Test 401 errors (should redirect to login)
+- [ ] Test 403 errors (should show permission denied)
+- [ ] Test 500 errors (should show server error)
+- [ ] Test component errors (should show ErrorFallback)
+- [ ] Test toast auto-dismiss (should disappear after duration)
+- [ ] Test toast manual close (should close on X button)
+- [ ] Test success notifications (create/update operations)
+
+**Impact**:
+
+- Complete error handling system for frontend
+- User-friendly error messages for all API errors
+- Automatic toast notifications for API operations
+- Graceful error recovery with ErrorBoundary
+- Development-friendly error logging
+- Production-ready error reporting foundation
+- Ready for integration with error monitoring services (Sentry, LogRocket)
+
+**Original Implementation for ErrorBoundary.tsx**:
 
 ```typescript
 import React, { Component, ReactNode } from 'react';
@@ -944,12 +1049,12 @@ npm run test:e2e
 | Priority | Total | Not Started | In Progress | Completed | Blocked |
 | -------- | ----- | ----------- | ----------- | --------- | ------- |
 | P0       | 5     | 1           | 0           | 4         | 0       |
-| P1       | 5     | 3           | 0           | 2         | 0       |
+| P1       | 5     | 2           | 0           | 3         | 0       |
 | P2       | 1     | 1           | 0           | 0         | 0       |
 
-**Progress**: 6/11 tasks completed (55%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-011 ✅
+**Progress**: 7/11 tasks completed (64%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-006 ✅, FE-011 ✅
 
-**Next Task**: **FE-006** (Error Handling) or **FE-009** (Navigation based on roles) - Ready to start
+**Next Task**: **FE-009** (Navigation based on roles) or **FE-007** (Loading States) - Ready to start
 
 ## Dependencies Flow
 
