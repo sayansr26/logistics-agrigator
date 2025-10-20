@@ -76,15 +76,14 @@ const getNavigationSections = () => {
       ].filter(canSeeMenuItem),
     },
     {
-      title: "Service Management",
+      title: "Pricing & Services",
       items: [
         {
-          title: "Service Management",
+          title: "Service Types",
           href: "/services",
           icon: Settings,
           permission: "partner:read:own",
-          disabled: true, // Currently working on this
-          tooltip: "In Progress",
+          disabled: false, // Active and working
         },
         {
           title: "Zone Management",

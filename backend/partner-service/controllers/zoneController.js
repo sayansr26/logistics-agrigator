@@ -14,9 +14,10 @@
  */
 
 const ZoneService = require("../services/zoneService");
+const ServiceTypeService = require("../services/serviceTypeService");
 const logger = require("../shared/lib/logger");
-const { successResponse, errorResponse } = require("../shared/lib/response");
-const { validateRequest } = require("../shared/lib/validation");
+const APIResponse = require("../shared/lib/response");
+const { prisma } = require("../config/database");
 
 class ZoneController {
   /**
@@ -40,12 +41,13 @@ class ZoneController {
       const limitNum = parseInt(limit);
 
       if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        return errorResponse(
-          res,
-          "INVALID_PAGINATION",
+        const errorResp = APIResponse.error(
           "Invalid pagination parameters",
+          "INVALID_PAGINATION",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate sort parameters
@@ -56,12 +58,13 @@ class ZoneController {
         !validSortFields.includes(sortBy) ||
         !validSortOrders.includes(sortOrder)
       ) {
-        return errorResponse(
-          res,
-          "INVALID_SORT",
+        const errorResp = APIResponse.error(
           "Invalid sort parameters",
+          "INVALID_SORT",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const options = {
@@ -76,12 +79,13 @@ class ZoneController {
       const result = await zoneService.getAllZones(options);
 
       if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "ZONE_RETRIEVAL_ERROR",
+        const errorResp = APIResponse.error(
           result.error?.message || "Failed to retrieve zones",
+          result.error?.code || "ZONE_RETRIEVAL_ERROR",
+          null,
           500,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       logger.info("Zones retrieved successfully", {
@@ -91,9 +95,11 @@ class ZoneController {
         limit: limitNum,
       });
 
-      return successResponse(res, result.data, "Zones retrieved successfully", {
-        pagination: result.meta?.pagination,
-        summary: result.meta?.summary,
+      return res.status(200).json({
+        ...APIResponse.success(result.data, {
+          pagination: result.meta?.pagination,
+          summary: result.meta?.summary,
+        }),
       });
     } catch (error) {
       logger.error("Failed to get zones", {
@@ -102,7 +108,13 @@ class ZoneController {
         query: req.query,
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
+        null,
+        500,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 
@@ -115,15 +127,16 @@ class ZoneController {
     try {
       // Validate required fields
       const requiredFields = ["name", "description", "partnerId"];
-      const validation = validateRequest(req.body, requiredFields);
+      const missingFields = requiredFields.filter((field) => !req.body[field]);
 
-      if (!validation.isValid) {
-        return errorResponse(
-          res,
+      if (missingFields.length > 0) {
+        const errorResp = APIResponse.error(
+          `Missing required fields: ${missingFields.join(", ")}`,
           "VALIDATION_ERROR",
-          validation.errors.join(", "),
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const {
@@ -137,41 +150,45 @@ class ZoneController {
 
       // Additional validation
       if (name.length < 3 || name.length > 100) {
-        return errorResponse(
-          res,
-          "INVALID_NAME",
+        const errorResp = APIResponse.error(
           "Zone name must be between 3 and 100 characters",
+          "INVALID_NAME",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       if (description.length < 10 || description.length > 500) {
-        return errorResponse(
-          res,
-          "INVALID_DESCRIPTION",
+        const errorResp = APIResponse.error(
           "Zone description must be between 10 and 500 characters",
+          "INVALID_DESCRIPTION",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate geographical data structure
       if (geographical.pincodes && !Array.isArray(geographical.pincodes)) {
-        return errorResponse(
-          res,
-          "INVALID_GEOGRAPHICAL",
+        const errorResp = APIResponse.error(
           "Geographical pincodes must be an array",
+          "INVALID_GEOGRAPHICAL",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate services structure
       if (services && !Array.isArray(services)) {
-        return errorResponse(
-          res,
-          "INVALID_SERVICES",
+        const errorResp = APIResponse.error(
           "Services must be an array",
+          "INVALID_SERVICES",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const zoneData = {
@@ -186,12 +203,13 @@ class ZoneController {
       const result = await zoneService.createZone(zoneData);
 
       if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "ZONE_CREATION_ERROR",
+        const errorResp = APIResponse.error(
           result.error?.message || "Failed to create zone",
+          result.error?.code || "ZONE_CREATION_ERROR",
+          null,
           500,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       logger.info("Zone created successfully", {
@@ -201,13 +219,10 @@ class ZoneController {
         partnerId,
       });
 
-      return successResponse(
-        res,
-        result.data,
-        "Zone created successfully",
-        null,
-        201,
-      );
+      return res.status(200).json({
+        message: result.data,
+        ...APIResponse.success("Zone created successfully", null, 201),
+      });
     } catch (error) {
       logger.error("Failed to create zone", {
         error: error.message,
@@ -215,7 +230,13 @@ class ZoneController {
         body: { ...req.body, services: "[REDACTED]" },
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
+        null,
+        500,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 
@@ -224,7 +245,7 @@ class ZoneController {
    * GET /api/service-types
    */
   static async getServiceTypes(req, res) {
-    const zoneService = new ZoneService();
+    const serviceTypeService = new ServiceTypeService();
     try {
       const {
         page = 1,
@@ -233,6 +254,7 @@ class ZoneController {
         category,
         sortBy = "sortOrder",
         sortOrder = "asc",
+        search,
       } = req.query;
 
       // Validate pagination parameters
@@ -240,44 +262,38 @@ class ZoneController {
       const limitNum = parseInt(limit);
 
       if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        return errorResponse(
-          res,
-          "INVALID_PAGINATION",
+        const errorResp = APIResponse.error(
           "Invalid pagination parameters",
+          "INVALID_PAGINATION",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate status
       const validStatuses = ["ACTIVE", "INACTIVE", "ALL"];
       if (status && !validStatuses.includes(status)) {
-        return errorResponse(
-          res,
-          "INVALID_STATUS",
+        const errorResp = APIResponse.error(
           "Invalid status parameter",
+          "INVALID_STATUS",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const options = {
         page: pageNum,
         limit: limitNum,
-        status: status === "ALL" ? null : status,
+        status,
         category,
+        search,
         sortBy,
         sortOrder,
       };
 
-      const result = await zoneService.getServiceTypes(options);
-
-      if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "SERVICE_TYPE_RETRIEVAL_ERROR",
-          result.error?.message || "Failed to retrieve service types",
-          500,
-        );
-      }
+      const result = await serviceTypeService.getServiceTypes(options);
 
       logger.info("Service types retrieved successfully", {
         userId: req.user?.userId,
@@ -287,15 +303,13 @@ class ZoneController {
         status,
       });
 
-      return successResponse(
-        res,
-        result.data,
-        "Service types retrieved successfully",
-        {
+      return res.status(200).json({
+        message: "Service types retrieved successfully",
+        ...APIResponse.success(result.data, {
           pagination: result.meta?.pagination,
           filters: result.meta?.filters,
-        },
-      );
+        }),
+      });
     } catch (error) {
       logger.error("Failed to get service types", {
         error: error.message,
@@ -303,114 +317,13 @@ class ZoneController {
         query: req.query,
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
-    }
-  }
-
-  /**
-   * Create a new service type
-   * POST /api/service-types
-   */
-  static async createServiceType(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      // Validate required fields
-      const requiredFields = ["name", "displayName", "category"];
-      const validation = validateRequest(req.body, requiredFields);
-
-      if (!validation.isValid) {
-        return errorResponse(
-          res,
-          "VALIDATION_ERROR",
-          validation.errors.join(", "),
-          400,
-        );
-      }
-
-      const {
-        name,
-        displayName,
-        category,
-        description = "",
-        isAvailable = true,
-        baseCharge = "0",
-        sortOrder = 100,
-        additionalInfo = null,
-      } = req.body;
-
-      // Additional validation
-      if (name.length < 2 || name.length > 50) {
-        return errorResponse(
-          res,
-          "INVALID_NAME",
-          "Service type name must be between 2 and 50 characters",
-          400,
-        );
-      }
-
-      if (displayName.length < 3 || displayName.length > 100) {
-        return errorResponse(
-          res,
-          "INVALID_DISPLAY_NAME",
-          "Display name must be between 3 and 100 characters",
-          400,
-        );
-      }
-
-      const validCategories = ["LOGISTICS", "PAYMENT", "LOCATION", "SPECIAL"];
-      if (!validCategories.includes(category)) {
-        return errorResponse(
-          res,
-          "INVALID_CATEGORY",
-          "Invalid service type category",
-          400,
-        );
-      }
-
-      const serviceTypeData = {
-        name: name.trim().toUpperCase(),
-        displayName: displayName.trim(),
-        category,
-        description: description.trim(),
-        isAvailable,
-        baseCharge: baseCharge.toString(),
-        sortOrder: parseInt(sortOrder),
-        additionalInfo,
-      };
-
-      const result = await zoneService.createServiceType(serviceTypeData);
-
-      if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "SERVICE_TYPE_CREATION_ERROR",
-          result.error?.message || "Failed to create service type",
-          500,
-        );
-      }
-
-      logger.info("Service type created successfully", {
-        userId: req.user?.userId,
-        serviceTypeId: result.data?.id,
-        name,
-        category,
-      });
-
-      return successResponse(
-        res,
-        result.data,
-        "Service type created successfully",
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
         null,
-        201,
+        500,
       );
-    } catch (error) {
-      logger.error("Failed to create service type", {
-        error: error.message,
-        userId: req.user?.userId,
-        body: req.body,
-      });
-
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 
@@ -433,12 +346,13 @@ class ZoneController {
 
       // Validate partnerId
       if (!partnerId || partnerId.trim().length === 0) {
-        return errorResponse(
-          res,
-          "INVALID_PARTNER_ID",
+        const errorResp = APIResponse.error(
           "Partner ID is required",
+          "INVALID_PARTNER_ID",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate pagination parameters
@@ -446,12 +360,13 @@ class ZoneController {
       const limitNum = parseInt(limit);
 
       if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        return errorResponse(
-          res,
-          "INVALID_PAGINATION",
+        const errorResp = APIResponse.error(
           "Invalid pagination parameters",
+          "INVALID_PAGINATION",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const options = {
@@ -466,12 +381,13 @@ class ZoneController {
       const result = await zoneService.getPartnerZones(partnerId, options);
 
       if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "PARTNER_ZONE_RETRIEVAL_ERROR",
+        const errorResp = APIResponse.error(
           result.error?.message || "Failed to retrieve partner zones",
+          result.error?.code || "PARTNER_ZONE_RETRIEVAL_ERROR",
+          null,
           500,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       logger.info("Partner zones retrieved successfully", {
@@ -482,11 +398,10 @@ class ZoneController {
         limit: limitNum,
       });
 
-      return successResponse(
-        res,
-        result.data,
-        "Partner zones retrieved successfully",
-      );
+      return res.status(200).json({
+        message: "Partner zones retrieved successfully",
+        ...APIResponse.success(result.data),
+      });
     } catch (error) {
       logger.error("Failed to get partner zones", {
         error: error.message,
@@ -495,7 +410,13 @@ class ZoneController {
         query: req.query,
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
+        null,
+        500,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 
@@ -511,12 +432,13 @@ class ZoneController {
 
       // Validate partnerId
       if (!partnerId || partnerId.trim().length === 0) {
-        return errorResponse(
-          res,
-          "INVALID_PARTNER_ID",
+        const errorResp = APIResponse.error(
           "Partner ID is required",
+          "INVALID_PARTNER_ID",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const options = {
@@ -530,13 +452,14 @@ class ZoneController {
       );
 
       if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "COMPREHENSIVE_DATA_ERROR",
+        const errorResp = APIResponse.error(
           result.error?.message ||
             "Failed to retrieve comprehensive partner data",
+          result.error?.code || "COMPREHENSIVE_DATA_ERROR",
+          null,
           500,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       logger.info("Comprehensive partner data retrieved successfully", {
@@ -547,16 +470,17 @@ class ZoneController {
         executionTime: result.execution_time_ms,
       });
 
-      return successResponse(
-        res,
-        result.data,
-        "Comprehensive partner data retrieved successfully",
-        {
-          summary: result.summary,
-          metadata: result.metadata,
-          executionTime: result.execution_time_ms,
-        },
-      );
+      return res.status(200).json({
+        message: result.data,
+        ...APIResponse.success(
+          "Comprehensive partner data retrieved successfully",
+          {
+            summary: result.summary,
+            metadata: result.metadata,
+            executionTime: result.execution_time_ms,
+          },
+        ),
+      });
     } catch (error) {
       logger.error("Failed to get comprehensive partner data", {
         error: error.message,
@@ -565,7 +489,13 @@ class ZoneController {
         query: req.query,
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
+        null,
+        500,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 
@@ -580,12 +510,13 @@ class ZoneController {
 
       // Validate required fields
       if (!pincodes || !Array.isArray(pincodes) || pincodes.length === 0) {
-        return errorResponse(
-          res,
-          "INVALID_PINCODES",
+        const errorResp = APIResponse.error(
           "Pincodes array is required and must not be empty",
+          "INVALID_PINCODES",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Validate pincode format
@@ -593,22 +524,24 @@ class ZoneController {
         (pincode) => !/^\d{6}$/.test(pincode.toString()),
       );
       if (invalidPincodes.length > 0) {
-        return errorResponse(
-          res,
-          "INVALID_PINCODE_FORMAT",
+        const errorResp = APIResponse.error(
           `Invalid pincode format: ${invalidPincodes.join(", ")}`,
+          "INVALID_PINCODE_FORMAT",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       // Limit number of pincodes to prevent abuse
       if (pincodes.length > 1000) {
-        return errorResponse(
-          res,
-          "TOO_MANY_PINCODES",
+        const errorResp = APIResponse.error(
           "Maximum 1000 pincodes allowed per request",
+          "TOO_MANY_PINCODES",
+          null,
           400,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       const result = await zoneService.validateZoneCoverage(
@@ -617,12 +550,13 @@ class ZoneController {
       );
 
       if (!result.success) {
-        return errorResponse(
-          res,
-          result.error?.code || "ZONE_COVERAGE_VALIDATION_ERROR",
+        const errorResp = APIResponse.error(
           result.error?.message || "Failed to validate zone coverage",
+          result.error?.code || "ZONE_COVERAGE_VALIDATION_ERROR",
+          null,
           500,
         );
+        return res.status(errorResp.statusCode).json(errorResp);
       }
 
       logger.info("Zone coverage validation completed", {
@@ -632,11 +566,10 @@ class ZoneController {
         coveragePercentage: result.data?.coveragePercentage || 0,
       });
 
-      return successResponse(
-        res,
-        result.data,
-        "Zone coverage validation completed successfully",
-      );
+      return res.status(200).json({
+        message: "Zone coverage validation completed successfully",
+        ...APIResponse.success(result.data),
+      });
     } catch (error) {
       logger.error("Failed to validate zone coverage", {
         error: error.message,
@@ -647,7 +580,230 @@ class ZoneController {
         },
       });
 
-      return errorResponse(res, "INTERNAL_ERROR", "Internal server error", 500);
+      const errorResp = APIResponse.error(
+        "Internal server error",
+        "INTERNAL_ERROR",
+        null,
+        500,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
+    }
+  }
+
+  /**
+   * Get service type by ID
+   * GET /api/service-types/:id
+   */
+  static async getServiceTypeById(req, res) {
+    const serviceTypeService = new ServiceTypeService();
+    try {
+      const { id } = req.params;
+
+      const serviceType = await serviceTypeService.getServiceTypeById(id);
+
+      // Log audit
+      await prisma.auditLog.create({
+        data: {
+          action: "VIEW_SERVICE_TYPE",
+          resourceType: "SERVICE_TYPE",
+          resourceId: id,
+          userId: req.user?.userId || null,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+        },
+      });
+
+      return res.status(200).json({
+        message: "Service type retrieved successfully",
+        ...APIResponse.success(serviceType),
+      });
+    } catch (error) {
+      logger.error("Failed to get service type by ID", {
+        error: error.message,
+        id: req.params.id,
+        userId: req.user?.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      const errorResp = APIResponse.error(
+        error.message || "Internal server error",
+        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
+        null,
+        statusCode,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
+    }
+  }
+
+  /**
+   * Create a new service type
+   * POST /api/service-types
+   */
+  static async createServiceType(req, res) {
+    const serviceTypeService = new ServiceTypeService();
+    try {
+      // Validate required fields
+      const requiredFields = ["name", "displayName", "category"];
+      const missingFields = requiredFields.filter((field) => !req.body[field]);
+
+      if (missingFields.length > 0) {
+        const errorResp = APIResponse.error(
+          `Missing required fields: ${missingFields.join(", ")}`,
+          "VALIDATION_ERROR",
+          null,
+          400,
+        );
+        return res.status(errorResp.statusCode).json(errorResp);
+      }
+
+      const serviceType = await serviceTypeService.createServiceType(req.body);
+
+      // Log audit
+      await prisma.auditLog.create({
+        data: {
+          action: "CREATE_SERVICE_TYPE",
+          resourceType: "SERVICE_TYPE",
+          resourceId: serviceType.id,
+          userId: req.user?.userId || null,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          requestData: req.body,
+          responseData: serviceType,
+        },
+      });
+
+      logger.info("Service type created successfully", {
+        id: serviceType.id,
+        name: serviceType.name,
+        userId: req.user?.userId,
+      });
+
+      return res.status(201).json({
+        message: "Service type created successfully",
+        ...APIResponse.success(serviceType),
+      });
+    } catch (error) {
+      logger.error("Failed to create service type", {
+        error: error.message,
+        body: req.body,
+        userId: req.user?.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      const errorResp = APIResponse.error(
+        error.message || "Internal server error",
+        error.statusCode === 409 ? "SERVICE_TYPE_EXISTS" : "INTERNAL_ERROR",
+        null,
+        statusCode,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
+    }
+  }
+
+  /**
+   * Update a service type
+   * PUT /api/service-types/:id
+   */
+  static async updateServiceType(req, res) {
+    const serviceTypeService = new ServiceTypeService();
+    try {
+      const { id } = req.params;
+
+      const serviceType = await serviceTypeService.updateServiceType(
+        id,
+        req.body,
+      );
+
+      // Log audit
+      await prisma.auditLog.create({
+        data: {
+          action: "UPDATE_SERVICE_TYPE",
+          resourceType: "SERVICE_TYPE",
+          resourceId: id,
+          userId: req.user?.userId || null,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          requestData: req.body,
+          responseData: serviceType,
+        },
+      });
+
+      logger.info("Service type updated successfully", {
+        id,
+        userId: req.user?.userId,
+      });
+
+      return res.status(200).json({
+        message: "Service type updated successfully",
+        ...APIResponse.success(serviceType),
+      });
+    } catch (error) {
+      logger.error("Failed to update service type", {
+        error: error.message,
+        id: req.params.id,
+        body: req.body,
+        userId: req.user?.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      const errorResp = APIResponse.error(
+        error.message || "Internal server error",
+        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
+        null,
+        statusCode,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
+    }
+  }
+
+  /**
+   * Delete a service type (soft delete)
+   * DELETE /api/service-types/:id
+   */
+  static async deleteServiceType(req, res) {
+    const serviceTypeService = new ServiceTypeService();
+    try {
+      const { id } = req.params;
+
+      const serviceType = await serviceTypeService.deleteServiceType(id);
+
+      // Log audit
+      await prisma.auditLog.create({
+        data: {
+          action: "DELETE_SERVICE_TYPE",
+          resourceType: "SERVICE_TYPE",
+          resourceId: id,
+          userId: req.user?.userId || null,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          responseData: serviceType,
+        },
+      });
+
+      logger.info("Service type deleted successfully", {
+        id,
+        userId: req.user?.userId,
+      });
+
+      return res.status(200).json({
+        message: "Service type deleted successfully",
+        ...APIResponse.success(serviceType),
+      });
+    } catch (error) {
+      logger.error("Failed to delete service type", {
+        error: error.message,
+        id: req.params.id,
+        userId: req.user?.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      const errorResp = APIResponse.error(
+        error.message || "Internal server error",
+        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
+        null,
+        statusCode,
+      );
+      return res.status(errorResp.statusCode).json(errorResp);
     }
   }
 }

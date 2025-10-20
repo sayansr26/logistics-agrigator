@@ -630,6 +630,171 @@ router.post(
 
 /**
  * @swagger
+ * /api/service-types/{id}:
+ *   get:
+ *     summary: Get service type by ID
+ *     description: Retrieve a specific service type by its ID
+ *     tags: [Zone Management]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Service type UUID
+ *     responses:
+ *       200:
+ *         description: Service type retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Service type retrieved successfully"
+ *                 data:
+ *                   $ref: '#/components/schemas/ServiceType'
+ *       404:
+ *         description: Service type not found
+ *       401:
+ *         description: Unauthorized access
+ *   put:
+ *     summary: Update a service type
+ *     description: Update an existing service type
+ *     tags: [Zone Management]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Service type UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               displayName:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 100
+ *                 example: "Express Delivery Service"
+ *               category:
+ *                 type: string
+ *                 enum: [LOGISTICS, PAYMENT, LOCATION, SPECIAL]
+ *                 example: "LOGISTICS"
+ *               description:
+ *                 type: string
+ *                 example: "Fast delivery service with guaranteed time slots"
+ *               isAvailable:
+ *                 type: boolean
+ *                 example: true
+ *               baseCharge:
+ *                 type: string
+ *                 example: "25.00"
+ *               sortOrder:
+ *                 type: integer
+ *                 example: 10
+ *               additionalInfo:
+ *                 type: object
+ *                 example:
+ *                   deliveryTime: "Same day"
+ *                   cutoffTime: "14:00"
+ *     responses:
+ *       200:
+ *         description: Service type updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Service type updated successfully"
+ *                 data:
+ *                   $ref: '#/components/schemas/ServiceType'
+ *       400:
+ *         description: Invalid request data
+ *       404:
+ *         description: Service type not found
+ *       401:
+ *         description: Unauthorized access
+ *   delete:
+ *     summary: Delete a service type
+ *     description: Soft delete a service type (mark as unavailable)
+ *     tags: [Zone Management]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Service type UUID
+ *     responses:
+ *       200:
+ *         description: Service type deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Service type deleted successfully"
+ *                 data:
+ *                   $ref: '#/components/schemas/ServiceType'
+ *       404:
+ *         description: Service type not found
+ *       401:
+ *         description: Unauthorized access
+ */
+router.get(
+  "/service-types/:id",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "all"),
+  zoneManagementLimiter,
+  zoneController.getServiceTypeById,
+);
+
+router.put(
+  "/service-types/:id",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
+  zoneManagementLimiter,
+  zoneController.updateServiceType,
+);
+
+router.delete(
+  "/service-types/:id",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "manage", "all"),
+  zoneManagementLimiter,
+  zoneController.deleteServiceType,
+);
+
+/**
+ * @swagger
  * /api/partner-zones/{partnerId}:
  *   get:
  *     summary: Get partner-specific zones

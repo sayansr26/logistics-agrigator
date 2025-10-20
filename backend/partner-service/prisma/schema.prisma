@@ -137,6 +137,27 @@ model ServiceabilityCache {
   @@map("serviceability_cache")
 }
 
+model ServiceType {
+  id             String  @id @default(uuid()) @db.Uuid
+  name           String  @unique @db.VarChar(20)
+  displayName    String  @map("display_name") @db.VarChar(100)
+  description    String? @db.VarChar(500)
+  category       String  @db.VarChar(20) // LOGISTICS, PAYMENT, LOCATION, SPECIAL
+  isAvailable    Boolean @default(true) @map("is_available")
+  baseCharge     String  @default("0") @map("base_charge") @db.VarChar(20)
+  sortOrder      Int     @default(100) @map("sort_order")
+  additionalInfo Json?   @map("additional_info")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([category])
+  @@index([isAvailable])
+  @@index([sortOrder])
+  @@map("service_types")
+}
+
 model AuditLog {
   id String @id @default(cuid())
 

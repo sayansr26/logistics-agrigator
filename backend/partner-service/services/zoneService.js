@@ -90,13 +90,48 @@ class ZoneService {
         options,
       });
 
-      // Return fallback response
+      // Determine error type and provide user-friendly message
+      let errorCode = "ZONE_RETRIEVAL_ERROR";
+      let errorMessage = "Failed to retrieve zones";
+
+      if (error.message.includes("404")) {
+        errorCode = "EXTERNAL_API_ENDPOINT_NOT_FOUND";
+        errorMessage =
+          "External Partner API endpoint not found. Please verify the API configuration.";
+      } else if (
+        error.message.includes("Network Error") ||
+        error.message.includes("ECONNREFUSED")
+      ) {
+        errorCode = "EXTERNAL_API_UNAVAILABLE";
+        errorMessage =
+          "External Partner Micro service is currently unavailable. Please try again later.";
+      } else if (
+        error.message.includes("timeout") ||
+        error.message.includes("ETIMEDOUT")
+      ) {
+        errorCode = "EXTERNAL_API_TIMEOUT";
+        errorMessage = "External Partner API request timed out.";
+      } else if (error.message.includes("Circuit Breaker OPEN")) {
+        errorCode = "EXTERNAL_API_CIRCUIT_BREAKER_OPEN";
+        errorMessage =
+          "External Partner API is temporarily unavailable. Please try again in a few minutes.";
+      } else if (
+        error.message.includes("500") ||
+        error.message.includes("502") ||
+        error.message.includes("503")
+      ) {
+        errorCode = "EXTERNAL_API_SERVER_ERROR";
+        errorMessage = "External Partner API is experiencing server issues.";
+      }
+
+      // Return fallback response with improved error messaging
       return {
         success: false,
         error: {
-          code: "ZONE_RETRIEVAL_ERROR",
-          message: "Failed to retrieve zones",
+          code: errorCode,
+          message: errorMessage,
           details: error.message,
+          suggestion: "Please contact support if this issue persists.",
         },
         data: [],
         meta: {
@@ -164,149 +199,6 @@ class ZoneService {
         error: {
           code: "ZONE_CREATION_ERROR",
           message: "Failed to create zone",
-          details: error.message,
-        },
-      };
-    }
-  }
-
-  /**
-   * Get all service types
-   */
-  async getServiceTypes(options = {}) {
-    const {
-      page = 1,
-      limit = 20,
-      status = "ACTIVE",
-      category = null,
-      sortBy = "sortOrder",
-      sortOrder = "asc",
-    } = options;
-
-    const cacheKey = `service-types:${JSON.stringify(options)}`;
-
-    try {
-      // Check cache first
-      const redis = getClient();
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.debug("Service types retrieved from cache", { cacheKey });
-        return JSON.parse(cached);
-      }
-
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-      queryParams.append("page", page.toString());
-      queryParams.append("limit", limit.toString());
-      if (status) queryParams.append("status", status);
-      if (category) queryParams.append("category", category);
-      queryParams.append("sortBy", sortBy);
-      queryParams.append("sortOrder", sortOrder);
-
-      // Call external API
-      const endpoint = `/api/v1/service-types?${queryParams.toString()}`;
-      const response = await this.externalClient.makeRequest("GET", endpoint);
-
-      if (!response || !response.success) {
-        throw new Error(
-          "Failed to retrieve service types from external service",
-        );
-      }
-
-      // Cache the response
-      await redis.setex(
-        cacheKey,
-        this.cacheTTL.serviceTypes,
-        JSON.stringify(response),
-      );
-
-      logger.info("Service types retrieved successfully", {
-        total: response.data?.length || 0,
-        page,
-        limit,
-        cached: false,
-      });
-
-      return response;
-    } catch (error) {
-      logger.error("Failed to get service types", {
-        error: error.message,
-        options,
-      });
-
-      // Return fallback response
-      return {
-        success: false,
-        error: {
-          code: "SERVICE_TYPE_RETRIEVAL_ERROR",
-          message: "Failed to retrieve service types",
-          details: error.message,
-        },
-        data: [],
-        meta: {
-          pagination: {
-            currentPage: parseInt(page),
-            totalPages: 0,
-            totalCount: 0,
-            limit: parseInt(limit),
-            hasNext: false,
-            hasPrev: false,
-          },
-          filters: {
-            status,
-            sortBy,
-            sortOrder,
-          },
-        },
-      };
-    }
-  }
-
-  /**
-   * Create a new service type
-   */
-  async createServiceType(serviceTypeData) {
-    try {
-      // Validate required fields
-      const requiredFields = ["name", "displayName", "category"];
-      for (const field of requiredFields) {
-        if (!serviceTypeData[field]) {
-          throw new Error(`Missing required field: ${field}`);
-        }
-      }
-
-      // Call external API to create service type
-      const response = await this.externalClient.makeRequest(
-        "POST",
-        "/api/v1/service-types",
-        serviceTypeData,
-      );
-
-      if (!response || !response.success) {
-        throw new Error("Failed to create service type in external service");
-      }
-
-      // Clear related caches
-      await this.clearServiceTypeCaches();
-
-      logger.info("Service type created successfully", {
-        serviceTypeId: response.data?.id,
-        name: serviceTypeData.name,
-        category: serviceTypeData.category,
-      });
-
-      return response;
-    } catch (error) {
-      logger.error("Failed to create service type", {
-        error: error.message,
-        serviceTypeData,
-      });
-
-      return {
-        success: false,
-        error: {
-          code: "SERVICE_TYPE_CREATION_ERROR",
-          message: "Failed to create service type",
           details: error.message,
         },
       };
