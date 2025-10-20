@@ -874,46 +874,133 @@ export class ErrorBoundary extends Component<Props, State> {
 
 **Task Name**: Implement Loading States
 **Priority**: P2
-**Status**: NOT_STARTED
-**Dependencies**: FE-002
+**Status**: COMPLETED
+**Dependencies**: FE-002 ✅
 **Estimated Time**: 1 hour
+**Actual Time**: 1 hour
+**Started**: 2025-10-20
+**Completed**: 2025-10-20
 
-**Components to Create**:
+**Components Created**:
 
-- `src/components/ui/Skeleton.tsx`
-- `src/components/ui/LoadingSpinner.tsx`
-- `src/components/ui/LoadingOverlay.tsx`
+- ✅ `src/components/ui/Skeleton.tsx` - Skeleton loading component with pre-built layouts
+- ✅ `src/components/ui/LoadingSpinner.tsx` - Circular spinner with variants and sizes
+- ✅ `src/components/ui/LoadingOverlay.tsx` - Full-screen and container overlays
+- ✅ `src/hooks/useLoading.ts` - Custom hook for global and scoped loading states
+- ✅ `src/app/demo/loading/page.tsx` - Comprehensive demo page showing all loading components
 
-**Implementation for global loading**:
+**Implementation Completed**:
+
+1. **Skeleton Component** (`src/components/ui/Skeleton.tsx`):
+   - Basic skeleton with customizable width/height
+   - Shape variants: rect, circle, rounded
+   - Animation variants: pulse, wave (shimmer)
+   - Pre-built layouts: Card, ListItem, TableRow, Avatar, StatCard
+   - Responsive and accessible
+   - Dark mode support
+
+2. **LoadingSpinner Component** (`src/components/ui/LoadingSpinner.tsx`):
+   - 5 sizes: xs, sm, md, lg, xl
+   - 4 variants: primary, secondary, white, inherit
+   - Optional label display
+   - InlineSpinner for buttons and text
+   - LoadingDots for animated dots
+   - LoadingPulse for live indicators
+
+3. **LoadingOverlay Component** (`src/components/ui/LoadingOverlay.tsx`):
+   - Full-screen or container-relative overlays
+   - Optional blur effect
+   - Custom z-index support
+   - LoadingSection for inline sections
+   - LoadingTable for table skeletons
+   - LoadingPage for full page skeletons
+
+4. **useLoading Hook** (`src/hooks/useLoading.ts`):
+   - Global loading state management
+   - Scoped loading with withLoading wrapper
+   - Redux integration with UI slice
+   - TypeScript support
+
+5. **UI Slice Enhancement**:
+   - Already had globalLoading and loadingMessage states
+   - setGlobalLoading action ready to use
+   - Selectors for easy state access
+
+6. **Tailwind Animation**:
+   - Added shimmer keyframe animation
+   - Configured in tailwind.config.js
+   - Used for wave variant in Skeleton
+
+**Validation Results**:
+
+```bash
+# Frontend build: Success ✅
+cd frontend && pnpm run build
+# Result: ✓ Compiled successfully, 44 pages generated
+
+# TypeScript compilation: Pass ✅
+# No errors in new components
+
+# Demo page created: ✅
+# /demo/loading shows all loading components
+```
+
+**Features Implemented**:
+
+- ✅ Multiple loading variants (spinner, skeleton, overlay, dots, pulse)
+- ✅ Customizable sizes and colors
+- ✅ Pre-built layouts for common use cases
+- ✅ Global and scoped loading management
+- ✅ Dark mode support
+- ✅ Accessibility (aria-labels, role attributes)
+- ✅ Portal support for full-screen overlays
+- ✅ Responsive design
+- ✅ TypeScript type safety
+- ✅ Comprehensive demo page with examples
+
+**Usage Examples**:
 
 ```typescript
-// In store/slices/uiSlice.ts
-import { createSlice } from "@reduxjs/toolkit";
+// Global loading
+const { isLoading, startLoading, stopLoading } = useLoading();
 
-interface UIState {
-  isGlobalLoading: boolean;
-  loadingMessage: string;
-}
-
-const initialState: UIState = {
-  isGlobalLoading: false,
-  loadingMessage: "",
+const handleSubmit = async () => {
+  startLoading('Saving changes...');
+  try {
+    await saveData();
+  } finally {
+    stopLoading();
+  }
 };
 
-const uiSlice = createSlice({
-  name: "ui",
-  initialState,
-  reducers: {
-    setGlobalLoading: (state, action) => {
-      state.isGlobalLoading = action.payload.loading;
-      state.loadingMessage = action.payload.message || "";
-    },
-  },
+// Scoped loading
+const { isLoading, withLoading } = useScopedLoading();
+const handleAction = withLoading(async () => {
+  await performAction();
 });
 
-export const { setGlobalLoading } = uiSlice.actions;
-export default uiSlice.reducer;
+// Skeleton
+<SkeletonLayouts.Card />
+<Skeleton width="100%" height="20px" />
+
+// Spinner
+<LoadingSpinner size="lg" showLabel label="Loading..." />
+<InlineSpinner /> // For buttons
+
+// Overlay
+<LoadingOverlay isLoading={true} message="Processing..." fullScreen blur />
 ```
+
+**Impact**:
+
+- Professional loading UX across entire application
+- Reduces perceived wait time with skeleton screens
+- Consistent loading patterns throughout the app
+- Improved accessibility with proper ARIA labels
+- Ready for production use
+- Demo page for testing and documentation
+
+**Demo Page**: `/demo/loading` - Comprehensive showcase of all loading components
 
 ---
 
@@ -1050,11 +1137,11 @@ npm run test:e2e
 | -------- | ----- | ----------- | ----------- | --------- | ------- |
 | P0       | 5     | 1           | 0           | 4         | 0       |
 | P1       | 5     | 2           | 0           | 3         | 0       |
-| P2       | 1     | 1           | 0           | 0         | 0       |
+| P2       | 1     | 0           | 0           | 1         | 0       |
 
-**Progress**: 7/11 tasks completed (64%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-006 ✅, FE-011 ✅
+**Progress**: 8/11 tasks completed (73%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-006 ✅, FE-007 ✅, FE-011 ✅
 
-**Next Task**: **FE-009** (Navigation based on roles) or **FE-007** (Loading States) - Ready to start
+**Next Task**: **FE-009** (Navigation based on roles) or **FE-010** (Testing & Validation) - Ready to start
 
 ## Dependencies Flow
 
