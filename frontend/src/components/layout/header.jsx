@@ -3,6 +3,8 @@
 import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermission } from "@/hooks/usePermission";
+import { useRole } from "@/hooks/useRole";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +22,12 @@ import { Truck, Package, User, Menu, Settings, LogOut } from "lucide-react";
 
 export function Header({ className }) {
   const { user, logout } = useAuth();
+  const { canAccessResource } = usePermission();
+  const { getRoleBadgeColor, getRoleDisplayName } = useRole();
+
+  // Check permissions for quick actions
+  const canCreateShipment = canAccessResource("shipment", "create", "own");
+  const canTrackShipment = canAccessResource("shipment", "read", "own");
 
   const handleLogout = () => {
     logout();
@@ -60,20 +68,24 @@ export function Header({ className }) {
               </SheetContent>
             </Sheet>
 
-            {/* Desktop Quick Actions - Compact */}
+            {/* Desktop Quick Actions - Compact (Role-based) */}
             <div className="hidden md:flex items-center space-x-2">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/shipments/create">
-                  <Package className="h-4 w-4 mr-2" />
-                  <span className="hidden lg:inline">Create Shipment</span>
-                </Link>
-              </Button>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/shipments/track">
-                  <Truck className="h-4 w-4 mr-2" />
-                  <span className="hidden lg:inline">Track</span>
-                </Link>
-              </Button>
+              {canCreateShipment && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/shipments/create">
+                    <Package className="h-4 w-4 mr-2" />
+                    <span className="hidden lg:inline">Create Shipment</span>
+                  </Link>
+                </Button>
+              )}
+              {canTrackShipment && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/shipments/track">
+                    <Truck className="h-4 w-4 mr-2" />
+                    <span className="hidden lg:inline">Track</span>
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -107,9 +119,13 @@ export function Header({ className }) {
                       {user?.email || "user@logistics.com"}
                     </p>
                     {user?.role && (
-                      <p className="text-xs leading-none text-muted-foreground">
-                        Role: {user.role}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getRoleBadgeColor(user.role)}`}
+                        >
+                          {getRoleDisplayName(user.role)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </DropdownMenuLabel>

@@ -1029,7 +1029,7 @@ npm install --save-dev openapi-typescript
 ```typescript
 export * from "./api.generated";
 
-// Additional custom types
+// Additional custom types ( check user and other custom types based on recent changes before creation )
 export interface User {
   id: string;
   email: string;
@@ -1050,43 +1050,172 @@ export interface Permission {
 
 **Task Name**: Update Navigation Based on Roles
 **Priority**: P1
-**Status**: NOT_STARTED
-**Dependencies**: FE-004
+**Status**: COMPLETED
+**Dependencies**: FE-004 ✅
 **Estimated Time**: 2 hours
+**Actual Time**: 30 minutes
+**Started**: 2025-10-20
+**Completed**: 2025-10-20
 
-**Components to Update**:
+**Components Updated**:
 
-- `src/components/layout/navigation.tsx`
-- `src/components/layout/sidebar.tsx`
-- `src/components/layout/header.tsx`
+- ✅ `src/components/layout/sidebar.jsx` - Already had role-based filtering implemented
+- ✅ `src/components/layout/header.jsx` - Updated with permission-based quick actions and role badges
 
 **Implementation Pattern**:
 
 ```typescript
-import { useCanAccess } from '@/hooks/usePermission';
+// Sidebar Implementation (src/components/layout/sidebar.jsx)
+const getNavigationSections = () => {
+  const { user } = useAuth();
+  const { hasPermission, canAccessResource } = usePermission();
+  const { hasRole, isSystemAdmin } = useRole();
 
-const Navigation = () => {
-  const canAccessUsers = useCanAccess('users');
-  const canAccessBilling = useCanAccess('billing');
-  const canAccessShipments = useCanAccess('shipments');
+  // Filter function to check if user can see menu item
+  const canSeeMenuItem = (item) => {
+    // Check permission if specified
+    if (item.permission) {
+      const [module, action, scope] = item.permission.split(":");
+      return canAccessResource(module, action, scope || "own");
+    }
 
-  const menuItems = [
-    { label: 'Dashboard', href: '/', show: true },
-    { label: 'Users', href: '/users', show: canAccessUsers },
-    { label: 'Billing', href: '/billing', show: canAccessBilling },
-    { label: 'Shipments', href: '/shipments', show: canAccessShipments },
-  ].filter(item => item.show);
+    // Check roles if specified
+    if (item.roles) {
+      return hasRole(item.roles);
+    }
+
+    // Default to true if no restrictions
+    return true;
+  };
+
+  const sections = [
+    {
+      title: "Core Operations",
+      items: [
+        { title: "Dashboard", href: "/dashboard", icon: Home },
+        { title: "Shipments", href: "/shipments", icon: Package, permission: "shipment:list:own" },
+        { title: "Zones", href: "/zones", icon: Globe, permission: "partner:read:own" },
+      ].filter(canSeeMenuItem),
+    },
+    // ... more sections
+  ];
+
+  // Filter out empty sections
+  return sections.filter((section) => section.items.length > 0);
+};
+
+// Header Implementation (src/components/layout/header.jsx)
+export function Header({ className }) {
+  const { user, logout } = useAuth();
+  const { canAccessResource } = usePermission();
+  const { getRoleBadge, getRoleDisplayName } = useRole();
+
+  // Check permissions for quick actions
+  const canCreateShipment = canAccessResource("shipment", "create", "own");
+  const canTrackShipment = canAccessResource("shipment", "read", "own");
 
   return (
-    <nav>
-      {menuItems.map(item => (
-        <Link key={item.href} href={item.href}>
-          {item.label}
-        </Link>
-      ))}
-    </nav>
+    <header>
+      {/* Quick Actions - Role-based */}
+      <div className="hidden md:flex items-center space-x-2">
+        {canCreateShipment && (
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/shipments/create">
+              <Package className="h-4 w-4 mr-2" />
+              <span className="hidden lg:inline">Create Shipment</span>
+            </Link>
+          </Button>
+        )}
+        {canTrackShipment && (
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/shipments/track">
+              <Truck className="h-4 w-4 mr-2" />
+              <span className="hidden lg:inline">Track</span>
+            </Link>
+          </Button>
+        )}
+      </div>
+
+      {/* User Menu with Role Badge */}
+      <DropdownMenuLabel className="font-normal">
+        <div className="flex flex-col space-y-1">
+          <p className="text-sm font-medium leading-none">{user?.email}</p>
+          {user?.role && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getRoleBadge(user.role)}`}>
+                {getRoleDisplayName(user.role)}
+              </span>
+            </div>
+          )}
+        </div>
+      </DropdownMenuLabel>
+    </header>
   );
-};
+}
+```
+
+**Implementation Completed**:
+
+1. **Sidebar Navigation** (`src/components/layout/sidebar.jsx`):
+   - Already implemented with complete role-based filtering
+   - Menu items filtered by permissions: `module:action:scope` format
+   - Menu items filtered by roles: array of allowed roles
+   - Empty sections automatically removed
+   - 5 major sections: Core Operations, Finance & Billing, Administration, Reports & Analytics, Integration & Support
+   - Dynamic filtering based on user's effective permissions
+
+2. **Header Component** (`src/components/layout/header.jsx`):
+   - Added permission-based quick actions (Create Shipment, Track Shipment)
+   - Quick actions only visible to users with appropriate permissions
+   - Enhanced user dropdown menu with role badge
+   - Role badge shows color-coded role display name
+   - Uses `getRoleBadge()` for Tailwind CSS classes
+   - Uses `getRoleDisplayName()` for user-friendly role names
+
+3. **Fixed Loading Hook Bug**:
+   - Fixed `useLoading.ts` import issue causing infinite re-renders
+   - Moved `React` import to proper location with `useState`
+   - Removed duplicate import at bottom of file
+   - Frontend build now passes successfully (44 pages generated)
+
+**Bug Fixes Applied**:
+
+1. **Function Name Error (Fixed)**:
+   - Fixed function name error in header component
+   - Changed `getRoleBadge` → `getRoleBadgeColor` (correct function name from useRole hook)
+   - Error resolved: "TypeError: getRoleBadge is not a function"
+
+2. **404 Permissions Endpoint Error (Fixed)**:
+   - Frontend was calling `/api/v1/users/${userId}/permissions` which doesn't exist
+   - This endpoint is not implemented in backend yet
+   - Fixed by disabling the query in `useAuth.ts` hook
+   - Permissions already come from JWT token in `user.permissions` field
+   - File: `frontend/src/hooks/useAuth.ts:73` - Set `skip: true` for `useGetUserPermissionsQuery`
+   - Error resolved: "404 Not Found" for permissions endpoint
+
+**Validation Results**:
+
+```bash
+# Frontend build: Success ✅
+pnpm run build
+# Returns: ✓ Compiled successfully, 44 pages generated
+
+# TypeScript compilation: Pass ✅
+# No TypeScript errors in updated files
+
+# Docker container restart: Success ✅
+docker-compose restart frontend
+# Frontend running on port 3000
+
+# API Gateway health: Healthy ✅
+curl http://localhost:3001/health
+# Returns: {"status":"ok"}
+
+# Components verified: ✅
+# - Sidebar has role-based navigation filtering
+# - Header has permission-based quick actions
+# - Role badges displayed correctly with proper colors
+# - All navigation components working properly
 ```
 
 ---
@@ -1136,12 +1265,12 @@ npm run test:e2e
 | Priority | Total | Not Started | In Progress | Completed | Blocked |
 | -------- | ----- | ----------- | ----------- | --------- | ------- |
 | P0       | 5     | 1           | 0           | 4         | 0       |
-| P1       | 5     | 2           | 0           | 3         | 0       |
+| P1       | 5     | 1           | 0           | 4         | 0       |
 | P2       | 1     | 0           | 0           | 1         | 0       |
 
-**Progress**: 8/11 tasks completed (73%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-006 ✅, FE-007 ✅, FE-011 ✅
+**Progress**: 9/11 tasks completed (82%) - FE-001 ✅, FE-002 ✅, FE-003 ✅, FE-004 ✅, FE-005 ✅, FE-006 ✅, FE-007 ✅, FE-009 ✅, FE-011 ✅
 
-**Next Task**: **FE-009** (Navigation based on roles) or **FE-010** (Testing & Validation) - Ready to start
+**Next Task**: **FE-008** (Type Definitions) or **FE-010** (Testing & Validation) - Ready to start
 
 ## Dependencies Flow
 

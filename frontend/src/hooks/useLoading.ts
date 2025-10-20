@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   setGlobalLoading,
@@ -62,7 +62,7 @@ export const useLoading = () => {
  * ```
  */
 export const useScopedLoading = () => {
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const withLoading = useCallback(
     async <T>(asyncFn: () => Promise<T>): Promise<T> => {
@@ -82,5 +82,3 @@ export const useScopedLoading = () => {
     setIsLoading,
   };
 };
-
-import React from "react";

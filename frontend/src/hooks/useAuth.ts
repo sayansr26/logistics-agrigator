@@ -66,9 +66,12 @@ export function useAuth() {
     skip: true, // Always skip - we have user data from login/localStorage
   });
 
+  // NOTE: Permissions query disabled - permissions come from JWT token in user object
+  // Backend doesn't have /users/:id/permissions endpoint yet
+  // Permissions are available in user.permissions from the JWT token
   const { data: permissionsData, isLoading: isLoadingPermissions } =
     useGetUserPermissionsQuery(user?.id || "", {
-      skip: !user?.id,
+      skip: true, // Always skip - permissions come from JWT token
     });
 
   /**
