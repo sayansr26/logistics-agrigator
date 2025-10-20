@@ -83,7 +83,7 @@ const getNavigationSections = () => {
           href: "/services",
           icon: Settings,
           permission: "partner:read:own",
-          disabled: false, // Currently working on this
+          disabled: true, // Currently working on this
           tooltip: "In Progress",
         },
         {
@@ -275,9 +275,10 @@ function NavItemComponent({ item, pathname }) {
             </span>
           )}
         </Button>
-        {/* Tooltip for disabled items */}
+        {/* Tooltip for disabled items - positioned at bottom */}
         {item.tooltip && (
-          <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
+          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap border border-border">
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border rotate-45"></div>
             {item.tooltip}
           </div>
         )}
