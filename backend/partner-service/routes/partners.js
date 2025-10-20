@@ -65,7 +65,17 @@ router.get(
   authMiddleware.requirePermission("partner", "read", "all"),
   async (req, res, next) => {
     try {
-      const { isActive, supportsCOD, supportsReverse } = req.query;
+      const {
+        isActive,
+        supportsCOD,
+        supportsReverse,
+        search,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+      } = req.query;
+
       const filters = {
         ...(typeof isActive === "string" && { isActive: isActive === "true" }),
         ...(typeof supportsCOD === "string" && {
@@ -74,10 +84,15 @@ router.get(
         ...(typeof supportsReverse === "string" && {
           supportsReverse: supportsReverse === "true",
         }),
+        search,
+        page: page || 1,
+        limit: limit || 10,
+        sortBy: sortBy || "createdAt",
+        sortOrder: sortOrder || "desc",
       };
 
-      const partners = await partnerController.getAllPartners(filters);
-      res.json(APIResponse.success({ partners }));
+      const result = await partnerController.getAllPartners(filters);
+      res.json(APIResponse.success(result)); // Returns { partners, pagination }
     } catch (error) {
       next(error);
     }

@@ -7,31 +7,34 @@ const partnerSchema = {
     displayName: Joi.string().required().trim().max(100),
     isActive: Joi.boolean().default(true),
 
-    // API Configuration
+    // API Configuration - Support both field names
     apiUrl: Joi.string().required().uri(),
-    apiToken: Joi.string().trim(),
-    apiVersion: Joi.string().trim(),
+    apiEndpoint: Joi.string().uri(), // Alias for apiUrl (frontend compatibility)
+    apiToken: Joi.string().trim().allow("", null),
+    apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
+    apiVersion: Joi.string().trim().allow("", null),
 
     // Service Configuration
     supportsCOD: Joi.boolean().default(false),
     supportsReverse: Joi.boolean().default(false),
-    maxWeight: Joi.number().positive(),
+    minWeight: Joi.number().positive().allow(null), // Added for frontend compatibility
+    maxWeight: Joi.number().positive().allow(null),
     maxDimensions: Joi.object({
       length: Joi.number().positive().required(),
       width: Joi.number().positive().required(),
       height: Joi.number().positive().required(),
-    }),
+    }).allow(null),
 
     // Pricing Configuration
-    baseRate: Joi.number().positive(),
-    perKgRate: Joi.number().positive(),
-    codChargePercent: Joi.number().min(0).max(100),
-    fuelSurcharge: Joi.number().min(0).max(100),
+    baseRate: Joi.number().positive().allow(null),
+    perKgRate: Joi.number().positive().allow(null),
+    codChargePercent: Joi.number().min(0).max(100).allow(null),
+    fuelSurcharge: Joi.number().min(0).max(100).allow(null),
 
-    // Service Areas
+    // Service Areas - Allow empty array
     servicePincodes: Joi.array()
       .items(Joi.string().pattern(/^\d{6}$/))
-      .min(1),
+      .default([]),
   }),
 
   update: Joi.object({
@@ -40,31 +43,34 @@ const partnerSchema = {
     displayName: Joi.string().trim().max(100),
     isActive: Joi.boolean(),
 
-    // API Configuration
+    // API Configuration - Support both field names
     apiUrl: Joi.string().uri(),
-    apiToken: Joi.string().trim(),
-    apiVersion: Joi.string().trim(),
+    apiEndpoint: Joi.string().uri(), // Alias for apiUrl
+    apiToken: Joi.string().trim().allow("", null),
+    apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
+    apiVersion: Joi.string().trim().allow("", null),
 
     // Service Configuration
     supportsCOD: Joi.boolean(),
     supportsReverse: Joi.boolean(),
-    maxWeight: Joi.number().positive(),
+    minWeight: Joi.number().positive().allow(null), // Added for frontend compatibility
+    maxWeight: Joi.number().positive().allow(null),
     maxDimensions: Joi.object({
       length: Joi.number().positive().required(),
       width: Joi.number().positive().required(),
       height: Joi.number().positive().required(),
-    }),
+    }).allow(null),
 
     // Pricing Configuration
-    baseRate: Joi.number().positive(),
-    perKgRate: Joi.number().positive(),
-    codChargePercent: Joi.number().min(0).max(100),
-    fuelSurcharge: Joi.number().min(0).max(100),
+    baseRate: Joi.number().positive().allow(null),
+    perKgRate: Joi.number().positive().allow(null),
+    codChargePercent: Joi.number().min(0).max(100).allow(null),
+    fuelSurcharge: Joi.number().min(0).max(100).allow(null),
 
-    // Service Areas
+    // Service Areas - Allow empty array
     servicePincodes: Joi.array()
       .items(Joi.string().pattern(/^\d{6}$/))
-      .min(1),
+      .default([]),
   }),
 
   calculateRate: Joi.object({

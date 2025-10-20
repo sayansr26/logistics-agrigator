@@ -18,7 +18,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
 import { cn } from "@/lib/utils";
-import { Truck, Package, User, Menu, Settings, LogOut } from "lucide-react";
+import {
+  Truck,
+  Package,
+  User,
+  Menu,
+  Settings,
+  LogOut,
+  Bell,
+} from "lucide-react";
 
 export function Header({ className }) {
   const { user, logout } = useAuth();
@@ -91,6 +99,23 @@ export function Header({ className }) {
 
           {/* Right side */}
           <div className="flex items-center space-x-2">
+            {/* Notifications */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-8 w-8"
+              asChild
+            >
+              <Link href="/notifications">
+                <Bell className="h-4 w-4" />
+                <span className="sr-only">Notifications</span>
+                {/* Notification badge */}
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
+                  5
+                </span>
+              </Link>
+            </Button>
+
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -69,11 +69,29 @@ const getNavigationSections = () => {
           badge: "89",
           permission: "shipment:list:own",
         },
+      ].filter(canSeeMenuItem),
+    },
+    {
+      title: "Service Management",
+      items: [
         {
-          title: "Zones",
+          title: "Service Management",
+          href: "/services",
+          icon: Settings,
+          permission: "partner:read:own",
+        },
+        {
+          title: "Zone Management",
           href: "/zones",
           icon: Globe,
           permission: "partner:read:own",
+        },
+        {
+          title: "Charges Management",
+          href: "/charges",
+          icon: IndianRupee,
+          permission: "billing:list:own",
+          roles: ["superadmin", "admin", "accounts", "customer_account"],
         },
       ].filter(canSeeMenuItem),
     },
@@ -91,13 +109,6 @@ const getNavigationSections = () => {
           href: "/remittance",
           icon: CreditCard,
           permission: "billing:manage:own",
-          roles: ["superadmin", "admin", "accounts", "customer_account"],
-        },
-        {
-          title: "Charges",
-          href: "/charges",
-          icon: IndianRupee,
-          permission: "billing:list:own",
           roles: ["superadmin", "admin", "accounts", "customer_account"],
         },
       ].filter(canSeeMenuItem),
@@ -170,22 +181,8 @@ const getNavigationSections = () => {
 };
 
 const bottomNavItems = [
-  {
-    title: "Notifications",
-    href: "/notifications",
-    icon: Bell,
-    badge: "5",
-  },
-  {
-    title: "Account Settings",
-    href: "/settings",
-    icon: Settings,
-  },
-  {
-    title: "Help & Support",
-    href: "/support",
-    icon: HelpCircle,
-  },
+  // Bottom nav items removed - notifications moved to header
+  // Settings and Support already exist in main navigation
 ];
 
 export function Sidebar({ className }) {
@@ -225,20 +222,7 @@ export function Sidebar({ className }) {
           </div>
         </div>
 
-        <Separator className="mx-3" />
-
-        {/* Bottom Navigation */}
-        <div className="px-3 pb-3">
-          <div className="space-y-0.5">
-            {bottomNavItems.map((item) => (
-              <NavItemComponent
-                key={item.href}
-                item={item}
-                pathname={pathname}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Bottom navigation removed - items moved to appropriate locations */}
       </div>
     </div>
   );

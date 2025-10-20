@@ -25,7 +25,8 @@ model Partner {
   // Service Configuration
   supportsCOD     Boolean @default(false)
   supportsReverse Boolean @default(false)
-  maxWeight       Float? // in kg
+  minWeight       Float? // in kg (minimum weight accepted)
+  maxWeight       Float? // in kg (maximum weight accepted)
   maxDimensions   Json? // {length, width, height} in cm
 
   // Pricing Configuration

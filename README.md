@@ -6,18 +6,18 @@ A comprehensive logistics management solution for e-Commerce, B2B, and B2C enter
 
 ### Microservices
 
-- **API Gateway** (Port 8000) - Request routing, rate limiting, and authentication
-- **Auth Service** (Port 8001) - JWT authentication, RBAC, 2FA with Prisma ORM
-- **User Service** (Port 8002) - User and client management with Prisma ORM
-- **Shipment Service** (Port 8003) - Order and tracking management with Prisma ORM
-- **Support Service** (Port 8004) - Help desk and ticketing with Prisma ORM
-- **Platform Service** (Port 8005) - E-commerce platform integrations with Prisma ORM
+- **API Gateway** (Port 3001) - Request routing, rate limiting, and authentication
+- **Auth Service** (Port 3002) - JWT authentication, RBAC, 2FA with Prisma ORM
+- **User Service** (Port 3003) - User and client management with Prisma ORM
+- **Shipment Service** (Port 3004) - Order and tracking management with Prisma ORM
+- **Support Service** (Port 3005) - Help desk and ticketing with Prisma ORM
+- **Platform Service** (Port 3006) - E-commerce platform integrations with Prisma ORM
 - **Frontend** (Port 3000) - Next.js 14 with TypeScript
 
 ### External Services (Existing)
 
-- **Wallet Service** (Port 8006) - Financial transactions microservice
-- **Partner Service** (Port 8007) - Courier charges calculation microservice
+- **Wallet Service** (Port 3006) - Financial transactions microservice
+- **Partner Service** (Port 3007) - Courier charges calculation microservice
 
 ## 🚀 Tech Stack
 

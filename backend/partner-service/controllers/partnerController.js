@@ -7,30 +7,64 @@ const {
 const { DiscountService } = require("../services/discountService");
 
 /**
- * Get all partners with optional filtering
+ * Get all partners with optional filtering, search, pagination, and sorting
  * @param {Object} filters - Filter criteria
- * @returns {Promise<Array>} List of partners
+ * @returns {Promise<Object>} List of partners with pagination info
  */
 async function getAllPartners(filters = {}) {
-  const { isActive, supportsCOD, supportsReverse } = filters;
+  const {
+    isActive,
+    supportsCOD,
+    supportsReverse,
+    search,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = filters;
 
   const where = {
     ...(typeof isActive === "boolean" && { isActive }),
     ...(typeof supportsCOD === "boolean" && { supportsCOD }),
     ...(typeof supportsReverse === "boolean" && { supportsReverse }),
+    ...(search && {
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { displayName: { contains: search, mode: "insensitive" } },
+        { code: { contains: search, mode: "insensitive" } },
+      ],
+    }),
   };
 
-  return prisma.partner.findMany({
-    where,
-    include: {
-      _count: {
-        select: {
-          shipments: true,
-          rates: true,
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const [partners, total] = await Promise.all([
+    prisma.partner.findMany({
+      where,
+      skip,
+      take: parseInt(limit),
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        _count: {
+          select: {
+            shipments: true,
+            rates: true,
+          },
         },
       },
+    }),
+    prisma.partner.count({ where }),
+  ]);
+
+  return {
+    partners,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      totalPages: Math.ceil(total / parseInt(limit)),
     },
-  });
+  };
 }
 
 /**
