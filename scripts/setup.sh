@@ -376,27 +376,24 @@ else
     exit 1
 fi
 
-# Generate Prisma clients and deploy migrations for backend services
+# Note about database initialization
 if [ "$SETUP_TYPE" = "full" ] || [ "$SETUP_TYPE" = "backend" ]; then
-    print_status "🗄️  Setting up Prisma for backend services..."
-    
-    for service in auth-service user-service shipment-service partner-service support-service platform-service; do
+    print_status "🗄️  Database initialization notes..."
+
+    for service in auth-service user-service wallet-service shipment-service partner-service support-service platform-service license-service; do
         if [ -d "backend/$service" ] && [ -f "backend/$service/prisma/schema.prisma" ]; then
-            print_status "Setting up Prisma for $service..."
-            
-            # Generate Prisma client
-            (cd "backend/$service" && npx prisma generate) || print_warning "⚠️  Failed to generate Prisma client for $service"
-            
-            # Note: Migrations will be deployed automatically when containers start
             if [ -d "backend/$service/prisma/migrations" ]; then
-                print_status "✅ Migrations found for $service (will deploy on container startup)"
+                print_status "✅ Migrations found for $service (will be deployed after container startup)"
             else
-                print_status "ℹ️  No migrations directory for $service"
+                print_status "ℹ️  No migrations directory for $service yet"
             fi
         fi
     done
-    
-    print_success "✅ Prisma setup completed"
+
+    echo ""
+    print_warning "⚠️  Important: Prisma client generation, migrations, and seeds will be handled automatically"
+    print_warning "    when you run 'pnpm run setup:dev' (after containers start)"
+    echo ""
 fi
 
 # Summary and next steps

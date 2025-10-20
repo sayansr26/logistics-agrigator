@@ -200,7 +200,7 @@ export default function ManagePermissionsPage() {
   if (isLoading) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto space-y-8">
           <div className="flex items-center justify-center h-96">
             <div className="text-center space-y-4">
               <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
@@ -217,7 +217,7 @@ export default function ManagePermissionsPage() {
   if (error) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto space-y-8">
           <Card>
             <CardContent className="p-8 text-center">
               <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -245,7 +245,7 @@ export default function ManagePermissionsPage() {
   if (!user) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto space-y-8">
           <Card>
             <CardContent className="p-8 text-center">
               <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -289,7 +289,7 @@ export default function ManagePermissionsPage() {
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
