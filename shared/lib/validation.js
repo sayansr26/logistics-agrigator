@@ -40,17 +40,51 @@ const schemas = {
 // Validation middleware
 const validate = (schema) => {
   return (req, res, next) => {
-    const { error } = schema.validate(req.body);
-    if (error) {
+    // Handle both simple Joi schemas and complex schemas with query/params/body
+    const errors = [];
+
+    // Check if schema is a direct Joi schema (has validate method)
+    if (typeof schema.validate === "function") {
+      // Simple schema - validate body only (backward compatible)
+      const { error } = schema.validate(req.body);
+      if (error) {
+        errors.push(...error.details);
+      }
+    } else {
+      // Complex schema with query/params/body properties
+      if (schema.query) {
+        const { error } = schema.query.validate(req.query);
+        if (error) {
+          errors.push(...error.details);
+        }
+      }
+
+      if (schema.params) {
+        const { error } = schema.params.validate(req.params);
+        if (error) {
+          errors.push(...error.details);
+        }
+      }
+
+      if (schema.body) {
+        const { error } = schema.body.validate(req.body);
+        if (error) {
+          errors.push(...error.details);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
         error: {
           code: "VALIDATION_ERROR",
           message: "Validation failed",
-          details: error.details,
+          details: errors,
         },
       });
     }
+
     next();
   };
 };

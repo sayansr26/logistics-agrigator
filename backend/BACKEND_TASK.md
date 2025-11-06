@@ -123,6 +123,200 @@ _No wallet service tasks completed yet - previous WALLET-001 was incorrect imple
 
 ## **ACTIVE TASKS**
 
+### **PARTNER-010: Integrate Geological Zone Management System**
+
+**Task Name**: Integrate Complete Geological Zone Management System from External Partner Service
+
+**Status**: NOT_STARTED
+
+**Planning**:
+
+- **Objective**: Integrate comprehensive geographical zone management (States → Cities → Areas → Pincodes) with partner-specific zone configuration and service type management
+- **Scope**: 13 new Prisma models, 24 API endpoints, Redis caching, zone coverage validation, service type configuration
+- **Approach**: Migrate zone management system from external_partner_service to production partner-service following auth-service patterns
+- **Estimated Time**: 5 days
+
+**Dependencies**:
+
+- [x] Partner Service operational (COMPLETED - 75+ endpoints)
+- [x] Auth Service operational (COMPLETED)
+- [x] Redis available for caching (COMPLETED)
+- [ ] External partner service zone logic analyzed (IN PROGRESS)
+
+**Implementation Details**:
+
+**Phase 1: Database Schema Integration (Day 1)**
+
+- [ ] Create Geographical Hierarchy Models (State, City, Area, Pincode)
+- [ ] Create Zone Management Models (Zone, ZoneState, ZoneCity, ZoneArea, ZonePincode)
+- [ ] Create Service Type Models (ServiceType enum, ZoneService)
+- [ ] Generate migration: `add_geographical_zone_management`
+- [ ] Create seed data for Indian states and major cities
+- [ ] Add proper indexes for performance
+
+**Phase 2: Service Layer Implementation (Day 2)**
+
+- [ ] GeographicalService - 6 methods for hierarchy management
+- [ ] ZoneService - 10 methods for zone CRUD with Redis caching
+- [ ] ZoneCoverageValidationService - 5 methods for coverage checking
+- [ ] Redis caching (24h TTL for geo, 2h for zones)
+- [ ] Transaction support for zone creation
+- [ ] Comprehensive audit logging
+
+**Phase 3: Controller Layer (Day 3)**
+
+- [ ] GeographicalController - 9 function-based exports
+- [ ] ZoneController - 10 function-based exports
+- [ ] ZoneCoverageController - 5 function-based exports
+- [ ] Standard API response format
+- [ ] Partner-scoped operations (multi-tenant)
+
+**Phase 4: Validation & Routes (Day 4)**
+
+- [ ] Create 7+ Joi validation schemas
+- [ ] GeographicalRoutes - 9 endpoints (public)
+- [ ] ZoneRoutes - 10 endpoints (authenticated)
+- [ ] CoverageRoutes - 5 endpoints (authenticated)
+- [ ] Rate limiting and auth middleware
+- [ ] Register routes in server.js
+
+**Phase 5: Swagger Documentation & Testing (Day 5)**
+
+- [ ] Update Swagger config with 24 new endpoints
+- [ ] Integration tests for geographical API
+- [ ] Integration tests for zone management
+- [ ] Integration tests for coverage validation
+- [ ] Performance testing (cache hit rates >70%)
+- [ ] Docker verification protocol
+
+**Completion Criteria**:
+
+- [ ] All 13 Prisma models created and migrated successfully
+- [ ] 24 API endpoints operational (9 geographical + 10 zone + 5 coverage)
+- [ ] Redis caching working (>70% hit rate for geographical data)
+- [ ] Zone creation with transaction support (<2s response time)
+- [ ] Coverage validation working (overlaps detection, serviceability)
+- [ ] Service type configuration per zone (6 types: PICKUP, DELIVERY, COD, PREPAID, ODA, HILL)
+- [ ] Comprehensive Swagger documentation
+- [ ] Integration tests passing
+- [ ] Docker service restarts successfully
+- [ ] Health endpoint includes zone service status
+- [ ] No MODULE_NOT_FOUND errors
+- [ ] Audit logging for all zone operations
+
+**What Was Actually Implemented**:
+
+_To be filled after implementation completion_
+
+**API Endpoints to Implement**:
+
+**Geographical Hierarchy (9 endpoints)**:
+
+1. `GET /api/v1/geography/states` - List all states
+2. `GET /api/v1/geography/cities?stateId=:id` - Get cities by state
+3. `GET /api/v1/geography/areas?cityId=:id` - Get areas by city
+4. `GET /api/v1/geography/pincodes?areaId=:id` - Get pincodes by area
+5. `GET /api/v1/geography/pincodes/search` - Search pincodes with filters
+6. `GET /api/v1/geography/pincodes/:code` - Get pincode details with hierarchy
+7. `POST /api/v1/geography/cities/by-states` - Batch get cities
+8. `POST /api/v1/geography/areas/by-cities` - Batch get areas
+9. `POST /api/v1/geography/pincodes/by-areas` - Batch get pincodes
+
+**Zone Management (10 endpoints)**:
+
+1. `POST /api/v1/zones` - Create zone with geographical associations
+2. `GET /api/v1/zones` - List zones with filtering and pagination
+3. `GET /api/v1/zones/:id` - Get zone details
+4. `GET /api/v1/zones/:id/complete` - Get zone with all associations
+5. `PUT /api/v1/zones/:id` - Update zone
+6. `DELETE /api/v1/zones/:id` - Soft delete zone
+7. `GET /api/v1/zones/:id/services` - Get zone service configuration
+8. `PUT /api/v1/zones/:id/services` - Update zone services
+9. `GET /api/v1/zones/:id/geography` - Get zone geographical associations
+10. `PUT /api/v1/zones/:id/geography` - Update zone geography
+
+**Coverage Validation (5 endpoints)**:
+
+1. `POST /api/v1/zones/coverage/check` - Check pincode serviceability
+2. `GET /api/v1/zones/coverage/pincode/:code` - Get zones covering a pincode
+3. `GET /api/v1/zones/coverage/overlaps` - Detect overlapping zones
+4. `GET /api/v1/zones/coverage/gaps` - Find coverage gaps
+5. `GET /api/v1/zones/:id/coverage/validate` - Validate zone coverage
+
+**Files to Create/Modify**:
+
+**Database**:
+
+- `backend/partner-service/prisma/schema.prisma` (ADD 13 models)
+- `backend/partner-service/prisma/migrations/YYYYMMDDHHMMSS_add_geographical_zone_management/` (NEW)
+- `backend/partner-service/prisma/seed-geographical-data.js` (NEW)
+
+**Services**:
+
+- `backend/partner-service/services/geographicalService.js` (NEW - ~800 lines)
+- `backend/partner-service/services/zoneService.js` (NEW - ~3800 lines)
+- `backend/partner-service/services/zoneCoverageValidationService.js` (NEW - ~600 lines)
+
+**Controllers**:
+
+- `backend/partner-service/controllers/geographicalController.js` (NEW - ~600 lines)
+- `backend/partner-service/controllers/zoneController.js` (NEW - ~2500 lines)
+- `backend/partner-service/controllers/zoneCoverageController.js` (NEW - ~400 lines)
+
+**Routes**:
+
+- `backend/partner-service/routes/geographical.js` (NEW - ~150 lines)
+- `backend/partner-service/routes/zones.js` (NEW - ~180 lines)
+- `backend/partner-service/routes/zoneCoverage.js` (NEW - ~100 lines)
+
+**Validation**:
+
+- `backend/partner-service/validation/zoneSchemas.js` (NEW - ~1000 lines)
+
+**Configuration**:
+
+- `backend/partner-service/server.js` (MODIFY - add 3 route registrations)
+- `backend/partner-service/config/swagger.js` (MODIFY - add zone endpoints)
+
+**Testing**:
+
+- `backend/partner-service/tests/geographical.test.js` (NEW)
+- `backend/partner-service/tests/zone-management.test.js` (NEW)
+- `backend/partner-service/tests/zone-coverage.test.js` (NEW)
+
+**Performance Targets**:
+
+- Geographical API: <100ms (cached), <500ms (uncached)
+- Zone Creation: <2s (with associations)
+- Zone Listing: <200ms (paginated)
+- Coverage Check: <300ms
+- Cache Hit Rate: >70% for geographical data
+- Database Queries: <100ms (with proper indexes)
+
+**Redis Caching Strategy**:
+
+```javascript
+// Cache keys pattern
+const cacheKeys = {
+  states: "geo:states", // TTL: 24h
+  cities: (stateId) => `geo:cities:state:${stateId}`, // TTL: 24h
+  areas: (cityId) => `geo:areas:city:${cityId}`, // TTL: 24h
+  pincodes: (areaId) => `geo:pincodes:area:${areaId}`, // TTL: 24h
+  zone: (partnerId, zoneId) => `zones:${partnerId}:${zoneId}`, // TTL: 2h
+  zoneComplete: (partnerId, zoneId) => `zones:${partnerId}:${zoneId}:complete`, // TTL: 2h
+  partnerZones: (partnerId) => `zones:${partnerId}:list`, // TTL: 2h
+};
+```
+
+**Reference Documents**:
+
+- **Detailed Task**: `backend/partner-service/PARTNER_GEOLOGICAL_ZONE_TASK.md` (CREATED)
+- **Source Logic**: `external_partner_service/partner-services/src/services/zone.service.js`
+- **Source Design**: `external_partner_service/ENHANCED_ZONE_DESIGN.md`
+- **Architecture**: `external_partner_service/PRD.md`
+
+---
+
 ### **WALLET-001: Complete Wallet Service Foundation**
 
 **Task Name**: Create Complete Independent Wallet Service with External API Integration

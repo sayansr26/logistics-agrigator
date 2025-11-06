@@ -23,6 +23,7 @@ import {
   LucideIcon,
   IndianRupee,
   Briefcase,
+  Map,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermission } from "@/hooks/usePermission";
@@ -135,6 +136,13 @@ const getNavigationSections = () => {
           icon: Users,
           permission: "user:list:all",
           roles: ["superadmin", "admin"],
+          disabled: false, // Working and completed
+        },
+        {
+          title: "Geography",
+          href: "/geography",
+          icon: Map,
+          roles: ["superadmin"],
           disabled: false, // Working and completed
         },
         {

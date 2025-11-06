@@ -55,6 +55,10 @@ export const baseApi = createApi({
     "Geographical",
     "License",
     "Permission",
+    "Service",
+    "ServiceHealth",
+    "ServiceStatistics",
+    "ServiceConfiguration",
   ],
 
   // Define endpoints in separate API slices

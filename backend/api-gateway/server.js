@@ -310,6 +310,26 @@ const services = {
       "^/api/v1/partners": "/api/partners", // API endpoints → /api/partners/*
     },
   },
+  // Geographical Data Management (in partner service - public endpoints)
+  geography: {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/geography": "/api/v1/geography", // Geography endpoints → /api/v1/geography/*
+    },
+  },
+  // Zone and Service Type Management (in partner service)
+  zones: {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/zones": "/api/v1/zones", // Zones endpoints → /api/v1/zones/*
+    },
+  },
+  "service-types": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/service-types": "/api/service-types", // Service types → /api/service-types/*
+    },
+  },
   // System management endpoints (also in partner service)
   "services-status": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",

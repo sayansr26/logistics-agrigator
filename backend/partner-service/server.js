@@ -123,8 +123,14 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/partners", partnerRoutes);
-app.use("/api/geographical", require("./routes/geographical"));
-app.use("/api", require("./routes/zones"));
+
+// Geological Zone Management Routes (NEW)
+// IMPORTANT: Zone coverage routes MUST come before zone routes to prevent path conflicts
+app.use("/api/v1/geography", require("./routes/geographical"));
+app.use("/api/v1/zones/coverage", require("./routes/zoneCoverage"));
+app.use("/api/v1/zones", require("./routes/zones"));
+
+// Existing Routes
 app.use("/api/packages", require("./routes/packages"));
 app.use("/api/customer-charges", require("./routes/customerCharges"));
 app.use("/api/discounts", require("./routes/discounts"));

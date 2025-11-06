@@ -184,3 +184,209 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+// ========================================
+// GEOGRAPHICAL HIERARCHY MODELS
+// ========================================
+
+model State {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  code      String   @unique @db.VarChar(10)
+  status    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  cities     City[]
+  pincodes   Pincode[]
+  zoneStates ZoneState[]
+
+  @@index([code, status])
+  @@map("states")
+}
+
+model City {
+  id        String   @id @default(uuid()) @db.Uuid
+  stateId   String   @db.Uuid
+  name      String   @db.VarChar(255)
+  code      String?  @db.VarChar(10)
+  status    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  state      State      @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  areas      Area[]
+  zoneCities ZoneCity[]
+
+  @@index([stateId, status])
+  @@index([code])
+  @@map("cities")
+}
+
+model Area {
+  id        String   @id @default(uuid()) @db.Uuid
+  cityId    String   @db.Uuid
+  name      String   @db.VarChar(255)
+  code      String?  @db.VarChar(10)
+  status    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  city      City       @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  pincodes  Pincode[]
+  zoneAreas ZoneArea[]
+
+  @@index([cityId, status])
+  @@index([code])
+  @@map("areas")
+}
+
+model Pincode {
+  id             String   @id @default(uuid()) @db.Uuid
+  areaId         String?  @db.Uuid
+  stateId        String   @db.Uuid
+  code           String   @unique @db.VarChar(6)
+  areaName       String?  @db.VarChar(255)
+  district       String?  @db.VarChar(255)
+  latitude       Decimal? @db.Decimal(10, 8)
+  longitude      Decimal? @db.Decimal(11, 8)
+  odaApplicable  Boolean  @default(false)
+  hillApplicable Boolean  @default(false)
+  status         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  area         Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  state        State         @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  zonePincodes ZonePincode[]
+
+  @@index([code, status])
+  @@index([areaId, status])
+  @@index([stateId, status])
+  @@index([latitude, longitude])
+  @@map("pincodes")
+}
+
+// ========================================
+// ZONE MANAGEMENT MODELS
+// ========================================
+
+model Zone {
+  id          String   @id @default(uuid()) @db.Uuid
+  partnerId   String // Reference to Partner model (keeping CUID for compatibility)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  status      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  zoneStates   ZoneState[]
+  zoneCities   ZoneCity[]
+  zoneAreas    ZoneArea[]
+  zonePincodes ZonePincode[]
+  zoneServices ZoneService[]
+
+  @@unique([partnerId, name])
+  @@index([partnerId, status])
+  @@map("zones")
+}
+
+model ZoneState {
+  id        String   @id @default(uuid()) @db.Uuid
+  zoneId    String   @db.Uuid
+  stateId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // Relations
+  zone  Zone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  state State @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, stateId])
+  @@index([zoneId])
+  @@index([stateId])
+  @@map("zone_states")
+}
+
+model ZoneCity {
+  id        String   @id @default(uuid()) @db.Uuid
+  zoneId    String   @db.Uuid
+  cityId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // Relations
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  city City @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, cityId])
+  @@index([zoneId])
+  @@index([cityId])
+  @@map("zone_cities")
+}
+
+model ZoneArea {
+  id        String   @id @default(uuid()) @db.Uuid
+  zoneId    String   @db.Uuid
+  areaId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // Relations
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, areaId])
+  @@index([zoneId])
+  @@index([areaId])
+  @@map("zone_areas")
+}
+
+model ZonePincode {
+  id        String   @id @default(uuid()) @db.Uuid
+  zoneId    String   @db.Uuid
+  pincodeId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  // Relations
+  zone    Zone    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  pincode Pincode @relation(fields: [pincodeId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, pincodeId])
+  @@index([zoneId])
+  @@index([pincodeId])
+  @@map("zone_pincodes")
+}
+
+// ========================================
+// SERVICE TYPE CONFIGURATION
+// ========================================
+
+enum ZoneServiceType {
+  PICKUP
+  DELIVERY
+  COD
+  PREPAID
+  ODA
+  HILL
+}
+
+model ZoneService {
+  id                String          @id @default(uuid()) @db.Uuid
+  zoneId            String          @db.Uuid
+  serviceType       ZoneServiceType
+  isAvailable       Boolean         @default(true)
+  additionalCharges Decimal?        @db.Decimal(10, 2)
+  remarks           String?         @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([zoneId, serviceType])
+  @@index([zoneId, serviceType, isAvailable])
+  @@map("zone_services")
+}

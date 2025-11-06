@@ -66,14 +66,16 @@ interface State {
   id: string;
   name: string;
   code: string;
-  isActive: boolean;
+  status: boolean; // Backend uses 'status' not 'isActive'
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface StatesResponse {
   status: string;
-  message: string;
-  data: {
-    states: State[];
+  data: State[]; // Backend returns array directly
+  meta: {
+    timestamp: string;
   };
 }
 
@@ -81,19 +83,25 @@ interface City {
   id: string;
   name: string;
   stateId: string;
-  stateName?: string;
-  isActive: boolean;
+  code: string;
+  status: boolean; // Backend uses 'status' not 'isActive'
+  state?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CitiesResponse {
   status: string;
-  message: string;
-  data: {
-    cities: City[];
+  data: City[]; // Backend returns array directly
+  meta: {
+    timestamp: string;
     pagination?: {
       page: number;
       limit: number;
-      total: number;
     };
   };
 }
@@ -102,44 +110,59 @@ interface Area {
   id: string;
   name: string;
   cityId: string;
-  cityName?: string;
-  isActive: boolean;
+  status: boolean; // Backend uses 'status' not 'isActive'
+  city?: {
+    id: string;
+    name: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AreasResponse {
   status: string;
-  message: string;
-  data: {
-    areas: Area[];
+  data: Area[]; // Backend returns array directly
+  meta: {
+    timestamp: string;
     pagination?: {
       page: number;
       limit: number;
-      total: number;
     };
   };
 }
 
 interface Pincode {
   id: string;
-  pincode: string;
-  areaId?: string;
-  areaName?: string;
-  cityId: string;
-  cityName: string;
+  code: string; // Backend uses 'code' not 'pincode'
   stateId: string;
-  stateName: string;
-  isActive: boolean;
+  cityId: string;
+  areaId?: string;
+  status: boolean;
+  state?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  city?: {
+    id: string;
+    name: string;
+  };
+  area?: {
+    id: string;
+    name: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface PincodesResponse {
   status: string;
-  message: string;
-  data: {
-    pincodes: Pincode[];
+  data: Pincode[]; // Backend returns array directly
+  meta: {
+    timestamp: string;
     pagination?: {
       page: number;
       limit: number;
-      total: number;
     };
   };
 }
@@ -315,8 +338,22 @@ export const geoApi = baseApi.injectEndpoints({
      * Get States - Fetch all states
      */
     getStates: builder.query<StatesResponse, void>({
-      query: () => "/api/v1/geographical/states",
+      query: () => "/api/v1/geography/states",
       providesTags: [{ type: "Geo", id: "STATES" }],
+    }),
+
+    /**
+     * Search States - Search states by name or code
+     */
+    searchStates: builder.query<
+      StatesResponse,
+      { name?: string; code?: string; page?: number; limit?: number }
+    >({
+      query: (params) => ({
+        url: "/api/v1/geography/states/search",
+        params,
+      }),
+      providesTags: [{ type: "Geo", id: "STATES_SEARCH" }],
     }),
 
     /**
@@ -324,18 +361,18 @@ export const geoApi = baseApi.injectEndpoints({
      */
     getCities: builder.query<CitiesResponse, GetCitiesParams | void>({
       query: (params = {}) => ({
-        url: "/api/v1/geographical/cities",
+        url: "/api/v1/geography/cities",
         params,
       }),
       providesTags: [{ type: "Geo", id: "CITIES" }],
     }),
 
     /**
-     * Get Areas - Fetch areas (optionally filtered by city)
+     * Get Areas - Fetch areas (optionally filtered by city/state)
      */
     getAreas: builder.query<AreasResponse, GetAreasParams | void>({
       query: (params = {}) => ({
-        url: "/api/v1/geographical/areas",
+        url: "/api/v1/geography/areas",
         params,
       }),
       providesTags: [{ type: "Geo", id: "AREAS" }],
@@ -346,7 +383,7 @@ export const geoApi = baseApi.injectEndpoints({
      */
     getPincodes: builder.query<PincodesResponse, GetPincodesParams | void>({
       query: (params = {}) => ({
-        url: "/api/v1/geographical/pincodes",
+        url: "/api/v1/geography/pincodes",
         params,
       }),
       providesTags: [{ type: "Geo", id: "PINCODES" }],
@@ -356,21 +393,24 @@ export const geoApi = baseApi.injectEndpoints({
      * Get Pincode Details - Fetch detailed information for a pincode
      */
     getPincodeDetails: builder.query<PincodeDetailsResponse, string>({
-      query: (pincode) => `/api/v1/geographical/pincodes/${pincode}`,
+      query: (pincode) => `/api/v1/geography/pincodes/${pincode}`,
       providesTags: (result, error, pincode) => [
         { type: "Geo", id: `PINCODE-${pincode}` },
       ],
     }),
 
     /**
-     * Search Geographical Data - Search across all geographical entities
+     * Search Pincodes - Search pincodes with multiple criteria
      */
-    searchGeo: builder.mutation<SearchGeoResponse, SearchGeoRequest>({
-      query: (searchData) => ({
-        url: "/api/v1/geographical/search",
-        method: "POST",
-        body: searchData,
+    searchPincodes: builder.query<
+      PincodesResponse,
+      { code?: string; city?: string; state?: string; district?: string }
+    >({
+      query: (params) => ({
+        url: "/api/v1/geography/pincodes/search",
+        params,
       }),
+      providesTags: [{ type: "Geo", id: "PINCODES_SEARCH" }],
     }),
 
     /**
@@ -385,6 +425,78 @@ export const geoApi = baseApi.injectEndpoints({
         params,
       }),
       providesTags: [{ type: "Geo", id: "HIERARCHY" }],
+    }),
+
+    /**
+     * Toggle State Status - Toggle state active/inactive status
+     */
+    toggleStateStatus: builder.mutation<
+      {
+        status: string;
+        data: State;
+        meta: { timestamp: string; message: string };
+      },
+      string
+    >({
+      query: (stateId) => ({
+        url: `/api/v1/geography/states/${stateId}/toggle-status`,
+        method: "PATCH",
+      }),
+      invalidatesTags: [{ type: "Geo", id: "STATES" }],
+    }),
+
+    /**
+     * Toggle City Status - Toggle city active/inactive status
+     */
+    toggleCityStatus: builder.mutation<
+      {
+        status: string;
+        data: City;
+        meta: { timestamp: string; message: string };
+      },
+      string
+    >({
+      query: (cityId) => ({
+        url: `/api/v1/geography/cities/${cityId}/toggle-status`,
+        method: "PATCH",
+      }),
+      invalidatesTags: [{ type: "Geo", id: "CITIES" }],
+    }),
+
+    /**
+     * Toggle Area Status - Toggle area active/inactive status
+     */
+    toggleAreaStatus: builder.mutation<
+      {
+        status: string;
+        data: Area;
+        meta: { timestamp: string; message: string };
+      },
+      string
+    >({
+      query: (areaId) => ({
+        url: `/api/v1/geography/areas/${areaId}/toggle-status`,
+        method: "PATCH",
+      }),
+      invalidatesTags: [{ type: "Geo", id: "AREAS" }],
+    }),
+
+    /**
+     * Toggle Pincode Status - Toggle pincode active/inactive status
+     */
+    togglePincodeStatus: builder.mutation<
+      {
+        status: string;
+        data: Pincode;
+        meta: { timestamp: string; message: string };
+      },
+      string
+    >({
+      query: (pincodeId) => ({
+        url: `/api/v1/geography/pincodes/${pincodeId}/toggle-status`,
+        method: "PATCH",
+      }),
+      invalidatesTags: [{ type: "Geo", id: "PINCODES" }],
     }),
   }),
 });
@@ -406,6 +518,10 @@ export const {
   useGetPincodeDetailsQuery,
   useSearchGeoMutation,
   useGetGeoHierarchyQuery,
+  useToggleStateStatusMutation,
+  useToggleCityStatusMutation,
+  useToggleAreaStatusMutation,
+  useTogglePincodeStatusMutation,
 } = geoApi;
 
 // ===========================

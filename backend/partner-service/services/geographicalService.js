@@ -1,670 +1,1547 @@
 /**
  * Geographical Service
  *
- * Handles geographical data operations by integrating with external Partner Micro service
- * Provides pincode search, city/state data, and geographical hierarchy services
+ * Purpose: Manage geographical hierarchy (states, cities, areas, pincodes) with Redis caching
+ * Provides CRUD operations and hierarchy traversal for geographical data from DATABASE
+ *
+ * Following auth-service patterns with Prisma ORM and Redis caching
+ * Replaces external API calls with direct database operations
  */
 
+const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
-const { getClient } = require("../shared/lib/redis");
-const { getExternalPartnerClient } = require("./externalPartnerClient");
+const { getRedisClient } = require("../config/redis");
 
 class GeographicalService {
   constructor() {
-    this.externalClient = getExternalPartnerClient();
-    this.cachePrefix = "geo_data";
-    this.defaultCacheTTL = 86400; // 24 hours for geographical data
+    this.cachePrefix = "geo";
+    this.cacheTTL = 86400; // 24 hours for geographical data (relatively static)
   }
 
   /**
-   * Generate cache key for geographical data
+   * Get all active states
+   * Uses Redis cache with 24h TTL
+   * @returns {Promise<Array>} List of states
    */
-  getCacheKey(type, params) {
-    const paramString = JSON.stringify(params);
-    const crypto = require("crypto");
-    return `${this.cachePrefix}:${type}:${crypto.createHash("md5").update(paramString).digest("hex")}`;
-  }
-
-  /**
-   * Get cached geographical data
-   */
-  async getCachedData(cacheKey) {
+  async getStates() {
     try {
-      const redis = await getClient();
-      const cached = await redis.get(cacheKey);
-      return cached ? JSON.parse(cached) : null;
-    } catch (error) {
-      logger.warn("Cache get failed for geographical data", {
-        error: error.message,
-        cacheKey,
-      });
-      return null;
-    }
-  }
+      logger.info("Getting all states (active and inactive)");
 
-  /**
-   * Set cached geographical data
-   */
-  async setCachedData(cacheKey, data, ttl = this.defaultCacheTTL) {
-    try {
-      const redis = await getClient();
-      await redis.setex(cacheKey, ttl, JSON.stringify(data));
-    } catch (error) {
-      logger.warn("Cache set failed for geographical data", {
-        error: error.message,
-        cacheKey,
-      });
-    }
-  }
+      // Try cache first
+      const cacheKey = `${this.cachePrefix}:states`;
+      const redis = getRedisClient();
 
-  /**
-   * Search pincodes with comprehensive filtering
-   */
-  async searchPincodes(params) {
-    const {
-      pincode,
-      city,
-      state,
-      district,
-      type,
-      latitude,
-      longitude,
-      radius,
-      page = 1,
-      limit = 20,
-      sortBy = "pincode",
-      searchMode = "partial",
-      includeHierarchy = false,
-      includeCoordinates = false,
-      includeMetadata = false,
-    } = params;
-
-    const cacheKey = this.getCacheKey("pincode_search", params);
-
-    // Try to get cached response
-    const cached = await this.getCachedData(cacheKey);
-    if (cached) {
-      logger.info("Returning cached pincode search", { cacheKey });
-      return cached;
-    }
-
-    try {
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-      if (pincode) queryParams.append("pincode", pincode);
-      if (city) queryParams.append("city", city);
-      if (state) queryParams.append("state", state);
-      if (district) queryParams.append("district", district);
-      if (type) queryParams.append("type", type);
-      if (latitude) queryParams.append("latitude", latitude);
-      if (longitude) queryParams.append("longitude", longitude);
-      if (radius) queryParams.append("radius", radius);
-      queryParams.append("page", page);
-      queryParams.append("limit", limit);
-      queryParams.append("sortBy", sortBy);
-      queryParams.append("searchMode", searchMode);
-      queryParams.append("includeHierarchy", includeHierarchy);
-      queryParams.append("includeCoordinates", includeCoordinates);
-      queryParams.append("includeMetadata", includeMetadata);
-
-      logger.info("Searching pincodes via external API", { params });
-
-      const response = await this.externalClient.makeRequest({
-        method: "GET",
-        url: `/api/v1/pincodes/search?${queryParams.toString()}`,
-      });
-
-      // Cache successful response
-      if (response.success) {
-        await this.setCachedData(cacheKey, response);
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached states");
+          return JSON.parse(cached);
+        }
       }
 
-      return response;
-    } catch (error) {
-      logger.error("Pincode search failed", { error: error.message, params });
+      // Query database - show both active and inactive for management
+      const states = await prisma.state.findMany({
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
 
-      // Try to return cached data on error
-      const cachedData = await this.getCachedData(cacheKey);
-      if (cachedData) {
-        logger.info("Returning cached pincode search data due to API error");
-        return {
-          ...cachedData,
-          cached: true,
-          warning: "Using cached data due to API error",
+      // Store in cache
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(states), {
+          EX: this.cacheTTL,
+        });
+      }
+
+      logger.info("States retrieved from database", { count: states.length });
+      return states;
+    } catch (error) {
+      logger.error("Error getting states", {
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get cities by state ID (for zone management)
+   * Uses Redis cache with 24h TTL
+   * @param {string} stateId - State UUID
+   * @returns {Promise<Array>} List of cities in the state
+   */
+  async getCitiesByState(stateId) {
+    try {
+      logger.info("Getting cities by state", { stateId });
+
+      // Validate input
+      if (!stateId) {
+        throw new Error("State ID is required");
+      }
+
+      // Try cache first
+      const cacheKey = `${this.cachePrefix}:cities:state:${stateId}`;
+      const redis = getRedisClient();
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached cities", { stateId });
+          return JSON.parse(cached);
+        }
+      }
+
+      // Query database
+      const cities = await prisma.city.findMany({
+        where: {
+          stateId: stateId,
+          status: true,
+        },
+        include: {
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+
+      // Store in cache
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(cities), {
+          EX: this.cacheTTL,
+        });
+      }
+
+      logger.info("Cities retrieved", { stateId, count: cities.length });
+      return cities;
+    } catch (error) {
+      logger.error("Error getting cities", {
+        error: error.message,
+        stateId,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get areas by city ID (for zone management)
+   * Uses Redis cache with 24h TTL
+   * @param {string} cityId - City UUID
+   * @returns {Promise<Array>} List of areas in the city
+   */
+  async getAreasByCity(cityId) {
+    try {
+      logger.info("Getting areas by city", { cityId });
+
+      // Validate input
+      if (!cityId) {
+        throw new Error("City ID is required");
+      }
+
+      // Try cache first
+      const cacheKey = `${this.cachePrefix}:areas:city:${cityId}`;
+      const redis = getRedisClient();
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached areas", { cityId });
+          return JSON.parse(cached);
+        }
+      }
+
+      // Query database
+      const areas = await prisma.area.findMany({
+        where: {
+          cityId: cityId,
+          status: true,
+        },
+        include: {
+          city: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              state: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+
+      // Store in cache
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(areas), { EX: this.cacheTTL });
+      }
+
+      logger.info("Areas retrieved", { cityId, count: areas.length });
+      return areas;
+    } catch (error) {
+      logger.error("Error getting areas", {
+        error: error.message,
+        cityId,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get pincodes by area ID (for zone management)
+   * Uses Redis cache with 24h TTL
+   * @param {string} areaId - Area UUID
+   * @returns {Promise<Array>} List of pincodes in the area
+   */
+  async getPincodesByArea(params) {
+    try {
+      const { areaId, cityId, stateId, limit = 100, page = 1 } = params;
+      logger.info("Getting pincodes by area/city/state", {
+        areaId,
+        cityId,
+        stateId,
+        limit,
+        page,
+      });
+
+      // Calculate skip for pagination
+      const skip = (page - 1) * limit;
+
+      // Build cache key based on available parameters
+      let cacheKey = `${this.cachePrefix}:pincodes`;
+      if (areaId) cacheKey += `:area:${areaId}`;
+      if (cityId) cacheKey += `:city:${cityId}`;
+      if (stateId) cacheKey += `:state:${stateId}`;
+      if (!areaId && !cityId && !stateId) cacheKey += `:all`;
+      cacheKey += `:page:${page}:limit:${limit}`;
+
+      // Try cache first
+      const redis = getRedisClient();
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached pincodes", {
+            areaId,
+            cityId,
+            stateId,
+          });
+          const cachedData = JSON.parse(cached);
+          return {
+            success: true,
+            data: cachedData.data,
+            total: cachedData.total,
+            activeCount: cachedData.activeCount,
+            inactiveCount: cachedData.inactiveCount,
+            cached: true,
+          };
+        }
+      }
+
+      // Build where clause for filtering - show both active and inactive for management
+      const where = {};
+
+      if (areaId) {
+        where.areaId = areaId;
+      } else if (cityId) {
+        // Get pincodes by city through area relationship
+        where.area = {
+          cityId: cityId,
         };
+      } else if (stateId) {
+        // Get pincodes by state
+        where.stateId = stateId;
       }
 
-      // Return error when external service fails and no cache available
-      logger.error("External service failed and no cached data available", {
-        error: error.message,
+      // Get total count
+      const total = await prisma.pincode.count({ where });
+
+      // Get active and inactive counts
+      const activeCount = await prisma.pincode.count({
+        where: { ...where, status: true },
+      });
+      const inactiveCount = total - activeCount;
+
+      // Query database
+      const pincodes = await prisma.pincode.findMany({
+        where,
+        include: {
+          area: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              city: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  state: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy: { code: "asc" },
       });
 
+      // Store in cache (including total and counts for pagination)
+      if (redis) {
+        await redis.set(
+          cacheKey,
+          JSON.stringify({ data: pincodes, total, activeCount, inactiveCount }),
+          { EX: this.cacheTTL },
+        );
+      }
+
+      logger.info("Pincodes retrieved", {
+        areaId,
+        cityId,
+        stateId,
+        count: pincodes.length,
+        total,
+        activeCount,
+        inactiveCount,
+      });
+
+      // Return in controller-expected format
+      return {
+        success: true,
+        data: pincodes,
+        total,
+        activeCount,
+        inactiveCount,
+        cached: false,
+      };
+    } catch (error) {
+      logger.error("Error getting pincodes", {
+        error: error.message,
+        params,
+        stack: error.stack,
+      });
       return {
         success: false,
         data: [],
-        error: "External service temporarily unavailable",
+        error: error.message,
         cached: false,
       };
     }
   }
 
   /**
-   * Get specific pincode details
+   * Get complete pincode details with full hierarchy
+   * Uses Redis cache with 24h TTL
+   * @param {string} code - Pincode (6 digits)
+   * @returns {Promise<Object>} Complete pincode details with state, city, area
    */
-  async getPincodeDetails(pincode) {
-    const cacheKey = this.getCacheKey("pincode_details", { pincode });
-
-    // Try to get cached response
-    const cached = await this.getCachedData(cacheKey);
-    if (cached) {
-      logger.info("Returning cached pincode details", { pincode });
-      return cached;
-    }
-
+  async getPincodeDetails(code) {
     try {
-      logger.info("Getting pincode details via external API", { pincode });
+      logger.info("Getting pincode details", { code });
 
-      const response = await this.externalClient.makeRequest({
-        method: "GET",
-        url: `/api/v1/pincodes/${pincode}`,
-      });
-
-      // Cache successful response
-      if (response.success) {
-        await this.setCachedData(cacheKey, response);
+      // Validate input
+      if (!code) {
+        throw new Error("Pincode is required");
       }
 
-      return response;
-    } catch (error) {
-      logger.error("Get pincode details failed", {
-        error: error.message,
-        pincode,
+      // Try cache first
+      const cacheKey = `${this.cachePrefix}:pincode:${code}`;
+      const redis = getRedisClient();
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached pincode details", { code });
+          return JSON.parse(cached);
+        }
+      }
+
+      // Query database with complete hierarchy
+      const pincode = await prisma.pincode.findUnique({
+        where: { code: code },
+        include: {
+          area: {
+            include: {
+              city: {
+                include: {
+                  state: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      status: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              status: true,
+            },
+          },
+        },
       });
-      throw error;
+
+      const result = {
+        success: pincode !== null,
+        data: pincode,
+      };
+
+      // Store in cache
+      if (redis && pincode) {
+        await redis.set(cacheKey, JSON.stringify(result), {
+          EX: this.cacheTTL,
+        });
+      }
+
+      logger.info("Pincode details retrieved", { code, found: !!pincode });
+      return result;
+    } catch (error) {
+      logger.error("Error getting pincode details", {
+        error: error.message,
+        code,
+        stack: error.stack,
+      });
+      return {
+        success: false,
+        data: null,
+        error: error.message,
+      };
     }
   }
 
   /**
    * Get geographical hierarchy for pincode
+   * Returns state -> city -> area -> pincode hierarchy
+   * @param {string} code - Pincode (6 digits)
+   * @returns {Promise<Object>} Hierarchical geographical data
    */
-  async getPincodeHierarchy(pincode) {
-    const cacheKey = this.getCacheKey("pincode_hierarchy", { pincode });
-
-    // Try to get cached response
-    const cached = await this.getCachedData(cacheKey);
-    if (cached) {
-      logger.info("Returning cached pincode hierarchy", { pincode });
-      return cached;
-    }
-
+  async getPincodeHierarchy(code) {
     try {
-      logger.info("Getting pincode hierarchy via external API", { pincode });
+      logger.info("Getting pincode hierarchy", { code });
 
-      const response = await this.externalClient.makeRequest({
-        method: "GET",
-        url: `/api/v1/pincodes/${pincode}/hierarchy`,
-      });
+      const result = await this.getPincodeDetails(code);
 
-      // Cache successful response
-      if (response.success) {
-        await this.setCachedData(cacheKey, response);
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          data: null,
+          message: `Pincode ${code} not found`,
+        };
       }
 
-      return response;
+      const pincode = result.data;
+
+      // Build hierarchy
+      const hierarchy = {
+        pincode: {
+          code: pincode.code,
+          areaName: pincode.areaName,
+          district: pincode.district,
+          odaApplicable: pincode.odaApplicable,
+          hillApplicable: pincode.hillApplicable,
+          latitude: pincode.latitude,
+          longitude: pincode.longitude,
+        },
+        area: pincode.area
+          ? {
+              id: pincode.area.id,
+              name: pincode.area.name,
+              code: pincode.area.code,
+            }
+          : null,
+        city: pincode.area?.city
+          ? {
+              id: pincode.area.city.id,
+              name: pincode.area.city.name,
+              code: pincode.area.city.code,
+            }
+          : null,
+        state: pincode.state
+          ? {
+              id: pincode.state.id,
+              name: pincode.state.name,
+              code: pincode.state.code,
+            }
+          : null,
+      };
+
+      return {
+        success: true,
+        data: hierarchy,
+      };
     } catch (error) {
-      logger.error("Get pincode hierarchy failed", {
+      logger.error("Error getting pincode hierarchy", {
         error: error.message,
+        code,
+        stack: error.stack,
+      });
+      return {
+        success: false,
+        data: null,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Search pincodes with comprehensive filtering
+   * Maintains compatibility with existing controller
+   * @param {Object} params - Search parameters
+   * @returns {Promise<Object>} Search results
+   */
+  async searchPincodes(params) {
+    try {
+      const {
         pincode,
-      });
-      throw error;
-    }
-  }
+        city,
+        state,
+        district,
+        page = 1,
+        limit = 20,
+        sortBy = "code",
+      } = params;
 
-  /**
-   * Get all states with pincode counts
-   */
-  async getStatesWithPincodeCounts() {
-    const cacheKey = this.getCacheKey("states_with_counts", {});
+      logger.info("Searching pincodes", { params });
 
-    // Try to get cached response
-    const cached = await this.getCachedData(cacheKey);
-    if (cached) {
-      logger.info("Returning cached states with pincode counts");
-      return cached;
-    }
+      // Build where clause
+      const where = { status: true };
+      const orConditions = [];
 
-    try {
-      logger.info("Getting states with pincode counts via external API");
-
-      const response = await this.externalClient.makeRequest({
-        method: "GET",
-        url: "/api/v1/pincodes/states",
-      });
-
-      // Cache successful response for longer period (states don't change often)
-      if (response.success) {
-        await this.setCachedData(cacheKey, response, 604800); // 7 days
+      if (pincode) {
+        orConditions.push({ code: { contains: pincode } });
       }
-
-      return response;
-    } catch (error) {
-      logger.error("Get states with pincode counts failed", {
-        error: error.message,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get cities with comprehensive filtering
-   */
-  async getCities(params) {
-    const {
-      stateIds,
-      states,
-      search,
-      name,
-      searchMode = "partial",
-      isMetro,
-      minPopulation,
-      maxPopulation,
-      latitude,
-      longitude,
-      radius,
-      page = 1,
-      limit = 50, // Reduced default limit to prevent memory issues
-      sortBy = "name",
-      sortOrder = "asc",
-      includeAreaCount = false,
-      includeState = false,
-      includeCoordinates = false,
-      includeMetadata = false,
-      fields,
-      forceRefresh = false,
-    } = params;
-
-    // Memory protection: Limit maximum results
-    const maxLimit = 500;
-    let actualLimit = limit;
-    if (actualLimit > maxLimit) {
-      actualLimit = maxLimit;
-      logger.warn("Limit exceeded maximum, capping at 500", {
-        requestedLimit: params.limit,
-        cappedLimit: actualLimit,
-      });
-    }
-
-    const cacheKey = this.getCacheKey("cities", params);
-
-    // Try to get cached response (unless force refresh)
-    if (!forceRefresh) {
-      const cached = await this.getCachedData(cacheKey);
-      if (cached) {
-        logger.info("Returning cached cities data", { cacheKey });
-        return cached;
-      }
-    }
-
-    try {
-      // Check external service health before making request
-      const healthCheck = await this.externalClient.healthCheck();
-      if (healthCheck.status !== "healthy") {
-        logger.warn(
-          "External service unhealthy, returning cached data if available",
-          {
-            healthStatus: healthCheck.status,
-            error: healthCheck.error,
+      if (city) {
+        orConditions.push({
+          area: {
+            city: {
+              name: { contains: city, mode: "insensitive" },
+            },
           },
-        );
-
-        // Try to return cached data even if expired
-        const expiredCache = await this.getCachedData(cacheKey);
-        if (expiredCache) {
-          logger.info(
-            "Returning expired cached cities data due to service unavailability",
-          );
-          return expiredCache;
-        }
-
-        // Return empty result if no cache available
-        return {
-          success: false,
-          data: [],
-          error: "External service temporarily unavailable",
-          cached: false,
-        };
+        });
       }
-
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-      if (stateIds) queryParams.append("stateIds", stateIds);
-      if (states) queryParams.append("states", states);
-      if (search) queryParams.append("search", search);
-      if (name) queryParams.append("name", name);
-      queryParams.append("searchMode", searchMode);
-      if (isMetro !== undefined) queryParams.append("isMetro", isMetro);
-      if (minPopulation) queryParams.append("minPopulation", minPopulation);
-      if (maxPopulation) queryParams.append("maxPopulation", maxPopulation);
-      if (latitude) queryParams.append("latitude", latitude);
-      if (longitude) queryParams.append("longitude", longitude);
-      if (radius) queryParams.append("radius", radius);
-      queryParams.append("sortBy", sortBy);
-      queryParams.append("sortOrder", sortOrder);
-      queryParams.append("includeAreaCount", includeAreaCount);
-      queryParams.append("includeState", includeState);
-      queryParams.append("includeCoordinates", includeCoordinates);
-      queryParams.append("includeMetadata", includeMetadata);
-      if (fields) queryParams.append("fields", fields);
-      queryParams.append("forceRefresh", forceRefresh);
-      queryParams.append("page", page);
-      queryParams.append("limit", actualLimit);
-
-      logger.info("Getting cities via external API", { params });
-
-      // Add timeout protection
-      const requestPromise = this.externalClient.makeRequest({
-        method: "GET",
-        url: `/api/v1/cities?${queryParams.toString()}`,
-      });
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("External API timeout")), 15000),
-      );
-
-      const response = await Promise.race([requestPromise, timeoutPromise]);
-
-      // Cache successful response
-      if (response.success) {
-        await this.setCachedData(cacheKey, response);
-      }
-
-      return response;
-    } catch (error) {
-      logger.error("Get cities failed", { error: error.message, params });
-
-      // Try to return cached data on error
-      const cachedData = await this.getCachedData(cacheKey);
-      if (cachedData) {
-        logger.info("Returning cached cities data due to API error");
-        return {
-          ...cachedData,
-          cached: true,
-          warning: "Using cached data due to API error",
-        };
-      }
-
-      // Return error when external service fails and no cache available
-      logger.error("External service failed and no cached data available", {
-        error: error.message,
-      });
-
-      return {
-        success: false,
-        data: [],
-        error: "External service temporarily unavailable",
-        cached: false,
-      };
-    }
-  }
-
-  /**
-   * Get areas with comprehensive filtering
-   */
-  async getAreas(params) {
-    const {
-      cityIds,
-      stateIds,
-      states,
-      search,
-      name,
-      searchMode = "partial",
-      type,
-      zone,
-      minPincodeCount,
-      maxPincodeCount,
-      latitude,
-      longitude,
-      radius,
-      page = 1,
-      limit = 20,
-      sortBy = "name",
-      sortOrder = "asc",
-      includePincodeCount = false,
-      includeCity = false,
-      includeState = false,
-      includeCoordinates = false,
-      includeMetadata = false,
-      includePincodes = false,
-      fields,
-      forceRefresh = false,
-    } = params;
-
-    const cacheKey = this.getCacheKey("areas", params);
-
-    // Try to get cached response (unless force refresh)
-    if (!forceRefresh) {
-      const cached = await this.getCachedData(cacheKey);
-      if (cached) {
-        logger.info("Returning cached areas data", { cacheKey });
-        return cached;
-      }
-    }
-
-    try {
-      // Check external service health before making request
-      const healthCheck = await this.externalClient.healthCheck();
-      if (healthCheck.status !== "healthy") {
-        logger.warn(
-          "External service unhealthy, returning cached data if available",
-          {
-            healthStatus: healthCheck.status,
-            error: healthCheck.error,
+      if (state) {
+        orConditions.push({
+          state: {
+            name: { contains: state, mode: "insensitive" },
           },
-        );
-
-        // Try to return cached data even if expired
-        const expiredCache = await this.getCachedData(cacheKey);
-        if (expiredCache) {
-          logger.info(
-            "Returning expired cached areas data due to service unavailability",
-          );
-          return expiredCache;
-        }
-
-        // Return empty result if no cache available
-        return {
-          success: false,
-          data: [],
-          error: "External service temporarily unavailable",
-          cached: false,
-        };
+        });
+      }
+      if (district) {
+        orConditions.push({
+          district: { contains: district, mode: "insensitive" },
+        });
       }
 
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-      if (cityIds) queryParams.append("cityIds", cityIds);
-      if (stateIds) queryParams.append("stateIds", stateIds);
-      if (states) queryParams.append("states", states);
-      if (search) queryParams.append("search", search);
-      if (name) queryParams.append("name", name);
-      queryParams.append("searchMode", searchMode);
-      if (type) queryParams.append("type", type);
-      if (zone) queryParams.append("zone", zone);
-      if (minPincodeCount)
-        queryParams.append("minPincodeCount", minPincodeCount);
-      if (maxPincodeCount)
-        queryParams.append("maxPincodeCount", maxPincodeCount);
-      if (latitude) queryParams.append("latitude", latitude);
-      if (longitude) queryParams.append("longitude", longitude);
-      if (radius) queryParams.append("radius", radius);
-      queryParams.append("page", page);
-      queryParams.append("limit", limit);
-      queryParams.append("sortBy", sortBy);
-      queryParams.append("sortOrder", sortOrder);
-      queryParams.append("includePincodeCount", includePincodeCount);
-      queryParams.append("includeCity", includeCity);
-      queryParams.append("includeState", includeState);
-      queryParams.append("includeCoordinates", includeCoordinates);
-      queryParams.append("includeMetadata", includeMetadata);
-      queryParams.append("includePincodes", includePincodes);
-      if (fields) queryParams.append("fields", fields);
-      queryParams.append("forceRefresh", forceRefresh);
-
-      logger.info("Getting areas via external API", { params });
-
-      // Add timeout protection
-      const requestPromise = this.externalClient.makeRequest({
-        method: "GET",
-        url: `/api/v1/areas?${queryParams.toString()}`,
-      });
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("External API timeout")), 15000),
-      );
-
-      const response = await Promise.race([requestPromise, timeoutPromise]);
-
-      // Cache successful response
-      if (response.success) {
-        await this.setCachedData(cacheKey, response);
+      if (orConditions.length > 0) {
+        where.OR = orConditions;
       }
 
-      return response;
-    } catch (error) {
-      logger.error("Get areas failed", { error: error.message, params });
+      // Get total count
+      const total = await prisma.pincode.count({ where });
 
-      // Try to return cached data on error
-      const cachedData = await this.getCachedData(cacheKey);
-      if (cachedData) {
-        logger.info("Returning cached areas data due to API error");
-        return {
-          ...cachedData,
-          cached: true,
-          warning: "Using cached data due to API error",
-        };
-      }
-
-      // Return error when external service fails and no cache available
-      logger.error("External service failed and no cached data available", {
-        error: error.message,
-      });
-
-      return {
-        success: false,
-        data: [],
-        error: "External service temporarily unavailable",
-        cached: false,
-      };
-    }
-  }
-
-  /**
-   * Get pincodes by area ID
-   */
-  async getPincodesByArea(params) {
-    const { areaId, limit = 20, forceRefresh = false } = params;
-
-    const cacheKey = this.getCacheKey("pincodes_by_area", params);
-
-    // Try to get cached response (unless force refresh)
-    if (!forceRefresh) {
-      const cached = await this.getCachedData(cacheKey);
-      if (cached) {
-        logger.info("Returning cached pincodes by area data", { cacheKey });
-        return cached;
-      }
-    }
-
-    try {
-      // Check external service health before making request
-      const healthCheck = await this.externalClient.healthCheck();
-      if (healthCheck.status !== "healthy") {
-        logger.warn(
-          "External service unhealthy, returning cached data if available",
-          {
-            healthStatus: healthCheck.status,
-            error: healthCheck.error,
+      // Get pincodes
+      const pincodes = await prisma.pincode.findMany({
+        where,
+        include: {
+          area: {
+            include: {
+              city: {
+                include: {
+                  state: true,
+                },
+              },
+            },
           },
-        );
+          state: true,
+        },
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { [sortBy]: "asc" },
+      });
 
-        // Try to return cached data even if expired
-        const expiredCache = await this.getCachedData(cacheKey);
-        if (expiredCache) {
-          logger.info(
-            "Returning expired cached pincodes data due to service unavailability",
-          );
-          return expiredCache;
-        }
-
-        // Return empty result if no cache available
-        return {
-          success: false,
-          data: [],
-          error: "External service temporarily unavailable",
-          cached: false,
-        };
-      }
-
-      // Since the external API doesn't have a direct pincodes by area endpoint,
-      // we'll return an empty result with a message
-      logger.warn("External API doesn't support pincodes by area endpoint", {
-        areaId,
+      logger.info("Pincode search completed", {
+        count: pincodes.length,
+        total,
       });
 
       return {
         success: true,
-        data: [],
-        cached: false,
-        warning: "Pincodes by area not supported by external API",
+        data: pincodes,
         pagination: {
-          currentPage: 1,
-          totalPages: 0,
-          totalRecords: 0,
-          recordsPerPage: limit,
-          hasNextPage: false,
-          hasPreviousPage: false,
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
       };
     } catch (error) {
-      logger.error("Get pincodes by area failed", {
+      logger.error("Pincode search failed", {
         error: error.message,
         params,
+        stack: error.stack,
       });
-
-      // Try to return cached data on error
-      const cachedData = await this.getCachedData(cacheKey);
-      if (cachedData) {
-        logger.info("Returning cached pincodes data due to API error");
-        return {
-          ...cachedData,
-          cached: true,
-          warning: "Using cached data due to API error",
-        };
-      }
-
-      // Return error when external service fails and no cache available
-      logger.error("External service failed and no cached data available", {
-        error: error.message,
-      });
-
       return {
         success: false,
         data: [],
-        error: "External service temporarily unavailable",
-        cached: false,
+        error: error.message,
       };
     }
   }
 
   /**
-   * Get service statistics
+   * Get all states with pincode counts (for controller compatibility)
+   * @returns {Promise<Object>} States with counts
+   */
+  async getStatesWithPincodeCounts() {
+    try {
+      logger.info("Getting states with pincode counts");
+
+      const cacheKey = `${this.cachePrefix}:states_with_counts`;
+      const redis = getRedisClient();
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached states with counts");
+          return JSON.parse(cached);
+        }
+      }
+
+      // Get all states with pincode counts
+      const states = await prisma.state.findMany({
+        where: { status: true },
+        include: {
+          _count: {
+            select: { pincodes: true },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+
+      const statesWithCounts = states.map((state) => ({
+        id: state.id,
+        name: state.name,
+        code: state.code,
+        pincodeCount: state._count.pincodes,
+      }));
+
+      const result = {
+        success: true,
+        data: statesWithCounts,
+      };
+
+      // Cache for 24 hours
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(result), {
+          EX: this.cacheTTL,
+        });
+      }
+
+      logger.info("States with pincode counts retrieved", {
+        count: states.length,
+      });
+      return result;
+    } catch (error) {
+      logger.error("Error getting states with pincode counts", {
+        error: error.message,
+        stack: error.stack,
+      });
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get cities with comprehensive filtering (for controller compatibility)
+   * @param {Object} params - Filter parameters
+   * @returns {Promise<Object>} Cities data
+   */
+  async getCities(params) {
+    try {
+      const { stateIds, page = 1, limit = 50 } = params;
+      logger.info("Getting cities", { params });
+
+      // Build where clause - show both active and inactive for management
+      const where = {};
+      if (stateIds) {
+        const stateIdArray = stateIds.split(",").map((id) => id.trim());
+        where.stateId = { in: stateIdArray };
+      }
+
+      // Get total count
+      const total = await prisma.city.count({ where });
+
+      // Get active and inactive counts
+      const activeCount = await prisma.city.count({
+        where: { ...where, status: true },
+      });
+      const inactiveCount = total - activeCount;
+
+      // Get cities
+      const cities = await prisma.city.findMany({
+        where,
+        include: {
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { name: "asc" },
+      });
+
+      logger.info("Cities retrieved", {
+        count: cities.length,
+        total,
+        activeCount,
+        inactiveCount,
+      });
+
+      return {
+        success: true,
+        data: cities,
+        total,
+        activeCount,
+        inactiveCount,
+      };
+    } catch (error) {
+      logger.error("Error getting cities", {
+        error: error.message,
+        params,
+        stack: error.stack,
+      });
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get areas with comprehensive filtering (for controller compatibility)
+   * @param {Object} params - Filter parameters
+   * @returns {Promise<Object>} Areas data
+   */
+  async getAreas(params) {
+    try {
+      const { cityIds, stateIds, page = 1, limit = 50 } = params;
+      logger.info("Getting areas", { params });
+
+      // Build where clause - show both active and inactive for management
+      const where = {};
+      if (cityIds) {
+        const cityIdArray = cityIds.split(",").map((id) => id.trim());
+        where.cityId = { in: cityIdArray };
+      }
+      if (stateIds) {
+        const stateIdArray = stateIds.split(",").map((id) => id.trim());
+        where.city = {
+          stateId: { in: stateIdArray },
+        };
+      }
+
+      // Get total count
+      const total = await prisma.area.count({ where });
+
+      // Get active and inactive counts
+      const activeCount = await prisma.area.count({
+        where: { ...where, status: true },
+      });
+      const inactiveCount = total - activeCount;
+
+      // Get areas
+      const areas = await prisma.area.findMany({
+        where,
+        include: {
+          city: {
+            include: {
+              state: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                },
+              },
+            },
+          },
+        },
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { name: "asc" },
+      });
+
+      logger.info("Areas retrieved", {
+        count: areas.length,
+        total,
+        activeCount,
+        inactiveCount,
+      });
+
+      return {
+        success: true,
+        data: areas,
+        total,
+        activeCount,
+        inactiveCount,
+      };
+    } catch (error) {
+      logger.error("Error getting areas", {
+        error: error.message,
+        params,
+        stack: error.stack,
+      });
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Batch get cities by multiple state IDs
+   * Efficient batch operation for multiple states
+   * @param {Array<string>} stateIds - Array of state UUIDs
+   * @returns {Promise<Object>} Cities grouped by state ID
+   */
+  async getCitiesByStates(stateIds) {
+    try {
+      logger.info("Batch getting cities by states", {
+        stateCount: stateIds?.length,
+      });
+
+      // Validate input
+      if (!stateIds || !Array.isArray(stateIds) || stateIds.length === 0) {
+        throw new Error("State IDs array is required");
+      }
+
+      // Query database for all cities in these states
+      const cities = await prisma.city.findMany({
+        where: {
+          stateId: { in: stateIds },
+          status: true,
+        },
+        include: {
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: [{ stateId: "asc" }, { name: "asc" }],
+      });
+
+      // Group cities by state ID
+      const citiesByState = {};
+      stateIds.forEach((stateId) => {
+        citiesByState[stateId] = [];
+      });
+
+      cities.forEach((city) => {
+        if (citiesByState[city.stateId]) {
+          citiesByState[city.stateId].push(city);
+        }
+      });
+
+      const result = {
+        success: true,
+        data: citiesByState,
+        summary: {
+          totalStates: stateIds.length,
+          totalCities: cities.length,
+          citiesPerState: Object.entries(citiesByState).reduce(
+            (acc, [stateId, cities]) => {
+              acc[stateId] = cities.length;
+              return acc;
+            },
+            {},
+          ),
+        },
+        metadata: {
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      logger.info("Batch cities retrieved", {
+        stateCount: stateIds.length,
+        totalCities: cities.length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error batch getting cities", {
+        error: error.message,
+        stateCount: stateIds?.length,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Batch get areas by multiple city IDs
+   * Efficient batch operation for multiple cities
+   * @param {Array<string>} cityIds - Array of city UUIDs
+   * @returns {Promise<Object>} Areas grouped by city ID
+   */
+  async getAreasByCities(cityIds) {
+    try {
+      logger.info("Batch getting areas by cities", {
+        cityCount: cityIds?.length,
+      });
+
+      // Validate input
+      if (!cityIds || !Array.isArray(cityIds) || cityIds.length === 0) {
+        throw new Error("City IDs array is required");
+      }
+
+      // Query database for all areas in these cities
+      const areas = await prisma.area.findMany({
+        where: {
+          cityId: { in: cityIds },
+          status: true,
+        },
+        include: {
+          city: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              state: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ cityId: "asc" }, { name: "asc" }],
+      });
+
+      // Group areas by city ID
+      const areasByCity = {};
+      cityIds.forEach((cityId) => {
+        areasByCity[cityId] = [];
+      });
+
+      areas.forEach((area) => {
+        if (areasByCity[area.cityId]) {
+          areasByCity[area.cityId].push(area);
+        }
+      });
+
+      const result = {
+        success: true,
+        data: areasByCity,
+        summary: {
+          totalCities: cityIds.length,
+          totalAreas: areas.length,
+          areasPerCity: Object.entries(areasByCity).reduce(
+            (acc, [cityId, areas]) => {
+              acc[cityId] = areas.length;
+              return acc;
+            },
+            {},
+          ),
+        },
+        metadata: {
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      logger.info("Batch areas retrieved", {
+        cityCount: cityIds.length,
+        totalAreas: areas.length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error batch getting areas", {
+        error: error.message,
+        cityCount: cityIds?.length,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Batch get pincodes by multiple area IDs
+   * Efficient batch operation for multiple areas
+   * @param {Array<string>} areaIds - Array of area UUIDs
+   * @returns {Promise<Object>} Pincodes grouped by area ID
+   */
+  async getPincodesByAreas(areaIds) {
+    try {
+      logger.info("Batch getting pincodes by areas", {
+        areaCount: areaIds?.length,
+      });
+
+      // Validate input
+      if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
+        throw new Error("Area IDs array is required");
+      }
+
+      // Query database for all pincodes in these areas
+      const pincodes = await prisma.pincode.findMany({
+        where: {
+          areaId: { in: areaIds },
+          status: true,
+        },
+        include: {
+          area: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              city: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  state: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          state: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: [{ areaId: "asc" }, { code: "asc" }],
+      });
+
+      // Group pincodes by area ID
+      const pincodesByArea = {};
+      areaIds.forEach((areaId) => {
+        pincodesByArea[areaId] = [];
+      });
+
+      pincodes.forEach((pincode) => {
+        if (pincode.areaId && pincodesByArea[pincode.areaId]) {
+          pincodesByArea[pincode.areaId].push(pincode);
+        }
+      });
+
+      const result = {
+        success: true,
+        data: pincodesByArea,
+        summary: {
+          totalAreas: areaIds.length,
+          totalPincodes: pincodes.length,
+          pincodesPerArea: Object.entries(pincodesByArea).reduce(
+            (acc, [areaId, pincodes]) => {
+              acc[areaId] = pincodes.length;
+              return acc;
+            },
+            {},
+          ),
+        },
+        metadata: {
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      logger.info("Batch pincodes retrieved", {
+        areaCount: areaIds.length,
+        totalPincodes: pincodes.length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error batch getting pincodes", {
+        error: error.message,
+        areaCount: areaIds?.length,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Clear geographical cache
+   * Invalidates all cached geographical data
+   * @param {Object} options - { scope: 'all' | 'states' | 'cities' | 'areas' | 'pincodes', id: specific ID }
+   * @returns {Promise<Object>} Cache clear result
+   */
+  async clearCache(options = {}) {
+    try {
+      const { scope = "all", id = null } = options;
+      logger.info("Clearing geographical cache", { scope, id });
+
+      const redis = getRedisClient();
+      if (!redis) {
+        logger.warn("Redis not available, cache clear skipped");
+        return {
+          success: false,
+          message: "Redis not available",
+        };
+      }
+
+      let pattern;
+      if (scope === "all") {
+        pattern = `${this.cachePrefix}:*`;
+      } else if (id) {
+        // Clear specific item
+        if (scope === "states") {
+          pattern = `${this.cachePrefix}:cities:state:${id}`;
+        } else if (scope === "cities") {
+          pattern = `${this.cachePrefix}:areas:city:${id}`;
+        } else if (scope === "areas") {
+          pattern = `${this.cachePrefix}:pincodes:area:${id}`;
+        } else if (scope === "pincodes") {
+          pattern = `${this.cachePrefix}:pincode:${id}`;
+        } else {
+          pattern = `${this.cachePrefix}:*`;
+        }
+      } else {
+        // Clear by scope
+        pattern = `${this.cachePrefix}:${scope}:*`;
+      }
+
+      const keys = await redis.keys(pattern);
+      let deletedCount = 0;
+
+      if (keys.length > 0) {
+        deletedCount = await redis.del(...keys);
+      }
+
+      logger.info("Geographical cache cleared", {
+        scope,
+        id,
+        pattern,
+        deletedCount,
+      });
+
+      return {
+        success: true,
+        deletedCount,
+        pattern,
+        message: `Cleared ${deletedCount} cache keys`,
+      };
+    } catch (error) {
+      logger.error("Error clearing geographical cache", {
+        error: error.message,
+        options,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get geographical statistics
+   * Provides overview of geographical data in the system
+   * @returns {Promise<Object>} Statistical overview
+   */
+  async getStatistics() {
+    try {
+      logger.info("Getting geographical statistics");
+
+      // Check cache first
+      const cacheKey = `${this.cachePrefix}:statistics`;
+      const redis = getRedisClient();
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.debug("Returning cached statistics");
+          return JSON.parse(cached);
+        }
+      }
+
+      // Get counts from database
+      const [
+        totalStates,
+        activeStates,
+        totalCities,
+        activeCities,
+        totalAreas,
+        activeAreas,
+        totalPincodes,
+        activePincodes,
+        odaPincodes,
+        hillPincodes,
+      ] = await Promise.all([
+        prisma.state.count(),
+        prisma.state.count({ where: { status: true } }),
+        prisma.city.count(),
+        prisma.city.count({ where: { status: true } }),
+        prisma.area.count(),
+        prisma.area.count({ where: { status: true } }),
+        prisma.pincode.count(),
+        prisma.pincode.count({ where: { status: true } }),
+        prisma.pincode.count({ where: { odaApplicable: true, status: true } }),
+        prisma.pincode.count({ where: { hillApplicable: true, status: true } }),
+      ]);
+
+      const statistics = {
+        success: true,
+        data: {
+          states: {
+            total: totalStates,
+            active: activeStates,
+            inactive: totalStates - activeStates,
+          },
+          cities: {
+            total: totalCities,
+            active: activeCities,
+            inactive: totalCities - activeCities,
+          },
+          areas: {
+            total: totalAreas,
+            active: activeAreas,
+            inactive: totalAreas - activeAreas,
+          },
+          pincodes: {
+            total: totalPincodes,
+            active: activePincodes,
+            inactive: totalPincodes - activePincodes,
+            oda: odaPincodes,
+            hill: hillPincodes,
+            odaPercentage:
+              activePincodes > 0
+                ? ((odaPincodes / activePincodes) * 100).toFixed(2)
+                : "0",
+            hillPercentage:
+              activePincodes > 0
+                ? ((hillPincodes / activePincodes) * 100).toFixed(2)
+                : "0",
+          },
+        },
+        metadata: {
+          timestamp: new Date().toISOString(),
+          source: "database",
+        },
+      };
+
+      // Cache statistics for 1 hour
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(statistics), { EX: 3600 });
+      }
+
+      logger.info("Geographical statistics retrieved", {
+        totalStates,
+        totalCities,
+        totalAreas,
+        totalPincodes,
+      });
+
+      return statistics;
+    } catch (error) {
+      logger.error("Error getting geographical statistics", {
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get service statistics (for controller compatibility)
+   * @returns {Object} Service stats
    */
   getStats() {
     return {
+      service: "GeographicalService",
+      version: "2.0",
+      source: "database",
       cachePrefix: this.cachePrefix,
-      defaultCacheTTL: this.defaultCacheTTL,
-      externalClientStatus: this.externalClient ? "connected" : "disconnected",
+      cacheTTL: this.cacheTTL,
+      prismaConnected: !!prisma,
     };
+  }
+
+  /**
+   * Toggle state status (active/inactive)
+   * @param {string} id - State UUID
+   * @returns {Promise<Object>} Updated state
+   */
+  async toggleStateStatus(id) {
+    try {
+      logger.info("Toggling state status", { id });
+
+      // Get current state
+      const state = await prisma.state.findUnique({ where: { id } });
+
+      if (!state) {
+        return { success: false, error: "State not found" };
+      }
+
+      // Toggle status
+      const updatedState = await prisma.state.update({
+        where: { id },
+        data: { status: !state.status },
+      });
+
+      // Clear cache - delete all state-related cache keys
+      const redis = getRedisClient();
+      if (redis) {
+        const keys = await redis.keys(`${this.cachePrefix}:states*`);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      }
+
+      logger.info("State status toggled", {
+        id,
+        oldStatus: state.status,
+        newStatus: updatedState.status,
+      });
+
+      return {
+        success: true,
+        data: updatedState,
+      };
+    } catch (error) {
+      logger.error("Error toggling state status", { id, error: error.message });
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Toggle city status (active/inactive)
+   * @param {string} id - City UUID
+   * @returns {Promise<Object>} Updated city
+   */
+  async toggleCityStatus(id) {
+    try {
+      logger.info("Toggling city status", { id });
+
+      const city = await prisma.city.findUnique({
+        where: { id },
+        include: { state: true },
+      });
+
+      if (!city) {
+        return { success: false, error: "City not found" };
+      }
+
+      const updatedCity = await prisma.city.update({
+        where: { id },
+        data: { status: !city.status },
+        include: { state: true },
+      });
+
+      // Clear cache - delete all city-related cache keys
+      const redis = getRedisClient();
+      if (redis) {
+        const keys = await redis.keys(`${this.cachePrefix}:cities*`);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      }
+
+      logger.info("City status toggled", {
+        id,
+        oldStatus: city.status,
+        newStatus: updatedCity.status,
+      });
+
+      return {
+        success: true,
+        data: updatedCity,
+      };
+    } catch (error) {
+      logger.error("Error toggling city status", { id, error: error.message });
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Toggle area status (active/inactive)
+   * @param {string} id - Area UUID
+   * @returns {Promise<Object>} Updated area
+   */
+  async toggleAreaStatus(id) {
+    try {
+      logger.info("Toggling area status", { id });
+
+      const area = await prisma.area.findUnique({
+        where: { id },
+        include: {
+          city: {
+            include: { state: true },
+          },
+        },
+      });
+
+      if (!area) {
+        return { success: false, error: "Area not found" };
+      }
+
+      const updatedArea = await prisma.area.update({
+        where: { id },
+        data: { status: !area.status },
+        include: {
+          city: {
+            include: { state: true },
+          },
+        },
+      });
+
+      // Clear cache - delete all area-related cache keys
+      const redis = getRedisClient();
+      if (redis) {
+        const keys = await redis.keys(`${this.cachePrefix}:areas*`);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      }
+
+      logger.info("Area status toggled", {
+        id,
+        oldStatus: area.status,
+        newStatus: updatedArea.status,
+      });
+
+      return {
+        success: true,
+        data: updatedArea,
+      };
+    } catch (error) {
+      logger.error("Error toggling area status", { id, error: error.message });
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Toggle pincode status (active/inactive)
+   * @param {string} id - Pincode UUID
+   * @returns {Promise<Object>} Updated pincode
+   */
+  async togglePincodeStatus(id) {
+    try {
+      logger.info("Toggling pincode status", { id });
+
+      const pincode = await prisma.pincode.findUnique({
+        where: { id },
+        include: {
+          area: {
+            include: {
+              city: {
+                include: { state: true },
+              },
+            },
+          },
+          state: true,
+        },
+      });
+
+      if (!pincode) {
+        return { success: false, error: "Pincode not found" };
+      }
+
+      const updatedPincode = await prisma.pincode.update({
+        where: { id },
+        data: { status: !pincode.status },
+        include: {
+          area: {
+            include: {
+              city: {
+                include: { state: true },
+              },
+            },
+          },
+          state: true,
+        },
+      });
+
+      // Clear cache - delete all pincode-related cache keys
+      const redis = getRedisClient();
+      if (redis) {
+        const keys = await redis.keys(`${this.cachePrefix}:pincodes*`);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      }
+
+      logger.info("Pincode status toggled", {
+        id,
+        oldStatus: pincode.status,
+        newStatus: updatedPincode.status,
+      });
+
+      return {
+        success: true,
+        data: updatedPincode,
+      };
+    } catch (error) {
+      logger.error("Error toggling pincode status", {
+        id,
+        error: error.message,
+      });
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
   }
 }
 
@@ -672,7 +1549,8 @@ class GeographicalService {
 let geographicalServiceInstance = null;
 
 /**
- * Get geographical service instance
+ * Get geographical service instance (for controller compatibility)
+ * @returns {GeographicalService} Singleton instance
  */
 function getGeographicalService() {
   if (!geographicalServiceInstance) {

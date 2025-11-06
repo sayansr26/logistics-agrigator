@@ -1,811 +1,1004 @@
 /**
- * Zone Controller - Zone Management and Service Type Configuration
+ * Zone Controller
  *
- * Handles HTTP requests for zone management operations
- * Integrates with external Partner Micro service through ZoneService
+ * Purpose: Handle partner zone management operations
+ * Following auth-service patterns with function-based exports
  *
- * Features:
- * - Zone CRUD operations
- * - Service type management
- * - Partner-specific zone operations
- * - Zone coverage validation
- * - Comprehensive partner data retrieval
- * - Input validation and error handling
+ * AUTHENTICATED ENDPOINTS - Partner-scoped access required
+ *
+ * Endpoints:
+ * 1.  POST   /api/v1/zones                  - Create new zone
+ * 2.  GET    /api/v1/zones                  - List zones with pagination
+ * 3.  GET    /api/v1/zones/:id              - Get basic zone details
+ * 4.  GET    /api/v1/zones/:id/complete     - Get complete zone with associations
+ * 5.  PUT    /api/v1/zones/:id              - Update zone basic details
+ * 6.  DELETE /api/v1/zones/:id              - Soft delete zone
+ * 7.  GET    /api/v1/zones/:id/services     - Get zone service configuration
+ * 8.  PUT    /api/v1/zones/:id/services     - Update zone services
+ * 9.  GET    /api/v1/zones/:id/geography    - Get zone geographical associations
+ * 10. PUT    /api/v1/zones/:id/geography    - Update zone geography
  */
 
-const ZoneService = require("../services/zoneService");
-const ServiceTypeService = require("../services/serviceTypeService");
 const logger = require("../shared/lib/logger");
 const APIResponse = require("../shared/lib/response");
-const { prisma } = require("../config/database");
+const zoneService = require("../services/zoneService");
 
-class ZoneController {
-  /**
-   * Get all zones with filtering and pagination
-   * GET /api/zones
-   */
-  static async getAllZones(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      const {
-        page = 1,
-        limit = 20,
-        status,
-        search,
-        sortBy = "name",
-        sortOrder = "asc",
-      } = req.query;
+/**
+ * 1. Create new zone with geographical associations and service configuration
+ * @route POST /api/v1/zones
+ * @access Authenticated (Partner scoped)
+ * @body {
+ *   name: string (required),
+ *   description: string,
+ *   status: boolean,
+ *   geographical: {
+ *     states: [uuid],
+ *     cities: [uuid],
+ *     areas: [uuid],
+ *     pincodes: [string]
+ *   },
+ *   services: {
+ *     PICKUP: boolean,
+ *     PICKUP_charges: number,
+ *     DELIVERY: boolean,
+ *     DELIVERY_charges: number,
+ *     COD: boolean,
+ *     COD_charges: number,
+ *     PREPAID: boolean,
+ *     PREPAID_charges: number,
+ *     ODA: boolean,
+ *     ODA_charges: number,
+ *     HILL: boolean,
+ *     HILL_charges: number
+ *   }
+ * }
+ */
+async function createZone(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
 
-      // Validate pagination parameters
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
-
-      if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        const errorResp = APIResponse.error(
-          "Invalid pagination parameters",
-          "INVALID_PAGINATION",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Validate sort parameters
-      const validSortFields = ["name", "createdAt", "updatedAt", "status"];
-      const validSortOrders = ["asc", "desc"];
-
-      if (
-        !validSortFields.includes(sortBy) ||
-        !validSortOrders.includes(sortOrder)
-      ) {
-        const errorResp = APIResponse.error(
-          "Invalid sort parameters",
-          "INVALID_SORT",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const options = {
-        page: pageNum,
-        limit: limitNum,
-        status,
-        search,
-        sortBy,
-        sortOrder,
-      };
-
-      const result = await zoneService.getAllZones(options);
-
-      if (!result.success) {
-        const errorResp = APIResponse.error(
-          result.error?.message || "Failed to retrieve zones",
-          result.error?.code || "ZONE_RETRIEVAL_ERROR",
-          null,
-          500,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      logger.info("Zones retrieved successfully", {
-        userId: req.user?.userId,
-        total: result.data?.length || 0,
-        page: pageNum,
-        limit: limitNum,
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
       });
-
-      return res.status(200).json({
-        ...APIResponse.success(result.data, {
-          pagination: result.meta?.pagination,
-          summary: result.meta?.summary,
-        }),
-      });
-    } catch (error) {
-      logger.error("Failed to get zones", {
-        error: error.message,
-        userId: req.user?.userId,
-        query: req.query,
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
     }
-  }
 
-  /**
-   * Create a new zone
-   * POST /api/zones
-   */
-  static async createZone(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      // Validate required fields
-      const requiredFields = ["name", "description", "partnerId"];
-      const missingFields = requiredFields.filter((field) => !req.body[field]);
+    const zoneData = req.body;
 
-      if (missingFields.length > 0) {
-        const errorResp = APIResponse.error(
-          `Missing required fields: ${missingFields.join(", ")}`,
-          "VALIDATION_ERROR",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
+    logger.info("Creating zone", {
+      partnerId,
+      zoneName: zoneData.name,
+      userId: req.user?.id,
+    });
 
-      const {
-        name,
-        description,
-        partnerId,
-        status = true,
-        geographical = {},
-        services = [],
-      } = req.body;
-
-      // Additional validation
-      if (name.length < 3 || name.length > 100) {
-        const errorResp = APIResponse.error(
-          "Zone name must be between 3 and 100 characters",
-          "INVALID_NAME",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      if (description.length < 10 || description.length > 500) {
-        const errorResp = APIResponse.error(
-          "Zone description must be between 10 and 500 characters",
-          "INVALID_DESCRIPTION",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Validate geographical data structure
-      if (geographical.pincodes && !Array.isArray(geographical.pincodes)) {
-        const errorResp = APIResponse.error(
-          "Geographical pincodes must be an array",
-          "INVALID_GEOGRAPHICAL",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Validate services structure
-      if (services && !Array.isArray(services)) {
-        const errorResp = APIResponse.error(
-          "Services must be an array",
-          "INVALID_SERVICES",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const zoneData = {
-        name: name.trim(),
-        description: description.trim(),
-        partnerId,
-        status,
-        geographical,
-        services,
-      };
-
-      const result = await zoneService.createZone(zoneData);
-
-      if (!result.success) {
-        const errorResp = APIResponse.error(
-          result.error?.message || "Failed to create zone",
-          result.error?.code || "ZONE_CREATION_ERROR",
-          null,
-          500,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      logger.info("Zone created successfully", {
-        userId: req.user?.userId,
-        zoneId: result.data?.id,
-        zoneName: name,
-        partnerId,
-      });
-
-      return res.status(200).json({
-        message: result.data,
-        ...APIResponse.success("Zone created successfully", null, 201),
-      });
-    } catch (error) {
-      logger.error("Failed to create zone", {
-        error: error.message,
-        userId: req.user?.userId,
-        body: { ...req.body, services: "[REDACTED]" },
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
+    // Validate required fields
+    if (
+      !zoneData.name ||
+      typeof zoneData.name !== "string" ||
+      !zoneData.name.trim()
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Zone name is required", "VALIDATION_ERROR"));
     }
-  }
 
-  /**
-   * Get all service types with filtering and pagination
-   * GET /api/service-types
-   */
-  static async getServiceTypes(req, res) {
-    const serviceTypeService = new ServiceTypeService();
-    try {
-      const {
-        page = 1,
-        limit = 20,
-        status = "ACTIVE",
-        category,
-        sortBy = "sortOrder",
-        sortOrder = "asc",
-        search,
-      } = req.query;
+    // Create zone with service (handles transactions and audit logging)
+    const zone = await zoneService.createZone(partnerId, zoneData);
 
-      // Validate pagination parameters
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
+    logger.info("Zone created successfully", {
+      partnerId,
+      zoneId: zone.id,
+      zoneName: zone.name,
+      userId: req.user?.id,
+    });
 
-      if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        const errorResp = APIResponse.error(
-          "Invalid pagination parameters",
-          "INVALID_PAGINATION",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
+    res
+      .status(201)
+      .json(APIResponse.success(zone, "Zone created successfully"));
+  } catch (error) {
+    logger.error("Failed to create zone", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneName: req.body?.name,
+      userId: req.user?.id,
+    });
 
-      // Validate status
-      const validStatuses = ["ACTIVE", "INACTIVE", "ALL"];
-      if (status && !validStatuses.includes(status)) {
-        const errorResp = APIResponse.error(
-          "Invalid status parameter",
-          "INVALID_STATUS",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const options = {
-        page: pageNum,
-        limit: limitNum,
-        status,
-        category,
-        search,
-        sortBy,
-        sortOrder,
-      };
-
-      const result = await serviceTypeService.getServiceTypes(options);
-
-      logger.info("Service types retrieved successfully", {
-        userId: req.user?.userId,
-        total: result.data?.length || 0,
-        page: pageNum,
-        limit: limitNum,
-        status,
-      });
-
-      return res.status(200).json({
-        message: "Service types retrieved successfully",
-        ...APIResponse.success(result.data, {
-          pagination: result.meta?.pagination,
-          filters: result.meta?.filters,
-        }),
-      });
-    } catch (error) {
-      logger.error("Failed to get service types", {
-        error: error.message,
-        userId: req.user?.userId,
-        query: req.query,
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
+    // Handle specific error types
+    if (error.message.includes("already exists")) {
+      return res.status(409).json(APIResponse.error(error.message, "CONFLICT"));
     }
-  }
 
-  /**
-   * Get partner-specific zones
-   * GET /api/partner-zones/:partnerId
-   */
-  static async getPartnerZones(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      const { partnerId } = req.params;
-      const {
-        page = 1,
-        limit = 50,
-        status,
-        search,
-        sortBy = "name",
-        sortOrder = "asc",
-      } = req.query;
-
-      // Validate partnerId
-      if (!partnerId || partnerId.trim().length === 0) {
-        const errorResp = APIResponse.error(
-          "Partner ID is required",
-          "INVALID_PARTNER_ID",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Validate pagination parameters
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
-
-      if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-        const errorResp = APIResponse.error(
-          "Invalid pagination parameters",
-          "INVALID_PAGINATION",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const options = {
-        page: pageNum,
-        limit: limitNum,
-        status,
-        search,
-        sortBy,
-        sortOrder,
-      };
-
-      const result = await zoneService.getPartnerZones(partnerId, options);
-
-      if (!result.success) {
-        const errorResp = APIResponse.error(
-          result.error?.message || "Failed to retrieve partner zones",
-          result.error?.code || "PARTNER_ZONE_RETRIEVAL_ERROR",
-          null,
-          500,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      logger.info("Partner zones retrieved successfully", {
-        userId: req.user?.userId,
-        partnerId,
-        total: result.data?.zones?.length || 0,
-        page: pageNum,
-        limit: limitNum,
-      });
-
-      return res.status(200).json({
-        message: "Partner zones retrieved successfully",
-        ...APIResponse.success(result.data),
-      });
-    } catch (error) {
-      logger.error("Failed to get partner zones", {
-        error: error.message,
-        userId: req.user?.userId,
-        partnerId: req.params.partnerId,
-        query: req.query,
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("does not exist")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
     }
-  }
 
-  /**
-   * Get comprehensive partner data
-   * GET /api/partners/comprehensive-data/:partnerId
-   */
-  static async getComprehensivePartnerData(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      const { partnerId } = req.params;
-      const { includeInactive = false, modules } = req.query;
-
-      // Validate partnerId
-      if (!partnerId || partnerId.trim().length === 0) {
-        const errorResp = APIResponse.error(
-          "Partner ID is required",
-          "INVALID_PARTNER_ID",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const options = {
-        includeInactive: includeInactive === "true",
-        modules,
-      };
-
-      const result = await zoneService.getComprehensivePartnerData(
-        partnerId,
-        options,
-      );
-
-      if (!result.success) {
-        const errorResp = APIResponse.error(
-          result.error?.message ||
-            "Failed to retrieve comprehensive partner data",
-          result.error?.code || "COMPREHENSIVE_DATA_ERROR",
-          null,
-          500,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      logger.info("Comprehensive partner data retrieved successfully", {
-        userId: req.user?.userId,
-        partnerId,
-        modules: result.summary?.dataModules || [],
-        totalRecords: result.summary?.totalRecords || 0,
-        executionTime: result.execution_time_ms,
-      });
-
-      return res.status(200).json({
-        message: result.data,
-        ...APIResponse.success(
-          "Comprehensive partner data retrieved successfully",
-          {
-            summary: result.summary,
-            metadata: result.metadata,
-            executionTime: result.execution_time_ms,
-          },
-        ),
-      });
-    } catch (error) {
-      logger.error("Failed to get comprehensive partner data", {
-        error: error.message,
-        userId: req.user?.userId,
-        partnerId: req.params.partnerId,
-        query: req.query,
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
+    if (
+      error.message.includes("Invalid") ||
+      error.message.includes("required")
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
     }
-  }
 
-  /**
-   * Validate zone coverage for pincodes
-   * POST /api/zones/coverage/validate
-   */
-  static async validateZoneCoverage(req, res) {
-    const zoneService = new ZoneService();
-    try {
-      const { pincodes, partnerId } = req.body;
-
-      // Validate required fields
-      if (!pincodes || !Array.isArray(pincodes) || pincodes.length === 0) {
-        const errorResp = APIResponse.error(
-          "Pincodes array is required and must not be empty",
-          "INVALID_PINCODES",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Validate pincode format
-      const invalidPincodes = pincodes.filter(
-        (pincode) => !/^\d{6}$/.test(pincode.toString()),
-      );
-      if (invalidPincodes.length > 0) {
-        const errorResp = APIResponse.error(
-          `Invalid pincode format: ${invalidPincodes.join(", ")}`,
-          "INVALID_PINCODE_FORMAT",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      // Limit number of pincodes to prevent abuse
-      if (pincodes.length > 1000) {
-        const errorResp = APIResponse.error(
-          "Maximum 1000 pincodes allowed per request",
-          "TOO_MANY_PINCODES",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const result = await zoneService.validateZoneCoverage(
-        pincodes,
-        partnerId,
-      );
-
-      if (!result.success) {
-        const errorResp = APIResponse.error(
-          result.error?.message || "Failed to validate zone coverage",
-          result.error?.code || "ZONE_COVERAGE_VALIDATION_ERROR",
-          null,
-          500,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      logger.info("Zone coverage validation completed", {
-        userId: req.user?.userId,
-        partnerId,
-        totalPincodes: pincodes.length,
-        coveragePercentage: result.data?.coveragePercentage || 0,
-      });
-
-      return res.status(200).json({
-        message: "Zone coverage validation completed successfully",
-        ...APIResponse.success(result.data),
-      });
-    } catch (error) {
-      logger.error("Failed to validate zone coverage", {
-        error: error.message,
-        userId: req.user?.userId,
-        body: {
-          ...req.body,
-          pincodes: `[${req.body?.pincodes?.length || 0} pincodes]`,
-        },
-      });
-
-      const errorResp = APIResponse.error(
-        "Internal server error",
-        "INTERNAL_ERROR",
-        null,
-        500,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
-    }
-  }
-
-  /**
-   * Get service type by ID
-   * GET /api/service-types/:id
-   */
-  static async getServiceTypeById(req, res) {
-    const serviceTypeService = new ServiceTypeService();
-    try {
-      const { id } = req.params;
-
-      const serviceType = await serviceTypeService.getServiceTypeById(id);
-
-      // Log audit
-      await prisma.auditLog.create({
-        data: {
-          action: "VIEW_SERVICE_TYPE",
-          resourceType: "SERVICE_TYPE",
-          resourceId: id,
-          userId: req.user?.userId || null,
-          ipAddress: req.ip,
-          userAgent: req.headers["user-agent"],
-        },
-      });
-
-      return res.status(200).json({
-        message: "Service type retrieved successfully",
-        ...APIResponse.success(serviceType),
-      });
-    } catch (error) {
-      logger.error("Failed to get service type by ID", {
-        error: error.message,
-        id: req.params.id,
-        userId: req.user?.userId,
-      });
-
-      const statusCode = error.statusCode || 500;
-      const errorResp = APIResponse.error(
-        error.message || "Internal server error",
-        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
-        null,
-        statusCode,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
-    }
-  }
-
-  /**
-   * Create a new service type
-   * POST /api/service-types
-   */
-  static async createServiceType(req, res) {
-    const serviceTypeService = new ServiceTypeService();
-    try {
-      // Validate required fields
-      const requiredFields = ["name", "displayName", "category"];
-      const missingFields = requiredFields.filter((field) => !req.body[field]);
-
-      if (missingFields.length > 0) {
-        const errorResp = APIResponse.error(
-          `Missing required fields: ${missingFields.join(", ")}`,
-          "VALIDATION_ERROR",
-          null,
-          400,
-        );
-        return res.status(errorResp.statusCode).json(errorResp);
-      }
-
-      const serviceType = await serviceTypeService.createServiceType(req.body);
-
-      // Log audit
-      await prisma.auditLog.create({
-        data: {
-          action: "CREATE_SERVICE_TYPE",
-          resourceType: "SERVICE_TYPE",
-          resourceId: serviceType.id,
-          userId: req.user?.userId || null,
-          ipAddress: req.ip,
-          userAgent: req.headers["user-agent"],
-          requestData: req.body,
-          responseData: serviceType,
-        },
-      });
-
-      logger.info("Service type created successfully", {
-        id: serviceType.id,
-        name: serviceType.name,
-        userId: req.user?.userId,
-      });
-
-      return res.status(201).json({
-        message: "Service type created successfully",
-        ...APIResponse.success(serviceType),
-      });
-    } catch (error) {
-      logger.error("Failed to create service type", {
-        error: error.message,
-        body: req.body,
-        userId: req.user?.userId,
-      });
-
-      const statusCode = error.statusCode || 500;
-      const errorResp = APIResponse.error(
-        error.message || "Internal server error",
-        error.statusCode === 409 ? "SERVICE_TYPE_EXISTS" : "INTERNAL_ERROR",
-        null,
-        statusCode,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
-    }
-  }
-
-  /**
-   * Update a service type
-   * PUT /api/service-types/:id
-   */
-  static async updateServiceType(req, res) {
-    const serviceTypeService = new ServiceTypeService();
-    try {
-      const { id } = req.params;
-
-      const serviceType = await serviceTypeService.updateServiceType(
-        id,
-        req.body,
-      );
-
-      // Log audit
-      await prisma.auditLog.create({
-        data: {
-          action: "UPDATE_SERVICE_TYPE",
-          resourceType: "SERVICE_TYPE",
-          resourceId: id,
-          userId: req.user?.userId || null,
-          ipAddress: req.ip,
-          userAgent: req.headers["user-agent"],
-          requestData: req.body,
-          responseData: serviceType,
-        },
-      });
-
-      logger.info("Service type updated successfully", {
-        id,
-        userId: req.user?.userId,
-      });
-
-      return res.status(200).json({
-        message: "Service type updated successfully",
-        ...APIResponse.success(serviceType),
-      });
-    } catch (error) {
-      logger.error("Failed to update service type", {
-        error: error.message,
-        id: req.params.id,
-        body: req.body,
-        userId: req.user?.userId,
-      });
-
-      const statusCode = error.statusCode || 500;
-      const errorResp = APIResponse.error(
-        error.message || "Internal server error",
-        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
-        null,
-        statusCode,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
-    }
-  }
-
-  /**
-   * Delete a service type (soft delete)
-   * DELETE /api/service-types/:id
-   */
-  static async deleteServiceType(req, res) {
-    const serviceTypeService = new ServiceTypeService();
-    try {
-      const { id } = req.params;
-
-      const serviceType = await serviceTypeService.deleteServiceType(id);
-
-      // Log audit
-      await prisma.auditLog.create({
-        data: {
-          action: "DELETE_SERVICE_TYPE",
-          resourceType: "SERVICE_TYPE",
-          resourceId: id,
-          userId: req.user?.userId || null,
-          ipAddress: req.ip,
-          userAgent: req.headers["user-agent"],
-          responseData: serviceType,
-        },
-      });
-
-      logger.info("Service type deleted successfully", {
-        id,
-        userId: req.user?.userId,
-      });
-
-      return res.status(200).json({
-        message: "Service type deleted successfully",
-        ...APIResponse.success(serviceType),
-      });
-    } catch (error) {
-      logger.error("Failed to delete service type", {
-        error: error.message,
-        id: req.params.id,
-        userId: req.user?.userId,
-      });
-
-      const statusCode = error.statusCode || 500;
-      const errorResp = APIResponse.error(
-        error.message || "Internal server error",
-        error.statusCode ? "SERVICE_TYPE_NOT_FOUND" : "INTERNAL_ERROR",
-        null,
-        statusCode,
-      );
-      return res.status(errorResp.statusCode).json(errorResp);
-    }
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to create zone", "INTERNAL_ERROR"));
   }
 }
 
-module.exports = ZoneController;
+/**
+ * 2. List zones with pagination and filters
+ * @route GET /api/v1/zones?page=1&limit=20&status=true&search=name
+ * @access Authenticated (Partner scoped)
+ */
+async function listZones(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const filters = {
+      page: req.query.page ? parseInt(req.query.page) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit) : 20,
+      status:
+        req.query.status !== undefined
+          ? req.query.status === "true"
+          : undefined,
+      search: req.query.search,
+      sortBy: req.query.sortBy || "createdAt",
+      sortOrder: req.query.sortOrder || "desc",
+    };
+
+    logger.info("Listing zones", {
+      partnerId,
+      filters,
+      userId: req.user?.id,
+    });
+
+    const result = await zoneService.listZones(partnerId, filters);
+
+    logger.info("Zones listed successfully", {
+      partnerId,
+      count: result.zones.length,
+      total: result.pagination.total,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(result));
+  } catch (error) {
+    logger.error("Failed to list zones", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      filters: req.query,
+      userId: req.user?.id,
+    });
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to retrieve zones", "INTERNAL_ERROR"));
+  }
+}
+
+/**
+ * 3. Get basic zone details
+ * @route GET /api/v1/zones/:id
+ * @access Authenticated (Partner scoped)
+ */
+async function getZone(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Getting zone basic details", {
+      partnerId,
+      zoneId: id,
+      userId: req.user?.id,
+    });
+
+    const zone = await zoneService.getZone(id, partnerId);
+
+    logger.info("Zone retrieved successfully", {
+      partnerId,
+      zoneId: id,
+      zoneName: zone.name,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(zone));
+  } catch (error) {
+    logger.error("Failed to get zone", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to retrieve zone", "INTERNAL_ERROR"));
+  }
+}
+
+/**
+ * 4. Get complete zone with all associations
+ * @route GET /api/v1/zones/:id/complete
+ * @access Authenticated (Partner scoped)
+ */
+async function getZoneComplete(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Getting complete zone details", {
+      partnerId,
+      zoneId: id,
+      userId: req.user?.id,
+    });
+
+    const zone = await zoneService.getZoneComplete(id, partnerId);
+
+    logger.info("Complete zone retrieved successfully", {
+      partnerId,
+      zoneId: id,
+      zoneName: zone.name,
+      summary: zone.summary,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(zone));
+  } catch (error) {
+    logger.error("Failed to get complete zone", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error("Failed to retrieve complete zone", "INTERNAL_ERROR"),
+      );
+  }
+}
+
+/**
+ * 5. Update zone basic details (name, description, status)
+ * @route PUT /api/v1/zones/:id
+ * @access Authenticated (Partner scoped)
+ * @body {
+ *   name: string,
+ *   description: string,
+ *   status: boolean
+ * }
+ */
+async function updateZone(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+    const zoneData = req.body;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    // Validate update data exists
+    if (!zoneData || Object.keys(zoneData).length === 0) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Update data is required", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Updating zone", {
+      partnerId,
+      zoneId: id,
+      changes: Object.keys(zoneData),
+      userId: req.user?.id,
+    });
+
+    const zone = await zoneService.updateZone(id, partnerId, zoneData);
+
+    logger.info("Zone updated successfully", {
+      partnerId,
+      zoneId: id,
+      zoneName: zone.name,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(zone, "Zone updated successfully"));
+  } catch (error) {
+    logger.error("Failed to update zone", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    if (error.message.includes("already exists")) {
+      return res.status(409).json(APIResponse.error(error.message, "CONFLICT"));
+    }
+
+    if (error.message.includes("required")) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    }
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to update zone", "INTERNAL_ERROR"));
+  }
+}
+
+/**
+ * 6. Soft delete zone (set status to false)
+ * @route DELETE /api/v1/zones/:id
+ * @access Authenticated (Partner scoped)
+ */
+async function deleteZone(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Deleting zone", {
+      partnerId,
+      zoneId: id,
+      userId: req.user?.id,
+    });
+
+    const zone = await zoneService.deleteZone(id, partnerId);
+
+    logger.info("Zone deleted successfully", {
+      partnerId,
+      zoneId: id,
+      zoneName: zone.name,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(zone, "Zone deleted successfully"));
+  } catch (error) {
+    logger.error("Failed to delete zone", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to delete zone", "INTERNAL_ERROR"));
+  }
+}
+
+/**
+ * 7. Get zone service configuration
+ * @route GET /api/v1/zones/:id/services
+ * @access Authenticated (Partner scoped)
+ */
+async function getZoneServices(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Getting zone services", {
+      partnerId,
+      zoneId: id,
+      userId: req.user?.id,
+    });
+
+    const result = await zoneService.getZoneServices(id, partnerId);
+
+    logger.info("Zone services retrieved successfully", {
+      partnerId,
+      zoneId: id,
+      summary: result.summary,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(result));
+  } catch (error) {
+    logger.error("Failed to get zone services", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error("Failed to retrieve zone services", "INTERNAL_ERROR"),
+      );
+  }
+}
+
+/**
+ * 8. Update zone service configuration
+ * @route PUT /api/v1/zones/:id/services
+ * @access Authenticated (Partner scoped)
+ * @body {
+ *   PICKUP: boolean,
+ *   PICKUP_charges: number,
+ *   PICKUP_remarks: string,
+ *   DELIVERY: boolean,
+ *   DELIVERY_charges: number,
+ *   DELIVERY_remarks: string,
+ *   COD: boolean,
+ *   COD_charges: number,
+ *   COD_remarks: string,
+ *   PREPAID: boolean,
+ *   PREPAID_charges: number,
+ *   PREPAID_remarks: string,
+ *   ODA: boolean,
+ *   ODA_charges: number,
+ *   ODA_remarks: string,
+ *   HILL: boolean,
+ *   HILL_charges: number,
+ *   HILL_remarks: string
+ * }
+ */
+async function updateZoneServices(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+    const services = req.body;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    // Validate services data exists
+    if (
+      !services ||
+      typeof services !== "object" ||
+      Object.keys(services).length === 0
+    ) {
+      return res
+        .status(400)
+        .json(
+          APIResponse.error("Services data is required", "VALIDATION_ERROR"),
+        );
+    }
+
+    logger.info("Updating zone services", {
+      partnerId,
+      zoneId: id,
+      serviceCount: Object.keys(services).length,
+      userId: req.user?.id,
+    });
+
+    const result = await zoneService.updateZoneServices(
+      id,
+      partnerId,
+      services,
+    );
+
+    logger.info("Zone services updated successfully", {
+      partnerId,
+      zoneId: id,
+      servicesCount: result.length,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(result, "Zone services updated successfully"));
+  } catch (error) {
+    logger.error("Failed to update zone services", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    if (error.message.includes("required")) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error("Failed to update zone services", "INTERNAL_ERROR"),
+      );
+  }
+}
+
+/**
+ * 9. Get zone geographical associations
+ * @route GET /api/v1/zones/:id/geography
+ * @access Authenticated (Partner scoped)
+ */
+async function getZoneGeography(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    logger.info("Getting zone geography", {
+      partnerId,
+      zoneId: id,
+      userId: req.user?.id,
+    });
+
+    const result = await zoneService.getZoneGeography(id, partnerId);
+
+    logger.info("Zone geography retrieved successfully", {
+      partnerId,
+      zoneId: id,
+      summary: result.summary,
+      userId: req.user?.id,
+    });
+
+    res.json(APIResponse.success(result));
+  } catch (error) {
+    logger.error("Failed to get zone geography", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to retrieve zone geography",
+          "INTERNAL_ERROR",
+        ),
+      );
+  }
+}
+
+/**
+ * 10. Update zone geographical associations
+ * @route PUT /api/v1/zones/:id/geography
+ * @access Authenticated (Partner scoped)
+ * @body {
+ *   states: [uuid],
+ *   cities: [uuid],
+ *   areas: [uuid],
+ *   pincodes: [string] // 6-digit pincode codes
+ * }
+ */
+async function updateZoneGeography(req, res) {
+  try {
+    // Extract partnerId from authenticated user
+    const partnerId = req.user?.partnerId;
+
+    if (!partnerId) {
+      logger.warn("Partner ID missing from request", {
+        userId: req.user?.id,
+        ip: req.ip,
+      });
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Unauthorized: Partner ID required",
+            "UNAUTHORIZED",
+          ),
+        );
+    }
+
+    const { id } = req.params;
+    const geographical = req.body;
+
+    // Validate UUID format
+    if (
+      !id ||
+      !id.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Invalid zone ID format", "VALIDATION_ERROR"));
+    }
+
+    // Validate geographical data exists
+    if (!geographical || typeof geographical !== "object") {
+      return res
+        .status(400)
+        .json(
+          APIResponse.error(
+            "Geographical data is required",
+            "VALIDATION_ERROR",
+          ),
+        );
+    }
+
+    // Validate at least one geographical entity provided
+    const hasData =
+      (geographical.states && geographical.states.length > 0) ||
+      (geographical.cities && geographical.cities.length > 0) ||
+      (geographical.areas && geographical.areas.length > 0) ||
+      (geographical.pincodes && geographical.pincodes.length > 0);
+
+    if (!hasData) {
+      return res
+        .status(400)
+        .json(
+          APIResponse.error(
+            "At least one geographical entity (states, cities, areas, or pincodes) is required",
+            "VALIDATION_ERROR",
+          ),
+        );
+    }
+
+    logger.info("Updating zone geography", {
+      partnerId,
+      zoneId: id,
+      statesCount: geographical.states?.length || 0,
+      citiesCount: geographical.cities?.length || 0,
+      areasCount: geographical.areas?.length || 0,
+      pincodesCount: geographical.pincodes?.length || 0,
+      userId: req.user?.id,
+    });
+
+    const result = await zoneService.updateZoneGeography(
+      id,
+      partnerId,
+      geographical,
+    );
+
+    logger.info("Zone geography updated successfully", {
+      partnerId,
+      zoneId: id,
+      summary: result.summary,
+      userId: req.user?.id,
+    });
+
+    res.json(
+      APIResponse.success(result, "Zone geography updated successfully"),
+    );
+  } catch (error) {
+    logger.error("Failed to update zone geography", {
+      error: error.message,
+      stack: error.stack,
+      partnerId: req.user?.partnerId,
+      zoneId: req.params.id,
+      userId: req.user?.id,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    if (
+      error.message.includes("Invalid") ||
+      error.message.includes("inactive")
+    ) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    }
+
+    if (error.message.includes("overlap detected")) {
+      return res.status(409).json(APIResponse.error(error.message, "CONFLICT"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error("Failed to update zone geography", "INTERNAL_ERROR"),
+      );
+  }
+}
+
+/**
+ * Export all controller functions
+ * Following auth-service pattern with function-based exports
+ */
+module.exports = {
+  createZone,
+  listZones,
+  getZone,
+  getZoneComplete,
+  updateZone,
+  deleteZone,
+  getZoneServices,
+  updateZoneServices,
+  getZoneGeography,
+  updateZoneGeography,
+};
