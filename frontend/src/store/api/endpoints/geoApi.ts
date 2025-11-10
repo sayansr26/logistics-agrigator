@@ -250,6 +250,27 @@ interface GetPincodesParams {
   search?: string;
 }
 
+// Distance Calculation Interfaces
+interface CoordinatePoint {
+  latitude: number;
+  longitude: number;
+}
+
+interface DistanceCalculationResult {
+  distance: number;
+  distanceMiles: number;
+  calculationMethod: string;
+  cached?: boolean;
+  fromLocation?: any;
+  toLocation?: any;
+}
+
+interface DistanceResponse {
+  status: string;
+  message: string;
+  data: DistanceCalculationResult;
+}
+
 // ===========================
 // RTK Query API Definition
 // ===========================
@@ -498,6 +519,76 @@ export const geoApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: "Geo", id: "PINCODES" }],
     }),
+
+    /**
+     * Calculate Distance Between Coordinates
+     */
+    calculateCoordinateDistance: builder.mutation<
+      DistanceResponse,
+      { from: CoordinatePoint; to: CoordinatePoint }
+    >({
+      query: (body) => ({
+        url: "/api/v1/geography/distance/coordinates",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /**
+     * Calculate Distance Between Pincodes
+     */
+    calculatePincodeDistance: builder.mutation<
+      DistanceResponse,
+      { fromPincode: string; toPincode: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/geography/distance/pincode-to-pincode",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /**
+     * Calculate Distance Between Cities
+     */
+    calculateCityDistance: builder.mutation<
+      DistanceResponse,
+      { fromCityId: string; toCityId: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/geography/distance/city-to-city",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /**
+     * Calculate Distance Between States
+     */
+    calculateStateDistance: builder.mutation<
+      DistanceResponse,
+      { fromStateId: string; toStateId: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/geography/distance/state-to-state",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /**
+     * Calculate Distance Between Areas
+     */
+    calculateAreaDistance: builder.mutation<
+      DistanceResponse,
+      { fromAreaId: string; toAreaId: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/geography/distance/area-to-area",
+        method: "POST",
+        body,
+      }),
+    }),
   }),
 });
 
@@ -522,6 +613,11 @@ export const {
   useToggleCityStatusMutation,
   useToggleAreaStatusMutation,
   useTogglePincodeStatusMutation,
+  useCalculateCoordinateDistanceMutation,
+  useCalculatePincodeDistanceMutation,
+  useCalculateCityDistanceMutation,
+  useCalculateStateDistanceMutation,
+  useCalculateAreaDistanceMutation,
 } = geoApi;
 
 // ===========================

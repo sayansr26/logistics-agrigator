@@ -6,18 +6,18 @@
 
 ### Service Status Dashboard
 
-| Service          | Development | Testing | Documentation | Production Ready | Notes                                             |
-| ---------------- | ----------- | ------- | ------------- | ---------------- | ------------------------------------------------- |
-| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                 |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, customer management                |
-| Partner Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 75+ endpoints + **Service Types CRUD** ✅         |
-| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                   |
-| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending          |
-| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                     |
-| API Gateway      | ✅ 100%     | ✅ 90%  | ✅ 95%        | ✅ Yes           | **ALL SECURITY COMPLETE** (8/8 tasks)             |
-| Frontend         | ⚠️ 75%      | ⚠️ 50%  | ⚠️ 60%        | 🔄 Migration     | 9/11 tasks - Service Types UI ✅, Navigation next |
-| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured               |
-| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured               |
+| Service          | Development | Testing | Documentation | Production Ready | Notes                                                                |
+| ---------------- | ----------- | ------- | ------------- | ---------------- | -------------------------------------------------------------------- |
+| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                                    |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, customer management                                   |
+| Partner Service  | ⚠️ 95%      | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 75+ endpoints + Service Types CRUD + **Distance Calc (IN PROGRESS)** |
+| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                      |
+| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending                             |
+| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                        |
+| API Gateway      | ✅ 100%     | ✅ 90%  | ✅ 95%        | ✅ Yes           | **ALL SECURITY COMPLETE** (8/8 tasks)                                |
+| Frontend         | ⚠️ 75%      | ⚠️ 50%  | ⚠️ 60%        | 🔄 Migration     | 9/11 tasks - Service Types UI ✅, Navigation next                    |
+| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                  |
+| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                  |
 
 ### Current Sprint: Frontend Architecture Migration (Redux/RTK Query)
 
@@ -73,6 +73,39 @@
   - [x] FE-011: Superadmin user management
 
 ### Recent Achievements
+
+#### Distance Calculator Module (January 2025) ✅
+
+- **Distance Calculation Utility**: Complete Haversine-based distance calculator (Completed 2025-11-10)
+  - **Backend Implementation (Partner Service)**:
+    - ✅ Created geographicalDistanceService.js with Haversine formula implementation
+    - ✅ Implemented distance calculation for: pincode-to-pincode, city-to-city, state-to-state, area-to-area, coordinates
+    - ✅ Added Redis caching with 1-hour TTL for performance optimization
+    - ✅ Created geographicalDistanceController.js with all calculation endpoints
+    - ✅ Added Joi validation schemas for all distance calculation types
+    - ✅ Registered routes in partner-service server.js
+    - ✅ Fixed pincode field mapping (code vs pincode) in database queries
+    - ✅ Added Swagger documentation for all endpoints
+  - **API Testing**:
+    - ✅ Tested coordinate distance: Delhi to Mumbai = 1163.93 km (723.23 miles)
+    - ✅ Tested pincode distance: 110001 to 400001 = 1166.57 km (724.87 miles)
+    - ✅ Verified Redis caching works (cached: true in responses)
+    - ✅ All endpoints return proper success responses with location details
+  - **Frontend Implementation**:
+    - ✅ Created DistanceCalculator component with 5 calculation modes
+    - ✅ Migrated from axios to RTK Query for API integration
+    - ✅ Added mutations to geoApi.ts for all distance calculation types
+    - ✅ Integrated with Geography Management page (/geography)
+    - ✅ Fixed city filtering by state for area calculations
+    - ✅ Added automatic field clearing when parent selection changes
+    - ✅ Implemented proper error handling and loading states
+    - ✅ Successfully tested all calculation modes in browser
+  - **Key Features**:
+    - Pure distance calculation utility (NO charge/pricing logic as requested)
+    - Support for multiple calculation types with dedicated UI tabs
+    - Real-time calculation with instant results
+    - Cached results for improved performance
+    - Clean modal interface integrated into Geography Management
 
 #### Service Types Management Module (January 2025) ✅
 
@@ -165,6 +198,39 @@
   - **Files Modified**: 4 TypeScript files (List, Add, Edit, Detail)
   - **Documentation**: Updated PARTNER_CRUD_PROGRESS.md (100% complete)
   - Impact: Complete Partner CRUD module production-ready, clear module boundaries established, User Management UI patterns successfully replicated
+
+#### Partner Service Distance Calculation Feature (January 2025) 🔄
+
+- **PARTNER-011**: Distance Calculation Utility (Started 2025-01-10)
+  - **Scope**: Pure distance calculation without charge management
+  - **Task File Created**: DISTANCE_CALCULATION_TASK.md
+  - **Memory Bank Updated**: activeContext.md and progress.md
+  - **Implementation Plan**:
+    - Phase 1: Backend Service Layer (Day 1 Morning)
+      - [ ] Haversine formula implementation
+      - [ ] Pincode-to-pincode distance calculation
+      - [ ] City-to-city distance calculation
+      - [ ] State-to-state distance calculation
+      - [ ] Area-to-area distance calculation
+      - [ ] Coordinate-based distance calculation
+      - [ ] Redis caching (1-hour TTL)
+    - Phase 2: API Layer (Day 1 Afternoon)
+      - [ ] Controller with 6 calculation methods
+      - [ ] Joi validation schemas
+      - [ ] Routes registration
+      - [ ] Swagger documentation
+    - Phase 3: Frontend Components (Day 2 Morning)
+      - [ ] DistanceCalculator component
+      - [ ] Multi-mode selector UI
+      - [ ] API service integration
+    - Phase 4: Integration (Day 2 Afternoon)
+      - [ ] Zone management page integration
+      - [ ] Standalone tool page
+      - [ ] Testing and verification
+  - **Estimated Time**: 2 days
+  - **Dependencies**: Geological Zone Management (COMPLETED)
+  - **Impact**: Logistics planning utility for distance-based decisions
+  - **Note**: NO charge/pricing logic - pure distance calculation only
 
 #### Frontend Loading States System (January 2025) ✅
 

@@ -127,6 +127,7 @@ app.use("/api/partners", partnerRoutes);
 // Geological Zone Management Routes (NEW)
 // IMPORTANT: Zone coverage routes MUST come before zone routes to prevent path conflicts
 app.use("/api/v1/geography", require("./routes/geographical"));
+app.use("/api/v1/geography/distance", require("./routes/geographicalDistance")); // Distance calculation routes (NEW)
 app.use("/api/v1/zones/coverage", require("./routes/zoneCoverage"));
 app.use("/api/v1/zones", require("./routes/zones"));
 

@@ -62,7 +62,9 @@ import {
   Hash,
   ChevronLeft,
   ChevronRight,
+  Calculator,
 } from "lucide-react";
+import { DistanceCalculator } from "@/components/geography/distance-calculator";
 
 export default function GeographyPage() {
   const customBreadcrumbs = [
@@ -73,6 +75,9 @@ export default function GeographyPage() {
 
   // Active tab state
   const [activeTab, setActiveTab] = useState("states");
+
+  // Distance calculator state
+  const [showDistanceCalculator, setShowDistanceCalculator] = useState(false);
 
   // States tab state
   const [statesSearchTerm, setStatesSearchTerm] = useState("");
@@ -368,6 +373,13 @@ export default function GeographyPage() {
               Manage states, cities, areas, and pincodes across India
             </p>
           </div>
+          <Button
+            onClick={() => setShowDistanceCalculator(true)}
+            variant="outline"
+          >
+            <Calculator className="mr-2 h-4 w-4" />
+            Distance Calculator
+          </Button>
         </div>
 
         {/* Statistics Cards */}
@@ -1081,6 +1093,12 @@ export default function GeographyPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Distance Calculator Modal */}
+        <DistanceCalculator
+          open={showDistanceCalculator}
+          onOpenChange={setShowDistanceCalculator}
+        />
       </div>
     </DashboardLayout>
   );
