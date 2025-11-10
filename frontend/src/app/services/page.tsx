@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -40,6 +49,7 @@ import {
 } from "@/components/ui/table";
 import {
   useGetServicesQuery,
+  useCreateServiceMutation,
   useUpdateServiceMutation,
   useDeleteServiceMutation,
   type Service,
@@ -110,6 +120,7 @@ export default function ServiceTypesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const itemsPerPage = 20;
 
   // RTK Query - Fetch service types from API
@@ -241,7 +252,10 @@ export default function ServiceTypesPage() {
               Configure logistics service types with pricing and availability
             </p>
           </div>
-          <Button disabled className="flex items-center space-x-2">
+          <Button
+            className="flex items-center space-x-2"
+            onClick={() => setShowCreateDialog(true)}
+          >
             <Plus className="h-4 w-4" />
             <span>Add Service Type</span>
           </Button>
@@ -364,14 +378,14 @@ export default function ServiceTypesPage() {
           <CardContent>
             {/* Enhanced Filter Section */}
             {showFilters && (
-              <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="space-y-6 mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                 {/* Category Filter */}
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
-                    <div className="h-4 w-4 bg-blue-100 rounded-full flex items-center justify-center">
-                      <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
+                    <div className="h-4 w-4 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                      <div className="h-2 w-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
                     </div>
-                    <h3 className="text-sm font-medium text-gray-700">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       Filter by Category
                     </h3>
                   </div>
@@ -556,15 +570,15 @@ export default function ServiceTypesPage() {
             )}
 
             {/* Results Summary */}
-            <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-center space-x-2">
-                <Settings className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">
+                <Settings className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
                   {filteredServices.length} service type
                   {filteredServices.length !== 1 ? "s" : ""} found
                 </span>
                 {hasActiveFilters && (
-                  <span className="text-xs text-blue-600">
+                  <span className="text-xs text-blue-600 dark:text-blue-400">
                     (filtered from {totalCount} total)
                   </span>
                 )}
@@ -574,7 +588,7 @@ export default function ServiceTypesPage() {
                   variant="ghost"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear Filters
@@ -630,6 +644,12 @@ export default function ServiceTypesPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Create Service Type Dialog */}
+        <CreateServiceTypeDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+        />
       </div>
     </DashboardLayout>
   );
@@ -690,6 +710,7 @@ function ServiceTypeRow({ service }: { service: Service }) {
   const [deleteService, { isLoading: isDeleting }] = useDeleteServiceMutation();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const handleToggleStatus = () => {
     setShowConfirmDialog(true);
@@ -761,7 +782,7 @@ function ServiceTypeRow({ service }: { service: Service }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem disabled>
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit Details
               </DropdownMenuItem>
@@ -875,6 +896,13 @@ function ServiceTypeRow({ service }: { service: Service }) {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Service Type Dialog */}
+      <EditServiceTypeDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        service={service}
+      />
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
@@ -898,12 +926,12 @@ function ServiceTypeRow({ service }: { service: Service }) {
                 </div>
                 <div className="p-4 bg-red-100 border-2 border-red-300 rounded-lg">
                   <p className="text-sm text-red-900 font-semibold mb-2">
-                    ⚠️ Warning: This action will soft-delete the service type!
+                    ⚠️ Warning: This action cannot be undone!
                   </p>
                   <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
-                    <li>The service type will be marked as unavailable</li>
-                    <li>It will not appear in active service type lists</li>
-                    <li>Historical data will be preserved</li>
+                    <li>The service type will be permanently deleted</li>
+                    <li>All data will be removed from the database</li>
+                    <li>This action is irreversible</li>
                   </ul>
                 </div>
               </div>
@@ -939,5 +967,467 @@ function ServiceTypeRow({ service }: { service: Service }) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// Create Service Type Dialog Component
+function CreateServiceTypeDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [createService, { isLoading }] = useCreateServiceMutation();
+  const [formData, setFormData] = useState({
+    name: "",
+    displayName: "",
+    category: "LOGISTICS" as "LOGISTICS" | "PAYMENT" | "LOCATION" | "SPECIAL",
+    description: "",
+    baseCharge: "0",
+    sortOrder: 100,
+    isAvailable: true,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createService({
+        ...formData,
+        name: formData.name.toUpperCase(),
+      }).unwrap();
+
+      // Reset form and close dialog
+      setFormData({
+        name: "",
+        displayName: "",
+        category: "LOGISTICS",
+        description: "",
+        baseCharge: "0",
+        sortOrder: 100,
+        isAvailable: true,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Failed to create service type:", error);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center space-x-2">
+            <Plus className="h-5 w-5 text-blue-600" />
+            <span>Create New Service Type</span>
+          </DialogTitle>
+          <DialogDescription>
+            Add a new logistics service type with pricing and configuration
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            {/* Name and Display Name */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name (Code) *</Label>
+                <Input
+                  id="name"
+                  placeholder="e.g., COD, EXPRESS"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      name: e.target.value.toUpperCase(),
+                    })
+                  }
+                  required
+                  className="uppercase"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Uppercase alphanumeric code
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Display Name *</Label>
+                <Input
+                  id="displayName"
+                  placeholder="e.g., Cash on Delivery"
+                  value={formData.displayName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, displayName: e.target.value })
+                  }
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  User-friendly name
+                </p>
+              </div>
+            </div>
+
+            {/* Category and Base Charge */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="category">Category *</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value: any) =>
+                    setFormData({ ...formData, category: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOGISTICS">
+                      <div className="flex items-center space-x-2">
+                        <Package className="h-4 w-4" />
+                        <span>Logistics</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="PAYMENT">
+                      <div className="flex items-center space-x-2">
+                        <CreditCard className="h-4 w-4" />
+                        <span>Payment</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="LOCATION">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-4 w-4" />
+                        <span>Location</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="SPECIAL">
+                      <div className="flex items-center space-x-2">
+                        <Sparkles className="h-4 w-4" />
+                        <span>Special</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="baseCharge">Base Charge (₹)</Label>
+                <Input
+                  id="baseCharge"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  value={formData.baseCharge}
+                  onChange={(e) =>
+                    setFormData({ ...formData, baseCharge: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Enter service type description..."
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                rows={3}
+              />
+            </div>
+
+            {/* Sort Order and Availability */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="sortOrder">Sort Order</Label>
+                <Input
+                  id="sortOrder"
+                  type="number"
+                  min="0"
+                  placeholder="100"
+                  value={formData.sortOrder}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      sortOrder: parseInt(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2 flex items-end">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isAvailable}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        isAvailable: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium">Available for use</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Service Type
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Edit Service Type Dialog Component
+function EditServiceTypeDialog({
+  open,
+  onOpenChange,
+  service,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  service: Service;
+}) {
+  const [updateService, { isLoading }] = useUpdateServiceMutation();
+  const [formData, setFormData] = useState({
+    displayName: service.displayName,
+    category: service.category as
+      | "LOGISTICS"
+      | "PAYMENT"
+      | "LOCATION"
+      | "SPECIAL",
+    description: service.description || "",
+    baseCharge: service.baseCharge,
+    sortOrder: service.sortOrder,
+    isAvailable: service.isAvailable,
+  });
+
+  // Update form data when service prop changes
+  useEffect(() => {
+    setFormData({
+      displayName: service.displayName,
+      category: service.category as
+        | "LOGISTICS"
+        | "PAYMENT"
+        | "LOCATION"
+        | "SPECIAL",
+      description: service.description || "",
+      baseCharge: service.baseCharge,
+      sortOrder: service.sortOrder,
+      isAvailable: service.isAvailable,
+    });
+  }, [service]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateService({
+        id: service.id,
+        data: formData,
+      }).unwrap();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Failed to update service type:", error);
+    }
+  };
+
+  const handleChange = (field: string, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Edit className="h-5 w-5 text-blue-600" />
+              <span>Edit Service Type</span>
+            </DialogTitle>
+            <DialogDescription>
+              Update the service type details. Name cannot be changed after
+              creation.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            {/* Name and Display Name - 2 column layout */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Name (Read-only)</Label>
+                <Input
+                  id="edit-name"
+                  value={service.name}
+                  disabled
+                  className="bg-gray-50 dark:bg-gray-900 uppercase"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cannot be modified
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-displayName">Display Name *</Label>
+                <Input
+                  id="edit-displayName"
+                  value={formData.displayName}
+                  onChange={(e) => handleChange("displayName", e.target.value)}
+                  placeholder="e.g., Cash on Delivery"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Category and Base Charge - 2 column layout */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-category">Category *</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => handleChange("category", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOGISTICS">
+                      <div className="flex items-center space-x-2">
+                        <Package className="h-4 w-4" />
+                        <span>Logistics</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="PAYMENT">
+                      <div className="flex items-center space-x-2">
+                        <IndianRupee className="h-4 w-4" />
+                        <span>Payment</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="LOCATION">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-4 w-4" />
+                        <span>Location</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="SPECIAL">
+                      <div className="flex items-center space-x-2">
+                        <Settings className="h-4 w-4" />
+                        <span>Special</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-baseCharge">Base Charge (₹)</Label>
+                <Input
+                  id="edit-baseCharge"
+                  type="text"
+                  value={formData.baseCharge}
+                  onChange={(e) => handleChange("baseCharge", e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) => handleChange("description", e.target.value)}
+                placeholder="Describe this service type..."
+                rows={3}
+              />
+            </div>
+
+            {/* Sort Order and Availability - 2 column layout */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-sortOrder">Sort Order</Label>
+                <Input
+                  id="edit-sortOrder"
+                  type="number"
+                  value={formData.sortOrder}
+                  onChange={(e) =>
+                    handleChange("sortOrder", parseInt(e.target.value) || 100)
+                  }
+                  min="0"
+                  placeholder="100"
+                />
+              </div>
+
+              <div className="space-y-2 flex items-end">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="edit-isAvailable"
+                    checked={formData.isAvailable}
+                    onChange={(e) =>
+                      handleChange("isAvailable", e.target.checked)
+                    }
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium">Available for use</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Update Service Type
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

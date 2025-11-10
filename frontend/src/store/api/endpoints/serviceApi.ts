@@ -2,7 +2,7 @@ import { baseApi } from "../baseApi";
 
 // Types for Logistics Service Types (COD, Prepaid, Express, etc.)
 export interface Service {
-  id: number;
+  id: string; // UUID
   name: string; // e.g., "COD", "PREPAID", "EXPRESS"
   displayName: string; // e.g., "Cash on Delivery"
   category: "LOGISTICS" | "PAYMENT" | "LOCATION" | "SPECIAL";
@@ -153,7 +153,7 @@ export const serviceApi = baseApi.injectEndpoints({
     }),
 
     // Get service by ID
-    getServiceById: builder.query<{ data: Service }, number>({
+    getServiceById: builder.query<{ data: Service }, string>({
       query: (id) => ({
         url: `/api/v1/service-types/${id}`,
         method: "GET",
@@ -180,7 +180,7 @@ export const serviceApi = baseApi.injectEndpoints({
     // Update service type
     updateService: builder.mutation<
       { data: Service },
-      { id: number; data: UpdateServiceInput }
+      { id: string; data: UpdateServiceInput }
     >({
       query: ({ id, data }) => ({
         url: `/api/v1/service-types/${id}`,
@@ -197,7 +197,7 @@ export const serviceApi = baseApi.injectEndpoints({
     }),
 
     // Delete service type
-    deleteService: builder.mutation<{ data: { success: boolean } }, number>({
+    deleteService: builder.mutation<{ data: { success: boolean } }, string>({
       query: (id) => ({
         url: `/api/v1/service-types/${id}`,
         method: "DELETE",

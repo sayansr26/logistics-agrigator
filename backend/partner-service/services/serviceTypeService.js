@@ -296,7 +296,7 @@ class ServiceTypeService {
    */
   async deleteServiceType(id) {
     try {
-      logger.info("Soft deleting service type", { id });
+      logger.info("Deleting service type", { id });
 
       // Check if service type exists
       const existing = await prisma.serviceType.findUnique({
@@ -309,13 +309,12 @@ class ServiceTypeService {
         throw error;
       }
 
-      // Soft delete by marking as unavailable
-      const serviceType = await prisma.serviceType.update({
+      // Hard delete from database
+      const serviceType = await prisma.serviceType.delete({
         where: { id },
-        data: { isAvailable: false },
       });
 
-      logger.info("Service type soft deleted successfully", {
+      logger.info("Service type deleted successfully", {
         id,
         name: serviceType.name,
       });

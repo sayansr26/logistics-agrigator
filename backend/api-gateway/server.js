@@ -327,7 +327,7 @@ const services = {
   "service-types": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
-      "^/api/v1/service-types": "/api/service-types", // Service types → /api/service-types/*
+      "^/api/v1/service-types": "/api/v1/service-types", // Service types → /api/v1/service-types/*
     },
   },
   // System management endpoints (also in partner service)

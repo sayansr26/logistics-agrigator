@@ -131,6 +131,9 @@ app.use("/api/v1/geography/distance", require("./routes/geographicalDistance"));
 app.use("/api/v1/zones/coverage", require("./routes/zoneCoverage"));
 app.use("/api/v1/zones", require("./routes/zones"));
 
+// Service Type Management Routes (NEW)
+app.use("/api/v1/service-types", require("./routes/serviceTypes"));
+
 // Existing Routes
 app.use("/api/packages", require("./routes/packages"));
 app.use("/api/customer-charges", require("./routes/customerCharges"));
