@@ -221,10 +221,10 @@ export default function ManagePermissionsPage() {
           <Card>
             <CardContent className="p-8 text-center">
               <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                 Failed to Load User
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 {error?.data?.error?.message ||
                   "An error occurred while fetching user details"}
               </p>
@@ -249,10 +249,10 @@ export default function ManagePermissionsPage() {
           <Card>
             <CardContent className="p-8 text-center">
               <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                 User Not Found
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 The user you&apos;re looking for doesn&apos;t exist or has been
                 removed.
               </p>
@@ -274,7 +274,7 @@ export default function ManagePermissionsPage() {
     if (isActive) {
       return <CheckCircle className="h-4 w-4 text-green-600" />;
     }
-    return <Pause className="h-4 w-4 text-gray-600" />;
+    return <Pause className="h-4 w-4 text-gray-600 dark:text-gray-400" />;
   };
 
   const getStatusText = (isActive) => {
@@ -284,7 +284,7 @@ export default function ManagePermissionsPage() {
   const getStatusColorClass = (isActive) => {
     return isActive
       ? "bg-green-100 text-green-800 border-green-200"
-      : "bg-gray-100 text-gray-800 border-gray-200";
+      : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700";
   };
 
   return (
@@ -346,7 +346,7 @@ export default function ManagePermissionsPage() {
           <CardContent>
             <div className="flex items-center space-x-4">
               <Avatar className="h-16 w-16">
-                <AvatarFallback className="text-xl bg-blue-100 text-blue-600">
+                <AvatarFallback className="text-xl bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300">
                   {user.email[0].toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -451,7 +451,7 @@ export default function ManagePermissionsPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
                         <IconComponent className="h-5 w-5 text-blue-600" />
                       </div>
                       <div>
@@ -504,8 +504,8 @@ export default function ManagePermissionsPage() {
                         key={permission.id}
                         className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
                           userPermissions.has(permission.id)
-                            ? "bg-blue-50 border-blue-200"
-                            : "bg-gray-50 border-gray-200"
+                            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800"
+                            : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
                         }`}
                       >
                         <Checkbox
@@ -519,11 +519,11 @@ export default function ManagePermissionsPage() {
                         <div className="flex-1 min-w-0">
                           <Label
                             htmlFor={permission.id}
-                            className="text-sm font-medium text-gray-900 cursor-pointer"
+                            className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer"
                           >
                             {permission.name}
                           </Label>
-                          <p className="text-xs text-gray-600 mt-1">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                             {permission.description}
                           </p>
                         </div>
@@ -546,7 +546,7 @@ export default function ManagePermissionsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">
                   {userPermissions.size}
                 </div>

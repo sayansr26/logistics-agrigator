@@ -138,28 +138,28 @@ const performanceMetrics = [
 function getStatusColor(status) {
   switch (status) {
     case "delivered":
-      return "bg-green-100 text-green-800";
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
     case "in_transit":
-      return "bg-blue-100 text-blue-800";
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
     case "pending":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
     case "delayed":
-      return "bg-red-100 text-red-800";
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
 }
 
 function getPriorityColor(priority) {
   switch (priority) {
     case "high":
-      return "bg-red-100 text-red-800";
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
     case "medium":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
     case "low":
-      return "bg-green-100 text-green-800";
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
 }
 
@@ -424,11 +424,11 @@ export default function DashboardPage() {
                         className={
                           metric.inverse
                             ? metric.value <= metric.target
-                              ? "text-green-600"
-                              : "text-red-600"
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
                             : metric.value >= metric.target
-                              ? "text-green-600"
-                              : "text-red-600"
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
                         }
                       >
                         {metric.inverse

@@ -77,7 +77,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-24 pb-12 px-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <section className="pt-24 pb-12 px-4 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
         <div className="container mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">

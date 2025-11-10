@@ -238,14 +238,14 @@ export default function UsersPage() {
 
         {/* Success Message */}
         {showSuccessMessage && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+          <div className="p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
             <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
               <div>
-                <h3 className="text-sm font-medium text-green-800">
+                <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
                   User Created Successfully!
                 </h3>
-                <p className="text-sm text-green-700">
+                <p className="text-sm text-green-700 dark:text-green-400">
                   The new user has been added to the system.
                 </p>
               </div>
@@ -253,7 +253,7 @@ export default function UsersPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowSuccessMessage(false)}
-                className="ml-auto text-green-600 hover:text-green-800 hover:bg-green-100"
+                className="ml-auto text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -279,8 +279,8 @@ export default function UsersPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <div className="h-4 w-4 bg-green-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                  <div className="h-4 w-4 bg-green-600 dark:bg-green-400 rounded-full"></div>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
@@ -294,8 +294,8 @@ export default function UsersPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                  <div className="h-4 w-4 bg-yellow-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-yellow-100 dark:bg-yellow-900 rounded-full flex items-center justify-center">
+                  <div className="h-4 w-4 bg-yellow-600 dark:bg-yellow-400 rounded-full"></div>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
@@ -309,8 +309,8 @@ export default function UsersPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                  <div className="h-4 w-4 bg-red-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+                  <div className="h-4 w-4 bg-red-600 dark:bg-red-400 rounded-full"></div>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
@@ -349,7 +349,7 @@ export default function UsersPage() {
                     onBlur={() => setIsSearchFocused(false)}
                     className={`pl-10 w-64 transition-all duration-200 ${
                       isSearchFocused
-                        ? "ring-2 ring-blue-500 border-blue-500"
+                        ? "ring-2 ring-blue-500 dark:ring-blue-600 border-blue-500 dark:border-blue-600"
                         : ""
                     }`}
                   />
@@ -358,7 +358,7 @@ export default function UsersPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setSearchTerm("")}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100"
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
                       <X className="h-3 w-3" />
                     </Button>
@@ -378,14 +378,14 @@ export default function UsersPage() {
           <CardContent>
             {/* Enhanced Filter Section */}
             {showFilters && (
-              <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="space-y-6 mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                 {/* Status Filter */}
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
-                    <div className="h-4 w-4 bg-blue-100 rounded-full flex items-center justify-center">
-                      <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
+                    <div className="h-4 w-4 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                      <div className="h-2 w-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
                     </div>
-                    <h3 className="text-sm font-medium text-gray-700">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       Filter by Status
                     </h3>
                   </div>
@@ -439,10 +439,10 @@ export default function UsersPage() {
                 {/* Role Filter */}
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
-                    <div className="h-4 w-4 bg-purple-100 rounded-full flex items-center justify-center">
-                      <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
+                    <div className="h-4 w-4 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center">
+                      <div className="h-2 w-2 bg-purple-600 dark:bg-purple-400 rounded-full"></div>
                     </div>
-                    <h3 className="text-sm font-medium text-gray-700">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       Filter by Role
                     </h3>
                   </div>
@@ -519,16 +519,16 @@ export default function UsersPage() {
 
                 {/* Active Filters Summary */}
                 {hasActiveFilters && (
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center space-x-2">
-                      <Filter className="h-4 w-4 text-gray-500" />
-                      <span className="text-sm text-gray-600">
+                      <Filter className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">
                         Active Filters:
                       </span>
                       {statusFilter !== "all" && (
                         <Badge
                           variant="secondary"
-                          className="bg-blue-100 text-blue-800"
+                          className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300"
                         >
                           Status: {statusFilter}
                         </Badge>
@@ -536,7 +536,7 @@ export default function UsersPage() {
                       {roleFilter !== "all" && (
                         <Badge
                           variant="secondary"
-                          className="bg-purple-100 text-purple-800"
+                          className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300"
                         >
                           Role: {roleFilter}
                         </Badge>
@@ -544,7 +544,7 @@ export default function UsersPage() {
                       {searchTerm && (
                         <Badge
                           variant="secondary"
-                          className="bg-green-100 text-green-800"
+                          className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300"
                         >
                           Search: &quot;{searchTerm}&quot;
                         </Badge>
@@ -564,14 +564,14 @@ export default function UsersPage() {
             )}
 
             {/* Results Summary */}
-            <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-center space-x-2">
-                <Users className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">
+                <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
                   {users.length} user{users.length !== 1 ? "s" : ""} found
                 </span>
                 {hasActiveFilters && (
-                  <span className="text-xs text-blue-600">
+                  <span className="text-xs text-blue-600 dark:text-blue-400">
                     (filtered from {totalUsers} total)
                   </span>
                 )}
@@ -581,7 +581,7 @@ export default function UsersPage() {
                   variant="ghost"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear Filters
@@ -758,7 +758,7 @@ function UsersTable({ users, searchTerm, router }: UsersTableProps) {
               <TableCell>
                 <div className="flex items-center space-x-3">
                   <Avatar>
-                    <AvatarFallback className="bg-blue-100 text-blue-600">
+                    <AvatarFallback className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300">
                       {user.firstName && user.lastName
                         ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
                         : user.email[0].toUpperCase()}

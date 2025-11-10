@@ -3,6 +3,7 @@ const path = require("path");
 const csv = require("csv-parser");
 const { PrismaClient } = require("@prisma/client");
 const logger = require("../shared/lib/logger");
+const { connectRedis, getRedisClient } = require("../config/redis");
 
 const prisma = new PrismaClient();
 const BATCH_SIZE = 1000; // Process in batches of 1000 records
@@ -388,6 +389,65 @@ async function validateImport() {
 }
 
 /**
+ * Clear Redis cache for geographical data
+ */
+async function clearGeographicalCache() {
+  try {
+    console.log("\n🗑️  Clearing geographical data cache...");
+
+    const redis = getRedisClient();
+    if (!redis) {
+      console.log("   ⚠️  Redis client not available, skipping cache clear");
+      return;
+    }
+
+    // Clear all geographical cache keys using SCAN for production safety
+    const pattern = "geo:*";
+    let cursor = 0;
+    let totalKeysDeleted = 0;
+
+    do {
+      // Use SCAN to iterate through keys matching the pattern
+      const result = await redis.scan(cursor, {
+        MATCH: pattern,
+        COUNT: 100,
+      });
+
+      cursor = result.cursor;
+      const keys = result.keys;
+
+      if (keys && keys.length > 0) {
+        // Delete the keys found in this iteration
+        await redis.del(keys);
+        totalKeysDeleted += keys.length;
+        console.log(
+          `   🔄 Deleted ${keys.length} cache keys (total: ${totalKeysDeleted})`,
+        );
+      }
+    } while (cursor !== 0);
+
+    if (totalKeysDeleted > 0) {
+      console.log(
+        `   ✅ Successfully cleared ${totalKeysDeleted} geographical cache keys`,
+      );
+      logger.info("Cleared geographical cache after import", {
+        keysCleared: totalKeysDeleted,
+      });
+    } else {
+      console.log("   ℹ️  No cache keys found to clear");
+      logger.info("No geographical cache keys found to clear");
+    }
+  } catch (error) {
+    // Don't fail the import if cache clearing fails
+    console.warn("   ⚠️  Failed to clear cache:", error.message);
+    logger.warn("Failed to clear geographical cache", {
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+}
+
+/**
  * Main execution
  */
 async function main() {
@@ -395,8 +455,14 @@ async function main() {
     console.log("🏁 Starting Partner Services Pincode Import");
     console.log("=".repeat(50));
 
+    // Connect to Redis for cache clearing at the end
+    console.log("\n🔌 Connecting to Redis...");
+    await connectRedis();
+    console.log("✅ Redis connected successfully");
+
     await importPincodeData();
     await validateImport();
+    await clearGeographicalCache();
 
     console.log("\n🎉 Import process completed successfully!");
   } catch (error) {
@@ -405,6 +471,12 @@ async function main() {
     process.exit(1);
   } finally {
     await prisma.$disconnect();
+    // Close Redis connection
+    const redis = getRedisClient();
+    if (redis) {
+      await redis.quit();
+      console.log("✅ Redis connection closed");
+    }
   }
 }
 

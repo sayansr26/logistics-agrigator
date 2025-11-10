@@ -27,6 +27,7 @@ import {
   LogOut,
   Bell,
 } from "lucide-react";
+import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
 
 export function Header({ className }) {
   const { user, logout } = useAuth();
@@ -115,6 +116,9 @@ export function Header({ className }) {
                 </span>
               </Link>
             </Button>
+
+            {/* Dark Mode Toggle */}
+            <DarkModeToggle />
 
             {/* User Menu */}
             <DropdownMenu>

@@ -79,7 +79,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <div className="w-full max-w-md space-y-8">
         {/* Logo and Title */}
         <div className="text-center">
@@ -99,10 +99,10 @@ export default function LoginPage() {
 
         {/* Error Display */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4">
             <div className="flex items-center space-x-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              <p className="text-sm text-red-700">{error}</p>
+              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
             </div>
           </div>
         )}
@@ -193,7 +193,7 @@ export default function LoginPage() {
 
                   <Link
                     href="/auth/forgot-password"
-                    className="text-sm text-logistics-600 hover:text-logistics-700"
+                    className="text-sm text-logistics-600 hover:text-logistics-700 dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     Forgot password?
                   </Link>
@@ -230,7 +230,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <span className="text-logistics-600 font-medium">
+                <span className="text-logistics-600 dark:text-blue-400 font-medium">
                   Contact your administrator
                 </span>
               </p>

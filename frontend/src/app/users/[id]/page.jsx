@@ -197,7 +197,7 @@ export default function UserProfilePage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Failed to Load User
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 {error?.data?.error?.message ||
                   "An error occurred while fetching user details"}
               </p>
@@ -225,7 +225,7 @@ export default function UserProfilePage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 User Not Found
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 The user you&apos;re looking for doesn&apos;t exist or has been
                 removed.
               </p>
