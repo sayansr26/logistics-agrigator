@@ -182,6 +182,13 @@
     - "Step X of Y" counter in middle
     - Cancel button in top-right, conditional Create/Update button
     - Add and Edit forms have IDENTICAL UI (verified with browser MCP)
+  - **Dark Mode Theming (Completed 2025-01-10)**:
+    - ✅ Fixed all hardcoded colors in stepper components (bg-white → bg-card)
+    - ✅ Replaced gray colors with semantic tokens (text-gray-500 → text-muted-foreground)
+    - ✅ Updated inactive states (bg-gray-100 → bg-muted)
+    - ✅ Fixed badge colors with dark mode support
+    - ✅ Updated disabled inputs (bg-gray-50 → bg-muted)
+    - ✅ All Partner CRUD pages now fully support dark mode
   - **Sidebar Navigation Reorganization**:
     - Created new "Service Management" category
     - Moved "Zone Management" from Core Operations
@@ -197,7 +204,7 @@
   - **Browser Verification**: ✅ All pages verified with browser MCP
   - **Files Modified**: 4 TypeScript files (List, Add, Edit, Detail)
   - **Documentation**: Updated PARTNER_CRUD_PROGRESS.md (100% complete)
-  - Impact: Complete Partner CRUD module production-ready, clear module boundaries established, User Management UI patterns successfully replicated
+  - Impact: Complete Partner CRUD module production-ready with full dark mode support, clear module boundaries established, User Management UI patterns successfully replicated
 
 #### Partner Service Distance Calculation Feature (January 2025) 🔄
 

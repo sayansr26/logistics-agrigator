@@ -227,7 +227,7 @@ export default function AddPartnerPage() {
         </div>
 
         {/* Stepper */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-card rounded-lg border border-border p-6">
           <div className="flex items-center justify-between mb-8">
             {STEPS.map((step, index) => {
               const isCompleted = currentStep > step.id;
@@ -251,7 +251,7 @@ export default function AddPartnerPage() {
                           ? "bg-green-500 border-green-500 text-white"
                           : isCurrent
                             ? "bg-blue-500 border-blue-500 text-white"
-                            : "bg-gray-100 border-gray-300 text-gray-500"
+                            : "bg-muted border-border text-muted-foreground"
                       }`}
                     >
                       {isCompleted ? (
@@ -263,12 +263,12 @@ export default function AddPartnerPage() {
                     <div className="text-center">
                       <p
                         className={`text-sm font-medium ${
-                          isCurrent ? "text-blue-600" : "text-gray-600"
+                          isCurrent ? "text-blue-600" : "text-foreground"
                         }`}
                       >
                         {step.title}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         {step.description}
                       </p>
                     </div>
@@ -276,7 +276,7 @@ export default function AddPartnerPage() {
                   {index < STEPS.length - 1 && (
                     <div
                       className={`w-16 h-0.5 mx-4 ${
-                        isCompleted ? "bg-green-500" : "bg-gray-300"
+                        isCompleted ? "bg-green-500" : "bg-border"
                       }`}
                     />
                   )}
@@ -517,13 +517,13 @@ export default function AddPartnerPage() {
                     <span>Basic Information</span>
                   </h3>
                   <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <dt className="text-gray-500">Name:</dt>
+                    <dt className="text-muted-foreground">Name:</dt>
                     <dd className="font-medium">{formData.name}</dd>
-                    <dt className="text-gray-500">Display Name:</dt>
+                    <dt className="text-muted-foreground">Display Name:</dt>
                     <dd className="font-medium">{formData.displayName}</dd>
-                    <dt className="text-gray-500">Code:</dt>
+                    <dt className="text-muted-foreground">Code:</dt>
                     <dd className="font-medium">{formData.code}</dd>
-                    <dt className="text-gray-500">Status:</dt>
+                    <dt className="text-muted-foreground">Status:</dt>
                     <dd>
                       <Badge
                         variant={formData.isActive ? "default" : "secondary"}
@@ -542,13 +542,13 @@ export default function AddPartnerPage() {
                     <span>API Configuration</span>
                   </h3>
                   <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <dt className="text-gray-500">API URL:</dt>
+                    <dt className="text-muted-foreground">API URL:</dt>
                     <dd className="font-medium break-all">{formData.apiUrl}</dd>
-                    <dt className="text-gray-500">API Token:</dt>
+                    <dt className="text-muted-foreground">API Token:</dt>
                     <dd className="font-medium">
                       {formData.apiToken ? "Configured" : "Not set"}
                     </dd>
-                    <dt className="text-gray-500">API Version:</dt>
+                    <dt className="text-muted-foreground">API Version:</dt>
                     <dd className="font-medium">
                       {formData.apiVersion || "Not specified"}
                     </dd>

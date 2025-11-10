@@ -215,14 +215,14 @@ export default function PartnersPage() {
   const renderStatusBadge = (isActive: boolean) => {
     if (isActive) {
       return (
-        <Badge className="bg-green-50 text-green-700 hover:bg-green-100">
+        <Badge className="bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
           <CheckCircle className="mr-1 h-3 w-3" />
           Active
         </Badge>
       );
     }
     return (
-      <Badge className="bg-gray-50 text-gray-600 hover:bg-gray-100">
+      <Badge className="bg-muted text-muted-foreground hover:bg-muted/80">
         <XCircle className="mr-1 h-3 w-3" />
         Inactive
       </Badge>
@@ -400,7 +400,7 @@ export default function PartnersPage() {
             <div className="flex gap-4 items-center">
               {/* Search */}
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   type="text"
                   placeholder="Search partners by name or code..."
@@ -524,7 +524,7 @@ export default function PartnersPage() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8">
                       <div className="flex flex-col items-center">
-                        <Package className="h-12 w-12 text-gray-400 mb-2" />
+                        <Package className="h-12 w-12 text-muted-foreground mb-2" />
                         <p className="text-muted-foreground">
                           No partners found
                         </p>
