@@ -4,7 +4,10 @@
       "Bash(docker-compose ps:*)",
       "Bash(docker logs:*)",
       "Bash(docker exec:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "mcp__desktop-commander__list_directory",
+      "mcp__desktop-commander__write_file",
+      "mcp__desktop-commander__edit_block"
     ],
     "deny": [],
     "ask": []
