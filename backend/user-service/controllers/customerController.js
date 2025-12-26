@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 /**
  * Create a new customer under a client
  * Permission: customer:create:parent
+ * Supports both DIRECT (B2C) and OUTLET (B2B) customer types
  */
 async function createCustomer(req, res) {
   try {
@@ -22,50 +23,120 @@ async function createCustomer(req, res) {
       monthlyShipmentLimit,
       enabledModules = ["shipment", "billing", "wallet", "analytics"],
       isActive = true,
+      customerType = "DIRECT",
+      // Outlet-specific fields
+      outletCode,
+      outletName,
+      retailerName,
+      contactPerson,
+      outletStatus = "active",
+      outletType,
+      businessHours,
+      gstNumber,
+      panNumber,
+      bankDetails,
+      assignedCouriers = [],
+      serviceAreas = [],
+      address,
+      city,
+      state,
+      pincode,
+      country = "India",
+      // Optional clientId for direct customers (can be null)
+      clientId: requestClientId,
     } = req.body;
 
-    // Get client ID from authenticated user
-    const clientId =
-      req.user.role === "client" ? req.user.id : req.user.parentClientId;
-
-    if (!clientId) {
-      throw new UserServiceError(
-        "Client ID not found. Only client role can create customers.",
-        "CLIENT_ID_REQUIRED",
-        400,
-      );
+    // Get client ID - for admin/superadmin it can come from request body, for client role it's their own ID
+    let clientId;
+    if (["superadmin", "admin"].includes(req.user.role)) {
+      clientId = requestClientId || null; // Admin can create direct customers without client
+    } else {
+      clientId =
+        req.user.role === "client" ? req.user.id : req.user.parentClientId;
     }
 
-    // Check if customer email already exists for this client
-    const existingCustomer = await prisma.customer.findUnique({
-      where: {
-        clientId_email: {
+    // Check if customer email already exists (using the new partial index logic)
+    let existingCustomer;
+    if (clientId) {
+      // Check within client scope
+      existingCustomer = await prisma.customer.findFirst({
+        where: {
           clientId,
           email,
         },
-      },
-    });
+      });
+    } else {
+      // Check direct customers (no client)
+      existingCustomer = await prisma.customer.findFirst({
+        where: {
+          clientId: null,
+          email,
+        },
+      });
+    }
 
     if (existingCustomer) {
       throw new UserServiceError(
-        `Customer with email '${email}' already exists for this client`,
+        clientId
+          ? `Customer with email '${email}' already exists for this client`
+          : `Direct customer with email '${email}' already exists`,
         "CUSTOMER_EMAIL_EXISTS",
         409,
       );
     }
 
+    // For OUTLET type, check outlet code uniqueness
+    if (customerType === "OUTLET" && outletCode) {
+      const existingOutlet = await prisma.customer.findFirst({
+        where: { outletCode },
+      });
+      if (existingOutlet) {
+        throw new UserServiceError(
+          `Outlet with code '${outletCode}' already exists`,
+          "OUTLET_CODE_EXISTS",
+          409,
+        );
+      }
+    }
+
     // Create customer with transaction for audit logging
     const result = await prisma.$transaction(async (tx) => {
+      const customerData = {
+        clientId,
+        customerType,
+        name,
+        email,
+        phone,
+        monthlyShipmentLimit,
+        enabledModules,
+        isActive,
+      };
+
+      // Add outlet-specific fields if OUTLET type
+      if (customerType === "OUTLET") {
+        Object.assign(customerData, {
+          outletCode,
+          outletName,
+          retailerName,
+          contactPerson,
+          outletStatus,
+          outletType,
+          businessHours,
+          gstNumber,
+          panNumber,
+          bankDetails,
+          assignedCouriers,
+          serviceAreas,
+          address,
+          city,
+          state,
+          pincode,
+          country,
+        });
+      }
+
       const customer = await tx.customer.create({
-        data: {
-          clientId,
-          name,
-          email,
-          phone,
-          monthlyShipmentLimit,
-          enabledModules,
-          isActive,
-        },
+        data: customerData,
         include: {
           client: {
             select: {
@@ -95,14 +166,17 @@ async function createCustomer(req, res) {
             created: {
               name: customer.name,
               email: customer.email,
+              customerType: customer.customerType,
               monthlyShipmentLimit: customer.monthlyShipmentLimit,
               enabledModules: customer.enabledModules,
+              ...(customerType === "OUTLET" && { outletCode, outletName }),
             },
           },
           metadata: {
             source: "user-service",
             endpoint: "/api/v1/customers",
             createdBy: req.user.role,
+            customerType,
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
@@ -115,6 +189,7 @@ async function createCustomer(req, res) {
     logger.info("Customer created successfully", {
       customerId: result.id,
       name: result.name,
+      customerType: result.customerType,
       clientId,
       createdBy: req.user.id,
       service: "user-service",
@@ -140,6 +215,7 @@ async function createCustomer(req, res) {
 /**
  * List all customers with pagination and filtering
  * Permission: customer:read:assigned or customer:read:parent
+ * Supports filtering by customerType (DIRECT or OUTLET)
  */
 async function listCustomers(req, res) {
   try {
@@ -152,22 +228,39 @@ async function listCustomers(req, res) {
       isActive,
       startDate,
       endDate,
+      customerType, // Filter by DIRECT or OUTLET
+      clientId: filterClientId, // Filter by specific client
+      outletStatus, // Filter by outlet status
     } = req.query;
 
     const skip = (page - 1) * limit;
 
     // Build where clause
-    let where = {};
+    const where = {};
 
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
         { email: { contains: search, mode: "insensitive" } },
+        { outletCode: { contains: search, mode: "insensitive" } },
+        { outletName: { contains: search, mode: "insensitive" } },
       ];
     }
 
     if (isActive !== undefined) {
       where.isActive = isActive === "true";
+    }
+
+    if (customerType) {
+      where.customerType = customerType;
+    }
+
+    if (filterClientId) {
+      where.clientId = filterClientId;
+    }
+
+    if (outletStatus) {
+      where.outletStatus = outletStatus;
     }
 
     if (startDate || endDate) {
@@ -176,8 +269,20 @@ async function listCustomers(req, res) {
       if (endDate) where.createdAt.lte = new Date(endDate);
     }
 
-    // Apply RBAC scope filtering
-    where = authUtils.applyScopeFilter(req, where);
+    // Apply RBAC scope filtering - handle customer table differently
+    // The applyScopeFilter assumes customerId field exists, but for Customer table we filter by id
+    if (["superadmin", "admin"].includes(req.user.role)) {
+      // Full access - no additional filtering
+    } else if (req.user.role === "client") {
+      where.clientId = req.user.id;
+    } else if (req.user.parentClientId) {
+      where.clientId = req.user.parentClientId;
+    } else if (
+      req.user.assignedCustomerIds &&
+      req.user.assignedCustomerIds.length > 0
+    ) {
+      where.id = { in: req.user.assignedCustomerIds };
+    }
 
     const [customers, total] = await Promise.all([
       prisma.customer.findMany({
@@ -213,7 +318,7 @@ async function listCustomers(req, res) {
         metadata: {
           source: "user-service",
           endpoint: "/api/v1/customers",
-          filters: { search, isActive },
+          filters: { search, isActive, customerType, outletStatus },
           pagination: { page, limit },
           resultCount: customers.length,
           totalCount: total,
@@ -241,6 +346,8 @@ async function listCustomers(req, res) {
         filters: {
           search,
           isActive,
+          customerType,
+          outletStatus,
           startDate,
           endDate,
         },
@@ -358,6 +465,7 @@ async function getCustomer(req, res) {
 /**
  * Update a customer
  * Permission: customer:update:assigned
+ * Supports updating both DIRECT and OUTLET customer fields
  */
 async function updateCustomer(req, res) {
   try {
@@ -388,21 +496,54 @@ async function updateCustomer(req, res) {
       );
     }
 
-    // Check for email conflicts if updating email
+    // Check for email conflicts if updating email (using new partial index logic)
     if (updateData.email && updateData.email !== currentCustomer.email) {
-      const existingEmail = await prisma.customer.findUnique({
-        where: {
-          clientId_email: {
+      let existingEmail;
+      if (currentCustomer.clientId) {
+        existingEmail = await prisma.customer.findFirst({
+          where: {
             clientId: currentCustomer.clientId,
             email: updateData.email,
+            id: { not: customerId },
           },
-        },
-      });
+        });
+      } else {
+        existingEmail = await prisma.customer.findFirst({
+          where: {
+            clientId: null,
+            email: updateData.email,
+            id: { not: customerId },
+          },
+        });
+      }
 
       if (existingEmail) {
         throw new UserServiceError(
-          `Customer with email '${updateData.email}' already exists for this client`,
+          currentCustomer.clientId
+            ? `Customer with email '${updateData.email}' already exists for this client`
+            : `Direct customer with email '${updateData.email}' already exists`,
           "CUSTOMER_EMAIL_EXISTS",
+          409,
+        );
+      }
+    }
+
+    // Check for outlet code conflicts if updating outletCode
+    if (
+      updateData.outletCode &&
+      updateData.outletCode !== currentCustomer.outletCode
+    ) {
+      const existingOutlet = await prisma.customer.findFirst({
+        where: {
+          outletCode: updateData.outletCode,
+          id: { not: customerId },
+        },
+      });
+
+      if (existingOutlet) {
+        throw new UserServiceError(
+          `Outlet with code '${updateData.outletCode}' already exists`,
+          "OUTLET_CODE_EXISTS",
           409,
         );
       }
@@ -433,7 +574,10 @@ async function updateCustomer(req, res) {
       // Create audit log with before/after changes
       const changes = {};
       Object.keys(updateData).forEach((key) => {
-        if (currentCustomer[key] !== updateData[key]) {
+        if (
+          JSON.stringify(currentCustomer[key]) !==
+          JSON.stringify(updateData[key])
+        ) {
           changes[key] = {
             before: currentCustomer[key],
             after: updateData[key],
@@ -454,6 +598,7 @@ async function updateCustomer(req, res) {
             endpoint: `/api/v1/customers/${customerId}`,
             updatedBy: req.user.role,
             fieldsUpdated: Object.keys(updateData),
+            customerType: updatedCustomer.customerType,
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
@@ -465,6 +610,7 @@ async function updateCustomer(req, res) {
 
     logger.info("Customer updated successfully", {
       customerId: result.id,
+      customerType: result.customerType,
       updatedFields: Object.keys(updateData),
       updatedBy: req.user.id,
       service: "user-service",

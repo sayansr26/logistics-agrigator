@@ -1103,6 +1103,235 @@ const recentShipments = await cache.get(`shipments:recent:${clientId}`);
 const courierCharges = await cache.get(`charges:${hashKey}`);
 ```
 
+## Customer Type & Public Signup Patterns (NEW - December 2025)
+
+### Customer Type Model Pattern
+
+**1. CustomerType Enum with Conditional Fields**
+
+```prisma
+enum CustomerType {
+  DIRECT // B2C - Self-registered customers
+  OUTLET // B2B - Admin-managed business customers
+}
+
+model Customer {
+  id           String       @id @default(uuid()) @db.Uuid
+  clientId     String?      @map("client_id") @db.Uuid // Optional for DIRECT
+  customerType CustomerType @default(DIRECT)
+
+  // Base fields (both types)
+  name  String  @db.VarChar(200)
+  email String  @db.VarChar(255)
+  phone String? @db.VarChar(20)
+
+  // Outlet-specific fields (OUTLET type only)
+  outletCode         String? @unique @db.VarChar(50)
+  outletAddress      Json?
+  contactPersonName  String? @db.VarChar(200)
+  contactPersonEmail String? @db.VarChar(255)
+  contactPersonPhone String? @db.VarChar(20)
+
+  // Unique constraints
+  @@unique([clientId, email]) // For OUTLET customers under a client
+  @@unique([email]) // For DIRECT customers (clientId IS NULL)
+  @@index([customerType])
+  @@index([outletCode])
+}
+```
+
+**2. Conditional Validation Pattern**
+
+```javascript
+// Joi schema with conditional validation based on customerType
+const customerCreateSchema = Joi.object({
+  customerType: Joi.string().valid("DIRECT", "OUTLET").default("DIRECT"),
+  name: Joi.string().min(2).max(200).required(),
+  email: Joi.string().email().required(),
+  phone: Joi.string().optional(),
+
+  // Outlet fields - required only when customerType is OUTLET
+  outletCode: Joi.string().max(50).when("customerType", {
+    is: "OUTLET",
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  outletAddress: Joi.object().when("customerType", {
+    is: "OUTLET",
+    then: Joi.optional(),
+    otherwise: Joi.forbidden(),
+  }),
+  // ... more conditional fields
+});
+```
+
+### Inter-Service Communication Pattern (Auth → User Service)
+
+**1. Internal Bootstrap Endpoint**
+
+```javascript
+// user-service/routes/internal.js
+const internalAuth = require("../middleware/internal");
+
+// Protected internal endpoint
+router.post(
+  "/bootstrap-customer",
+  internalAuth, // Validates X-Internal-Request header
+  bootstrapController.bootstrapDirectCustomer,
+);
+
+// Internal auth middleware
+const internalAuth = (req, res, next) => {
+  const internalHeader = req.headers["x-internal-request"];
+  if (
+    !internalHeader ||
+    internalHeader !== process.env.INTERNAL_SERVICE_SECRET
+  ) {
+    return res.status(403).json({
+      status: "error",
+      error: { code: "INTERNAL_ACCESS_DENIED", message: "Internal endpoint" },
+    });
+  }
+  next();
+};
+```
+
+**2. Bootstrap Orchestration Pattern**
+
+```javascript
+// user-service/controllers/bootstrapController.js
+async function bootstrapDirectCustomer(req, res) {
+  const { userId, email, firstName, lastName, phone } = req.body;
+
+  // Atomic transaction: Create Customer + UserProfile + CustomerUser
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Create Customer with auth user's ID
+    const customer = await tx.customer.create({
+      data: {
+        id: userId, // Same ID as auth user
+        name: `${firstName} ${lastName}`,
+        email,
+        phone,
+        customerType: "DIRECT",
+        isActive: true,
+      },
+    });
+
+    // 2. Create UserProfile
+    const profile = await tx.userProfile.create({
+      data: {
+        userId,
+        customerId: customer.id,
+        firstName,
+        lastName,
+        email,
+        phone,
+      },
+    });
+
+    // 3. Link CustomerUser
+    const customerUser = await tx.customerUser.create({
+      data: {
+        customerId: customer.id,
+        userId,
+        isPrimary: true,
+        isActive: true,
+      },
+    });
+
+    return { customer, profile, customerUser };
+  });
+
+  res.status(201).json(APIResponse.success(result));
+}
+```
+
+**3. Auth Service Registration with Bootstrap Call**
+
+```javascript
+// auth-service/controllers/authController.js
+static async register(req, res) {
+  const { email, password, firstName, lastName, phone } = req.body;
+
+  // 1. Create auth user with role=customer
+  const user = await prisma.user.create({
+    data: {
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phone,
+      role: 'customer',  // Enforced, not from request
+    }
+  });
+
+  // 2. Call user-service bootstrap (direct service-to-service)
+  try {
+    const bootstrapResponse = await axios.post(
+      `${process.env.USER_SERVICE_URL}/api/v1/internal/bootstrap-customer`,
+      { userId: user.id, email, firstName, lastName, phone },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': process.env.INTERNAL_SERVICE_SECRET
+        }
+      }
+    );
+  } catch (bootstrapError) {
+    // Rollback: Delete auth user if bootstrap fails
+    await prisma.user.delete({ where: { id: user.id } });
+    throw new Error('Registration failed - unable to create customer profile');
+  }
+
+  // 3. Generate tokens and return like login
+  const { accessToken, refreshToken } = generateTokens(user);
+
+  res.status(201).json(APIResponse.success({
+    user: sanitizeUser(user),
+    accessToken,
+    refreshToken,
+    expiresIn: 3600
+  }));
+}
+```
+
+### Environment Configuration Pattern
+
+**1. Docker Compose Internal Secrets**
+
+```yaml
+# All services need BOTH for compatibility
+services:
+  api-gateway:
+    environment:
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret # Alias for older code
+
+  auth-service:
+    environment:
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
+      - USER_SERVICE_URL=http://user-service:3003 # Direct internal URL
+
+  user-service:
+    environment:
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
+
+  # ... repeat for all 9 services
+```
+
+**2. Service-to-Service vs Gateway Communication**
+
+```javascript
+// ✅ CORRECT: Direct service-to-service within Docker network
+const USER_SERVICE_URL =
+  process.env.USER_SERVICE_URL || "http://user-service:3003";
+
+// ❌ WRONG: Going through gateway for internal calls
+const USER_SERVICE_URL = "http://api-gateway:3001/api/v1/user-service";
+```
+
 ## Charge Package & Quote Calculation Patterns (NEW - December 2025)
 
 ### Charge Package Model Pattern

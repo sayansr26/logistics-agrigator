@@ -28,6 +28,8 @@ const APIResponse = require("./shared/lib/response");
 const userRoutes = require("./routes/users");
 const clientRoutes = require("./routes/clients");
 const customerRoutes = require("./routes/customers");
+const outletRoutes = require("./routes/outlets");
+const internalRoutes = require("./routes/internal");
 const assignmentRoutes = require("./routes/assignments");
 const dashboardRoutes = require("./routes/dashboard");
 const affiliateRoutes = require("./routes/affiliate");
@@ -81,8 +83,10 @@ app.use((req, res, next) => {
 
   // Validate internal requests for all other endpoints
   const internalHeader = req.headers["x-internal-request"];
+  const expectedSecret =
+    process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
 
-  if (!internalHeader || internalHeader !== process.env.INTERNAL_SECRET) {
+  if (!internalHeader || internalHeader !== expectedSecret) {
     logger.warn(`Direct access attempt blocked from ${req.ip} to ${req.path}`);
     return res.status(403).json({
       status: "error",
@@ -584,6 +588,8 @@ app.get("/api/test/pagination", validatePaginationQuery, (req, res) => {
 app.use("/api", userRoutes);
 app.use("/api", clientRoutes);
 app.use("/api", customerRoutes);
+app.use("/api/v1/outlets", outletRoutes);
+app.use("/api/v1/internal", internalRoutes);
 app.use("/api", assignmentRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);

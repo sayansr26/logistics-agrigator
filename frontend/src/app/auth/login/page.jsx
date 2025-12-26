@@ -226,13 +226,16 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Contact Admin */}
+            {/* Sign Up Link */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <span className="text-logistics-600 dark:text-blue-400 font-medium">
-                  Contact your administrator
-                </span>
+                <Link
+                  href="/auth/register"
+                  className="text-logistics-600 dark:text-blue-400 font-medium hover:underline"
+                >
+                  Create one now
+                </Link>
               </p>
             </div>
           </CardContent>

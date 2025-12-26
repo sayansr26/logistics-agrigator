@@ -13,6 +13,9 @@ const userServiceAuth = {
   // Basic JWT authentication using shared middleware
   authenticate: authMiddleware.authenticate,
 
+  // Permission-based authorization using shared middleware
+  authorize: authMiddleware.authorize,
+
   // Enhanced authentication that includes user profile data
   authenticateWithProfile: async (req, res, next) => {
     try {
@@ -57,14 +60,16 @@ const userServiceAuth = {
 
       next();
     } catch (error) {
-      return res.status(401).json(
-        APIResponse.error(
-          "Authentication failed",
-          "AUTHENTICATION_FAILED",
-          error.message,
-          401,
-        ),
-      );
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Authentication failed",
+            "AUTHENTICATION_FAILED",
+            error.message,
+            401,
+          ),
+        );
     }
   },
 
@@ -77,14 +82,16 @@ const userServiceAuth = {
       try {
         // First check if user is authenticated
         if (!req.user) {
-          return res.status(401).json(
-            APIResponse.error(
-              "Authentication required",
-              "UNAUTHORIZED",
-              null,
-              401,
-            ),
-          );
+          return res
+            .status(401)
+            .json(
+              APIResponse.error(
+                "Authentication required",
+                "UNAUTHORIZED",
+                null,
+                401,
+              ),
+            );
         }
 
         // Admin always has access
@@ -94,38 +101,44 @@ const userServiceAuth = {
 
         // Check if user has required role
         if (!allowedRoles.includes(req.user.role)) {
-          return res.status(403).json(
-            APIResponse.error(
-              `Access denied. Required role(s): ${allowedRoles.join(", ")}`,
-              "FORBIDDEN",
-              { userRole: req.user.role, requiredRoles: allowedRoles },
-              403,
-            ),
-          );
+          return res
+            .status(403)
+            .json(
+              APIResponse.error(
+                `Access denied. Required role(s): ${allowedRoles.join(", ")}`,
+                "FORBIDDEN",
+                { userRole: req.user.role, requiredRoles: allowedRoles },
+                403,
+              ),
+            );
         }
 
         // For non-admin users, ensure they have a client association
         if (!req.user.clientId && req.user.role !== "support") {
-          return res.status(403).json(
-            APIResponse.error(
-              "Client association required",
-              "NO_CLIENT_ACCESS",
-              null,
-              403,
-            ),
-          );
+          return res
+            .status(403)
+            .json(
+              APIResponse.error(
+                "Client association required",
+                "NO_CLIENT_ACCESS",
+                null,
+                403,
+              ),
+            );
         }
 
         next();
       } catch (error) {
-        return res.status(500).json(
-          APIResponse.error(
-            "Authorization check failed",
-            "AUTHORIZATION_ERROR",
-            error.message,
-            500,
-          ),
-        );
+        return res
+          .status(500)
+          .json(
+            APIResponse.error(
+              "Authorization check failed",
+              "AUTHORIZATION_ERROR",
+              error.message,
+              500,
+            ),
+          );
       }
     };
   },
@@ -134,9 +147,16 @@ const userServiceAuth = {
   requireOwnClientOrAdmin: async (req, res, next) => {
     try {
       if (!req.user) {
-        return res.status(401).json(
-          APIResponse.error("Authentication required", "UNAUTHORIZED", null, 401),
-        );
+        return res
+          .status(401)
+          .json(
+            APIResponse.error(
+              "Authentication required",
+              "UNAUTHORIZED",
+              null,
+              401,
+            ),
+          );
       }
 
       // Admin can access all clients
@@ -175,14 +195,16 @@ const userServiceAuth = {
 
       next();
     } catch (error) {
-      return res.status(500).json(
-        APIResponse.error(
-          "Client access check failed",
-          "CLIENT_ACCESS_ERROR",
-          error.message,
-          500,
-        ),
-      );
+      return res
+        .status(500)
+        .json(
+          APIResponse.error(
+            "Client access check failed",
+            "CLIENT_ACCESS_ERROR",
+            error.message,
+            500,
+          ),
+        );
     }
   },
 
@@ -190,37 +212,43 @@ const userServiceAuth = {
   requireProfile: async (req, res, next) => {
     try {
       if (!req.userProfile) {
-        return res.status(400).json(
-          APIResponse.error(
-            "User profile required. Please complete your profile setup.",
-            "PROFILE_REQUIRED",
-            null,
-            400,
-          ),
-        );
+        return res
+          .status(400)
+          .json(
+            APIResponse.error(
+              "User profile required. Please complete your profile setup.",
+              "PROFILE_REQUIRED",
+              null,
+              400,
+            ),
+          );
       }
 
       if (!req.userProfile.isActive) {
-        return res.status(403).json(
-          APIResponse.error(
-            "User profile is inactive",
-            "PROFILE_INACTIVE",
-            null,
-            403,
-          ),
-        );
+        return res
+          .status(403)
+          .json(
+            APIResponse.error(
+              "User profile is inactive",
+              "PROFILE_INACTIVE",
+              null,
+              403,
+            ),
+          );
       }
 
       next();
     } catch (error) {
-      return res.status(500).json(
-        APIResponse.error(
-          "Profile check failed",
-          "PROFILE_CHECK_ERROR",
-          error.message,
-          500,
-        ),
-      );
+      return res
+        .status(500)
+        .json(
+          APIResponse.error(
+            "Profile check failed",
+            "PROFILE_CHECK_ERROR",
+            error.message,
+            500,
+          ),
+        );
     }
   },
 

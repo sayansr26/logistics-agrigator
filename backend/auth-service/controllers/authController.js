@@ -7,18 +7,30 @@ const APIResponse = require("../shared/lib/response");
 const { ConflictError, errorUtils } = require("../shared/lib/errors");
 
 class AuthController {
-  // User registration
+  // User registration - Public signup creates DIRECT customers only
   static async register(req, res) {
     try {
       const {
         email,
         password,
-        role = "client",
-        clientId,
-        firstName,
-        lastName,
+        name,
+        firstName: providedFirstName,
+        lastName: providedLastName,
         phone,
       } = req.body;
+
+      // Parse firstName/lastName from name if not provided separately
+      let firstName = providedFirstName;
+      let lastName = providedLastName;
+
+      if (name && (!firstName || !lastName)) {
+        const nameParts = name.trim().split(/\s+/);
+        firstName = firstName || nameParts[0] || "";
+        lastName =
+          lastName || nameParts.slice(1).join(" ") || nameParts[0] || "";
+      }
+
+      const fullName = name || `${firstName} ${lastName}`.trim();
 
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
@@ -32,6 +44,9 @@ class AuthController {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 12);
 
+      // Public signup ALWAYS creates role=customer (enforced, ignore any role in request)
+      const role = "customer";
+
       // Create user with Prisma
       const user = await prisma.user.create({
         data: {
@@ -41,7 +56,7 @@ class AuthController {
           phone,
           passwordHash,
           role,
-          clientId,
+          // No clientId for direct customers
         },
         select: {
           id: true,
@@ -66,14 +81,148 @@ class AuthController {
           changes: {
             email: user.email,
             role: user.role,
+            registrationType: "public_signup",
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
         },
       });
 
-      const successResponse = APIResponse.success({ user });
-      res.status(201).json(successResponse);
+      // Bootstrap user-service records (Customer, UserProfile, CustomerUser)
+      try {
+        // Direct service-to-service call within Docker network
+        const userServiceUrl =
+          process.env.USER_SERVICE_URL || "http://user-service:3003";
+        const internalSecret =
+          process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+
+        const bootstrapResponse = await fetch(
+          `${userServiceUrl}/api/v1/internal/bootstrap-customer`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Internal-Request": internalSecret,
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              email: user.email,
+              name: fullName,
+              firstName,
+              lastName,
+              phone,
+            }),
+          },
+        );
+
+        if (!bootstrapResponse.ok) {
+          const errorData = await bootstrapResponse.json().catch(() => ({}));
+          console.error("Bootstrap failed:", errorData);
+
+          // Rollback: delete the auth user we just created
+          await prisma.user.delete({ where: { id: user.id } });
+
+          // Log rollback
+          await prisma.auditLog.create({
+            data: {
+              userId: null,
+              action: "REGISTRATION_ROLLBACK",
+              resource: "user",
+              resourceId: user.id,
+              changes: {
+                email: user.email,
+                reason: "user-service bootstrap failed",
+                bootstrapError: errorData,
+              },
+              ipAddress: req.ip,
+              userAgent: req.get("User-Agent"),
+            },
+          });
+
+          const errorResponse = APIResponse.error(
+            "Registration failed. Please try again.",
+            "REGISTRATION_FAILED",
+          );
+          return res.status(500).json(errorResponse);
+        }
+      } catch (bootstrapError) {
+        console.error("Bootstrap error:", bootstrapError);
+
+        // Rollback: delete the auth user we just created
+        try {
+          await prisma.user.delete({ where: { id: user.id } });
+        } catch (deleteError) {
+          console.error("Failed to rollback user creation:", deleteError);
+        }
+
+        const errorResponse = APIResponse.error(
+          "Registration failed. Please try again.",
+          "REGISTRATION_FAILED",
+        );
+        return res.status(500).json(errorResponse);
+      }
+
+      // Generate tokens like login - auto-login after successful registration
+      const permissions = AuthController.getRolePermissions(user.role);
+      const accessToken = jwt.sign(
+        {
+          userId: user.id,
+          clientId: user.clientId,
+          role: user.role,
+          permissions,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
+      );
+
+      const refreshToken = jwt.sign(
+        { userId: user.id },
+        process.env.JWT_SECRET,
+        { expiresIn: "30d" },
+      );
+
+      // Store refresh token with Prisma
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          refreshToken,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      // Store session in Redis
+      const redisClient = getRedisClient();
+      await redisClient.setEx(
+        `session:${user.id}`,
+        3600,
+        JSON.stringify({ userId: user.id, role: user.role }),
+      );
+
+      // Return same format as login - auto-login the user
+      res.status(201).json({
+        status: "success",
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            clientId: user.clientId,
+            permissions,
+          },
+          accessToken,
+          refreshToken,
+          expiresIn: 3600,
+        },
+        meta: {
+          message: "Registration successful",
+          timestamp: new Date().toISOString(),
+          service: "auth-service",
+        },
+      });
     } catch (error) {
       console.error("Registration error:", error);
 

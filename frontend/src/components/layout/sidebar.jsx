@@ -24,6 +24,7 @@ import {
   IndianRupee,
   Briefcase,
   Map,
+  UserCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermission } from "@/hooks/usePermission";
@@ -137,6 +138,14 @@ const getNavigationSections = () => {
           disabled: false, // Working and completed
         },
         {
+          title: "Customer Management",
+          href: "/customers",
+          icon: UserCheck,
+          permission: "customer:list:all",
+          roles: ["superadmin", "admin", "client"],
+          disabled: false, // Working - DIRECT and OUTLET customers
+        },
+        {
           title: "Geography",
           href: "/geography",
           icon: Map,
@@ -159,14 +168,6 @@ const getNavigationSections = () => {
           permission: "partner:list:all",
           roles: ["superadmin", "admin", "client"],
           disabled: false, // Working and completed
-        },
-        {
-          title: "Outlets",
-          href: "/outlets",
-          icon: Store,
-          permission: "customer:list:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
         },
       ].filter(canSeeMenuItem),
     },

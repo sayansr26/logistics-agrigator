@@ -79,7 +79,7 @@ const listUsersSchema = Joi.object({
  *               field: email
  */
 
-// Validation schemas
+// Validation schemas for public registration (direct customer signup)
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string()
@@ -90,12 +90,16 @@ const registerSchema = Joi.object({
       "string.pattern.base":
         "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character",
     }),
-  name: Joi.string().min(2).max(100).required(),
-  role: Joi.string()
-    .valid("admin", "finance", "operations", "client", "support")
-    .default("client"),
-  clientId: Joi.string().uuid().optional(),
-});
+  // Accept either name or firstName+lastName
+  name: Joi.string().min(2).max(100).optional(),
+  firstName: Joi.string().min(1).max(100).optional(),
+  lastName: Joi.string().min(1).max(100).optional(),
+  phone: Joi.string()
+    .pattern(/^\+?[1-9]\d{1,14}$/)
+    .optional()
+    .allow(null, ""),
+  // Note: role is ignored for public signup - always enforced as 'customer'
+}).or("name", "firstName"); // Require at least name OR firstName;
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),

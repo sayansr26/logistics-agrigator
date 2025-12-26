@@ -233,30 +233,57 @@ model ClientUser {
   @@map("client_users")
 }
 
-// Customer - End customers of a client (B2B customers using the logistics platform)
+// Customer - End customers of a client (B2B/B2C customers using the logistics platform)
+// CustomerType: DIRECT (B2C self-signup) or OUTLET (B2B managed by admin)
 model Customer {
-  id       String  @id @default(uuid()) @db.Uuid
-  clientId String  @map("client_id") @db.Uuid
-  name     String  @db.VarChar(200)
-  email    String  @db.VarChar(255)
-  phone    String? @db.VarChar(20)
+  id           String       @id @default(uuid()) @db.Uuid
+  clientId     String?      @map("client_id") @db.Uuid // Optional for direct customers
+  customerType CustomerType @default(DIRECT) @map("customer_type")
+  name         String       @db.VarChar(200)
+  email        String       @db.VarChar(255)
+  phone        String?      @db.VarChar(20)
 
   // Feature access control
   monthlyShipmentLimit Int?     @map("monthly_shipment_limit")
   enabledModules       String[] @map("enabled_modules") // ['shipment', 'billing', 'wallet', 'analytics']
 
+  // Outlet-specific fields (only for customerType=OUTLET)
+  outletCode    String? @unique @map("outlet_code") @db.VarChar(50)
+  outletName    String? @map("outlet_name") @db.VarChar(200)
+  retailerName  String? @map("retailer_name") @db.VarChar(200)
+  contactPerson String? @map("contact_person") @db.VarChar(100)
+  outletStatus  String? @map("outlet_status") @db.VarChar(20) // active, inactive, suspended
+  outletType    String? @map("outlet_type") @db.VarChar(50) // franchise, direct, retail, warehouse
+
+  // Outlet business details
+  businessHours    String?  @map("business_hours") @db.VarChar(255)
+  gstNumber        String?  @map("gst_number") @db.VarChar(20)
+  panNumber        String?  @map("pan_number") @db.VarChar(20)
+  bankDetails      Json?    @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
+  assignedCouriers String[] @map("assigned_couriers") // courier codes available at this outlet
+  serviceAreas     String[] @map("service_areas") // pincodes or zones served
+
+  // Outlet address (separate from client address)
+  address String? @db.VarChar(500)
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  pincode String? @db.VarChar(10)
+  country String? @default("India") @db.VarChar(100)
+
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   userProfiles  UserProfile[]
   customerUsers CustomerUser[]
   commissions   Commission[] // Commissions for affiliate who referred this customer
 
-  @@unique([clientId, email])
+  // Note: Unique constraint for email handled via raw SQL migration
+  // Handles: unique(email) when clientId IS NULL, unique(clientId, email) when clientId IS NOT NULL
   @@index([clientId])
   @@index([email])
+  @@index([customerType])
   @@map("customers")
 }
 
@@ -351,4 +378,9 @@ enum CommissionStatus {
   APPROVED // Approved for payout
   PAID // Already paid to affiliate
   CANCELLED // Cancelled (e.g., customer refunded)
+}
+
+enum CustomerType {
+  DIRECT // B2C direct self-signup customer
+  OUTLET // B2B outlet/franchise managed by admin
 }

@@ -19,9 +19,12 @@ interface LoginRequest {
 interface RegisterRequest {
   email: string;
   password: string;
-  name: string;
+  // Accept either name OR firstName+lastName
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
-  role?: string;
+  // Note: role is ignored for public signup - always enforced as 'customer' on backend
 }
 
 interface ForgotPasswordRequest {

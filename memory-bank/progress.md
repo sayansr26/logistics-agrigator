@@ -9,7 +9,7 @@
 | Service          | Development | Testing | Documentation | Production Ready | Notes                                                                          |
 | ---------------- | ----------- | ------- | ------------- | ---------------- | ------------------------------------------------------------------------------ |
 | Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                                              |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, customer management                                             |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, **CustomerTypes + Outlets + Bootstrap** - COMPLETE              |
 | Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Quote Engine + Distance Calc - COMPLETE** |
 | Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                                |
 | Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending                                       |
@@ -73,6 +73,40 @@
   - [x] FE-011: Superadmin user management
 
 ### Recent Achievements
+
+#### Customer Types + Public Signup (December 2025) ✅
+
+- **Customer Type System**: DIRECT (B2C) vs OUTLET (B2B) customer classification (Completed 2025-12-26)
+  - **User Service Schema Extension**:
+    - ✅ Added `CustomerType` enum (DIRECT | OUTLET)
+    - ✅ Extended Customer model with outlet fields (outletCode, outletAddress, contactPerson\*)
+    - ✅ Made clientId optional for DIRECT customers
+    - ✅ Added unique email constraint for DIRECT customers (clientId IS NULL)
+    - ✅ Created database migration `20251226100000_add_customer_types_and_outlets`
+  - **Outlets API**:
+    - ✅ Created `outletController.js` with OUTLET-filtered CRUD operations
+    - ✅ Created `/api/v1/outlets` routes
+    - ✅ Updated customerSchemas.js with conditional validation
+  - **Internal Bootstrap Endpoint**:
+    - ✅ Created `bootstrapController.js` for signup orchestration
+    - ✅ Created `/api/v1/internal/bootstrap-customer` internal route
+    - ✅ Atomic creation: Customer + UserProfile + CustomerUser
+    - ✅ X-Internal-Request header validation middleware
+  - **Auth Service Registration**:
+    - ✅ Refactored `/auth/register` to enforce `role=customer`
+    - ✅ Inter-service call to user-service bootstrap
+    - ✅ Returns tokens like login endpoint
+    - ✅ Rollback on bootstrap failure
+  - **Frontend Implementation**:
+    - ✅ Created `/auth/register` page with validation
+    - ✅ Created `customerApi.ts` RTK Query slice
+    - ✅ Created `/customers` listing page with filters
+    - ✅ Created `/customers/add` page (OUTLET disabled with "Coming Soon")
+    - ✅ Updated sidebar navigation with Customer Management
+  - **Infrastructure**:
+    - ✅ Added `INTERNAL_SERVICE_SECRET` + `INTERNAL_SECRET` to all 9 services
+    - ✅ Fixed API Gateway env var usage
+    - ✅ Added gateway proxy routes for `/api/v1/customers` and `/api/v1/outlets`
 
 #### Charge Packages + Zone-Based Quote Calculation (December 2025) ✅
 
@@ -692,17 +726,19 @@
 
 ---
 
-**Current Focus**: All major Partner Service initiatives COMPLETE. Zone System v2 Migration (6/6 tasks) and Charge Packages + Quote Engine (11/11 tasks) fully implemented with frontend integration.
+**Current Focus**: CustomerTypes + Public Signup COMPLETE. DIRECT customers can self-register, OUTLET creation pending outlet management module.
 
 **Completed This Sprint (December 2025)**:
 
+- ✅ **CustomerTypes + Signup**: DIRECT vs OUTLET customer model with public registration (6/6 tasks)
+- ✅ **User Service Bootstrap**: Internal endpoint for signup orchestration with atomic record creation
+- ✅ **Auth Service Refactor**: Public register enforces customer role, calls user-service bootstrap
+- ✅ **Frontend Registration**: New `/auth/register` page with validation and auto-login
+- ✅ **Frontend Customer Management**: Listing and add pages with RTK Query integration
+- ✅ **Inter-Service Auth**: INTERNAL_SERVICE_SECRET configured across all 9 services
 - ✅ **Zone System v2**: Complete redesign with PincodeType management, Distance zones with milestones, and zone matching
 - ✅ **Charge Packages**: WEIGHT/DISTANCE/GENERIC packages with multi-partner support and modal-based frontend UI
 - ✅ **Quote Calculation Engine**: Zone-based rate calculation with breakdown, pincode type charges, and sorting
-- ✅ **API Gateway Routing**: New `/api/v1/charge-packages` proxy route
-- ✅ **Shipment Service Integration**: X-Internal-Request header and Authorization forwarding
-- ✅ **Legacy Deprecation**: 5 deprecated endpoints returning 410 Gone
-- ✅ **Frontend Charge Packages**: RTK Query slice with create/view/edit modals, filtering, and statistics
 
 **Previously Completed**:
 
@@ -713,6 +749,7 @@
 
 **Next Priorities**:
 
+- OUTLET Customer CRUD (enable frontend creation after outlet management ready)
 - Platform Service with Shopify integration
 - Support Service with ticketing system
 - Shipment bulk operations

@@ -60,6 +60,8 @@ services:
       - SUPPORT_SERVICE_URL=http://support-service:3007
       - PLATFORM_SERVICE_URL=http://platform-service:3008
       - LICENSE_SERVICE_URL=http://license-service:3011
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     ports:
       - "3001:3001"
     volumes:
@@ -90,6 +92,10 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - JWT_EXPIRES_IN=8h
       - JWT_REFRESH_EXPIRES_IN=604800
+      # Inter-service communication (direct within Docker network)
+      - USER_SERVICE_URL=http://user-service:3003
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3002"
@@ -121,6 +127,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
+      # Inter-service communication secret (must match auth-service)
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3003"
@@ -163,6 +172,8 @@ services:
       - WALLET_SERVICE_URL=http://wallet-service:3006
       - PARTNER_SERVICE_URL=http://partner-service:3005
       - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3004"
@@ -217,6 +228,8 @@ services:
       - DELHIVERY_API_URL=https://track.delhivery.com/api/cmu/push/json
       - BLUEDART_API_URL=https://apigateway.bluedart.com
       - DTDC_API_URL=https://blktracksvc.dtdc.com
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3005"
@@ -281,6 +294,8 @@ services:
       - RATE_LIMIT_STRICT_MAX=50
       - RATE_LIMIT_BALANCE_MAX=100
       - RATE_LIMIT_TRANSACTION_MAX=30
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3006"
@@ -320,6 +335,8 @@ services:
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3007"
@@ -361,6 +378,8 @@ services:
       - SHIPMENT_SERVICE_URL=http://shipment-service:3004
       - SHOPIFY_CLIENT_ID=your_shopify_client_id
       - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3008"
@@ -406,6 +425,8 @@ services:
       # Service URLs
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
+      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3011"

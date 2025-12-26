@@ -1,10 +1,14 @@
 # Active Development Context
 
-## Current Sprint: Partner Service - Zone System v2 + Charge Packages (COMPLETED ✅)
+## Current Sprint: Customer Types + Public Signup (COMPLETED ✅)
 
 ### Overview
 
-**COMPLETED**: Full implementation of Zone System v2 (Distance/Geological zones with Pincode Types) and Charge Packages feature with zone-based quote calculation. All 17 tasks across two initiatives are now complete.
+**COMPLETED**: Full implementation of CustomerType system (DIRECT vs OUTLET) with public signup flow for direct customers. The plan introduces a two-tier customer model where DIRECT customers can self-register while OUTLET customers are admin-managed (coming soon).
+
+### Previous Sprint: Partner Service - Zone System v2 + Charge Packages (COMPLETED ✅)
+
+Full implementation of Zone System v2 (Distance/Geological zones with Pincode Types) and Charge Packages feature with zone-based quote calculation. All 17 tasks across two initiatives are now complete.
 
 ### PRD Reference
 
@@ -49,6 +53,54 @@
 8. 🔲 **FE-002**: Setup Redux store with RTK Query
 
 ### Recent Accomplishments
+
+✅ **Customer Types + Public Signup**: Complete feature implementation (Completed 2025-12-26)
+
+- **Backend - User Service Customer Model Extension**:
+  - Added `CustomerType` enum (DIRECT | OUTLET) to Prisma schema
+  - Extended Customer model with outlet-specific fields (outletCode, outletAddress, contactPerson\*, etc.)
+  - Made `clientId` optional to support DIRECT customers without client association
+  - Added unique constraint for email when clientId is null (DIRECT customers)
+  - Created migration: `20251226100000_add_customer_types_and_outlets`
+
+- **Backend - User Service Outlets API**:
+  - Created `outletController.js` for OUTLET customer CRUD operations
+  - Created `outlets.js` routes mounted at `/api/v1/outlets`
+  - Updated `customerSchemas.js` with validation for customerType and outlet fields
+  - Updated `customerController.js` to handle customerType filtering
+
+- **Backend - User Service Bootstrap Endpoint**:
+  - Created `bootstrapController.js` for internal signup orchestration
+  - Created `internal.js` routes at `/api/v1/internal/bootstrap-customer`
+  - Created `internal.js` middleware for X-Internal-Request validation
+  - Bootstrap creates: Customer (DIRECT) + UserProfile + CustomerUser atomically
+
+- **Backend - Auth Service Registration Refactor**:
+  - Updated `/auth/register` to enforce `role=customer` for public signup
+  - Calls user-service bootstrap endpoint to create associated records
+  - Returns tokens like login (accessToken, refreshToken, user)
+  - Implements rollback on bootstrap failure (deletes auth user)
+
+- **Backend - Inter-Service Communication**:
+  - Added `INTERNAL_SERVICE_SECRET` and `INTERNAL_SECRET` to all 9 services in docker-compose.yml
+  - Fixed API Gateway to use correct env var (`INTERNAL_SERVICE_SECRET`)
+  - Direct service-to-service calls within Docker network (not through gateway)
+
+- **Frontend - Public Registration Page**:
+  - Created `/auth/register/page.tsx` with firstName, lastName, email, phone, password fields
+  - Password validation with requirements display (8+ chars, upper/lower/number/special)
+  - Uses `useRegisterMutation` from RTK Query authApi
+  - Auto-login on successful registration
+
+- **Frontend - Customer Management UI**:
+  - Created RTK Query slice `customerApi.ts` for customer CRUD
+  - Created `/customers/page.tsx` with listing, filtering, search
+  - Created `/customers/add/page.tsx` with customer type selection
+  - OUTLET type creation disabled with "Coming Soon" message
+  - Updated sidebar with "Customer Management" under Administration
+
+- **API Gateway Integration**:
+  - Added proxy routes for `/api/v1/customers` and `/api/v1/outlets` to user-service
 
 ✅ **Charge Packages + Zone-Based Quote Calculation**: Complete feature implementation (Completed 2025-12-26)
 
@@ -369,8 +421,8 @@ If critical issues arise:
 
 ### Services Status Summary
 
-- ✅ Auth Service (3002) - RBAC complete, stable with nodemon config
-- ✅ User Service (3003) - Customer management complete, stable with nodemon config
+- ✅ Auth Service (3002) - RBAC complete, public signup with customer role enforcement
+- ✅ User Service (3003) - **CustomerTypes + Outlets + Bootstrap** - COMPLETE, DIRECT/OUTLET model
 - ✅ Shipment Service (3004) - 100% stable, crash loop fixed, nodemon configured
 - ✅ Partner Service (3005) - **100% COMPLETE** - Zone System v2 + Charge Packages + Quote Engine + Distance Calculator
 - ✅ Wallet Service (3006) - Commission system complete, stable with nodemon config
@@ -385,10 +437,15 @@ If critical issues arise:
 **Last Updated**: December 2025 (2025-12-26)
 **Sprint Duration**: 2 weeks
 **Current Day**: COMPLETED
-**Backend Work**: ALL COMPLETE ✅ (Zone Migration 6/6 + Charge Packages 11/11 = 17/17 tasks)
-**Frontend Work**: COMPLETE ✅ (Charge Packages UI with modal-based CRUD)
-**Latest Achievement**: Charge Packages + Zone-Based Quote Calculation - Full stack implementation
+**Backend Work**: ALL COMPLETE ✅ (CustomerTypes+Signup 6/6 + Zone Migration 6/6 + Charge Packages 11/11 = 23 tasks)
+**Frontend Work**: COMPLETE ✅ (Registration page + Customer Management UI)
+**Latest Achievement**: CustomerTypes + Public Signup - DIRECT customers can self-register
 **Completed Initiatives**:
 
+- CustomerTypes + Public Signup (6 tasks) ✅
 - Zone System v2 Migration (PARTNER-012 to PARTNER-017) ✅
 - Charge Packages + Quote Engine (11 tasks) ✅
+
+**Pending Features**:
+
+- OUTLET customer creation (frontend disabled with "Coming Soon" until outlet CRUD ready)
