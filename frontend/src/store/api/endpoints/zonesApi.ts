@@ -4,47 +4,81 @@ import { baseApi } from "../baseApi";
  * Zone Management API Endpoints
  *
  * All zone endpoints route through API Gateway (port 3001)
+ *
+ * Zone System v2:
+ * - DISTANCE zones: Based on distance milestones (km ranges)
+ * - GEOLOGICAL zones: Based on geographical coverage (coming soon)
  */
 
 // ===========================
 // Request/Response Interfaces
 // ===========================
 
+type ZoneType = "DISTANCE" | "GEOLOGICAL";
+
+interface ZoneMilestone {
+  id: string;
+  zoneId: string;
+  minKm: number;
+  maxKm: number;
+  suffix: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 interface Zone {
   id: string;
   name: string;
-  type: "city" | "state" | "region" | "pincode";
-  parentZoneId?: string;
-  isActive: boolean;
+  description?: string;
+  partnerId: string;
+  zoneType: ZoneType;
+  status: boolean;
+  milestones?: ZoneMilestone[];
   createdAt: string;
   updatedAt: string;
 }
 
 interface CreateZoneRequest {
   name: string;
-  type: "city" | "state" | "region" | "pincode";
-  parentZoneId?: string;
-  isActive?: boolean;
+  description?: string;
+  zoneType: ZoneType;
+  status?: boolean;
+  // For DISTANCE zones
+  partnerIds?: string[];
+  milestones?: { minKm: number; maxKm: number }[];
+  // For GEOLOGICAL zones (coming soon)
+  partnerId?: string;
+  geographical?: {
+    states?: string[];
+    cities?: string[];
+    areas?: string[];
+    pincodes?: string[];
+  };
 }
 
 interface UpdateZoneRequest {
   name?: string;
-  type?: "city" | "state" | "region" | "pincode";
-  parentZoneId?: string;
-  isActive?: boolean;
+  description?: string;
+  status?: boolean;
 }
 
 interface ZoneResponse {
   status: string;
-  message: string;
+  message?: string;
   data: {
-    zone: Zone;
+    zone?: Zone;
+    zones?: Zone[];
+    summary?: {
+      zonesCreated: number;
+      partnersAffected: number;
+      milestonesPerZone: number;
+    };
   };
 }
 
 interface ZonesListResponse {
   status: string;
-  message: string;
+  message?: string;
   data: {
     zones: Zone[];
     pagination?: {
@@ -59,29 +93,15 @@ interface ZonesListResponse {
 interface GetZonesParams {
   page?: number;
   limit?: number;
-  type?: "city" | "state" | "region" | "pincode";
-  parentZoneId?: string;
-  isActive?: boolean;
+  zoneType?: ZoneType;
+  status?: boolean;
   search?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
 
-interface ServiceType {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  isActive: boolean;
-}
-
-interface ServiceTypesResponse {
-  status: string;
-  message: string;
-  data: {
-    serviceTypes: ServiceType[];
-  };
-}
+// Note: ServiceType model has been removed from backend.
+// Use /api/v1/pincode-types for pincode type management instead.
 
 interface PartnerZone {
   id: string;
@@ -146,9 +166,9 @@ export const zonesApi = baseApi.injectEndpoints({
      * Get Zones - Fetch list of zones with pagination and filters
      */
     getZones: builder.query<ZonesListResponse, GetZonesParams | void>({
-      query: (params = {}) => ({
+      query: (params) => ({
         url: "/api/v1/zones",
-        params,
+        params: params || {},
       }),
       providesTags: (result) =>
         result?.data?.zones
@@ -164,8 +184,12 @@ export const zonesApi = baseApi.injectEndpoints({
 
     /**
      * Get Zone by ID - Fetch single zone details
+     * Note: Backend returns zone directly in data, not data.zone
      */
-    getZoneById: builder.query<ZoneResponse, string>({
+    getZoneById: builder.query<
+      { status: string; data: Zone; meta?: any },
+      string
+    >({
       query: (zoneId) => `/api/v1/zones/${zoneId}`,
       providesTags: (result, error, id) => [{ type: "Zone", id }],
     }),
@@ -202,13 +226,8 @@ export const zonesApi = baseApi.injectEndpoints({
       ],
     }),
 
-    /**
-     * Get Service Types - Fetch available service types
-     */
-    getServiceTypes: builder.query<ServiceTypesResponse, void>({
-      query: () => "/api/v1/service-types",
-      providesTags: ["Zone"],
-    }),
+    // Note: getServiceTypes has been removed.
+    // Use pincodeTypeApi for pincode type management.
 
     /**
      * Get Partner Zones - Fetch partner-zone mappings
@@ -250,7 +269,6 @@ export const {
   useGetZoneByIdQuery,
   useUpdateZoneMutation,
   useDeleteZoneMutation,
-  useGetServiceTypesQuery,
   useGetPartnerZonesQuery,
   useValidateCoverageMutation,
 } = zonesApi;
@@ -261,13 +279,13 @@ export const {
 
 export type {
   Zone,
+  ZoneType,
+  ZoneMilestone,
   CreateZoneRequest,
   UpdateZoneRequest,
   ZoneResponse,
   ZonesListResponse,
   GetZonesParams,
-  ServiceType,
-  ServiceTypesResponse,
   PartnerZone,
   PartnerZonesResponse,
   ValidateCoverageRequest,

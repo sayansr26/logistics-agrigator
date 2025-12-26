@@ -41,12 +41,16 @@ class PartnerIntegrationService {
       timeout: 60000, // 1 minute
     };
 
-    // Initialize HTTP client
+    // Internal secret for inter-service communication
+    this.internalSecret = process.env.INTERNAL_SECRET;
+
+    // Initialize HTTP client with internal auth header
     this.client = axios.create({
       baseURL: this.partnerServiceURL,
       timeout: this.timeout,
       headers: {
         "Content-Type": "application/json",
+        "X-Internal-Request": this.internalSecret,
       },
     });
 
@@ -64,13 +68,20 @@ class PartnerIntegrationService {
    * Setup axios interceptors for logging and error handling
    */
   setupInterceptors() {
-    // Request interceptor
+    // Request interceptor - ensures internal header is always sent
     this.client.interceptors.request.use(
       (config) => {
+        // Ensure internal secret is always set
+        if (this.internalSecret && !config.headers["X-Internal-Request"]) {
+          config.headers["X-Internal-Request"] = this.internalSecret;
+        }
+
         logger.debug("Partner Service API Request", {
           service: "shipment-service",
           url: config.url,
           method: config.method,
+          hasInternalHeader: !!config.headers["X-Internal-Request"],
+          hasAuthHeader: !!config.headers["Authorization"],
           data: config.data ? JSON.stringify(config.data) : null,
         });
         return config;
@@ -210,9 +221,10 @@ class PartnerIntegrationService {
   /**
    * Calculate shipping rates from Partner Service
    * @param {Object} rateParams - Rate calculation parameters
+   * @param {string} [authToken] - Optional Authorization token to forward
    * @returns {Object} Rate calculation results
    */
-  async calculateRates(rateParams) {
+  async calculateRates(rateParams, authToken = null) {
     try {
       // Validate input parameters
       this.validateRateCalculationParams(rateParams);
@@ -255,9 +267,14 @@ class PartnerIntegrationService {
       let lastError;
       for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
         try {
+          const requestConfig = {};
+          if (authToken) {
+            requestConfig.headers = { Authorization: authToken };
+          }
           const response = await this.client.post(
             "/api/partners/calculate",
             partnerRequest,
+            requestConfig,
           );
 
           if (response.data && response.data.status === "success") {
@@ -316,9 +333,10 @@ class PartnerIntegrationService {
   /**
    * Check serviceability from Partner Service
    * @param {Object} serviceabilityParams - Serviceability check parameters
+   * @param {string} [authToken] - Optional Authorization token to forward
    * @returns {Object} Serviceability results
    */
-  async checkServiceability(serviceabilityParams) {
+  async checkServiceability(serviceabilityParams, authToken = null) {
     try {
       // Validate input parameters
       this.validateServiceabilityParams(serviceabilityParams);
@@ -354,10 +372,15 @@ class PartnerIntegrationService {
         request: partnerRequest,
       });
 
-      // Call Partner Service
+      // Call Partner Service with optional auth header
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
       const response = await this.client.post(
         "/api/partners/serviceability",
         partnerRequest,
+        requestConfig,
       );
 
       if (response.data && response.data.status === "success") {
@@ -393,14 +416,15 @@ class PartnerIntegrationService {
   /**
    * Select optimal courier based on Partner Service recommendations
    * @param {Object} selectionParams - Courier selection parameters
+   * @param {string} [authToken] - Optional Authorization token to forward
    * @returns {Object} Selected courier information
    */
-  async selectOptimalCourier(selectionParams) {
+  async selectOptimalCourier(selectionParams, authToken = null) {
     try {
       // Get rates and serviceability
       const [rates, serviceability] = await Promise.all([
-        this.calculateRates(selectionParams),
-        this.checkServiceability(selectionParams),
+        this.calculateRates(selectionParams, authToken),
+        this.checkServiceability(selectionParams, authToken),
       ]);
 
       // Filter serviceable partners

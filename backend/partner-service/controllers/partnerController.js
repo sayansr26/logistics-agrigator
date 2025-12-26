@@ -5,6 +5,8 @@ const {
   getExternalPartnerClient,
 } = require("../services/externalPartnerClient");
 const { DiscountService } = require("../services/discountService");
+const quoteCalculationService = require("../services/quoteCalculationService");
+const logger = require("../shared/lib/logger");
 
 /**
  * Get all partners with optional filtering, search, pagination, and sorting
@@ -276,8 +278,11 @@ async function deletePartner(id, req = {}) {
 
 /**
  * Calculate shipping rates for given parameters
+ * Uses new Zone System v2 with charge packages
+ * Falls back to external API or local rates if quote engine fails
+ *
  * @param {Object} params - Rate calculation parameters
- * @returns {Promise<Array>} Calculated rates from partners
+ * @returns {Promise<Object>} Calculated rates with breakdown
  */
 async function calculateRates(params) {
   const {
@@ -288,6 +293,9 @@ async function calculateRates(params) {
     codAmount,
     partnerId,
     dimensions,
+    paymentMode,
+    shipmentValue,
+    sortBy,
   } = params;
 
   // Validate required parameters
@@ -297,75 +305,120 @@ async function calculateRates(params) {
     );
   }
 
+  // Determine payment type from paymentMode or codAmount
+  const paymentType =
+    paymentMode?.toUpperCase() ||
+    (codAmount && codAmount > 0 ? "COD" : "PREPAID");
+
   try {
-    // Get external API client
-    const externalClient = getExternalPartnerClient();
-
-    // Prepare parameters for external API
-    const externalParams = {
-      origin: fromPincode,
-      destination: toPincode,
+    // Use new Zone System v2 quote calculation
+    const quoteResult = await quoteCalculationService.calculateRates({
+      fromPincode,
+      toPincode,
       weight: parseFloat(weight),
-      dimensions: dimensions || { length: 10, width: 10, height: 10 },
+      dimensions,
+      paymentType,
+      codAmount: codAmount ? parseFloat(codAmount) : 0,
+      declaredValue: shipmentValue ? parseFloat(shipmentValue) : 0,
+      partnerId,
+      sortBy: sortBy || "cheapest",
+    });
+
+    // Transform to expected response format (maintaining backward compatibility)
+    const rates = quoteResult.rates.map((rate) => ({
+      partnerId: rate.partnerId,
+      partnerName: rate.partnerName,
+      serviceable: rate.serviceable,
+      rate: rate.baseRate,
+      totalRate: rate.totalRate,
+      totalAmount: rate.totalRate, // Alias for backward compatibility
+      deliveryDays: rate.estimatedDays,
+      estimatedDays: rate.estimatedDays,
+      distanceKm: rate.distanceKm,
+      zoneSuffix: rate.zoneSuffix,
+      zoneName: rate.zoneName,
+      breakdown: rate.breakdown,
+      // Legacy fields for compatibility
       serviceType: serviceType || "standard",
-      partnerId: partnerId || "partner_001", // Use requested partner or default
+      isServiceable: rate.serviceable,
+    }));
+
+    logger.info("Quote calculation successful", {
+      fromPincode,
+      toPincode,
+      weight,
+      ratesCount: rates.length,
+      cheapestRate: quoteResult.cheapestRate?.totalRate,
+    });
+
+    // Return enriched response
+    return {
+      rates,
+      cheapestRate: quoteResult.cheapestRate,
+      fastestRate: quoteResult.fastestRate,
+      summary: quoteResult.summary,
     };
+  } catch (quoteError) {
+    logger.warn("Quote engine failed, falling back to external API", {
+      error: quoteError.message,
+      fromPincode,
+      toPincode,
+    });
 
-    // Call external Partner Micro service for real-time rates
-    const externalResponse =
-      await externalClient.calculateRates(externalParams);
+    // Fallback to external API
+    try {
+      const externalClient = getExternalPartnerClient();
+      const externalParams = {
+        origin: fromPincode,
+        destination: toPincode,
+        weight: parseFloat(weight),
+        dimensions: dimensions || { length: 10, width: 10, height: 10 },
+        serviceType: serviceType || "standard",
+        partnerId: partnerId || "partner_001",
+      };
 
-    if (
-      externalResponse.success &&
-      externalResponse.data &&
-      externalResponse.data.rates
-    ) {
-      let rates = externalResponse.data.rates;
+      const externalResponse =
+        await externalClient.calculateRates(externalParams);
 
-      // Filter by specific partner if requested
-      if (partnerId) {
-        rates = rates.filter((rate) => rate.partnerId === partnerId);
+      if (
+        externalResponse.success &&
+        externalResponse.data &&
+        externalResponse.data.rates
+      ) {
+        let rates = externalResponse.data.rates;
+
+        if (partnerId) {
+          rates = rates.filter((rate) => rate.partnerId === partnerId);
+        }
+
+        if (codAmount) {
+          rates = rates.map((rate) => {
+            if (rate.cod) {
+              const codCharge = codAmount * 0.02;
+              return {
+                ...rate,
+                rate: rate.rate + codCharge,
+                codCharge: codCharge,
+                totalAmount: rate.rate + codCharge,
+              };
+            }
+            return { ...rate, totalAmount: rate.rate };
+          });
+        } else {
+          rates = rates.map((rate) => ({ ...rate, totalAmount: rate.rate }));
+        }
+
+        return { rates };
       }
-
-      // Add COD charges if applicable
-      if (codAmount) {
-        rates = rates.map((rate) => {
-          if (rate.cod) {
-            // Add 2% COD charge (configurable)
-            const codCharge = codAmount * 0.02;
-            return {
-              ...rate,
-              rate: rate.rate + codCharge,
-              codCharge: codCharge,
-              totalAmount: rate.rate + codCharge,
-            };
-          }
-          return { ...rate, totalAmount: rate.rate };
-        });
-      } else {
-        rates = rates.map((rate) => ({ ...rate, totalAmount: rate.rate }));
-      }
-
-      // Log successful rate calculation
-      console.log("External API rate calculation successful", {
-        fromPincode,
-        toPincode,
-        weight,
-        ratesCount: rates.length,
+    } catch (externalError) {
+      logger.warn("External API also failed, using local rates", {
+        error: externalError.message,
       });
-
-      return rates;
-    } else {
-      throw new Error("Invalid response from external Partner Micro service");
     }
-  } catch (externalError) {
-    console.error(
-      "External API rate calculation failed, falling back to local rates:",
-      externalError.message,
-    );
 
-    // Fallback to local rate calculation if external API fails
-    return await calculateLocalRates(params);
+    // Final fallback to local rate calculation
+    const localRates = await calculateLocalRates(params);
+    return { rates: localRates };
   }
 }
 
@@ -520,8 +573,11 @@ async function calculateLocalRates(params) {
 
 /**
  * Check serviceability for given parameters
+ * Uses new Zone System v2 with distance zones
+ * Falls back to external API if quote engine fails
+ *
  * @param {Object} params - Serviceability check parameters
- * @returns {Promise<Array>} Serviceability results
+ * @returns {Promise<Object>} Serviceability results
  */
 async function checkServiceability(params) {
   const { fromPincode, toPincode, partnerId, serviceType } = params;
@@ -532,70 +588,122 @@ async function checkServiceability(params) {
   }
 
   try {
-    // Get external API client
-    const externalClient = getExternalPartnerClient();
-
-    // Check serviceability for destination pincode
-    const externalResponse = await externalClient.checkServiceability({
-      pincode: toPincode,
-      serviceType: serviceType || "standard",
-    });
-
-    if (externalResponse.success && externalResponse.data) {
-      const { serviceable, partners, services, cod, prepaid } =
-        externalResponse.data;
-
-      if (!serviceable) {
-        return [
-          {
-            partnerId: null,
-            partnerName: "No Service Available",
-            isServiceable: false,
-            serviceTypes: [],
-            deliveryDays: {},
-            cod: false,
-            prepaid: false,
-          },
-        ];
-      }
-
-      // Filter by specific partner if requested
-      let availablePartners = partners;
-      if (partnerId) {
-        availablePartners = partners.filter((p) => p === partnerId);
-      }
-
-      // Map to expected format
-      const serviceabilityResults = availablePartners.map((partnerCode) => ({
-        partnerId: partnerCode,
-        partnerName: getPartnerDisplayName(partnerCode),
-        isServiceable: true,
-        serviceTypes: services || ["standard"],
-        deliveryDays: getEstimatedDeliveryDays(partnerCode, services),
-        cod,
-        prepaid,
-      }));
-
-      // Log successful serviceability check
-      console.log("External API serviceability check successful", {
+    // Use new Zone System v2 quote serviceability check
+    const serviceabilityResult =
+      await quoteCalculationService.checkServiceability({
         fromPincode,
         toPincode,
-        serviceable,
-        partnersCount: availablePartners.length,
+        partnerId,
       });
 
-      return serviceabilityResults;
-    } else {
-      throw new Error("Invalid response from external Partner Micro service");
-    }
-  } catch (externalError) {
-    console.error(
-      "External API serviceability check failed, falling back to local check:",
-      externalError.message,
+    // Transform to expected response format
+    const results = serviceabilityResult.serviceability.map((item) => ({
+      partnerId: item.partnerId,
+      partnerName: item.partnerName,
+      isServiceable: item.serviceable,
+      serviceable: item.serviceable,
+      distanceKm: item.distanceKm,
+      zoneSuffix: item.zoneSuffix,
+      zoneId: item.zoneId,
+      zoneName: item.zoneName,
+      estimatedDays: item.estimatedDays,
+      deliveryDays: item.estimatedDays,
+      serviceTypes: ["standard"], // Default for now
+      cod: true, // Will be configured per partner in future
+      prepaid: true,
+      error: item.error,
+    }));
+
+    logger.info("Serviceability check successful", {
+      fromPincode,
+      toPincode,
+      serviceableCount: serviceabilityResult.serviceableCount,
+      totalPartners: serviceabilityResult.totalPartners,
+    });
+
+    return {
+      serviceability: results,
+      summary: {
+        fromPincode,
+        toPincode,
+        serviceableCount: serviceabilityResult.serviceableCount,
+        totalPartners: serviceabilityResult.totalPartners,
+      },
+    };
+  } catch (quoteError) {
+    logger.warn(
+      "Quote engine serviceability check failed, falling back to external API",
+      {
+        error: quoteError.message,
+        fromPincode,
+        toPincode,
+      },
     );
 
-    // Fallback to local serviceability check
-    return await checkLocalServiceability(params);
+    // Fallback to external API
+    try {
+      const externalClient = getExternalPartnerClient();
+
+      const externalResponse = await externalClient.checkServiceability({
+        pincode: toPincode,
+        serviceType: serviceType || "standard",
+      });
+
+      if (externalResponse.success && externalResponse.data) {
+        const { serviceable, partners, services, cod, prepaid } =
+          externalResponse.data;
+
+        if (!serviceable) {
+          return {
+            serviceability: [
+              {
+                partnerId: null,
+                partnerName: "No Service Available",
+                isServiceable: false,
+                serviceTypes: [],
+                deliveryDays: {},
+                cod: false,
+                prepaid: false,
+              },
+            ],
+          };
+        }
+
+        let availablePartners = partners;
+        if (partnerId) {
+          availablePartners = partners.filter((p) => p === partnerId);
+        }
+
+        const serviceabilityResults = availablePartners.map((partnerCode) => ({
+          partnerId: partnerCode,
+          partnerName: getPartnerDisplayName(partnerCode),
+          isServiceable: true,
+          serviceTypes: services || ["standard"],
+          deliveryDays: getEstimatedDeliveryDays(partnerCode, services),
+          cod,
+          prepaid,
+        }));
+
+        logger.info("External API serviceability check successful", {
+          fromPincode,
+          toPincode,
+          serviceable,
+          partnersCount: availablePartners.length,
+        });
+
+        return { serviceability: serviceabilityResults };
+      } else {
+        throw new Error("Invalid response from external Partner Micro service");
+      }
+    } catch (externalError) {
+      logger.warn("External API also failed, using local serviceability", {
+        error: externalError.message,
+      });
+
+      // Final fallback to local serviceability check
+      const localResults = await checkLocalServiceability(params);
+      return { serviceability: localResults };
+    }
   }
 }
 

@@ -42,9 +42,10 @@ import { useAuth } from "@/hooks/useAuth";
 const defaultFormData = {
   name: "",
   description: "",
-  partnerId: "",
+  partnerId: "", // For geological zones (single partner)
+  selectedPartnerIds: [], // For distance zones (multiple partners)
   status: true,
-  zoneType: "zone-wise", // New field for zone type selection
+  zoneType: "distance-wise", // Default to distance-wise (zone-wise coming soon)
   selectedStates: [],
   selectedCities: [],
   selectedAreas: [],
@@ -52,7 +53,7 @@ const defaultFormData = {
   manualPincodes: [], // New field for manually entered pincodes
   services: [],
   // Distance-wise specific fields
-  distanceSlabs: [{ id: 1, name: "", distanceFrom: "", distanceTo: "" }],
+  distanceSlabs: [{ id: 1, name: "", distanceFrom: "0", distanceTo: "" }], // First slab must start at 0
   // Network tax table fields
   networkTaxes: [
     {
@@ -413,8 +414,20 @@ export function ZoneForm({
         "Zone description must be between 10 and 500 characters";
     }
 
-    if (!formData.partnerId) {
-      newErrors.partnerId = "Partner selection is required";
+    // Partner validation based on zone type
+    if (formData.zoneType === "zone-wise" && !formData.partnerId) {
+      newErrors.partnerId =
+        "Partner selection is required for geographical zones";
+    }
+
+    if (formData.zoneType === "distance-wise") {
+      if (
+        !formData.selectedPartnerIds ||
+        formData.selectedPartnerIds.length === 0
+      ) {
+        newErrors.selectedPartnerIds =
+          "At least one partner is required for distance zones";
+      }
     }
 
     // Zone-wise validation
@@ -442,12 +455,19 @@ export function ZoneForm({
       if (!formData.distanceSlabs || formData.distanceSlabs.length === 0) {
         newErrors.distanceSlabs = "At least one distance slab is required";
       } else {
+        // First milestone must start at 0
+        if (Number(formData.distanceSlabs[0].distanceFrom) !== 0) {
+          newErrors[`distanceSlab_0_distanceFrom`] =
+            "First distance slab must start at 0 km";
+        }
+
         formData.distanceSlabs.forEach((slab, index) => {
           if (!slab.name.trim()) {
             newErrors[`distanceSlab_${index}_name`] = "Zone name is required";
           }
           if (
-            !slab.distanceFrom ||
+            slab.distanceFrom === "" ||
+            slab.distanceFrom === undefined ||
             isNaN(Number(slab.distanceFrom)) ||
             Number(slab.distanceFrom) < 0
           ) {
@@ -464,7 +484,7 @@ export function ZoneForm({
           }
           // Validate that distanceTo is greater than distanceFrom
           if (
-            slab.distanceFrom &&
+            slab.distanceFrom !== "" &&
             slab.distanceTo &&
             Number(slab.distanceTo) <= Number(slab.distanceFrom)
           ) {
@@ -503,16 +523,25 @@ export function ZoneForm({
       });
     }
 
-    // Network tax validation
+    // Network tax validation - only validate if user has entered data
     if (formData.networkTaxes && formData.networkTaxes.length > 0) {
       formData.networkTaxes.forEach((tax, index) => {
-        if (!tax.taxName.trim()) {
-          newErrors[`networkTax_${index}_taxName`] = "Tax name is required";
+        // Skip validation for empty/default entries
+        if (!tax.taxName.trim() && !tax.taxValue) {
+          return; // Skip this entry - it's empty
+        }
+
+        if (tax.taxName.trim() && !tax.taxValue) {
+          newErrors[`networkTax_${index}_taxValue`] =
+            "Tax value is required when tax name is provided";
+        }
+        if (tax.taxValue && !tax.taxName.trim()) {
+          newErrors[`networkTax_${index}_taxName`] =
+            "Tax name is required when tax value is provided";
         }
         if (
-          !tax.taxValue ||
-          isNaN(Number(tax.taxValue)) ||
-          Number(tax.taxValue) < 0
+          tax.taxValue &&
+          (isNaN(Number(tax.taxValue)) || Number(tax.taxValue) < 0)
         ) {
           newErrors[`networkTax_${index}_taxValue`] =
             "Valid tax value is required";
@@ -538,6 +567,7 @@ export function ZoneForm({
           name: formData.name,
           description: formData.description,
           partnerId: formData.partnerId,
+          selectedPartnerIds: formData.selectedPartnerIds || [], // For distance zones (multi-select)
           status: formData.status,
           zoneType: formData.zoneType,
           ...(formData.zoneType === "zone-wise"
@@ -962,9 +992,26 @@ export function ZoneForm({
       <CardContent>
         {/* Success Message */}
         {isSuccess && (
-          <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 flex items-center space-x-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
+          <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 flex items-center space-x-3">
+            <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
             <span className="font-medium">Zone created successfully!</span>
+          </div>
+        )}
+
+        {/* Validation Error Summary */}
+        {Object.keys(errors).length > 0 && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300">
+            <div className="flex items-center space-x-2 mb-2">
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <span className="font-medium">
+                Please fix the following errors:
+              </span>
+            </div>
+            <ul className="list-disc list-inside text-sm space-y-1">
+              {Object.entries(errors).map(([key, value]) => (
+                <li key={key}>{value}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -989,60 +1036,150 @@ export function ZoneForm({
               </div>
 
               <div>
-                <Label htmlFor="partnerId">Courier Partner *</Label>
-                <Select
-                  value={formData.partnerId}
-                  onValueChange={(value) =>
-                    updateFormData({ partnerId: value })
-                  }
-                  disabled={loadingPartners || partners.length === 0}
-                >
-                  <SelectTrigger
-                    className={errors.partnerId ? "border-red-500" : ""}
-                  >
-                    <SelectValue
-                      placeholder={
-                        loadingPartners
-                          ? "Loading partners..."
-                          : partners.length === 0
-                            ? "No partners available"
-                            : "Select a courier partner"
+                <Label htmlFor="partnerId">
+                  Courier Partner
+                  {formData.zoneType === "distance-wise" ? "s" : ""} *
+                  {formData.zoneType === "distance-wise" && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Select multiple)
+                    </span>
+                  )}
+                </Label>
+
+                {/* Single select for Geological zones */}
+                {formData.zoneType === "zone-wise" && (
+                  <>
+                    <Select
+                      value={formData.partnerId}
+                      onValueChange={(value) =>
+                        updateFormData({ partnerId: value })
                       }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingPartners ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span className="text-sm text-gray-500">
-                          Loading partners...
-                        </span>
-                      </div>
-                    ) : partners.length === 0 ? (
-                      <div className="flex items-center justify-center py-4">
-                        <span className="text-sm text-gray-500">
-                          No partners available
-                        </span>
-                      </div>
-                    ) : (
-                      partners.map((partner) => (
-                        <SelectItem key={partner.id} value={partner.id}>
-                          <div className="flex items-center space-x-2">
-                            <Truck className="h-4 w-4 text-blue-600" />
-                            <span>{partner.name}</span>
-                            <span className="text-xs text-gray-500">
-                              ({partner.code})
+                      disabled={loadingPartners || partners.length === 0}
+                    >
+                      <SelectTrigger
+                        className={errors.partnerId ? "border-red-500" : ""}
+                      >
+                        <SelectValue
+                          placeholder={
+                            loadingPartners
+                              ? "Loading partners..."
+                              : partners.length === 0
+                                ? "No partners available"
+                                : "Select a courier partner"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {loadingPartners ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            <span className="text-sm text-muted-foreground">
+                              Loading partners...
                             </span>
                           </div>
-                        </SelectItem>
-                      ))
+                        ) : partners.length === 0 ? (
+                          <div className="flex items-center justify-center py-4">
+                            <span className="text-sm text-muted-foreground">
+                              No partners available
+                            </span>
+                          </div>
+                        ) : (
+                          partners.map((partner) => (
+                            <SelectItem key={partner.id} value={partner.id}>
+                              <div className="flex items-center space-x-2">
+                                <Truck className="h-4 w-4 text-blue-600" />
+                                <span>{partner.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({partner.code})
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {errors.partnerId && (
+                      <p className="text-sm text-red-500 mt-1">
+                        {errors.partnerId}
+                      </p>
                     )}
-                  </SelectContent>
-                </Select>
-                {errors.partnerId && (
-                  <p className="text-sm text-red-500 mt-1">
-                    {errors.partnerId}
-                  </p>
+                  </>
+                )}
+
+                {/* Multi-select for Distance zones */}
+                {formData.zoneType === "distance-wise" && (
+                  <>
+                    <div
+                      className={`border rounded-md p-3 max-h-48 overflow-y-auto ${errors.selectedPartnerIds ? "border-red-500" : "border-border"}`}
+                    >
+                      {loadingPartners ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          <span className="text-sm text-muted-foreground">
+                            Loading partners...
+                          </span>
+                        </div>
+                      ) : partners.length === 0 ? (
+                        <div className="flex items-center justify-center py-4">
+                          <span className="text-sm text-muted-foreground">
+                            No partners available
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {partners.map((partner) => (
+                            <label
+                              key={partner.id}
+                              className="flex items-center space-x-3 p-2 rounded hover:bg-accent cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={
+                                  formData.selectedPartnerIds?.includes(
+                                    partner.id,
+                                  ) || false
+                                }
+                                onChange={(e) => {
+                                  const currentIds =
+                                    formData.selectedPartnerIds || [];
+                                  if (e.target.checked) {
+                                    updateFormData({
+                                      selectedPartnerIds: [
+                                        ...currentIds,
+                                        partner.id,
+                                      ],
+                                    });
+                                  } else {
+                                    updateFormData({
+                                      selectedPartnerIds: currentIds.filter(
+                                        (id) => id !== partner.id,
+                                      ),
+                                    });
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              <Truck className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm">{partner.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({partner.code})
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {formData.selectedPartnerIds?.length > 0 && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {formData.selectedPartnerIds.length} partner(s) selected
+                      </p>
+                    )}
+                    {errors.selectedPartnerIds && (
+                      <p className="text-sm text-red-500 mt-1">
+                        {errors.selectedPartnerIds}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1056,8 +1193,8 @@ export function ZoneForm({
                 onChange={(e) =>
                   updateFormData({ description: e.target.value })
                 }
-                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.description ? "border-red-500" : "border-gray-300"
+                className={`w-full px-3 py-2 border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  errors.description ? "border-red-500" : "border-border"
                 }`}
                 rows={3}
               />
@@ -1093,30 +1230,32 @@ export function ZoneForm({
                 Zone Type *
               </Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Zone Wise - Coming Soon */}
                 <div
-                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                    formData.zoneType === "zone-wise"
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                  onClick={() => updateFormData({ zoneType: "zone-wise" })}
+                  className="border-2 rounded-lg p-4 cursor-not-allowed transition-all border-border opacity-50 relative"
+                  title="Coming Soon"
                 >
+                  <div className="absolute top-2 right-2">
+                    <span className="text-xs bg-yellow-500 text-yellow-900 px-2 py-0.5 rounded-full font-medium">
+                      Coming Soon
+                    </span>
+                  </div>
                   <div className="flex items-center space-x-3">
                     <input
                       type="radio"
                       name="zoneType"
                       value="zone-wise"
-                      checked={formData.zoneType === "zone-wise"}
-                      onChange={() => updateFormData({ zoneType: "zone-wise" })}
-                      className="h-4 w-4 text-blue-600"
+                      checked={false}
+                      disabled
+                      className="h-4 w-4 text-gray-400"
                     />
                     <div className="flex items-center space-x-2">
-                      <Map className="h-5 w-5 text-blue-600" />
+                      <Map className="h-5 w-5 text-gray-400" />
                       <div>
-                        <div className="font-medium text-gray-900">
+                        <div className="font-medium text-muted-foreground">
                           Zone Wise
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                           Define zones by geographical areas
                         </div>
                       </div>
@@ -1124,11 +1263,12 @@ export function ZoneForm({
                   </div>
                 </div>
 
+                {/* Distance Wise - Active */}
                 <div
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                     formData.zoneType === "distance-wise"
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-600"
+                      : "border-border hover:border-gray-400 dark:hover:border-gray-600"
                   }`}
                   onClick={() => updateFormData({ zoneType: "distance-wise" })}
                 >
@@ -1144,12 +1284,12 @@ export function ZoneForm({
                       className="h-4 w-4 text-blue-600"
                     />
                     <div className="flex items-center space-x-2">
-                      <Route className="h-5 w-5 text-green-600" />
+                      <Route className="h-5 w-5 text-green-600 dark:text-green-400" />
                       <div>
-                        <div className="font-medium text-gray-900">
+                        <div className="font-medium text-foreground">
                           Distance Wise
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                           Define zones by distance slabs
                         </div>
                       </div>
@@ -1238,14 +1378,14 @@ export function ZoneForm({
                 {/* State Selection */}
                 <div>
                   <Label htmlFor="state">States *</Label>
-                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {loadingStates ? (
                       <div className="flex items-center justify-center py-4">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         <span>Loading states...</span>
                       </div>
                     ) : states.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         No states available (Debug: states.length ={" "}
                         {states.length})
                       </div>
@@ -1273,7 +1413,7 @@ export function ZoneForm({
                             >
                               <MapPin className="h-4 w-4 text-blue-600" />
                               <span className="text-sm">{state.name}</span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-muted-foreground">
                                 ({state.code})
                               </span>
                             </label>
@@ -1284,7 +1424,7 @@ export function ZoneForm({
                   </div>
                   {formData.selectedStates.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Selected:{" "}
                         {formData.selectedStates.map((s) => s.name).join(", ")}
                       </p>
@@ -1303,7 +1443,9 @@ export function ZoneForm({
                     <Label htmlFor="city">Cities *</Label>
                     {cities.length > 0 && (
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500">Filter:</span>
+                        <span className="text-xs text-muted-foreground">
+                          Filter:
+                        </span>
                         <Select
                           value={cityFilter}
                           onValueChange={setCityFilter}
@@ -1321,9 +1463,9 @@ export function ZoneForm({
                     )}
                   </div>
 
-                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {!formData.selectedStates.length ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         Select states first
                       </div>
                     ) : loadingCities ? (
@@ -1332,7 +1474,7 @@ export function ZoneForm({
                         <span>Loading cities...</span>
                       </div>
                     ) : cities.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         No cities available
                       </div>
                     ) : (
@@ -1365,7 +1507,7 @@ export function ZoneForm({
                                 </span>
                               )}
                               {city.population && (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-muted-foreground">
                                   ({city.population.toLocaleString()})
                                 </span>
                               )}
@@ -1374,7 +1516,7 @@ export function ZoneForm({
                         ))}
                         {getFilteredCities().length === 0 &&
                           cityFilter !== "all" && (
-                            <div className="text-center py-4 text-gray-500">
+                            <div className="text-center py-4 text-muted-foreground">
                               No{" "}
                               {cityFilter === "metro" ? "metro" : "non-metro"}{" "}
                               cities found
@@ -1385,7 +1527,7 @@ export function ZoneForm({
                   </div>
                   {formData.selectedCities.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-600 mb-2">
+                      <p className="text-sm text-muted-foreground mb-2">
                         Selected Cities ({formData.selectedCities.length}):
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -1457,9 +1599,9 @@ export function ZoneForm({
                 {/* Area Selection */}
                 <div>
                   <Label htmlFor="area">Areas (Optional)</Label>
-                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {!formData.selectedCities.length ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         Select cities first
                       </div>
                     ) : loadingAreas ? (
@@ -1468,7 +1610,7 @@ export function ZoneForm({
                         <span>Loading areas...</span>
                       </div>
                     ) : areas.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         No areas available
                       </div>
                     ) : (
@@ -1503,7 +1645,7 @@ export function ZoneForm({
                   </div>
                   {formData.selectedAreas.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Selected:{" "}
                         {formData.selectedAreas.map((a) => a.name).join(", ")}
                       </p>
@@ -1514,9 +1656,9 @@ export function ZoneForm({
                 {/* Pincode Selection */}
                 <div>
                   <Label htmlFor="pincode">Pincodes *</Label>
-                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {!formData.selectedAreas.length ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         Select areas first
                       </div>
                     ) : loadingPincodes ? (
@@ -1525,7 +1667,7 @@ export function ZoneForm({
                         <span>Loading pincodes...</span>
                       </div>
                     ) : pincodes.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-4 text-muted-foreground">
                         No pincodes available
                       </div>
                     ) : (
@@ -1556,7 +1698,7 @@ export function ZoneForm({
                               <MapPin className="h-4 w-4 text-orange-600" />
                               <span className="text-sm">{pincode.pincode}</span>
                               {pincode.areaName && (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-muted-foreground">
                                   ({pincode.areaName})
                                 </span>
                               )}
@@ -1568,7 +1710,7 @@ export function ZoneForm({
                   </div>
                   {formData.selectedPincodes.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Selected:{" "}
                         {formData.selectedPincodes
                           .map((p) => p.pincode)
@@ -1623,7 +1765,7 @@ export function ZoneForm({
 
                     {/* Pincode Search Results Dropdown */}
                     {showPincodeSearch && pincodeSearchResults.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto">
                         {pincodeSearchResults.map((pincodeData, index) => (
                           <div
                             key={index}
@@ -1660,7 +1802,7 @@ export function ZoneForm({
                       pincodeSearchResults.length === 0 &&
                       manualPincodeInput.length >= 3 &&
                       !isSearchingPincodes && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-4">
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-md shadow-lg p-4">
                           <div className="text-center text-gray-500">
                             <MapPin className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                             <p className="text-sm">
@@ -1746,10 +1888,10 @@ export function ZoneForm({
                   {formData.distanceSlabs.map((slab, index) => (
                     <div
                       key={slab.id}
-                      className="border border-gray-200 rounded-lg p-4"
+                      className="border border-border rounded-lg p-4 bg-card"
                     >
                       <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-sm font-medium text-gray-700">
+                        <h4 className="text-sm font-medium text-foreground">
                           Distance Slab {index + 1}
                         </h4>
                         {formData.distanceSlabs.length > 1 && (
@@ -1758,7 +1900,7 @@ export function ZoneForm({
                             variant="ghost"
                             size="sm"
                             onClick={() => removeDistanceSlab(slab.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1797,11 +1939,16 @@ export function ZoneForm({
                         <div>
                           <Label htmlFor={`slab-distance-from-${slab.id}`}>
                             Distance From (km) *
+                            {index === 0 && (
+                              <span className="text-xs text-muted-foreground ml-1">
+                                (must start at 0)
+                              </span>
+                            )}
                           </Label>
                           <Input
                             id={`slab-distance-from-${slab.id}`}
                             type="number"
-                            placeholder="e.g., 0, 10, 25"
+                            placeholder={index === 0 ? "0" : "e.g., 10, 25"}
                             value={slab.distanceFrom}
                             onChange={(e) =>
                               updateDistanceSlab(
@@ -1813,10 +1960,13 @@ export function ZoneForm({
                             className={
                               errors[`distanceSlab_${index}_distanceFrom`]
                                 ? "border-red-500"
-                                : ""
+                                : index === 0
+                                  ? "bg-muted"
+                                  : ""
                             }
                             min="0"
                             step="0.1"
+                            readOnly={index === 0} // First slab must always start at 0
                           />
                           {errors[`distanceSlab_${index}_distanceFrom`] && (
                             <p className="text-sm text-red-500 mt-1">

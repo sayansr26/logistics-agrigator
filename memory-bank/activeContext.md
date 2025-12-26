@@ -1,19 +1,41 @@
 # Active Development Context
 
-## Current Sprint: Frontend Architecture Migration (Redux/RTK Query)
+## Current Sprint: Partner Service - Zone System v2 + Charge Packages (COMPLETED ✅)
 
 ### Overview
 
-Migrating frontend from direct service calls to API Gateway-only architecture with Redux Toolkit and RTK Query. Backend API Gateway security is 100% complete (8/8 tasks). Focus is now on frontend state management migration.
+**COMPLETED**: Full implementation of Zone System v2 (Distance/Geological zones with Pincode Types) and Charge Packages feature with zone-based quote calculation. All 17 tasks across two initiatives are now complete.
 
 ### PRD Reference
 
-[API Gateway & RBAC Implementation PRD](../docs/PRD_API_GATEWAY_RBAC.md)
+- [API Gateway & RBAC Implementation PRD](../docs/PRD_API_GATEWAY_RBAC.md)
+- [Partner Packages + Zone-Based Quotes Plan](../.cursor/plans/partner_packages_+_zone-based_quotes_44970444.plan.md)
+- [Zone Migration Task](../backend/partner-service/ZONE_MIGRATION_TASK.md)
 
-### Active Tasks
+### Completed Initiatives
 
-- **Backend**: [BACKEND_GATEWAY_TASK.md](../backend/BACKEND_GATEWAY_TASK.md) - 8 tasks (6 P0, 2 P1)
-- **Frontend**: [FRONTEND_ARCHITECTURE_TASK.md](../frontend/FRONTEND_ARCHITECTURE_TASK.md) - 10 tasks (5 P0, 4 P1, 1 P2)
+#### ✅ Zone System v2 Migration (6/6 Tasks - 100% Complete)
+
+- **PARTNER-012**: Database Schema Migration
+- **PARTNER-013**: Pincode Type Service Implementation
+- **PARTNER-014**: Distance Zone Service Implementation
+- **PARTNER-015**: Zone Controller & Routes Update
+- **PARTNER-016**: ServiceType Cleanup & Swagger Update
+- **PARTNER-017**: Integration Testing & Verification
+
+#### ✅ Charge Packages + Quote Engine (11/11 Tasks - 100% Complete)
+
+- **schema-charge-packages**: Prisma models/enums + Partner.defaultDeliveryDays
+- **charge-packages-crud**: /api/v1/charge-packages CRUD with multi-partner create
+- **gateway-charge-packages-route**: API Gateway proxy routing
+- **quote-engine**: quoteCalculationService with distance+weight+generic+pincodeTypes
+- **partner-calc-endpoints**: Updated /api/partners/calculate and /api/partners/serviceability
+- **routes-no-inline**: Refactored routes to controller pattern
+- **shipment-integration-header**: X-Internal-Request + Authorization forwarding
+- **frontend-charge-packages-rtk**: RTK Query slice + modal-based UI
+- **frontend-fix-partnersApi-shapes**: Updated types for new quote engine responses
+- **frontend-sidebar-unblock-charges**: Enabled Charge Packages nav (superadmin/admin/operations)
+- **deprecate-legacy**: Legacy endpoints return 410 Gone
 
 ### Critical Path (Must Complete in Order)
 
@@ -27,6 +49,55 @@ Migrating frontend from direct service calls to API Gateway-only architecture wi
 8. 🔲 **FE-002**: Setup Redux store with RTK Query
 
 ### Recent Accomplishments
+
+✅ **Charge Packages + Zone-Based Quote Calculation**: Complete feature implementation (Completed 2025-12-26)
+
+- **Backend - Charge Package System**:
+  - New Prisma models: `ChargePackage`, `ChargePackageType`, `ChargePackageCalcType`, `ChargePackageAppliesTo`
+  - Full CRUD API at `/api/v1/charge-packages` with multi-partner create support
+  - Joi validation schemas for all operations
+  - Audit logging for all CRUD operations
+  - Rate limiting: 25 requests per 15 minutes per user
+
+- **Backend - Quote Calculation Engine**:
+  - `quoteCalculationService.js` with distance zone matching
+  - Distance-based charges (base + addon per km)
+  - Weight-based charges (base + addon per kg)
+  - Generic charges (COD, Prepaid, flat fees)
+  - Pincode type charges aggregation
+  - Charge breakdown with sorting (cheapest/highest)
+
+- **Backend - Endpoint Updates**:
+  - `POST /api/partners/calculate` - Returns quotes with breakdown
+  - `POST /api/partners/serviceability` - Uses zone matching
+  - Fallback to external API if quote engine fails
+  - Added `defaultDeliveryDays` to Partner model
+
+- **Frontend - Charge Packages UI**:
+  - RTK Query slice with full CRUD operations
+  - Modal-based create/edit/view (no separate pages)
+  - Multi-partner selection on create
+  - Status toggle (activate/deactivate) in modals
+  - Filter by partner, type, status, search
+  - Statistics cards and pagination
+
+- **API Gateway & Integration**:
+  - New proxy route for `/api/v1/charge-packages`
+  - Shipment service updated with X-Internal-Request header
+  - Authorization header forwarding for internal calls
+
+- **Legacy Deprecation**:
+  - `/api/packages/*`, `/api/customer-charges/*`, `/api/discounts/*` return 410 Gone
+  - `/api/v1/charge-calculation/*`, `/api/v1/partner-assignment/*` deprecated
+
+✅ **Zone System v2 Migration**: Complete redesign (Completed 2025-12-25)
+
+- Replaced `ServiceType` system with `PincodeType` management
+- Added `ZoneType` enum (DISTANCE | GEOLOGICAL)
+- Implemented `ZoneMilestone` for distance zones with auto-suffix (A, B, C)
+- Haversine-based distance calculation between pincodes
+- Zone matching by distance for shipment serviceability
+- Frontend Pincode Types page with RTK Query
 
 ✅ **Distance Calculator Module**: Complete Haversine-based distance calculator (Completed 2025-11-10)
 
@@ -301,20 +372,23 @@ If critical issues arise:
 - ✅ Auth Service (3002) - RBAC complete, stable with nodemon config
 - ✅ User Service (3003) - Customer management complete, stable with nodemon config
 - ✅ Shipment Service (3004) - 100% stable, crash loop fixed, nodemon configured
-- ✅ Partner Service (3005) - 75+ endpoints complete + **service types module** + **🆕 Distance Calculation Feature (IN PROGRESS)**, stable with nodemon config
+- ✅ Partner Service (3005) - **100% COMPLETE** - Zone System v2 + Charge Packages + Quote Engine + Distance Calculator
 - ✅ Wallet Service (3006) - Commission system complete, stable with nodemon config
 - ❌ Support Service (3007) - Not started, nodemon pre-configured
 - ❌ Platform Service (3008) - Not started, nodemon pre-configured
 - ✅ License Service (3011) - Complete, stable with nodemon config
-- ✅ API Gateway (3001) - JWT validation complete, RBAC middleware ready
-- ✅ Frontend (3000) - Redux/RTK Query migration in progress, service types UI complete
+- ✅ API Gateway (3001) - JWT validation complete, RBAC middleware ready, Charge Packages routed
+- ✅ Frontend (3000) - Redux/RTK Query complete, Charge Packages UI with modals
 
 ---
 
-**Last Updated**: January 2025 (2025-01-10)
+**Last Updated**: December 2025 (2025-12-26)
 **Sprint Duration**: 2 weeks
-**Current Day**: Day 8 of 14
-**Backend Work**: ALL COMPLETE ✅ (8/8 tasks - 100%)
-**Frontend Work**: IN PROGRESS (9/11 tasks - 82%)
-**Latest Achievement**: Service Types Management Module - Backend + Frontend complete with UI consistency
-**New Initiative**: Distance Calculation Feature for Partner Service (PARTNER-011) - Pure distance calculation utility without charge management
+**Current Day**: COMPLETED
+**Backend Work**: ALL COMPLETE ✅ (Zone Migration 6/6 + Charge Packages 11/11 = 17/17 tasks)
+**Frontend Work**: COMPLETE ✅ (Charge Packages UI with modal-based CRUD)
+**Latest Achievement**: Charge Packages + Zone-Based Quote Calculation - Full stack implementation
+**Completed Initiatives**:
+
+- Zone System v2 Migration (PARTNER-012 to PARTNER-017) ✅
+- Charge Packages + Quote Engine (11 tasks) ✅

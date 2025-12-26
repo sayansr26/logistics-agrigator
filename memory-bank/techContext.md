@@ -33,14 +33,15 @@
 
 **State & Form Management**
 
-- **Zustand**: Lightweight state management for client-side state
+- **Redux Toolkit**: Global state management with RTK Query for data fetching
+- **RTK Query**: Automatic caching, invalidation, and optimistic updates
 - **React Hook Form**: Performant forms with validation
 - **Zod**: TypeScript-first schema validation
 
 **HTTP & API Integration**
 
-- **Axios**: HTTP client with interceptors and request/response handling
-- **SWR**: Data fetching with caching, revalidation, and error recovery
+- **RTK Query**: Primary data fetching via API Gateway (replaced Axios/SWR)
+- **Axios**: Used only for internal service-to-service communication
 
 ## Development Environment
 
@@ -63,16 +64,18 @@ CMD ["node", "server.js"]
 
 ```yaml
 services:
-  auth-service: # Port 8001 - ✅ COMPLETED
-  user-service: # Port 8002 - ✅ COMPLETED
-  partner-service: # Port 3005 - ✅ 95% COMPLETED
-  shipment-service: # Port 8003 - 🔄 READY FOR INTEGRATION
-  support-service: # Port 8004 - ❌ NOT STARTED
-  platform-service: # Port 8005 - ❌ NOT STARTED
-  api-gateway: # Port 8000 - ✅ OPERATIONAL
-  frontend: # Port 3000 - ✅ FOUNDATION READY
-  postgres: # Port 5432 - ✅ OPERATIONAL
-  redis: # Port 6379 - ✅ OPERATIONAL
+  auth-service: # Port 3002 - ✅ COMPLETED (JWT + RBAC)
+  user-service: # Port 3003 - ✅ COMPLETED (Customer Management)
+  partner-service: # Port 3005 - ✅ 100% COMPLETED (Zone v2 + Charge Packages + Quote Engine)
+  shipment-service: # Port 3004 - ✅ OPERATIONAL (Integrated with Partner Service)
+  wallet-service: # Port 3006 - ✅ COMPLETED (Commission System)
+  license-service: # Port 3011 - ✅ COMPLETED (Auto-generation)
+  support-service: # Port 3007 - ❌ NOT STARTED
+  platform-service: # Port 3008 - ❌ NOT STARTED
+  api-gateway: # Port 3001 - ✅ COMPLETED (JWT + RBAC + All Routes)
+  frontend: # Port 3000 - ✅ COMPLETED (Redux/RTK Query + Charge Packages UI)
+  postgres: # Port 5432 - ✅ OPERATIONAL (Internal only)
+  redis: # Port 6379 - ✅ OPERATIONAL (Internal only)
 ```
 
 ### Database Architecture
@@ -112,6 +115,38 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+// Partner Service - Charge Package Model (NEW - December 2025)
+model ChargePackage {
+  id          String                 @id @default(cuid())
+  partnerId   String
+  name        String
+  type        ChargePackageType // WEIGHT | DISTANCE | GENERIC
+  baseCharge  Decimal                @db.Decimal(10, 2)
+  baseUnit    Decimal? // e.g., first 5 kg or 10 km
+  addonUnit   Decimal? // per 1 kg or 1 km
+  addonCharge Decimal? // charge per addon unit
+  appliesTo   ChargePackageAppliesTo @default(ANY) // ANY | COD | PREPAID
+  calcType    ChargePackageCalcType  @default(FLAT)
+  isActive    Boolean                @default(true)
+
+  @@unique([partnerId, name])
+  @@index([partnerId, type, isActive])
+  @@map("charge_packages")
+}
+
+// Partner Service - Zone Milestone Model (NEW - December 2025)
+model ZoneMilestone {
+  id        String @id @default(uuid()) @db.Uuid
+  zoneId    String @map("zone_id") @db.Uuid
+  minKm     Int    @map("min_km")
+  maxKm     Int    @map("max_km")
+  suffix    String @db.VarChar(5) // A, B, C...
+  sortOrder Int    @map("sort_order")
+
+  @@unique([zoneId, sortOrder])
+  @@map("zone_milestones")
 }
 ```
 

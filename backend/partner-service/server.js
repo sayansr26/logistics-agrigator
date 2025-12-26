@@ -17,6 +17,7 @@ const { connectRedis, getRedisClient } = require("./config/redis");
 const swaggerSpecs = require("./config/swagger");
 const { generalLimiter } = require("./middleware/rateLimiter");
 const { corsConfig } = require("./shared");
+const { deprecated } = require("./middleware/deprecated");
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -131,16 +132,52 @@ app.use("/api/v1/geography/distance", require("./routes/geographicalDistance"));
 app.use("/api/v1/zones/coverage", require("./routes/zoneCoverage"));
 app.use("/api/v1/zones", require("./routes/zones"));
 
-// Service Type Management Routes (NEW)
-app.use("/api/v1/service-types", require("./routes/serviceTypes"));
+// Pincode Type Management Routes (Zone System v2)
+app.use("/api/v1/pincode-types", require("./routes/pincodeTypes"));
 
-// Existing Routes
-app.use("/api/packages", require("./routes/packages"));
-app.use("/api/customer-charges", require("./routes/customerCharges"));
-app.use("/api/discounts", require("./routes/discounts"));
+// Charge Package Management Routes (NEW - replaces legacy packages)
+app.use("/api/v1/charge-packages", require("./routes/chargePackages"));
+
+// ============================================================================
+// DEPRECATED ENDPOINTS - Return 410 Gone responses
+// These endpoints have been replaced by the new Zone System v2 and Charge Packages
+// ============================================================================
+app.all("/api/packages/*", deprecated("/api/v1/charge-packages", "2024-12-26"));
+app.all("/api/packages", deprecated("/api/v1/charge-packages", "2024-12-26"));
+app.all(
+  "/api/customer-charges/*",
+  deprecated("/api/v1/charge-packages", "2024-12-26"),
+);
+app.all(
+  "/api/customer-charges",
+  deprecated("/api/v1/charge-packages", "2024-12-26"),
+);
+app.all(
+  "/api/discounts/*",
+  deprecated("/api/v1/charge-packages", "2024-12-26"),
+);
+app.all("/api/discounts", deprecated("/api/v1/charge-packages", "2024-12-26"));
+app.all(
+  "/api/v1/charge-calculation/*",
+  deprecated("/api/v1/partners/calculate", "2024-12-26"),
+);
+app.all(
+  "/api/v1/charge-calculation",
+  deprecated("/api/v1/partners/calculate", "2024-12-26"),
+);
+app.all(
+  "/api/v1/partner-assignment/*",
+  deprecated("/api/v1/partners/serviceability", "2024-12-26"),
+);
+app.all(
+  "/api/v1/partner-assignment",
+  deprecated("/api/v1/partners/serviceability", "2024-12-26"),
+);
+
+// Partner Data - Still active but uses external API (keeping for backward compatibility)
 app.use("/api", require("./routes/partnerData"));
-app.use("/api/v1/charge-calculation", require("./routes/chargeCalculation"));
-app.use("/api/v1/partner-assignment", require("./routes/partnerAssignment"));
+
+// Performance & System Management - Still active
 app.use("/api/v1", require("./routes/partnerPerformance"));
 app.use("/api/v1", require("./routes/systemManagement"));
 
@@ -290,142 +327,61 @@ app.get("/health", async (req, res) => {
 app.get("/", (req, res) => {
   res.json({
     service: "partner-service",
-    version: "1.0.0",
+    version: "2.0.0",
     description:
-      "Partner Service for Logistics Aggregator Portal - Courier Management and External API Integration",
+      "Partner Service for Logistics Aggregator Portal - Courier Management, Zone-based Pricing, and Charge Package Management",
     endpoints: {
+      // Core endpoints
       health: "/health",
       docs: "/api-docs",
+
+      // Partner Management
       partners: "/api/partners",
-      geographical: "/api/geographical",
-      zones: "/api/zones",
-      serviceTypes: "/api/service-types",
-      partnerZones: "/api/partner-zones",
-      comprehensiveData: "/api/partners/comprehensive-data",
-      zoneCoverage: "/api/zones/coverage/validate",
-      packages: "/api/packages",
-      packageCharges: "/api/packages/charges",
-      customerCharges: "/api/customer-charges",
-      chargeCalculation: "/api/packages/charges/calculate",
-      customerChargeCalculation: "/api/customer-charges/calculate",
-      discounts: "/api/discounts",
-      discountCalculation: "/api/discounts/calculate",
-      activeDiscounts: "/api/discounts/active",
-      discountAnalytics: "/api/discounts/analytics",
-      bulkDiscounts: "/api/discounts/bulk",
-      rateCalculationWithDiscounts: "/api/partners/calculate-with-discounts",
-      partnerPackages: "/api/partner-packages",
-      partnerCharges: "/api/partner-charges",
-      partnerDiscounts: "/api/partner-discounts",
-      partnerServices: "/api/partner-services",
-      comprehensivePartnerData: "/api/partners/comprehensive-data",
-      partnerMetrics: "/api/partners/{partnerId}/metrics",
-      partnerDataExport: "/api/partners/{partnerId}/export",
-      partnerCacheManagement: "/api/partners/{partnerId}/cache",
-      partnerDataHealth: "/api/partners/{partnerId}/health",
-      chargeCalculationSurcharge:
-        "/api/v1/charge-calculation/{partnerId}/calculate",
-      shipmentChargeCalculation:
-        "/api/v1/charge-calculation/shipments/calculate-charges",
-      partnerAvailabilityCheck: "/api/v1/partner-assignment/availability/check",
-      shipmentAssignment: "/api/v1/partner-assignment/assign",
+      partnerCalculate: "/api/partners/calculate",
+      partnerServiceability: "/api/partners/serviceability",
+
+      // Zone System v2
+      zones: "/api/v1/zones",
+      zoneCoverage: "/api/v1/zones/coverage",
+      pincodeTypes: "/api/v1/pincode-types",
+
+      // Charge Packages (NEW - replaces legacy packages/charges)
+      chargePackages: "/api/v1/charge-packages",
+
+      // Geography
+      geography: "/api/v1/geography",
+      distanceCalculation: "/api/v1/geography/distance",
+
+      // Performance & System (still active)
       partnerPerformance: "/api/v1/partner-performance/{partnerId}",
       systemDashboard: "/api/v1/main-system-dashboard",
-      partnerAnalytics: "/api/v1/partner-analytics/{partnerId}",
-      partnerBenchmarks: "/api/v1/partner-benchmarks/{partnerId}",
-      partnerKPIs: "/api/v1/partner-kpis/{partnerId}",
-      performanceAlerts: "/api/v1/performance-alerts",
-      performanceStatistics: "/api/v1/partner-performance/statistics",
-      performanceReport: "/api/v1/partner-performance/report",
-      systemInitialization: "/api/v1/main-system",
-      rateLimitManagement: "/api/v1/main-system-rate-limit",
-      cacheManagement: "/api/v1/main-system-cache",
-      auditTrail: "/api/v1/audit",
-      webhookManagement: "/api/v1/webhooks",
-      systemHealth: "/api/v1/system-health",
-      servicesStatus: "/api/v1/services-status",
-      systemConfiguration: "/api/v1/system-configuration",
-      systemStatistics: "/api/v1/system-statistics",
-      systemMaintenance: "/api/v1/system-maintenance",
-      systemAlerts: "/api/v1/system-alerts",
+    },
+    deprecatedEndpoints: {
+      note: "The following endpoints have been deprecated and return 410 Gone",
+      deprecated: [
+        "/api/packages/* -> Use /api/v1/charge-packages",
+        "/api/customer-charges/* -> Use /api/v1/charge-packages",
+        "/api/discounts/* -> Use /api/v1/charge-packages",
+        "/api/v1/charge-calculation/* -> Use /api/partners/calculate",
+        "/api/v1/partner-assignment/* -> Use /api/partners/serviceability",
+      ],
     },
     features: [
-      "Partner Management",
-      "Rate Calculation",
-      "Serviceability Checking",
-      "Geographical Data Services",
-      "Pincode Search and Validation",
-      "City and State Information",
-      "Zone Management and Configuration",
-      "Service Type Management",
+      "Partner Management (CRUD)",
+      "Zone System v2 with Distance and Geological Zones",
+      "Charge Package Management (Weight, Distance, Generic)",
+      "Quote Engine with Charge Breakdown",
+      "Pincode Type Management",
       "Zone Coverage Validation",
-      "Package Charge Management",
-      "Customer Charge Configuration",
-      "Bulk Charge Operations",
-      "Charge Calculation Workflows",
-      "FSC, COD, Insurance Charges",
-      "Weight-based Charge Calculation",
-      "Zone-to-Zone Charge Mapping",
-      "Comprehensive Partner Data Retrieval",
+      "Distance-based Rate Calculation",
+      "Weight-based Rate Calculation",
+      "COD/Prepaid Charge Configuration",
+      "Serviceability Checking",
       "External Courier API Integration",
-      "Charge Preview and Validation",
-      "Discount Management and Configuration",
-      "Discount Calculation and Application",
-      "Time-based Discount Activation",
-      "Bulk Discount Operations",
-      "Discount Conflict Resolution",
-      "Discount Performance Analytics",
-      "Active Discount Retrieval",
-      "Comprehensive Partner Data Retrieval",
-      "Partner Package Data Aggregation",
-      "Partner Charge Data Consolidation",
-      "Partner Discount Management",
-      "Partner Service Capability Analysis",
-      "Partner Performance Metrics",
-      "Partner Data Export (JSON/CSV)",
-      "Partner Data Cache Management",
-      "Partner Data Health Monitoring",
-      "Multi-source Data Integration",
-      "Real-time Data Aggregation",
-      "Advanced Charge Calculation Services",
-      "Surcharge Calculation and Management",
-      "Shipment Charge Calculation",
-      "Charge Validation and Verification",
-      "Comprehensive Charge Breakdown",
-      "Partner Assignment Algorithms",
-      "Partner Availability Checking",
-      "Shipment Assignment Workflows",
-      "Assignment Strategy Optimization",
       "Partner Performance Analytics",
       "System Dashboard and Monitoring",
-      "Partner Analytics and Insights",
-      "Benchmark Comparisons",
-      "Key Performance Indicators (KPIs)",
-      "Performance Alerts and Notifications",
-      "Performance Statistics and Reporting",
-      "Comprehensive Performance Reports",
-      "System Management and Control",
-      "System Initialization and Configuration",
-      "Rate Limiting Management",
-      "Cache Management and Optimization",
-      "Audit Trail and Logging",
-      "Webhook Management and Integration",
-      "System Health Monitoring",
-      "Services Status Tracking",
-      "System Configuration Management",
-      "System Statistics and Metrics",
-      "System Maintenance Operations",
-      "System Alerts and Notifications",
-      "Advanced Analytics and Insights",
-      "Performance Benchmarking",
-      "Quality Metrics and Scoring",
-      "Cost Optimization Analysis",
-      "Delivery Efficiency Tracking",
-      "Customer Satisfaction Monitoring",
-      "Trend Analysis and Forecasting",
-      "Recommendation Engine",
-      "Smart Partner Selection",
-      "Automated Failover Mechanisms",
+      "Audit Logging for All Operations",
+      "Rate Limiting and Security",
     ],
   });
 });

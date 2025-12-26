@@ -25,7 +25,7 @@ class ZoneService {
   constructor() {
     this.cachePrefix = "zones";
     this.cacheTTL = 7200; // 2 hours for zone data
-    this.serviceTypes = ["PICKUP", "DELIVERY", "COD", "PREPAID", "ODA", "HILL"];
+    // NOTE: serviceTypes removed in Zone System v2 - use Pincode Types instead
   }
 
   // ==========================================
@@ -143,18 +143,19 @@ class ZoneService {
             stats: geoStats,
           });
 
-          // 4. Configure service types (PICKUP, DELIVERY, COD, PREPAID, ODA, HILL)
-          const serviceStats = await this._configureServices(
-            zone.id,
-            services,
-            tx,
-          );
-          logger.debug("Service configuration created", {
-            zoneId: zone.id,
-            stats: serviceStats,
-          });
+          // NOTE: Zone services configuration has been removed in Zone System v2
+          // Use Pincode Types for service-based configuration instead
+          if (services && Object.keys(services).length > 0) {
+            logger.warn(
+              "Zone services configuration ignored - feature deprecated",
+              {
+                zoneId: zone.id,
+                partnerId,
+              },
+            );
+          }
 
-          // 5. Validate no zone overlaps (optional - can be disabled for performance)
+          // 4. Validate no zone overlaps (optional - can be disabled for performance)
           if (validateOverlap) {
             await this._validateZoneOverlap(zone.id, partnerId, tx);
             logger.debug("Zone overlap validation passed", {
@@ -370,12 +371,13 @@ class ZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
+      // Try cache first (only if partnerId provided)
+      let cacheKey;
+      if (partnerId) {
+        cacheKey = `${this.cachePrefix}:${partnerId}:${zoneId}`;
+      } else {
+        cacheKey = `${this.cachePrefix}:all:${zoneId}`;
       }
-
-      // Try cache first
-      const cacheKey = `${this.cachePrefix}:${partnerId}:${zoneId}`;
       const redis = getRedisClient();
 
       if (redis) {
@@ -386,9 +388,19 @@ class ZoneService {
         }
       }
 
-      // Query database
+      // Query database - conditionally filter by partnerId
+      const where = { id: zoneId };
+      if (partnerId) {
+        where.partnerId = partnerId;
+      }
+
       const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where,
+        include: {
+          milestones: {
+            orderBy: { sortOrder: "asc" },
+          },
+        },
       });
 
       if (!zone) {
@@ -429,20 +441,20 @@ class ZoneService {
    */
   async listZones(partnerId, filters = {}) {
     try {
-      logger.info("Listing zones", { partnerId, filters });
-
-      // Validate inputs
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
+      logger.info("Listing zones", { partnerId: partnerId || "ALL", filters });
 
       // Parse and validate pagination parameters
       const page = Math.max(1, parseInt(filters.page) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(filters.limit) || 20));
       const skip = (page - 1) * limit;
 
-      // Build where clause
-      const where = { partnerId };
+      // Build where clause - partnerId is optional for admin users
+      const where = {};
+
+      // Only filter by partnerId if provided (non-admin users)
+      if (partnerId) {
+        where.partnerId = partnerId;
+      }
 
       // Filter by status if provided
       if (filters.status !== undefined) {
@@ -499,16 +511,29 @@ class ZoneService {
             partnerId: true,
             name: true,
             description: true,
+            zoneType: true, // Added zoneType field
             status: true,
             createdAt: true,
             updatedAt: true,
+            milestones: {
+              // Include milestones data for DISTANCE zones
+              orderBy: { sortOrder: "asc" },
+              select: {
+                id: true,
+                minKm: true,
+                maxKm: true,
+                suffix: true,
+                sortOrder: true,
+                createdAt: true,
+              },
+            },
             _count: {
               select: {
                 zoneStates: true,
                 zoneCities: true,
                 zoneAreas: true,
                 zonePincodes: true,
-                zoneServices: true,
+                milestones: true,
               },
             },
           },
@@ -570,7 +595,7 @@ class ZoneService {
    * @returns {Object[]} return.zoneCities - Associated cities
    * @returns {Object[]} return.zoneAreas - Associated areas
    * @returns {Object[]} return.zonePincodes - Associated pincodes
-   * @returns {Object[]} return.zoneServices - Service configuration
+   * @returns {Object[]} return.milestones - Distance milestones (for DISTANCE zones)
    * @throws {Error} If zone not found or access denied
    */
   async getZoneComplete(zoneId, partnerId) {
@@ -582,12 +607,13 @@ class ZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
+      // Try cache first (cache key depends on whether partnerId is provided)
+      let cacheKey;
+      if (partnerId) {
+        cacheKey = `${this.cachePrefix}:${partnerId}:${zoneId}:complete`;
+      } else {
+        cacheKey = `${this.cachePrefix}:all:${zoneId}:complete`;
       }
-
-      // Try cache first
-      const cacheKey = `${this.cachePrefix}:${partnerId}:${zoneId}:complete`;
       const redis = getRedisClient();
 
       if (redis) {
@@ -598,9 +624,14 @@ class ZoneService {
         }
       }
 
-      // Query database with all associations
+      // Query database with all associations - conditionally filter by partnerId
+      const where = { id: zoneId };
+      if (partnerId) {
+        where.partnerId = partnerId;
+      }
+
       const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where,
         include: {
           zoneStates: {
             include: {
@@ -692,8 +723,8 @@ class ZoneService {
             },
             orderBy: { pincode: { code: "asc" } },
           },
-          zoneServices: {
-            orderBy: { serviceType: "asc" },
+          milestones: {
+            orderBy: { sortOrder: "asc" },
           },
         },
       });
@@ -710,10 +741,7 @@ class ZoneService {
           totalCities: zone.zoneCities.length,
           totalAreas: zone.zoneAreas.length,
           totalPincodes: zone.zonePincodes.length,
-          totalServices: zone.zoneServices.length,
-          availableServices: zone.zoneServices
-            .filter((s) => s.isAvailable)
-            .map((s) => s.serviceType),
+          totalMilestones: zone.milestones?.length || 0,
         },
       };
 
@@ -1260,228 +1288,55 @@ class ZoneService {
    * @throws {Error} If zone not found or access denied
    */
   async updateZoneServices(zoneId, partnerId, services) {
-    try {
-      logger.info("Updating zone services", { partnerId, zoneId });
-
-      // Validate inputs
-      if (!zoneId) {
-        throw new Error("Zone ID is required");
-      }
-
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
-      if (!services || typeof services !== "object") {
-        throw new Error("Services data is required");
-      }
-
-      // Verify zone exists and belongs to partner
-      const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
-      });
-
-      if (!zone) {
-        throw new Error("Zone not found or access denied");
-      }
-
-      // Use transaction to update services
-      const result = await prisma.$transaction(
-        async (tx) => {
-          // Delete existing service configuration
-          await tx.zoneService.deleteMany({ where: { zoneId } });
-          logger.debug("Existing service configuration deleted", { zoneId });
-
-          // Create new service configuration
-          const serviceStats = await this._configureServices(
-            zoneId,
-            services,
-            tx,
-          );
-          logger.debug("New service configuration created", {
-            zoneId,
-            stats: serviceStats,
-          });
-
-          // Get updated services
-          const updatedServices = await tx.zoneService.findMany({
-            where: { zoneId },
-            orderBy: { serviceType: "asc" },
-          });
-
-          return updatedServices;
-        },
-        {
-          maxWait: 5000,
-          timeout: 30000,
-        },
-      );
-
-      // Invalidate cache
-      await this._invalidateZoneCache(partnerId, zoneId);
-
-      logger.info("Zone services updated successfully", {
-        partnerId,
-        zoneId,
-        servicesCount: result.length,
-      });
-
-      return result;
-    } catch (error) {
-      logger.error("Error updating zone services", {
-        error: error.message,
-        stack: error.stack,
-        zoneId,
-        partnerId,
-      });
-      throw error;
-    }
+    // DEPRECATED: Zone services system has been removed in Zone System v2
+    // Use Pincode Types for service-based configuration instead
+    logger.warn("updateZoneServices called - feature deprecated", {
+      partnerId,
+      zoneId,
+    });
+    const error = new Error(
+      "Zone services feature has been deprecated. Use Pincode Types for service-based configuration.",
+    );
+    error.statusCode = 410; // Gone
+    throw error;
   }
 
   /**
    * Get zone service configuration
-   * Returns all service types configured for the zone
+   * @deprecated Zone services system has been removed in Zone System v2
    * @param {string} zoneId - Zone UUID
    * @param {string} partnerId - Partner ID
-   * @returns {Promise<Object[]>} Service configuration
-   * @throws {Error} If zone not found or access denied
+   * @throws {Error} Feature deprecated
    */
   async getZoneServices(zoneId, partnerId) {
-    try {
-      logger.debug("Getting zone services", { partnerId, zoneId });
-
-      // Validate inputs
-      if (!zoneId) {
-        throw new Error("Zone ID is required");
-      }
-
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
-      // Verify zone exists and belongs to partner
-      const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
-        select: { id: true },
-      });
-
-      if (!zone) {
-        throw new Error("Zone not found or access denied");
-      }
-
-      // Get service configuration
-      const services = await prisma.zoneService.findMany({
-        where: { zoneId },
-        orderBy: { serviceType: "asc" },
-      });
-
-      // Add summary
-      const result = {
-        services,
-        summary: {
-          totalServices: services.length,
-          availableServices: services
-            .filter((s) => s.isAvailable)
-            .map((s) => s.serviceType),
-          unavailableServices: services
-            .filter((s) => !s.isAvailable)
-            .map((s) => s.serviceType),
-          servicesWithCharges: services
-            .filter(
-              (s) => s.additionalCharges && parseFloat(s.additionalCharges) > 0,
-            )
-            .map((s) => ({
-              type: s.serviceType,
-              charges: parseFloat(s.additionalCharges),
-            })),
-        },
-      };
-
-      logger.debug("Zone services retrieved", {
-        partnerId,
-        zoneId,
-        summary: result.summary,
-      });
-
-      return result;
-    } catch (error) {
-      logger.error("Error getting zone services", {
-        error: error.message,
-        stack: error.stack,
-        zoneId,
-        partnerId,
-      });
-      throw error;
-    }
+    // DEPRECATED: Zone services system has been removed in Zone System v2
+    // Use Pincode Types for service-based configuration instead
+    logger.warn("getZoneServices called - feature deprecated", {
+      partnerId,
+      zoneId,
+    });
+    const error = new Error(
+      "Zone services feature has been deprecated. Use Pincode Types for service-based configuration.",
+    );
+    error.statusCode = 410; // Gone
+    throw error;
   }
 
   /**
    * Helper: Configure service types in transaction
+   * @deprecated Zone services system has been removed in Zone System v2
    * @private
-   * @param {string} zoneId - Zone UUID
-   * @param {Object} services - Service configuration
-   * @param {Object} tx - Prisma transaction client
-   * @returns {Promise<Object>} Statistics of services configured
    */
   async _configureServices(zoneId, services, tx) {
-    const serviceConfigs = [];
-    const stats = {
+    // DEPRECATED: Zone services system has been removed in Zone System v2
+    // This method is kept for backward compatibility but does nothing
+    logger.warn("_configureServices called - feature deprecated", { zoneId });
+    return {
       servicesAdded: 0,
       availableServices: [],
       unavailableServices: [],
+      deprecated: true,
     };
-
-    // Process each service type: PICKUP, DELIVERY, COD, PREPAID, ODA, HILL
-    for (const serviceType of this.serviceTypes) {
-      // Check if this service type is mentioned in the services object
-      const isAvailable = services[serviceType];
-      const charges = services[`${serviceType}_charges`];
-      const remarks = services[`${serviceType}_remarks`];
-
-      // Only create service config if explicitly set
-      if (isAvailable !== undefined) {
-        const config = {
-          zoneId,
-          serviceType,
-          isAvailable: Boolean(isAvailable),
-          additionalCharges: null,
-          remarks: null,
-        };
-
-        // Add charges if provided and valid
-        if (charges !== undefined && charges !== null) {
-          const chargesFloat = parseFloat(charges);
-          if (!isNaN(chargesFloat) && chargesFloat >= 0) {
-            config.additionalCharges = chargesFloat;
-          }
-        }
-
-        // Add remarks if provided
-        if (remarks && typeof remarks === "string" && remarks.trim()) {
-          config.remarks = remarks.trim();
-        }
-
-        serviceConfigs.push(config);
-
-        if (config.isAvailable) {
-          stats.availableServices.push(serviceType);
-        } else {
-          stats.unavailableServices.push(serviceType);
-        }
-      }
-    }
-
-    // Create service configurations if any
-    if (serviceConfigs.length > 0) {
-      const created = await tx.zoneService.createMany({
-        data: serviceConfigs,
-        skipDuplicates: true,
-      });
-
-      stats.servicesAdded = created.count;
-    }
-
-    return stats;
   }
 
   // ==========================================
@@ -1581,15 +1436,22 @@ class ZoneService {
       const keysToDelete = [];
 
       if (zoneId) {
-        // Invalidate specific zone caches
+        // Invalidate specific zone caches (both partner-scoped and admin/all-scoped)
         keysToDelete.push(
           `${this.cachePrefix}:${partnerId}:${zoneId}`,
           `${this.cachePrefix}:${partnerId}:${zoneId}:complete`,
+          // Also invalidate admin cache keys (zones:all:*)
+          `${this.cachePrefix}:all:${zoneId}`,
+          `${this.cachePrefix}:all:${zoneId}:complete`,
         );
       }
 
       // Always invalidate partner's zone list cache
       keysToDelete.push(`${this.cachePrefix}:${partnerId}:list`);
+
+      // Also invalidate any admin list caches (pattern-based)
+      const adminListKeys = await redis.keys(`${this.cachePrefix}:all:list*`);
+      keysToDelete.push(...adminListKeys);
 
       // Delete all keys
       if (keysToDelete.length > 0) {
@@ -1711,7 +1573,6 @@ class ZoneService {
         totalCities,
         totalAreas,
         totalPincodes,
-        serviceStats,
       ] = await Promise.all([
         prisma.zone.count({ where: { partnerId } }),
         prisma.zone.count({ where: { partnerId, status: true } }),
@@ -1727,28 +1588,10 @@ class ZoneService {
         prisma.zonePincode.count({
           where: { zone: { partnerId } },
         }),
-        prisma.zoneService.groupBy({
-          by: ["serviceType", "isAvailable"],
-          where: { zone: { partnerId, status: true } },
-          _count: true,
-        }),
       ]);
 
-      // Process service statistics
-      const serviceAvailability = this.serviceTypes.reduce((acc, type) => {
-        const available =
-          serviceStats.find((s) => s.serviceType === type && s.isAvailable)
-            ?._count || 0;
-        const unavailable =
-          serviceStats.find((s) => s.serviceType === type && !s.isAvailable)
-            ?._count || 0;
-        acc[type] = {
-          available,
-          unavailable,
-          total: available + unavailable,
-        };
-        return acc;
-      }, {});
+      // NOTE: Zone services statistics removed in Zone System v2
+      // Use Pincode Types for service-based configuration instead
 
       const statistics = {
         zones: {
@@ -1762,7 +1605,10 @@ class ZoneService {
           areas: totalAreas,
           pincodes: totalPincodes,
         },
-        services: serviceAvailability,
+        services: {
+          deprecated: true,
+          message: "Zone services have been replaced by Pincode Types system",
+        },
         averageCoverage: {
           statesPerZone:
             activeZones > 0 ? (totalStates / activeZones).toFixed(2) : 0,

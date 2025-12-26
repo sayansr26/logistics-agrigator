@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { ZoneForm } from "@/components/zones/zone-form.jsx";
 import { zonesApiService } from "@/services";
+import { useAuth } from "@/hooks/useAuth";
 import { CheckCircle, XCircle } from "lucide-react";
 
 export default function CreateZonePage() {
   const router = useRouter();
+  const { accessToken } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -17,52 +19,61 @@ export default function CreateZonePage() {
     setNotification(null); // Clear any existing notifications
 
     try {
-      // Convert form data to API format
+      // Map frontend zoneType to backend enum
+      const backendZoneType =
+        formData.zoneType === "zone-wise" ? "GEOLOGICAL" : "DISTANCE";
+
+      // Convert form data to API format matching new backend schema
       const zoneData = {
         name: formData.name,
         description: formData.description,
-        partnerId: formData.partnerId,
-        status: formData.status,
-        zoneType: formData.zoneType,
-        ...(formData.zoneType === "zone-wise"
-          ? {
-              geographical: {
-                states: formData.geographical.states,
-                cities: formData.geographical.cities,
-                areas: formData.geographical.areas,
-                pincodes: formData.geographical.pincodes,
-              },
-            }
-          : {
-              distanceSlabs: formData.distanceSlabs.map((slab) => ({
-                name: slab.name,
-                distanceFrom: Number(slab.distanceFrom),
-                distanceTo: Number(slab.distanceTo),
-              })),
-            }),
-        services: formData.services || [
-          {
-            serviceTypeId: 1,
-            isAvailable: true,
-            baseCharge: 60,
-            customCharges: {
-              expressDelivery: 25,
-              codCharge: 15,
-            },
-            additionalInfo: {
-              cutoffTime: "18:00",
-              deliveryWindow: "24-48 hours",
-            },
-          },
-        ],
+        status: formData.status, // Backend expects 'status' not 'isActive'
+        zoneType: backendZoneType,
       };
 
+      // Add type-specific data
+      if (backendZoneType === "GEOLOGICAL") {
+        // For geological zones, use partnerId (singular)
+        zoneData.partnerId = formData.partnerId;
+        zoneData.geographical = {
+          states: formData.selectedStates?.map((s) => s.id) || [],
+          cities: formData.selectedCities?.map((c) => c.id) || [],
+          areas: formData.selectedAreas?.map((a) => a.id) || [],
+          pincodes: formData.selectedPincodes?.map((p) => p.id) || [],
+        };
+      } else {
+        // For distance zones, use partnerIds (array) - backend requires this
+        // Support both single partnerId and multiple selectedPartnerIds
+        if (
+          formData.selectedPartnerIds &&
+          formData.selectedPartnerIds.length > 0
+        ) {
+          zoneData.partnerIds = formData.selectedPartnerIds;
+        } else if (formData.partnerId) {
+          zoneData.partnerIds = [formData.partnerId];
+        } else {
+          zoneData.partnerIds = [];
+        }
+        // Convert distanceSlabs to milestones (backend only accepts minKm and maxKm)
+        // suffix and sortOrder are generated server-side
+        zoneData.milestones = formData.distanceSlabs.map((slab) => ({
+          minKm: Number(slab.distanceFrom),
+          maxKm: Number(slab.distanceTo),
+        }));
+      }
+
       console.log("Creating zone with data:", zoneData);
+
+      // Set access token before making API call
+      if (accessToken) {
+        zonesApiService.setAccessToken(accessToken);
+      }
 
       // Call the actual API
       const response = await zonesApiService.createZone(zoneData);
 
-      if (response.success) {
+      // Backend returns { status: "success", data: {...} }
+      if (response.status === "success" || response.success) {
         console.log("Zone created successfully:", response.data);
         setNotification({
           type: "success",
@@ -106,19 +117,19 @@ export default function CreateZonePage() {
           <div
             className={`mb-6 p-4 rounded-lg flex items-center space-x-3 ${
               notification.type === "success"
-                ? "bg-green-50 border border-green-200 text-green-800"
-                : "bg-red-50 border border-red-200 text-red-800"
+                ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300"
+                : "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300"
             }`}
           >
             {notification.type === "success" ? (
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
             ) : (
-              <XCircle className="h-5 w-5 text-red-600" />
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
             )}
             <span className="font-medium">{notification.message}</span>
             <button
               onClick={() => setNotification(null)}
-              className="ml-auto text-gray-400 hover:text-gray-600"
+              className="ml-auto text-muted-foreground hover:text-foreground"
             >
               ×
             </button>

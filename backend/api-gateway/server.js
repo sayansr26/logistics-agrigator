@@ -317,17 +317,25 @@ const services = {
       "^/api/v1/geography": "/api/v1/geography", // Geography endpoints → /api/v1/geography/*
     },
   },
-  // Zone and Service Type Management (in partner service)
+  // Zone Management (in partner service)
   zones: {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
       "^/api/v1/zones": "/api/v1/zones", // Zones endpoints → /api/v1/zones/*
     },
   },
-  "service-types": {
+  // Pincode Type Management (Zone System v2 - admin/operations only)
+  "pincode-types": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
-      "^/api/v1/service-types": "/api/v1/service-types", // Service types → /api/v1/service-types/*
+      "^/api/v1/pincode-types": "/api/v1/pincode-types", // Pincode types → /api/v1/pincode-types/*
+    },
+  },
+  // Charge Package Management (Zone System v2 - partner charge packages)
+  "charge-packages": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/charge-packages": "/api/v1/charge-packages", // Charge packages → /api/v1/charge-packages/*
     },
   },
   // System management endpoints (also in partner service)
@@ -561,6 +569,91 @@ const services = {
  *         schema:
  *           type: string
  *         description: Partner service endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       503:
+ *         description: Partner service unavailable
+ */
+
+/**
+ * @swagger
+ * /api/v1/pincode-types/{path}:
+ *   get:
+ *     tags: [Gateway]
+ *     summary: Proxy GET requests to Pincode Types (Partner Service)
+ *     description: Routes pincode type management GET requests to partner service (admin/operations only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Pincode types endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       401:
+ *         description: Unauthorized - authentication required
+ *       403:
+ *         description: Forbidden - admin/operations role required
+ *       503:
+ *         description: Partner service unavailable
+ *   post:
+ *     tags: [Gateway]
+ *     summary: Proxy POST requests to Pincode Types (Partner Service)
+ *     description: Routes pincode type management POST requests (create, assign) to partner service
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Pincode types endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admin/operations role required
+ *       503:
+ *         description: Partner service unavailable
+ *   put:
+ *     tags: [Gateway]
+ *     summary: Proxy PUT requests to Pincode Types (Partner Service)
+ *     description: Routes pincode type management PUT requests (update) to partner service
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Pincode types endpoint path
+ *     responses:
+ *       200:
+ *         description: Success response from partner service
+ *       503:
+ *         description: Partner service unavailable
+ *   delete:
+ *     tags: [Gateway]
+ *     summary: Proxy DELETE requests to Pincode Types (Partner Service)
+ *     description: Routes pincode type management DELETE requests (soft delete, unassign) to partner service
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: path
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Pincode types endpoint path
  *     responses:
  *       200:
  *         description: Success response from partner service

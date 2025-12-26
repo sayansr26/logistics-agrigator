@@ -11,152 +11,179 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Globe,
   MapPin,
   CheckCircle,
   XCircle,
   Plus,
-  Settings,
   RefreshCw,
   Edit,
   Trash2,
   Search,
-  Map,
-  Navigation,
-  Truck,
-  Package,
-  DollarSign,
-  Clock,
+  Filter,
+  Route,
+  Loader2,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  Eye,
+  AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-function getStatusColor(status) {
-  switch (status) {
-    case "active":
-      return "bg-green-100 text-green-800";
-    case "inactive":
-      return "bg-gray-100 text-gray-800";
-    case "pending":
-      return "bg-yellow-100 text-yellow-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-}
-
-function getStatusIcon(status) {
-  switch (status) {
-    case "active":
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    case "inactive":
-      return <XCircle className="h-4 w-4 text-gray-500" />;
-    case "pending":
-      return <Clock className="h-4 w-4 text-yellow-500" />;
-    default:
-      return <XCircle className="h-4 w-4 text-gray-500" />;
-  }
-}
-
-function getZoneTypeIcon(type) {
-  switch (type) {
-    case "pickup":
-      return <Package className="h-5 w-5 text-blue-600" />;
-    case "delivery":
-      return <Truck className="h-5 w-5 text-green-600" />;
-    case "both":
-      return <Navigation className="h-5 w-5 text-purple-600" />;
-    default:
-      return <MapPin className="h-5 w-5 text-gray-600" />;
-  }
-}
+import {
+  useGetZonesQuery,
+  useDeleteZoneMutation,
+} from "@/store/api/endpoints/zonesApi";
 
 export default function ZonesPage() {
   const router = useRouter();
-  const [zones, setZones] = useState([]);
-  const [selectedZone, setSelectedZone] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const itemsPerPage = 10;
 
-  // Calculate stats dynamically
-  const zoneStats = {
-    totalZones: zones.length,
-    activeZones: zones.filter((z) => z.status === "active").length,
-    pickupZones: zones.filter((z) => z.type === "pickup" || z.type === "both")
-      .length,
-    deliveryZones: zones.filter(
-      (z) => z.type === "delivery" || z.type === "both",
-    ).length,
-    totalPincodes: zones.reduce((sum, z) => sum + z.pincodes.length, 0),
-    totalCities: zones.reduce((sum, z) => sum + z.cities.length, 0),
-    averageRate:
-      zones.length > 0
-        ? zones.reduce((sum, z) => sum + (z.partnerRates[0]?.rate || 0), 0) /
-          zones.length
-        : 0,
-  };
-
-  // Filter zones based on search and filters
-  const filteredZones = zones.filter((zone) => {
-    const matchesSearch =
-      zone.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      zone.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      zone.pincodes.some((p) => p.includes(searchTerm)) ||
-      zone.cities.some((c) =>
-        c.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-
-    const matchesType = filterType === "all" || zone.type === filterType;
-    const matchesStatus =
-      filterStatus === "all" || zone.status === filterStatus;
-
-    return matchesSearch && matchesType && matchesStatus;
+  // RTK Query - automatically handles auth via baseApi
+  const {
+    data: zonesResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useGetZonesQuery({
+    page: currentPage,
+    limit: itemsPerPage,
+    zoneType: filterType !== "all" ? filterType : undefined,
+    status:
+      filterStatus !== "all"
+        ? filterStatus === "active"
+          ? true
+          : false
+        : undefined,
+    search: searchTerm || undefined,
   });
 
-  const handleZoneSelect = (zone) => {
+  const [deleteZone, { isLoading: isDeleting }] = useDeleteZoneMutation();
+
+  // Extract zones from response
+  const zones = zonesResponse?.data?.zones || [];
+  const totalZones = zonesResponse?.data?.pagination?.total || 0;
+  const totalPages = zonesResponse?.data?.pagination?.totalPages || 1;
+
+  // Calculate stats
+  const activeZones = zones.filter((z) => z.status === true).length;
+  const inactiveZones = zones.filter((z) => z.status === false).length;
+  const distanceZones = zones.filter((z) => z.zoneType === "DISTANCE").length;
+  const geologicalZones = zones.filter(
+    (z) => z.zoneType === "GEOLOGICAL",
+  ).length;
+
+  // Check if filters are active
+  const hasActiveFilters =
+    filterType !== "all" || filterStatus !== "all" || searchTerm;
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  const handleTypeFilterChange = (type) => {
+    setFilterType(type);
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (status) => {
+    setFilterStatus(status);
+    setCurrentPage(1);
+  };
+
+  const toggleFilters = () => {
+    setShowFilters(!showFilters);
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setFilterType("all");
+    setFilterStatus("all");
+    setCurrentPage(1);
+  };
+
+  const openDeleteDialog = (zone) => {
     setSelectedZone(zone);
+    setShowDeleteDialog(true);
   };
 
-  const handleSyncZones = () => {
-    // TODO: Implement zone sync logic
-    console.log("Syncing zones...");
+  const closeDeleteDialog = () => {
+    setShowDeleteDialog(false);
+    setSelectedZone(null);
   };
 
-  const handleRemoveZone = (zoneId) => {
-    setZones((prev) => prev.filter((z) => z.id !== zoneId));
-    if (selectedZone?.id === zoneId) {
-      setSelectedZone(null);
+  const handleConfirmDelete = async () => {
+    if (!selectedZone) return;
+
+    try {
+      await deleteZone(selectedZone.id).unwrap();
+      closeDeleteDialog();
+    } catch (err) {
+      console.error("Failed to delete zone:", err);
+      alert(
+        "Failed to delete zone: " + (err.data?.error?.message || err.message),
+      );
     }
   };
 
   return (
     <DashboardLayout
-      customBreadcrumbs={[{ title: "Zone Management", href: "/zones" }]}
+      customBreadcrumbs={[
+        { title: "Home", href: "/" },
+        { title: "Zone Management" },
+      ]}
     >
       <div className="space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              Zone Management
+            <h1 className="text-3xl font-bold text-foreground flex items-center space-x-2">
+              <Globe className="h-8 w-8 text-blue-600" />
+              <span>Zone Management</span>
             </h1>
-            <p className="text-muted-foreground">
-              Manage delivery zones, pincode coverage, and partner rates for
-              efficient logistics operations.
+            <p className="text-muted-foreground mt-1">
+              Manage delivery zones, distance milestones, and geographical
+              coverage for efficient logistics operations.
             </p>
           </div>
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={handleSyncZones}>
+            <Button variant="outline" size="sm" onClick={refetch}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Sync Zones
             </Button>
@@ -167,411 +194,585 @@ export default function ZonesPage() {
           </div>
         </div>
 
-        {/* Zone Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Zones</CardTitle>
-              <Globe className="h-5 w-5 text-muted-foreground text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{zoneStats.totalZones}</div>
-              <p className="text-xs text-muted-foreground">
-                {zoneStats.activeZones} active
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Coverage</CardTitle>
-              <MapPin className="h-5 w-5 text-muted-foreground text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {zoneStats.totalPincodes.toLocaleString()}
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <Globe className="h-8 w-8 text-blue-600" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Zones
+                  </p>
+                  <p className="text-2xl font-bold">{totalZones}</p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {zoneStats.totalCities} cities
-              </p>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Service Types
-              </CardTitle>
-              <Navigation className="h-5 w-5 text-muted-foreground text-purple-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{zoneStats.pickupZones}</div>
-              <p className="text-xs text-muted-foreground">
-                {zoneStats.deliveryZones} delivery zones
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Rate</CardTitle>
-              <DollarSign className="h-5 w-5 text-muted-foreground text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ₹{zoneStats.averageRate.toFixed(0)}
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Active Zones
+                  </p>
+                  <p className="text-2xl font-bold">{activeZones}</p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">Per shipment</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <Route className="h-8 w-8 text-purple-600" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Distance Zones
+                  </p>
+                  <p className="text-2xl font-bold">{distanceZones}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center">
+                  <MapPin className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Geological Zones
+                  </p>
+                  <p className="text-2xl font-bold">{geologicalZones}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search and Filters */}
+        {/* Filters and Search */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center space-x-2">
+                  <Globe className="h-5 w-5" />
+                  <span>Zone Management</span>
+                </CardTitle>
+                <CardDescription>
+                  Search, filter, and manage delivery zones across the platform
+                </CardDescription>
+              </div>
+              <div className="flex items-center space-x-2">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search zones by name, code, pincode, or city..."
+                    placeholder="Search zones..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setIsSearchFocused(false)}
+                    className={`pl-10 w-64 transition-all duration-200 ${
+                      isSearchFocused
+                        ? "ring-2 ring-blue-500 dark:ring-blue-600 border-blue-500 dark:border-blue-600"
+                        : ""
+                    }`}
                   />
+                  {searchTerm && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Service Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="pickup">Pickup</SelectItem>
-                    <SelectItem value="delivery">Delivery</SelectItem>
-                    <SelectItem value="both">Both</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Button
+                  variant={showFilters ? "default" : "outline"}
+                  size="icon"
+                  onClick={toggleFilters}
+                  className="transition-all duration-200"
+                >
+                  <Filter className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Zones List */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Zones ({filteredZones.length})</CardTitle>
-                  <CardDescription>
-                    {zones.length === 0
-                      ? "No zones configured yet. Add your first zone to get started."
-                      : "Manage delivery zones and their coverage areas"}
-                  </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Enhanced Filter Section */}
+            {showFilters && (
+              <div className="space-y-6 mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                {/* Zone Type Filter */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center">
+                      <div className="h-2 w-2 bg-purple-600 dark:bg-purple-400 rounded-full"></div>
+                    </div>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Filter by Zone Type
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={filterType === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleTypeFilterChange("all")}
+                      className={`transition-all duration-200 ${
+                        filterType === "all"
+                          ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                          : "hover:bg-gray-50 border-gray-300"
+                      }`}
+                    >
+                      <div className="h-2 w-2 rounded-full bg-current mr-2"></div>
+                      All Types
+                    </Button>
+                    <Button
+                      variant={
+                        filterType === "DISTANCE" ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => handleTypeFilterChange("DISTANCE")}
+                      className={`transition-all duration-200 ${
+                        filterType === "DISTANCE"
+                          ? "bg-purple-600 hover:bg-purple-700 text-white shadow-md"
+                          : "hover:bg-purple-50 border-purple-300 text-purple-700"
+                      }`}
+                    >
+                      <Route className="h-3 w-3 mr-2" />
+                      Distance
+                    </Button>
+                    <Button
+                      variant={
+                        filterType === "GEOLOGICAL" ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => handleTypeFilterChange("GEOLOGICAL")}
+                      className={`transition-all duration-200 ${
+                        filterType === "GEOLOGICAL"
+                          ? "bg-orange-600 hover:bg-orange-700 text-white shadow-md"
+                          : "hover:bg-orange-50 border-orange-300 text-orange-700"
+                      }`}
+                    >
+                      <MapPin className="h-3 w-3 mr-2" />
+                      Geological
+                    </Button>
+                  </div>
                 </div>
-                {zones.length > 0 && (
-                  <Button variant="outline" size="sm">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Button>
+
+                {/* Status Filter */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                      <div className="h-2 w-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
+                    </div>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Filter by Status
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={filterStatus === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleStatusFilterChange("all")}
+                      className={`transition-all duration-200 ${
+                        filterStatus === "all"
+                          ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                          : "hover:bg-gray-50 border-gray-300"
+                      }`}
+                    >
+                      <div className="h-2 w-2 rounded-full bg-current mr-2"></div>
+                      All Status
+                    </Button>
+                    <Button
+                      variant={
+                        filterStatus === "active" ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => handleStatusFilterChange("active")}
+                      className={`transition-all duration-200 ${
+                        filterStatus === "active"
+                          ? "bg-green-600 hover:bg-green-700 text-white shadow-md"
+                          : "hover:bg-green-50 border-green-300 text-green-700"
+                      }`}
+                    >
+                      <CheckCircle className="h-3 w-3 mr-2" />
+                      Active
+                    </Button>
+                    <Button
+                      variant={
+                        filterStatus === "inactive" ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => handleStatusFilterChange("inactive")}
+                      className={`transition-all duration-200 ${
+                        filterStatus === "inactive"
+                          ? "bg-red-600 hover:bg-red-700 text-white shadow-md"
+                          : "hover:bg-red-50 border-red-300 text-red-700"
+                      }`}
+                    >
+                      <XCircle className="h-3 w-3 mr-2" />
+                      Inactive
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                {hasActiveFilters && (
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center space-x-2">
+                      <Filter className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">
+                        Active Filters:
+                      </span>
+                      {filterType !== "all" && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300"
+                        >
+                          Type: {filterType}
+                        </Badge>
+                      )}
+                      {filterStatus !== "all" && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300"
+                        >
+                          Status: {filterStatus}
+                        </Badge>
+                      )}
+                      {searchTerm && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300"
+                        >
+                          Search: "{searchTerm}"
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllFilters}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
                 )}
               </div>
-            </CardHeader>
-            <CardContent>
-              {zones.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Globe className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium mb-2">
-                    No zones configured
-                  </p>
-                  <p className="text-sm mb-4">
-                    Create your first delivery zone to start managing coverage
-                    areas and partner rates.
-                  </p>
+            )}
+
+            {/* Results Summary */}
+            <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center space-x-2">
+                <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                  {zones.length} zone{zones.length !== 1 ? "s" : ""} found
+                </span>
+                {hasActiveFilters && (
+                  <span className="text-xs text-blue-600 dark:text-blue-400">
+                    (filtered from {totalZones} total)
+                  </span>
+                )}
+              </div>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+
+            {/* Zones Table */}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">
+                  Loading zones...
+                </span>
+              </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-500 opacity-50" />
+                <p className="text-lg font-medium mb-2 text-red-600">
+                  Error loading zones
+                </p>
+                <p className="text-sm mb-4 text-muted-foreground">
+                  {error?.data?.error?.message ||
+                    error?.message ||
+                    "Failed to fetch zones"}
+                </p>
+                <Button onClick={refetch} variant="outline">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Try Again
+                </Button>
+              </div>
+            ) : zones.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Globe className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2">
+                  {hasActiveFilters
+                    ? "No zones match your filters"
+                    : "No zones configured"}
+                </p>
+                <p className="text-sm mb-4">
+                  {hasActiveFilters
+                    ? "Try adjusting your filters or search term"
+                    : "Create your first delivery zone to start managing coverage areas and rates"}
+                </p>
+                {!hasActiveFilters && (
                   <Button onClick={() => router.push("/zones/create")}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Your First Zone
                   </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredZones.map((zone) => (
-                    <div key={zone.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
+                )}
+              </div>
+            ) : (
+              <Table>
+                <TableCaption>
+                  {searchTerm
+                    ? `Filtered zones for "${searchTerm}"`
+                    : "A list of all delivery zones"}
+                </TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Zone Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Milestones</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {zones.map((zone) => (
+                    <TableRow key={zone.id}>
+                      <TableCell>
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
-                            {getZoneTypeIcon(zone.type)}
+                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                            {zone.zoneType === "DISTANCE" ? (
+                              <Route className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            ) : (
+                              <MapPin className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                            )}
                           </div>
                           <div>
                             <div className="font-medium">{zone.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {zone.code} • {zone.pincodes.length} pincodes •{" "}
-                              {zone.cities.length} cities
+                            <div className="text-xs text-muted-foreground">
+                              ID: {zone.id.slice(0, 8)}...
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="flex items-center space-x-2">
-                            {getStatusIcon(zone.status)}
-                            <Badge className={getStatusColor(zone.status)}>
-                              {zone.status}
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              router.push(`/zones/${zone.id}/edit`)
-                            }
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveZone(zone.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Zone Details */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                          <div className="text-sm font-medium">Coverage</div>
-                          <div className="text-sm text-muted-foreground">
-                            {zone.coverage.area} sq km •{" "}
-                            {zone.coverage.population.toLocaleString()} people
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">
-                            Service Type
-                          </div>
-                          <div className="text-sm text-muted-foreground capitalize">
-                            {zone.type} • {zone.coverage.density} density
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">
-                            Partner Rate
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            ₹{zone.partnerRates[0]?.rate || 0} per shipment
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Pincodes Preview */}
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {zone.pincodes.slice(0, 5).map((pincode) => (
-                          <Badge
-                            key={pincode}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {pincode}
-                          </Badge>
-                        ))}
-                        {zone.pincodes.length > 5 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{zone.pincodes.length - 5} more
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Restrictions */}
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <div className="flex items-center space-x-4 text-sm">
-                          <span>
-                            Weight:{" "}
-                            {zone.restrictions.weightLimit
-                              ? `${zone.restrictions.weightLimit}kg`
-                              : "No limit"}
-                          </span>
-                          <span>
-                            Hazardous:{" "}
-                            {zone.restrictions.hazardousAllowed
-                              ? "Allowed"
-                              : "Not allowed"}
-                          </span>
-                          <span>
-                            Fragile:{" "}
-                            {zone.restrictions.fragileAllowed
-                              ? "Allowed"
-                              : "Not allowed"}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Updated:{" "}
-                          {new Date(zone.updatedAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Zone Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Zone Details</CardTitle>
-              <CardDescription>
-                {selectedZone
-                  ? "View and manage zone configuration"
-                  : "Select a zone to view details"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {selectedZone ? (
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                      {getZoneTypeIcon(selectedZone.type)}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{selectedZone.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedZone.code} • {selectedZone.type} zone
-                      </p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-sm font-medium">Status</Label>
-                      <div className="flex items-center space-x-2 mt-1">
-                        {getStatusIcon(selectedZone.status)}
-                        <Badge className={getStatusColor(selectedZone.status)}>
-                          {selectedZone.status}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            zone.zoneType === "DISTANCE"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {zone.zoneType}
                         </Badge>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium">Coverage</Label>
-                      <div className="text-sm mt-1">
-                        <div>{selectedZone.pincodes.length} pincodes</div>
-                        <div>{selectedZone.cities.length} cities</div>
-                        <div>{selectedZone.states.length} states</div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Area Details
-                      </Label>
-                      <div className="text-sm mt-1">
-                        <div>{selectedZone.coverage.area} sq km</div>
-                        <div>
-                          {selectedZone.coverage.population.toLocaleString()}{" "}
-                          population
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-xs truncate text-sm text-muted-foreground">
+                          {zone.description || "No description"}
                         </div>
-                        <div className="capitalize">
-                          {selectedZone.coverage.density} density
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Partner Rates
-                      </Label>
-                      <div className="space-y-2 mt-1">
-                        {selectedZone.partnerRates.map((rate) => (
-                          <div
-                            key={rate.partnerId}
-                            className="flex justify-between text-sm"
-                          >
-                            <span>{rate.partnerName}</span>
-                            <span className="font-medium">₹{rate.rate}</span>
+                      </TableCell>
+                      <TableCell>
+                        {zone.zoneType === "DISTANCE" && zone.milestones ? (
+                          <div className="flex flex-wrap gap-1">
+                            {zone.milestones.slice(0, 3).map((milestone) => (
+                              <Badge
+                                key={milestone.id}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {milestone.suffix}: {milestone.minKm}-
+                                {milestone.maxKm}km
+                              </Badge>
+                            ))}
+                            {zone.milestones.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{zone.milestones.length - 3} more
+                              </Badge>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            N/A
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={zone.status ? "success" : "secondary"}
+                          className={
+                            zone.status
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                              : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+                          }
+                        >
+                          {zone.status ? (
+                            <>
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Active
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Inactive
+                            </>
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => router.push(`/zones/${zone.id}`)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/zones/${zone.id}/edit`)
+                              }
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Zone
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => openDeleteDialog(zone)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Zone
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
 
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Restrictions
-                      </Label>
-                      <div className="text-sm mt-1 space-y-1">
-                        <div>
-                          Weight:{" "}
-                          {selectedZone.restrictions.weightLimit
-                            ? `${selectedZone.restrictions.weightLimit}kg`
-                            : "No limit"}
-                        </div>
-                        <div>
-                          Hazardous:{" "}
-                          {selectedZone.restrictions.hazardousAllowed
-                            ? "Allowed"
-                            : "Not allowed"}
-                        </div>
-                        <div>
-                          Fragile:{" "}
-                          {selectedZone.restrictions.fragileAllowed
-                            ? "Allowed"
-                            : "Not allowed"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-2">
-                    <Button
-                      className="w-full"
-                      size="sm"
-                      onClick={() =>
-                        router.push(`/zones/${selectedZone.id}/edit`)
-                      }
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Zone
-                    </Button>
-                    <Button variant="outline" className="w-full" size="sm">
-                      <Map className="mr-2 h-4 w-4" />
-                      View Map
-                    </Button>
-                    <Button variant="outline" className="w-full" size="sm">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Manage Rates
-                    </Button>
-                  </div>
+            {/* Pagination */}
+            {totalPages > 1 && !isLoading && !error && (
+              <div className="flex items-center justify-between mt-6">
+                <div className="text-sm text-muted-foreground">
+                  Showing page {currentPage} of {totalPages}
                 </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm">
-                    {zones.length === 0
-                      ? "Add a zone to get started"
-                      : "Select a zone to view details"}
-                  </p>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let page;
+                    if (totalPages <= 5) {
+                      page = i + 1;
+                    } else if (currentPage <= 3) {
+                      page = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      page = totalPages - 4 + i;
+                    } else {
+                      page = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(page)}
+                      >
+                        {page}
+                      </Button>
+                    );
+                  })}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Zone</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the zone "
+              <strong>{selectedZone?.name}</strong>"? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Zone
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

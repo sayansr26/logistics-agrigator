@@ -380,6 +380,482 @@ const options = {
             },
           },
         },
+        // Zone System v2: Pincode Type schemas
+        PincodeType: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid",
+              description: "Unique pincode type identifier",
+              example: "123e4567-e89b-12d3-a456-426614174000",
+            },
+            name: {
+              type: "string",
+              description: "Pincode type name (unique)",
+              example: "Metro",
+            },
+            charge: {
+              type: "number",
+              format: "decimal",
+              description: "Associated charge amount",
+              example: 25.5,
+            },
+            description: {
+              type: "string",
+              nullable: true,
+              description: "Optional description",
+              example: "Metro city pincode type",
+            },
+            isActive: {
+              type: "boolean",
+              description: "Whether the type is active",
+              example: true,
+            },
+            assignedPincodeCount: {
+              type: "integer",
+              description: "Number of pincodes assigned to this type",
+              example: 150,
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              example: "2024-01-01T00:00:00.000Z",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              example: "2024-01-01T00:00:00.000Z",
+            },
+          },
+        },
+        CreatePincodeTypeRequest: {
+          type: "object",
+          required: ["name", "charge"],
+          properties: {
+            name: {
+              type: "string",
+              minLength: 2,
+              maxLength: 50,
+              pattern: "^[A-Za-z0-9_-]+$",
+              description: "Unique pincode type name",
+              example: "Metro",
+            },
+            charge: {
+              type: "number",
+              minimum: 0,
+              maximum: 9999999.99,
+              description: "Associated charge amount",
+              example: 25.5,
+            },
+            description: {
+              type: "string",
+              maxLength: 255,
+              nullable: true,
+              description: "Optional description",
+              example: "Metro city pincode type",
+            },
+            isActive: {
+              type: "boolean",
+              default: true,
+              description: "Whether the type is active",
+            },
+          },
+        },
+        BulkAssignPincodesRequest: {
+          type: "object",
+          required: ["pincodeCodes"],
+          properties: {
+            pincodeCodes: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[0-9]{6}$",
+              },
+              minItems: 1,
+              maxItems: 1000,
+              description: "Array of 6-digit pincode codes to assign",
+              example: ["110001", "110002", "110003"],
+            },
+          },
+        },
+        BulkAssignmentResult: {
+          type: "object",
+          properties: {
+            assignedCount: {
+              type: "integer",
+              description: "Number of successfully assigned pincodes",
+              example: 95,
+            },
+            totalRequested: {
+              type: "integer",
+              description: "Total number of pincodes requested",
+              example: 100,
+            },
+            validPincodes: {
+              type: "integer",
+              description: "Number of valid pincodes found",
+              example: 98,
+            },
+            skippedDuplicates: {
+              type: "integer",
+              description: "Number of already assigned (skipped) pincodes",
+              example: 3,
+            },
+            missingPincodes: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+              description: "Pincode codes not found in database",
+              example: ["999999", "888888"],
+            },
+          },
+        },
+        PincodeTypesByPincode: {
+          type: "object",
+          properties: {
+            pincode: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                code: { type: "string", example: "110001" },
+                areaName: { type: "string", nullable: true },
+                district: { type: "string", nullable: true },
+                status: { type: "boolean" },
+                state: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string", format: "uuid" },
+                    name: { type: "string" },
+                    code: { type: "string" },
+                  },
+                },
+              },
+            },
+            types: {
+              type: "array",
+              items: {
+                $ref: "#/components/schemas/PincodeType",
+              },
+            },
+            activeTypes: {
+              type: "array",
+              items: {
+                $ref: "#/components/schemas/PincodeType",
+              },
+              description: "Only active pincode types",
+            },
+            totalCharge: {
+              type: "number",
+              description: "Sum of charges from all active types",
+              example: 75.5,
+            },
+          },
+        },
+        // Zone System v2: Zone Type enum
+        ZoneType: {
+          type: "string",
+          enum: ["DISTANCE", "GEOLOGICAL"],
+          description:
+            "Type of zone - GEOLOGICAL for geographical associations, DISTANCE for milestone-based",
+          example: "DISTANCE",
+        },
+        // Zone System v2: Zone Milestone schema
+        ZoneMilestone: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid",
+              description: "Unique milestone identifier",
+            },
+            minKm: {
+              type: "integer",
+              minimum: 0,
+              description: "Minimum distance in kilometers (inclusive)",
+              example: 0,
+            },
+            maxKm: {
+              type: "integer",
+              minimum: 0,
+              description: "Maximum distance in kilometers (inclusive)",
+              example: 50,
+            },
+            suffix: {
+              type: "string",
+              description: "Zone suffix (A, B, C, etc.)",
+              example: "A",
+            },
+            sortOrder: {
+              type: "integer",
+              description: "Order of milestone (1-based)",
+              example: 1,
+            },
+            rangeLabel: {
+              type: "string",
+              description: "Human-readable range label",
+              example: "0-50 km (Zone A)",
+            },
+          },
+        },
+        // Zone System v2: Create Distance Zone Request
+        CreateDistanceZoneRequest: {
+          type: "object",
+          required: ["name", "zoneType", "partnerIds", "milestones"],
+          properties: {
+            name: {
+              type: "string",
+              minLength: 3,
+              maxLength: 255,
+              description: "Zone name (unique per partner)",
+              example: "North Region Distance Zone",
+            },
+            description: {
+              type: "string",
+              maxLength: 1000,
+              nullable: true,
+              description: "Optional zone description",
+              example: "Distance-based zone for north region",
+            },
+            status: {
+              type: "boolean",
+              default: true,
+              description: "Whether the zone is active",
+            },
+            zoneType: {
+              type: "string",
+              enum: ["DISTANCE"],
+              description: "Must be DISTANCE for distance zones",
+              example: "DISTANCE",
+            },
+            partnerIds: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^c[a-z0-9]{24}$",
+              },
+              minItems: 1,
+              maxItems: 100,
+              description: "Array of partner IDs (CUID format)",
+              example: ["clfz1234567890abcdefghij"],
+            },
+            milestones: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["minKm", "maxKm"],
+                properties: {
+                  minKm: {
+                    type: "integer",
+                    minimum: 0,
+                    description: "Minimum distance in km",
+                    example: 0,
+                  },
+                  maxKm: {
+                    type: "integer",
+                    minimum: 0,
+                    description: "Maximum distance in km",
+                    example: 50,
+                  },
+                },
+              },
+              minItems: 1,
+              maxItems: 26,
+              description: "Distance milestones (must be adjacent, no gaps)",
+              example: [
+                { minKm: 0, maxKm: 50 },
+                { minKm: 51, maxKm: 500 },
+                { minKm: 501, maxKm: 1000 },
+              ],
+            },
+          },
+        },
+        // Zone System v2: Calculate Distance Request
+        CalculateDistanceRequest: {
+          type: "object",
+          required: ["fromPincode", "toPincode"],
+          properties: {
+            fromPincode: {
+              type: "string",
+              pattern: "^[0-9]{6}$",
+              description: "Source pincode (6 digits)",
+              example: "110001",
+            },
+            toPincode: {
+              type: "string",
+              pattern: "^[0-9]{6}$",
+              description: "Destination pincode (6 digits)",
+              example: "400001",
+            },
+          },
+        },
+        // Zone System v2: Calculate Distance Response
+        CalculateDistanceResponse: {
+          type: "object",
+          properties: {
+            fromPincode: { type: "string", example: "110001" },
+            toPincode: { type: "string", example: "400001" },
+            distanceKm: {
+              type: "number",
+              description: "Distance in kilometers",
+              example: 1153.72,
+            },
+            distanceMiles: {
+              type: "number",
+              description: "Distance in miles",
+              example: 716.97,
+            },
+            fromLocation: {
+              type: "object",
+              properties: {
+                latitude: { type: "number", example: 28.6139 },
+                longitude: { type: "number", example: 77.209 },
+                area: { type: "string", nullable: true },
+                city: { type: "string", nullable: true },
+                state: { type: "string", nullable: true },
+              },
+            },
+            toLocation: {
+              type: "object",
+              properties: {
+                latitude: { type: "number", example: 18.9387 },
+                longitude: { type: "number", example: 72.8354 },
+                area: { type: "string", nullable: true },
+                city: { type: "string", nullable: true },
+                state: { type: "string", nullable: true },
+              },
+            },
+            calculationMethod: {
+              type: "string",
+              example: "haversine",
+            },
+            cached: {
+              type: "boolean",
+              description: "Whether result was served from cache",
+              example: false,
+            },
+          },
+        },
+        // Zone System v2: Match Zone Request
+        MatchZoneRequest: {
+          type: "object",
+          required: ["fromPincode", "toPincode"],
+          properties: {
+            fromPincode: {
+              type: "string",
+              pattern: "^[0-9]{6}$",
+              description: "Source pincode (6 digits)",
+              example: "110001",
+            },
+            toPincode: {
+              type: "string",
+              pattern: "^[0-9]{6}$",
+              description: "Destination pincode (6 digits)",
+              example: "400001",
+            },
+            partnerId: {
+              type: "string",
+              pattern: "^c[a-z0-9]{24}$",
+              nullable: true,
+              description: "Partner ID (optional if user has partnerId in JWT)",
+              example: "clfz1234567890abcdefghij",
+            },
+          },
+        },
+        // Zone System v2: Match Zone Response
+        MatchZoneResponse: {
+          type: "object",
+          properties: {
+            matched: {
+              type: "boolean",
+              description: "Whether a matching milestone was found",
+              example: true,
+            },
+            distanceKm: {
+              type: "number",
+              description: "Calculated distance in km",
+              example: 1153.72,
+            },
+            partnerId: {
+              type: "string",
+              example: "clfz1234567890abcdefghij",
+            },
+            zone: {
+              type: "object",
+              nullable: true,
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string", example: "North Region Distance Zone" },
+                description: { type: "string", nullable: true },
+              },
+            },
+            milestone: {
+              $ref: "#/components/schemas/ZoneMilestone",
+            },
+            zoneSuffix: {
+              type: "string",
+              description: "The matched zone suffix (e.g., A, B, C)",
+              example: "C",
+            },
+            fromLocation: {
+              type: "object",
+              description: "Source location details",
+            },
+            toLocation: {
+              type: "object",
+              description: "Destination location details",
+            },
+          },
+        },
+        // Zone (updated to include zoneType)
+        Zone: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid",
+              description: "Unique zone identifier",
+            },
+            partnerId: {
+              type: "string",
+              description: "Partner ID (CUID format)",
+            },
+            name: {
+              type: "string",
+              description: "Zone name",
+              example: "Zone A",
+            },
+            description: {
+              type: "string",
+              nullable: true,
+              description: "Zone description",
+            },
+            zoneType: {
+              $ref: "#/components/schemas/ZoneType",
+            },
+            status: {
+              type: "boolean",
+              description: "Whether the zone is active",
+              example: true,
+            },
+            milestones: {
+              type: "array",
+              items: {
+                $ref: "#/components/schemas/ZoneMilestone",
+              },
+              description: "Distance milestones (only for DISTANCE zones)",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+            },
+          },
+        },
       },
     },
     tags: [
@@ -394,6 +870,21 @@ const options = {
       {
         name: "Serviceability",
         description: "Serviceability checking operations",
+      },
+      {
+        name: "Zones",
+        description:
+          "Zone management - supports GEOLOGICAL (geographical) and DISTANCE (milestone-based) zones",
+      },
+      {
+        name: "DistanceZones",
+        description:
+          "Distance zone operations - calculate distance, match zones by distance, manage milestones",
+      },
+      {
+        name: "PincodeTypes",
+        description:
+          "Pincode type management (Zone System v2) - Admin/Operations only",
       },
       {
         name: "Health",

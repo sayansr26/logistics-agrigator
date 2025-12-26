@@ -1,48 +1,44 @@
 import { BaseApiService } from "./base-api";
 import { API_ENDPOINTS } from "@/constants/api";
 
+export type ZoneType = "DISTANCE" | "GEOLOGICAL";
+
 export interface ZoneGeographical {
-  states: number[];
-  cities: number[];
-  areas: number[];
-  pincodes: number[];
+  states: string[];
+  cities: string[];
+  areas: string[];
+  pincodes: string[];
 }
 
-export interface ZoneService {
-  serviceTypeId: number;
-  isAvailable: boolean;
-  baseCharge: number;
-  customCharges?: {
-    expressDelivery?: number;
-    codCharge?: number;
-    [key: string]: any;
-  };
-  additionalInfo?: {
-    cutoffTime?: string;
-    deliveryWindow?: string;
-    [key: string]: any;
-  };
+export interface ZoneMilestone {
+  id?: string;
+  minKm: number;
+  maxKm: number;
+  suffix: string;
+  sortOrder: number;
 }
 
 export interface Zone {
-  id?: number;
+  id?: string;
   name: string;
-  description: string;
+  description?: string;
   partnerId: string;
-  status: boolean;
-  geographical: ZoneGeographical;
-  services: ZoneService[];
+  isActive: boolean;
+  zoneType: ZoneType;
+  geographical?: ZoneGeographical;
+  milestones?: ZoneMilestone[];
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface CreateZoneData {
   name: string;
-  description: string;
+  description?: string;
   partnerId: string;
-  status?: boolean;
-  geographical: ZoneGeographical;
-  services?: ZoneService[];
+  isActive?: boolean;
+  zoneType: ZoneType;
+  geographical?: ZoneGeographical;
+  milestones?: Omit<ZoneMilestone, "id">[];
 }
 
 export interface ZoneResponse {
@@ -76,39 +72,8 @@ export interface ZonesListResponse {
   };
 }
 
-export interface ServiceType {
-  id: number;
-  name: string;
-  displayName: string;
-  category: "LOGISTICS" | "PAYMENT" | "LOCATION" | "SPECIAL";
-  description?: string;
-  isAvailable: boolean;
-  baseCharge: string;
-  sortOrder: number;
-  additionalInfo?: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ServiceTypesResponse {
-  success: boolean;
-  message?: string;
-  data?: ServiceType[];
-  meta?: {
-    pagination?: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    };
-    filters?: Record<string, any>;
-  };
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
+// Note: ServiceType model has been removed from backend.
+// Use pincodeTypeApi for pincode type management instead.
 
 export class ZonesApiService extends BaseApiService {
   private accessToken: string | null = null;
@@ -163,15 +128,8 @@ export class ZonesApiService extends BaseApiService {
     return this.delete<ZoneResponse>(`${API_ENDPOINTS.ZONES.DELETE}/${id}`);
   }
 
-  // Service Types
-  async getServiceTypes(
-    filters: Record<string, any> = {},
-  ): Promise<ServiceTypesResponse> {
-    return this.get<ServiceTypesResponse>(API_ENDPOINTS.ZONES.SERVICE_TYPES, {
-      params: filters,
-      headers: this.getAuthHeaders(),
-    });
-  }
+  // Note: getServiceTypes has been removed.
+  // Use pincodeTypeApi for pincode type management.
 
   // Zone Coverage Validation
   async validateZoneCoverage(

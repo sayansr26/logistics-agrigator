@@ -35,6 +35,9 @@ model Partner {
   codChargePercent Float?
   fuelSurcharge    Float?
 
+  // Delivery Configuration
+  defaultDeliveryDays Int? @map("default_delivery_days") // Default delivery days for this partner
+
   // Service Areas
   servicePincodes String[] // Array of supported pincodes
 
@@ -46,6 +49,7 @@ model Partner {
   shipments           PartnerShipment[]
   rates               PartnerRate[]
   serviceabilityCache ServiceabilityCache[]
+  chargePackages      ChargePackage[]
 
   @@map("partners")
 }
@@ -135,27 +139,6 @@ model ServiceabilityCache {
 
   @@unique([partnerId, fromPincode, toPincode])
   @@map("serviceability_cache")
-}
-
-model ServiceType {
-  id             String  @id @default(uuid()) @db.Uuid
-  name           String  @unique @db.VarChar(20)
-  displayName    String  @map("display_name") @db.VarChar(100)
-  description    String? @db.VarChar(500)
-  category       String  @db.VarChar(20) // LOGISTICS, PAYMENT, LOCATION, SPECIAL
-  isAvailable    Boolean @default(true) @map("is_available")
-  baseCharge     String  @default("0") @map("base_charge") @db.VarChar(20)
-  sortOrder      Int     @default(100) @map("sort_order")
-  additionalInfo Json?   @map("additional_info")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([name])
-  @@index([category])
-  @@index([isAvailable])
-  @@index([sortOrder])
-  @@map("service_types")
 }
 
 model AuditLog {
@@ -260,9 +243,10 @@ model Pincode {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  area         Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
-  state        State         @relation(fields: [stateId], references: [id], onDelete: Cascade)
-  zonePincodes ZonePincode[]
+  area            Area?                   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  state           State                   @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  zonePincodes    ZonePincode[]
+  typeAssignments PincodeTypeAssignment[]
 
   @@index([code, status])
   @@index([areaId, status])
@@ -275,11 +259,40 @@ model Pincode {
 // ZONE MANAGEMENT MODELS
 // ========================================
 
+// Zone type enum for distinguishing distance-based vs geological zones
+enum ZoneType {
+  DISTANCE
+  GEOLOGICAL
+}
+
+// ========================================
+// CHARGE PACKAGE ENUMS
+// ========================================
+
+enum ChargePackageType {
+  WEIGHT
+  DISTANCE
+  GENERIC
+}
+
+enum ChargePackageCalcType {
+  FLAT
+  PERCENTAGE_OF_COD
+  PERCENTAGE_OF_DECLARED_VALUE
+}
+
+enum ChargePackageAppliesTo {
+  ANY
+  COD
+  PREPAID
+}
+
 model Zone {
   id          String   @id @default(uuid()) @db.Uuid
   partnerId   String // Reference to Partner model (keeping CUID for compatibility)
   name        String   @db.VarChar(255)
   description String?  @db.Text
+  zoneType    ZoneType @default(GEOLOGICAL) @map("zone_type")
   status      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -289,10 +302,11 @@ model Zone {
   zoneCities   ZoneCity[]
   zoneAreas    ZoneArea[]
   zonePincodes ZonePincode[]
-  zoneServices ZoneService[]
+  milestones   ZoneMilestone[]
 
   @@unique([partnerId, name])
   @@index([partnerId, status])
+  @@index([zoneType])
   @@map("zones")
 }
 
@@ -361,32 +375,101 @@ model ZonePincode {
 }
 
 // ========================================
-// SERVICE TYPE CONFIGURATION
+// ZONE MILESTONE CONFIGURATION (Distance Zones)
 // ========================================
 
-enum ZoneServiceType {
-  PICKUP
-  DELIVERY
-  COD
-  PREPAID
-  ODA
-  HILL
-}
-
-model ZoneService {
-  id                String          @id @default(uuid()) @db.Uuid
-  zoneId            String          @db.Uuid
-  serviceType       ZoneServiceType
-  isAvailable       Boolean         @default(true)
-  additionalCharges Decimal?        @db.Decimal(10, 2)
-  remarks           String?         @db.Text
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+model ZoneMilestone {
+  id        String   @id @default(uuid()) @db.Uuid
+  zoneId    String   @map("zone_id") @db.Uuid
+  minKm     Int      @map("min_km")
+  maxKm     Int      @map("max_km")
+  suffix    String   @db.VarChar(5) // A, B, C, etc.
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
   zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
-  @@unique([zoneId, serviceType])
-  @@index([zoneId, serviceType, isAvailable])
-  @@map("zone_services")
+  @@unique([zoneId, sortOrder])
+  @@unique([zoneId, minKm])
+  @@unique([zoneId, maxKm])
+  @@index([zoneId])
+  @@map("zone_milestones")
+}
+
+// ========================================
+// PINCODE TYPE MANAGEMENT (Global/Admin-managed)
+// ========================================
+
+model PincodeType {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(50)
+  charge      Decimal  @db.Decimal(10, 2)
+  description String?  @db.VarChar(255)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  assignments PincodeTypeAssignment[]
+
+  @@index([name])
+  @@index([isActive])
+  @@map("pincode_types")
+}
+
+model PincodeTypeAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  pincodeId  String   @map("pincode_id") @db.Uuid
+  typeId     String   @map("type_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by") @db.Uuid
+
+  // Relations
+  pincode     Pincode     @relation(fields: [pincodeId], references: [id], onDelete: Cascade)
+  pincodeType PincodeType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  @@unique([pincodeId, typeId])
+  @@index([pincodeId])
+  @@index([typeId])
+  @@map("pincode_type_assignments")
+}
+
+// ========================================
+// CHARGE PACKAGE MANAGEMENT
+// ========================================
+
+model ChargePackage {
+  id        String            @id @default(uuid()) @db.Uuid
+  partnerId String            @map("partner_id")
+  name      String            @db.VarChar(100)
+  type      ChargePackageType
+
+  // Base charge configuration
+  baseCharge Decimal @map("base_charge") @db.Decimal(10, 2)
+
+  // Unit-based configuration (for WEIGHT and DISTANCE types)
+  baseUnit    Decimal? @map("base_unit") @db.Decimal(10, 2) // Base kg or km included in baseCharge
+  addonUnit   Decimal? @map("addon_unit") @db.Decimal(10, 2) // Each additional kg or km unit
+  addonCharge Decimal? @map("addon_charge") @db.Decimal(10, 2) // Charge per addon unit
+
+  // GENERIC type configuration
+  appliesTo ChargePackageAppliesTo @default(ANY) @map("applies_to")
+  calcType  ChargePackageCalcType  @default(FLAT) @map("calc_type")
+
+  // Metadata for future extensibility
+  metadata Json? @db.JsonB
+
+  // Status and timestamps
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, name])
+  @@index([partnerId, isActive])
+  @@index([type])
+  @@map("charge_packages")
 }

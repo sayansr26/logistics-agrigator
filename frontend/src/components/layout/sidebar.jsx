@@ -61,8 +61,7 @@ const getNavigationSections = () => {
           title: "Dashboard",
           href: "/dashboard",
           icon: Home,
-          disabled: true, // Dashboard not implemented yet
-          tooltip: "Coming Soon",
+          disabled: false, // Dashboard not implemented yet
           // Everyone can see dashboard
         },
         {
@@ -80,10 +79,11 @@ const getNavigationSections = () => {
       title: "Pricing & Services",
       items: [
         {
-          title: "Service Types",
-          href: "/services",
+          title: "Pincode Types",
+          href: "/pincode-types",
           icon: Settings,
           permission: "partner:read:own",
+          roles: ["superadmin", "admin"],
           disabled: false, // Active and working
         },
         {
@@ -91,17 +91,15 @@ const getNavigationSections = () => {
           href: "/zones",
           icon: Globe,
           permission: "partner:read:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
+          disabled: false, // Zone management is now implemented
         },
         {
-          title: "Charges Management",
+          title: "Charge Packages",
           href: "/charges",
           icon: IndianRupee,
-          permission: "billing:list:own",
-          roles: ["superadmin", "admin", "accounts", "customer_account"],
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
+          permission: "chargePackage:manage:all",
+          roles: ["superadmin", "admin", "operations"],
+          disabled: false, // Implemented with new package creation flow
         },
       ].filter(canSeeMenuItem),
     },

@@ -1,129 +1,162 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { ZoneForm } from "@/components/zones/zone-form.jsx";
-import { zonesApiService } from "@/services";
+import {
+  useGetZoneByIdQuery,
+  useUpdateZoneMutation,
+} from "@/store/api/endpoints/zonesApi";
+import {
+  CheckCircle,
+  XCircle,
+  Loader2,
+  AlertCircle,
+  ArrowLeft,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function EditZonePage() {
   const router = useRouter();
   const params = useParams();
   const zoneId = params.id;
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [initialData, setInitialData] = useState({});
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [notification, setNotification] = useState(null);
 
-  useEffect(() => {
-    const loadZoneData = async () => {
-      try {
-        // TODO: Replace with actual API call when backend is ready
-        // const zone = await zonesApiService.getZoneById(zoneId);
+  // RTK Query - fetch zone data
+  const {
+    data: zoneResponse,
+    isLoading: isLoadingData,
+    error: fetchError,
+    refetch,
+  } = useGetZoneByIdQuery(zoneId);
 
-        // For now, use mock data
-        const mockZone = {
-          name: "Delhi Central Zone",
-          code: "DCZ001",
-          type: "both",
-          status: "active",
-          pincodes: "110001, 110002, 110003, 110004, 110005",
-          cities: "New Delhi, Central Delhi",
-          states: "Delhi",
-          area: "150",
-          population: "2500000",
-          density: "high",
-          weightLimit: "25",
-          hazardousAllowed: false,
-          fragileAllowed: true,
-          liquidAllowed: true,
-          perishableAllowed: true,
-        };
+  // RTK Query - update mutation
+  const [updateZone, { isLoading: isUpdating }] = useUpdateZoneMutation();
 
-        setInitialData(mockZone);
-      } catch (error) {
-        console.error("Failed to load zone data:", error);
-        // TODO: Show error toast
-      } finally {
-        setIsLoadingData(false);
-      }
+  // Backend returns zone directly in data field
+  const zone = zoneResponse?.data;
+
+  // Convert backend data to form format
+  const initialData = useMemo(() => {
+    if (!zone) return null;
+
+    const formData = {
+      name: zone.name || "",
+      description: zone.description || "",
+      partnerId: zone.partnerId || "",
+      selectedPartnerIds: zone.partnerId ? [zone.partnerId] : [],
+      status: zone.status ?? true,
+      // Convert backend zoneType to form zoneType
+      zoneType: zone.zoneType === "GEOLOGICAL" ? "zone-wise" : "distance-wise",
+      selectedStates: [],
+      selectedCities: [],
+      selectedAreas: [],
+      selectedPincodes: [],
+      manualPincodes: [],
+      services: [],
+      // Convert backend milestones to form distanceSlabs
+      distanceSlabs:
+        zone.milestones?.length > 0
+          ? zone.milestones.map((m, index) => ({
+              id: index + 1,
+              name: m.suffix || "",
+              distanceFrom: String(m.minKm),
+              distanceTo: String(m.maxKm),
+            }))
+          : [{ id: 1, name: "", distanceFrom: "0", distanceTo: "" }],
+      // Network taxes (empty for now)
+      networkTaxes: [
+        {
+          id: 1,
+          taxName: "",
+          taxType: "percentage",
+          taxValue: "",
+          isActive: true,
+          description: "",
+        },
+      ],
     };
 
-    if (zoneId) {
-      loadZoneData();
-    }
-  }, [zoneId]);
+    return formData;
+  }, [zone]);
 
   const handleSubmit = async (formData) => {
-    setIsLoading(true);
+    setNotification(null);
+
     try {
-      // Convert form data to API format
-      const zoneData = {
-        id: zoneId,
+      // Map frontend zoneType to backend enum
+      const backendZoneType =
+        formData.zoneType === "zone-wise" ? "GEOLOGICAL" : "DISTANCE";
+
+      // Build update data
+      const updateData = {
         name: formData.name,
-        code: formData.code,
-        type: formData.type,
+        description: formData.description,
         status: formData.status,
-        pincodes: formData.pincodes
-          .split(",")
-          .map((p) => p.trim())
-          .filter((p) => p),
-        cities: formData.cities
-          .split(",")
-          .map((c) => c.trim())
-          .filter((c) => c),
-        states: formData.states
-          .split(",")
-          .map((s) => s.trim())
-          .filter((s) => s),
-        coverage: {
-          area: formData.area,
-          population: parseInt(formData.population) || 0,
-          density: formData.density,
-        },
-        restrictions: {
-          weightLimit: formData.weightLimit
-            ? parseFloat(formData.weightLimit)
-            : undefined,
-          hazardousAllowed: formData.hazardousAllowed,
-          fragileAllowed: formData.fragileAllowed,
-          liquidAllowed: formData.liquidAllowed,
-          perishableAllowed: formData.perishableAllowed,
-        },
       };
 
-      // TODO: Replace with actual API call when backend is ready
-      // await zonesApiService.updateZone(zoneData);
+      // For DISTANCE zones, include milestones if they changed
+      if (
+        backendZoneType === "DISTANCE" &&
+        formData.distanceSlabs?.length > 0
+      ) {
+        // Note: Milestone updates might need a separate API call
+        // For now, we'll just update basic zone info
+      }
 
-      // For now, just simulate success
-      console.log("Updating zone:", zoneData);
+      console.log("Updating zone with data:", updateData);
 
-      // Redirect to zones list
-      router.push("/zones");
+      // Call the update API
+      const response = await updateZone({
+        id: zoneId,
+        data: updateData,
+      }).unwrap();
+
+      console.log("Zone updated successfully:", response);
+      setNotification({
+        type: "success",
+        message: "Zone updated successfully! Redirecting...",
+      });
+
+      // Redirect to zone details after a short delay
+      setTimeout(() => {
+        router.push(`/zones/${zoneId}`);
+      }, 1500);
     } catch (error) {
       console.error("Failed to update zone:", error);
-      // TODO: Show error toast
-    } finally {
-      setIsLoading(false);
+      setNotification({
+        type: "error",
+        message: `Failed to update zone: ${error.data?.error?.message || error.message || "Unknown error"}`,
+      });
+      throw error;
     }
   };
 
   const handleCancel = () => {
+    router.push(`/zones/${zoneId}`);
+  };
+
+  const handleBackToZones = () => {
     router.push("/zones");
   };
 
+  // Loading state
   if (isLoadingData) {
     return (
       <DashboardLayout
         customBreadcrumbs={[
+          { title: "Home", href: "/" },
           { title: "Zone Management", href: "/zones" },
-          { title: "Edit Zone", href: `/zones/${zoneId}/edit` },
+          { title: "Edit Zone" },
         ]}
       >
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
               <p className="text-muted-foreground">Loading zone data...</p>
             </div>
           </div>
@@ -132,29 +165,124 @@ export default function EditZonePage() {
     );
   }
 
+  // Error state
+  if (fetchError) {
+    return (
+      <DashboardLayout
+        customBreadcrumbs={[
+          { title: "Home", href: "/" },
+          { title: "Zone Management", href: "/zones" },
+          { title: "Edit Zone" },
+        ]}
+      >
+        <div className="max-w-4xl mx-auto">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                Failed to Load Zone
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                {fetchError?.data?.error?.message ||
+                  "An error occurred while fetching zone details"}
+              </p>
+              <div className="flex items-center justify-center space-x-4">
+                <Button variant="outline" onClick={handleBackToZones}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Zones
+                </Button>
+                <Button onClick={refetch}>Try Again</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Zone not found
+  if (!zone) {
+    return (
+      <DashboardLayout
+        customBreadcrumbs={[
+          { title: "Home", href: "/" },
+          { title: "Zone Management", href: "/zones" },
+          { title: "Edit Zone" },
+        ]}
+      >
+        <div className="max-w-4xl mx-auto">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                Zone Not Found
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                The zone you're trying to edit doesn't exist or has been
+                removed.
+              </p>
+              <Button onClick={handleBackToZones}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Zones
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       customBreadcrumbs={[
+        { title: "Home", href: "/" },
         { title: "Zone Management", href: "/zones" },
-        { title: "Edit Zone", href: `/zones/${zoneId}/edit` },
+        { title: zone.name, href: `/zones/${zoneId}` },
+        { title: "Edit" },
       ]}
     >
       <div className="max-w-4xl mx-auto">
+        {/* Notification */}
+        {notification && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center space-x-3 ${
+              notification.type === "success"
+                ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300"
+                : "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300"
+            }`}
+          >
+            {notification.type === "success" ? (
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+            ) : (
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            )}
+            <span className="font-medium">{notification.message}</span>
+            <button
+              onClick={() => setNotification(null)}
+              className="ml-auto text-muted-foreground hover:text-foreground"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-foreground">Edit Zone</h1>
           <p className="text-muted-foreground">
-            Update zone configuration, coverage areas, and service restrictions.
+            Update zone configuration for <strong>{zone.name}</strong>
           </p>
         </div>
 
-        <ZoneForm
-          initialData={initialData}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          isLoading={isLoading}
-          title="Edit Zone Configuration"
-          description="Update the zone details, coverage area, and service capabilities"
-        />
+        {initialData && (
+          <ZoneForm
+            initialData={initialData}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            isLoading={isUpdating}
+            title="Edit Zone Configuration"
+            description="Update the zone details, coverage area, and service capabilities"
+          />
+        )}
       </div>
     </DashboardLayout>
   );

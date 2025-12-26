@@ -3,40 +3,63 @@ import { API_ENDPOINTS } from "@/constants/api";
 
 // Types for geographical data
 export interface State {
-  id: number;
+  id: string;
   name: string;
   code: string;
-  isActive: boolean;
+  status: boolean;
+  isActive?: boolean;
 }
 
 export interface City {
-  id: number;
+  id: string;
   name: string;
-  stateId: number;
+  stateId: string;
   stateName?: string;
-  isActive: boolean;
+  isMetro?: boolean;
+  status: boolean;
+  isActive?: boolean;
+  state?: {
+    id: string;
+    name: string;
+    code: string;
+  };
 }
 
 export interface Area {
-  id: number;
+  id: string;
   name: string;
-  cityId: number;
+  cityId: string;
   cityName?: string;
-  stateId?: number;
+  stateId?: string;
   stateName?: string;
-  isActive: boolean;
+  status: boolean;
+  isActive?: boolean;
+  city?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface Pincode {
-  id: number;
-  pincode: string;
-  areaId: number;
+  id: string;
+  code: string; // Backend uses 'code' not 'pincode'
+  pincode?: string; // Alias for compatibility
+  areaId?: string;
   areaName?: string;
-  cityId?: number;
+  cityId?: string;
   cityName?: string;
-  stateId?: number;
+  stateId?: string;
   stateName?: string;
-  isActive: boolean;
+  status: boolean;
+  isActive?: boolean;
+  area?: {
+    id: string;
+    name: string;
+    city?: {
+      id: string;
+      name: string;
+    };
+  };
 }
 
 export interface GeographicalListResponse<T> {
@@ -86,11 +109,11 @@ export class GeographicalApiService extends BaseApiService {
    * Get cities by state ID
    */
   async getCitiesByState(
-    stateId: number,
+    stateId: number | string,
   ): Promise<GeographicalListResponse<City>> {
     try {
       const response = await this.get<GeographicalListResponse<City>>(
-        `${API_ENDPOINTS.GEOGRAPHICAL.CITIES}?stateIds=${stateId}&limit=100`,
+        `${API_ENDPOINTS.GEOGRAPHICAL.CITIES}?stateId=${stateId}&limit=100`,
         { headers: this.getHeaders() },
       );
       return response;
@@ -104,11 +127,11 @@ export class GeographicalApiService extends BaseApiService {
    * Get areas by city ID
    */
   async getAreasByCity(
-    cityId: number,
+    cityId: number | string,
   ): Promise<GeographicalListResponse<Area>> {
     try {
       const response = await this.get<GeographicalListResponse<Area>>(
-        `${API_ENDPOINTS.GEOGRAPHICAL.AREAS}?cityIds=${cityId}`,
+        `${API_ENDPOINTS.GEOGRAPHICAL.AREAS}?cityId=${cityId}`,
         { headers: this.getHeaders() },
       );
       return response;
@@ -122,7 +145,7 @@ export class GeographicalApiService extends BaseApiService {
    * Get pincodes by area ID
    */
   async getPincodesByArea(
-    areaId: number,
+    areaId: number | string,
   ): Promise<GeographicalListResponse<Pincode>> {
     try {
       const response = await this.get<GeographicalListResponse<Pincode>>(
@@ -137,7 +160,7 @@ export class GeographicalApiService extends BaseApiService {
   }
 
   /**
-   * Search pincodes by query
+   * Search pincodes by query (code, city, state)
    */
   async searchPincodes(
     query: string,
@@ -145,7 +168,7 @@ export class GeographicalApiService extends BaseApiService {
   ): Promise<GeographicalListResponse<Pincode>> {
     try {
       const response = await this.get<GeographicalListResponse<Pincode>>(
-        `${API_ENDPOINTS.GEOGRAPHICAL.PINCODES}/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+        `${API_ENDPOINTS.GEOGRAPHICAL.PINCODES}/search?code=${encodeURIComponent(query)}&limit=${limit}`,
         { headers: this.getHeaders() },
       );
       return response;

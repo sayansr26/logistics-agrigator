@@ -1,23 +1,23 @@
 # Project Progress Tracker
 
-## Last Updated: January 2025
+## Last Updated: December 2025 (2025-12-26)
 
-## Overall Project Status: 75% Complete
+## Overall Project Status: 85% Complete
 
 ### Service Status Dashboard
 
-| Service          | Development | Testing | Documentation | Production Ready | Notes                                                                |
-| ---------------- | ----------- | ------- | ------------- | ---------------- | -------------------------------------------------------------------- |
-| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                                    |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, customer management                                   |
-| Partner Service  | ⚠️ 95%      | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 75+ endpoints + Service Types CRUD + **Distance Calc (IN PROGRESS)** |
-| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                      |
-| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending                             |
-| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                        |
-| API Gateway      | ✅ 100%     | ✅ 90%  | ✅ 95%        | ✅ Yes           | **ALL SECURITY COMPLETE** (8/8 tasks)                                |
-| Frontend         | ⚠️ 75%      | ⚠️ 50%  | ⚠️ 60%        | 🔄 Migration     | 9/11 tasks - Service Types UI ✅, Navigation next                    |
-| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                  |
-| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                  |
+| Service          | Development | Testing | Documentation | Production Ready | Notes                                                                          |
+| ---------------- | ----------- | ------- | ------------- | ---------------- | ------------------------------------------------------------------------------ |
+| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                                              |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, customer management                                             |
+| Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Quote Engine + Distance Calc - COMPLETE** |
+| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                                |
+| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending                                       |
+| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                                  |
+| API Gateway      | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **ALL SECURITY + CHARGE PACKAGES ROUTING COMPLETE**                            |
+| Frontend         | ✅ 90%      | ⚠️ 60%  | ⚠️ 70%        | ✅ Yes           | **Charge Packages UI complete with modals**                                    |
+| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
+| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
 
 ### Current Sprint: Frontend Architecture Migration (Redux/RTK Query)
 
@@ -73,6 +73,92 @@
   - [x] FE-011: Superadmin user management
 
 ### Recent Achievements
+
+#### Charge Packages + Zone-Based Quote Calculation (December 2025) ✅
+
+- **Charge Packages Feature**: Complete WEIGHT/DISTANCE/GENERIC charge package system (Completed 2025-12-26)
+  - **Backend Implementation (Partner Service)**:
+    - ✅ Created Prisma models: `ChargePackage`, `ChargePackageType`, `ChargePackageCalcType`, `ChargePackageAppliesTo`
+    - ✅ Added `defaultDeliveryDays` field to Partner model
+    - ✅ Implemented `chargePackageService.js` with full CRUD operations
+    - ✅ Created `chargePackageController.js` following function-based pattern
+    - ✅ Added Joi validation schemas for create/update/list
+    - ✅ Registered routes at `/api/v1/charge-packages`
+    - ✅ Rate limiting: 25 requests per 15 minutes per user
+    - ✅ Audit logging for all operations
+  - **Quote Calculation Engine**:
+    - ✅ Created `quoteCalculationService.js` with zone-based calculations
+    - ✅ Distance zone matching using `distanceZoneService.getZoneForShipment`
+    - ✅ Distance-based charges: base charge + addon per extra km
+    - ✅ Weight-based charges: base charge + addon per extra kg
+    - ✅ Generic charges: COD, Prepaid, flat fees based on `appliesTo`
+    - ✅ Pincode type charges aggregation (pickup + delivery)
+    - ✅ Charge breakdown with sorting (cheapest/highest)
+  - **Endpoint Updates**:
+    - ✅ Refactored `POST /api/partners/calculate` to use quote engine
+    - ✅ Refactored `POST /api/partners/serviceability` to use zone matching
+    - ✅ Added fallback to external API if quote engine fails
+    - ✅ Response includes `breakdown`, `zoneName`, `zoneSuffix`, `distanceKm`
+  - **API Gateway Integration**:
+    - ✅ Added proxy route for `/api/v1/charge-packages` → partner-service
+    - ✅ Updated shipment-service with `X-Internal-Request` header
+    - ✅ Authorization header forwarding for internal calls
+  - **Frontend Implementation**:
+    - ✅ Created RTK Query slice `chargePackagesApi.ts`
+    - ✅ Modal-based UI (no separate create/edit pages)
+    - ✅ Create modal with multi-partner selection
+    - ✅ View modal with status toggle (activate/deactivate)
+    - ✅ Edit modal with form validation
+    - ✅ Filter by partner, type, status, search
+    - ✅ Updated sidebar: "Charge Packages" (enabled for superadmin/admin/operations)
+    - ✅ Updated `partnersApi.ts` types for new response shapes
+  - **Legacy Deprecation**:
+    - ✅ `/api/packages/*` returns 410 Gone
+    - ✅ `/api/customer-charges/*` returns 410 Gone
+    - ✅ `/api/discounts/*` returns 410 Gone
+    - ✅ `/api/v1/charge-calculation/*` returns 410 Gone
+    - ✅ `/api/v1/partner-assignment/*` returns 410 Gone
+
+#### Zone System v2 Migration (December 2025) ✅
+
+- **Zone System Redesign**: Complete migration from ServiceType to PincodeType (Completed 2025-12-25)
+  - **PARTNER-012**: Database Schema Migration
+    - ✅ Removed `ServiceType` model and `ZoneServiceType` enum
+    - ✅ Added `ZoneType` enum (DISTANCE | GEOLOGICAL)
+    - ✅ Created `PincodeType` model (name, charge, description, isActive)
+    - ✅ Created `PincodeTypeAssignment` model (many-to-many)
+    - ✅ Created `ZoneMilestone` model (minKm, maxKm, suffix, sortOrder)
+    - ✅ Added `zoneType` field to Zone model
+  - **PARTNER-013**: Pincode Type Service Implementation
+    - ✅ Full CRUD for pincode types
+    - ✅ Bulk assign/unassign pincodes to types
+    - ✅ Get types by pincode, pincodes by type
+    - ✅ Redis caching for type lookups
+  - **PARTNER-014**: Distance Zone Service Implementation
+    - ✅ `distanceZoneService.js` with milestone management
+    - ✅ Auto-suffix generation (A, B, C...)
+    - ✅ Non-overlapping milestone validation
+    - ✅ Haversine distance calculation between pincodes
+    - ✅ Zone matching by distance
+    - ✅ `getZoneForShipment(partnerId, fromPincode, toPincode)`
+  - **PARTNER-015**: Zone Controller & Routes Update
+    - ✅ Zone creation supports both DISTANCE and GEOLOGICAL types
+    - ✅ Milestone CRUD endpoints
+    - ✅ Distance calculation endpoint
+    - ✅ Zone matching endpoint
+  - **PARTNER-016**: ServiceType Cleanup & Swagger Update
+    - ✅ Deleted all ServiceType files
+    - ✅ Updated server.js with pincodeTypes routes
+    - ✅ Updated Swagger documentation
+  - **PARTNER-017**: Integration Testing & Verification
+    - ✅ All Pincode Type endpoints working
+    - ✅ All Distance Zone endpoints working
+    - ✅ All Geological Zone endpoints preserved
+    - ✅ Docker service healthy
+  - **Frontend Updates**:
+    - ✅ Created Pincode Types page with RTK Query
+    - ✅ Updated sidebar: "Pincode Types" (replaced Service Types)
+    - ✅ Removed deprecated serviceApi.ts
 
 #### Distance Calculator Module (January 2025) ✅
 
@@ -606,6 +692,27 @@
 
 ---
 
-**Current Focus**: Frontend architecture migration to Redux/RTK Query with API Gateway integration. Backend security 100% complete (8/8 tasks - 100%). Frontend migration in progress (7/11 tasks - 64% complete). Error handling system complete with comprehensive coverage. Next priority: FE-007 (Loading states implementation).
+**Current Focus**: All major Partner Service initiatives COMPLETE. Zone System v2 Migration (6/6 tasks) and Charge Packages + Quote Engine (11/11 tasks) fully implemented with frontend integration.
 
-**Completed**: API Gateway Security + Frontend Core Migration + Error Handling System - Backend 100% secure with JWT validation and RBAC. Frontend has complete Redux/RTK Query architecture with authentication, permissions, API migration, and comprehensive error handling. Error system includes ErrorBoundary, toast notifications, 30+ error codes mapped, auto-handling for 401/403/500, and demo page. Production-ready error handling ensures no app crashes with clear user feedback. Database seeded with 153 permissions, 263 role-permission mappings, 1 superadmin (admin@logistics.com / Admin@123456). All core frontend systems operational.
+**Completed This Sprint (December 2025)**:
+
+- ✅ **Zone System v2**: Complete redesign with PincodeType management, Distance zones with milestones, and zone matching
+- ✅ **Charge Packages**: WEIGHT/DISTANCE/GENERIC packages with multi-partner support and modal-based frontend UI
+- ✅ **Quote Calculation Engine**: Zone-based rate calculation with breakdown, pincode type charges, and sorting
+- ✅ **API Gateway Routing**: New `/api/v1/charge-packages` proxy route
+- ✅ **Shipment Service Integration**: X-Internal-Request header and Authorization forwarding
+- ✅ **Legacy Deprecation**: 5 deprecated endpoints returning 410 Gone
+- ✅ **Frontend Charge Packages**: RTK Query slice with create/view/edit modals, filtering, and statistics
+
+**Previously Completed**:
+
+- API Gateway Security (8/8 tasks - 100%)
+- Frontend Core Migration - Redux/RTK Query architecture
+- Error Handling System with ErrorBoundary and toast notifications
+- Database seeded with 153 permissions, 263 role-permission mappings, 1 superadmin (admin@logistics.com / Admin@123456)
+
+**Next Priorities**:
+
+- Platform Service with Shopify integration
+- Support Service with ticketing system
+- Shipment bulk operations

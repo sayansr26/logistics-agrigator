@@ -42,7 +42,42 @@ SHIP-005: Bulk Operations and Advanced Features (2 days) - FINAL PHASE
 
 **Results**: 90% shipment service completion with comprehensive tracking system
 
-**3. Task Structure Template**
+**3. Zone System v2 + Charge Packages Pattern (December 2025) ✅ COMPLETED**
+
+Two related initiatives completed with 17 total tasks:
+
+```
+# Zone System v2 Migration (6 tasks)
+PARTNER-012: Database Schema Migration (0.5 day) ✅
+PARTNER-013: Pincode Type Service (1 day) ✅
+PARTNER-014: Distance Zone Service (1.5 days) ✅
+PARTNER-015: Zone Controller & Routes (1 day) ✅
+PARTNER-016: ServiceType Cleanup (0.5 day) ✅
+PARTNER-017: Integration Testing (0.5 day) ✅
+
+# Charge Packages + Quote Engine (11 tasks)
+schema-charge-packages: Prisma models ✅
+charge-packages-crud: CRUD API ✅
+gateway-charge-packages-route: API Gateway proxy ✅
+quote-engine: Quote calculation service ✅
+partner-calc-endpoints: Update calculate/serviceability ✅
+routes-no-inline: Controller pattern refactor ✅
+shipment-integration-header: Internal auth headers ✅
+frontend-charge-packages-rtk: RTK Query slice ✅
+frontend-fix-partnersApi-shapes: Type updates ✅
+frontend-sidebar-unblock-charges: Sidebar navigation ✅
+deprecate-legacy: 410 Gone responses ✅
+```
+
+**Key Patterns Established**:
+
+- Modal-based CRUD UI (create/view/edit in modals, not separate pages)
+- Multi-partner selection for bulk resource creation
+- Quote calculation engine with breakdown structure
+- Zone-based serviceability with milestone matching
+- Legacy endpoint deprecation with 410 Gone responses
+
+**4. Task Structure Template**
 
 ```markdown
 ### SERVICE-XXX: Task Name
@@ -1066,6 +1101,152 @@ const recentShipments = await cache.get(`shipments:recent:${clientId}`);
 
 // 3. API response caching
 const courierCharges = await cache.get(`charges:${hashKey}`);
+```
+
+## Charge Package & Quote Calculation Patterns (NEW - December 2025)
+
+### Charge Package Model Pattern
+
+**1. Package Types with Milestone Calculation**
+
+```prisma
+enum ChargePackageType {
+  WEIGHT // Base + addon per extra kg
+  DISTANCE // Base + addon per extra km
+  GENERIC // Flat charges (COD, Prepaid, etc.)
+}
+
+model ChargePackage {
+  id          String                 @id @default(cuid())
+  partnerId   String
+  name        String // Unique per partner
+  type        ChargePackageType
+  baseCharge  Decimal                @db.Decimal(10, 2)
+  baseUnit    Decimal? // e.g., first 5 kg, first 10 km
+  addonUnit   Decimal? // e.g., per 1 kg, per 1 km
+  addonCharge Decimal? // charge per addon unit
+  appliesTo   ChargePackageAppliesTo @default(ANY) // ANY/COD/PREPAID
+  calcType    ChargePackageCalcType  @default(FLAT)
+  isActive    Boolean                @default(true)
+
+  @@unique([partnerId, name])
+  @@index([partnerId, type, isActive])
+}
+```
+
+**2. Charge Calculation Formula**
+
+```javascript
+// Weight/Distance package calculation
+const calculatePackageCharge = (pkg, value) => {
+  if (!pkg.baseUnit || !pkg.addonUnit || !pkg.addonCharge) {
+    return pkg.baseCharge; // Flat charge only
+  }
+
+  if (value <= pkg.baseUnit) {
+    return pkg.baseCharge; // Within base unit
+  }
+
+  // Calculate addon
+  const extraUnits = Math.ceil((value - pkg.baseUnit) / pkg.addonUnit);
+  return pkg.baseCharge + extraUnits * pkg.addonCharge;
+};
+```
+
+### Quote Calculation Engine Pattern
+
+**1. Zone-Based Serviceability**
+
+```javascript
+// Check if partner services the route via distance zones
+const checkServiceability = async (fromPincode, toPincode) => {
+  const partners = await getActivePartners();
+  const results = [];
+
+  for (const partner of partners) {
+    const zoneMatch = await distanceZoneService.getZoneForShipment(
+      partner.id,
+      fromPincode,
+      toPincode,
+    );
+    results.push({
+      partnerId: partner.id,
+      isServiceable: zoneMatch.matched,
+      zoneName: zoneMatch.zoneName,
+      zoneSuffix: zoneMatch.suffix,
+      distanceKm: zoneMatch.distanceKm,
+    });
+  }
+  return results;
+};
+```
+
+**2. Quote Breakdown Structure**
+
+```javascript
+// Standard quote response with breakdown
+const calculateQuote = async (params) => {
+  return {
+    partnerId: partner.id,
+    partnerName: partner.displayName,
+    totalRate:
+      distanceCharge + weightCharge + genericCharges + pincodeTypeCharges,
+    deliveryDays: partner.defaultDeliveryDays,
+    distanceKm: zoneMatch.distanceKm,
+    zoneName: zoneMatch.zoneName,
+    zoneSuffix: zoneMatch.suffix,
+    breakdown: {
+      distance: { name: "Distance Charge", amount: distanceCharge },
+      weight: { name: "Weight Charge", amount: weightCharge },
+      generic: genericBreakdown, // Array of {name, amount}
+      pincodeTypes: pincodeTypeBreakdown, // Array of {type, location, charge}
+    },
+  };
+};
+```
+
+### Modal-Based CRUD UI Pattern
+
+**1. Single Page with Modals**
+
+```jsx
+// Page manages modal state, not separate routes
+const [createModalOpen, setCreateModalOpen] = useState(false);
+const [viewModalOpen, setViewModalOpen] = useState(false);
+const [editModalOpen, setEditModalOpen] = useState(false);
+const [selectedItem, setSelectedItem] = useState(null);
+
+// Table actions trigger modals
+const handleView = (item) => {
+  setSelectedItem(item);
+  setViewModalOpen(true);
+};
+const handleEdit = (item) => {
+  setSelectedItem(item);
+  setEditModalOpen(true);
+};
+```
+
+**2. View Modal with Edit Transition**
+
+```jsx
+// View modal has Edit button that switches modes
+const ViewEditModal = ({ pkg, open, onClose }) => {
+  const [mode, setMode] = useState("view");
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogHeader>
+        {mode === "view" ? (
+          <Button onClick={() => setMode("edit")}>Edit</Button>
+        ) : (
+          <Button onClick={() => setMode("view")}>View</Button>
+        )}
+      </DialogHeader>
+      {mode === "view" ? <ViewContent pkg={pkg} /> : <EditForm pkg={pkg} />}
+    </Dialog>
+  );
+};
 ```
 
 ## Rule Enforcement Patterns

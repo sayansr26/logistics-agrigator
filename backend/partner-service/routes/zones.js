@@ -1,13 +1,12 @@
 /**
  * Zone Management Routes
  *
- * Authenticated API routes for partner-specific zone management:
- * - Create, read, update, delete zones
- * - Manage geographical associations (states, cities, areas, pincodes)
- * - Configure service types (PICKUP, DELIVERY, COD, PREPAID, ODA, HILL)
+ * Authenticated API routes for zone management supporting both:
+ * - GEOLOGICAL zones: Partner-scoped geographical associations (states, cities, areas, pincodes)
+ * - DISTANCE zones: Admin/ops managed distance-based milestones (multi-partner)
  *
- * Authentication: Required (JWT with partnerId)
- * Authorization: Partner-scoped (users can only access their own zones)
+ * Authentication: Required (JWT with partnerId for GEOLOGICAL, or admin/ops role for DISTANCE)
+ * Authorization: Partner-scoped for GEOLOGICAL, role-based for DISTANCE
  * Rate Limiting: Applied to prevent abuse
  */
 
@@ -23,11 +22,43 @@ const zoneSchemas = require("../validation/zoneSchemas");
 router.use(authMiddleware.authenticate);
 router.use(zoneManagementLimiter);
 
+// ==========================================
+// DISTANCE-SPECIFIC ROUTES (must be before parameterized routes)
+// ==========================================
+
+/**
+ * POST /api/v1/zones/calculate-distance
+ * Calculate distance between two pincodes
+ * Body: { fromPincode, toPincode }
+ * Auth: Required
+ */
+router.post(
+  "/calculate-distance",
+  validate(zoneSchemas.distance.calculateDistance),
+  zoneController.calculateDistance,
+);
+
+/**
+ * POST /api/v1/zones/match
+ * Match zone by distance for a shipment
+ * Body: { fromPincode, toPincode, partnerId? }
+ * Auth: Required (partnerId optional if req.user.partnerId exists)
+ */
+router.post(
+  "/match",
+  validate(zoneSchemas.distance.matchZone),
+  zoneController.matchZone,
+);
+
+// ==========================================
+// ZONE CRUD ROUTES
+// ==========================================
+
 /**
  * POST /api/v1/zones
- * Create a new zone with geographical associations and service configurations
- * Body: { name, description, geographical: {...}, services: [...] }
- * Auth: Required (partnerId from req.user)
+ * Create a new zone (unified endpoint for both GEOLOGICAL and DISTANCE)
+ * Body: { name, description, zoneType?, geographical?, partnerIds?, milestones? }
+ * Auth: Required (GEOLOGICAL uses req.user.partnerId, DISTANCE requires admin/ops role)
  */
 router.post(
   "/",
@@ -38,7 +69,7 @@ router.post(
 /**
  * GET /api/v1/zones
  * List zones with pagination and filters
- * Query params: page, limit, status, search
+ * Query params: page, limit, status, search, zoneType
  * Auth: Required
  */
 router.get(
@@ -92,35 +123,46 @@ router.delete(
   zoneController.deleteZone,
 );
 
+// NOTE: Zone services routes (GET/PUT /:id/services) have been removed in Zone System v2.
+// Use Pincode Types for service-based configuration instead.
+
+// ==========================================
+// MILESTONE ROUTES (DISTANCE zones only)
+// ==========================================
+
 /**
- * GET /api/v1/zones/:id/services
- * Get zone service type configurations
- * Returns: Array of service types with availability and charges
+ * GET /api/v1/zones/:id/milestones
+ * Get zone milestones (DISTANCE zones only)
+ * Returns: Array of milestones with minKm, maxKm, suffix, sortOrder
  * Path params: id (zone UUID)
  * Auth: Required
  */
 router.get(
-  "/:id/services",
-  validate(zoneSchemas.zones.getZoneServices),
-  zoneController.getZoneServices,
+  "/:id/milestones",
+  validate(zoneSchemas.distance.getMilestones),
+  zoneController.getMilestones,
 );
 
 /**
- * PUT /api/v1/zones/:id/services
- * Update zone service type configurations
- * Body: { services: [{ serviceType, isAvailable, additionalCharges, remarks }] }
+ * PUT /api/v1/zones/:id/milestones
+ * Update zone milestones (replaces all existing milestones)
+ * Body: { milestones: [{ minKm, maxKm }] }
  * Path params: id (zone UUID)
  * Auth: Required
  */
 router.put(
-  "/:id/services",
-  validate(zoneSchemas.zones.updateZoneServices),
-  zoneController.updateZoneServices,
+  "/:id/milestones",
+  validate(zoneSchemas.distance.updateMilestones),
+  zoneController.updateMilestones,
 );
+
+// ==========================================
+// GEOGRAPHY ROUTES (GEOLOGICAL zones)
+// ==========================================
 
 /**
  * GET /api/v1/zones/:id/geography
- * Get zone geographical associations
+ * Get zone geographical associations (GEOLOGICAL zones)
  * Returns: { stateIds, cityIds, areaIds, pincodes }
  * Path params: id (zone UUID)
  * Auth: Required
@@ -133,7 +175,7 @@ router.get(
 
 /**
  * PUT /api/v1/zones/:id/geography
- * Update zone geographical associations
+ * Update zone geographical associations (GEOLOGICAL zones)
  * Body: { geographical: { stateIds?, cityIds?, areaIds?, pincodes? } }
  * Path params: id (zone UUID)
  * Auth: Required

@@ -290,6 +290,54 @@ const systemManagementLimiter = rateLimit({
   },
 });
 
+/**
+ * Pincode Type Management Rate Limiter
+ * Applies to pincode type CRUD operations and bulk assignment
+ * 30 requests per 15 minutes per user (admin/operations only)
+ */
+const pincodeTypeManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each user to 30 requests per windowMs
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many pincode type management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
+ * Charge Package Management Rate Limiter
+ * Applies to new charge package CRUD operations (WEIGHT/DISTANCE/GENERIC)
+ * 30 requests per 15 minutes per user
+ */
+const chargePackageManagementLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each user to 30 charge package operations per windowMs
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many charge package management requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
 module.exports = {
   partnerManagementLimiter,
   rateCalculationLimiter,
@@ -300,8 +348,10 @@ module.exports = {
   customerChargeManagementLimiter,
   discountManagementLimiter,
   chargeCalculationLimiter,
+  chargePackageManagementLimiter,
   partnerAssignmentLimiter,
   performanceAnalyticsLimiter,
   systemManagementLimiter,
+  pincodeTypeManagementLimiter,
   generalLimiter,
 };

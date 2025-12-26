@@ -431,6 +431,18 @@ export const geoApi = baseApi.injectEndpoints({
         url: "/api/v1/geography/pincodes/search",
         params,
       }),
+      // Transform response: backend returns { data: { pincodes: [...], pagination: {...} } }
+      // Frontend expects { data: [...], meta: {...} }
+      transformResponse: (response: any): PincodesResponse => {
+        return {
+          status: response.status || "success",
+          data: response.data?.pincodes || [],
+          meta: {
+            timestamp: new Date().toISOString(),
+            pagination: response.data?.pagination,
+          },
+        };
+      },
       providesTags: [{ type: "Geo", id: "PINCODES_SEARCH" }],
     }),
 
@@ -603,10 +615,12 @@ export const {
   useUpdateGeoEntityMutation,
   useDeleteGeoEntityMutation,
   useGetStatesQuery,
+  useSearchStatesQuery,
   useGetCitiesQuery,
   useGetAreasQuery,
   useGetPincodesQuery,
   useGetPincodeDetailsQuery,
+  useSearchPincodesQuery,
   useSearchGeoMutation,
   useGetGeoHierarchyQuery,
   useToggleStateStatusMutation,

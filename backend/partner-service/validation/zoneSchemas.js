@@ -1,7 +1,8 @@
 /**
- * Validation Schemas for Geological Zone Management
+ * Validation Schemas for Zone Management
  *
  * Joi validation schemas for all zone-related endpoints.
+ * Supports both GEOLOGICAL (geographical-based) and DISTANCE (milestone-based) zones.
  * Following auth-service patterns with comprehensive validation rules.
  */
 
@@ -15,8 +16,14 @@ const Joi = require("joi");
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// CUID validation pattern (for partner IDs)
+const cuidPattern = /^c[a-z0-9]{24}$/i;
+
 // Pincode validation pattern (6 digits)
 const pincodePattern = /^\d{6}$/;
+
+// Valid zone types
+const validZoneTypes = ["DISTANCE", "GEOLOGICAL"];
 
 // Reusable field schemas
 const schemas = {
@@ -27,6 +34,15 @@ const schemas = {
 
   uuidOptional: Joi.string().pattern(uuidPattern).optional().messages({
     "string.pattern.base": "Invalid UUID format",
+  }),
+
+  // Partner ID can be CUID format
+  partnerId: Joi.string().pattern(cuidPattern).messages({
+    "string.pattern.base": "Invalid partner ID format (must be CUID)",
+  }),
+
+  partnerIdOptional: Joi.string().pattern(cuidPattern).optional().messages({
+    "string.pattern.base": "Invalid partner ID format (must be CUID)",
   }),
 
   pincode: Joi.string().pattern(pincodePattern).required().messages({
@@ -52,6 +68,26 @@ const schemas = {
 
   status: Joi.boolean().optional().messages({
     "boolean.base": "Status must be a boolean",
+  }),
+
+  zoneType: Joi.string()
+    .valid(...validZoneTypes)
+    .messages({
+      "any.only": `Zone type must be one of: ${validZoneTypes.join(", ")}`,
+    }),
+
+  // Milestone schema for DISTANCE zones
+  milestone: Joi.object({
+    minKm: Joi.number().integer().min(0).required().messages({
+      "number.base": "minKm must be a number",
+      "number.min": "minKm must be at least 0",
+      "any.required": "minKm is required",
+    }),
+    maxKm: Joi.number().integer().min(Joi.ref("minKm")).required().messages({
+      "number.base": "maxKm must be a number",
+      "number.min": "maxKm must be greater than or equal to minKm",
+      "any.required": "maxKm is required",
+    }),
   }),
 };
 
@@ -198,7 +234,16 @@ const getPincodesByAreas = {
 // ========================================
 
 /**
- * POST /api/v1/zones - Create Zone
+ * POST /api/v1/zones - Create Zone (Unified endpoint for both GEOLOGICAL and DISTANCE)
+ *
+ * For GEOLOGICAL zones (default):
+ *   - Uses req.user.partnerId as the single partner
+ *   - Can include geographical associations
+ *
+ * For DISTANCE zones:
+ *   - Requires admin/operations role
+ *   - Requires partnerIds[] array (multi-partner)
+ *   - Requires milestones[] array
  */
 const createZone = {
   body: Joi.object({
@@ -212,41 +257,54 @@ const createZone = {
     }),
     status: schemas.status.default(true),
 
-    // Geographical associations (optional during creation)
+    // Zone type (GEOLOGICAL is default)
+    zoneType: schemas.zoneType.default("GEOLOGICAL"),
+
+    // For DISTANCE zones: partner IDs (required when zoneType=DISTANCE)
+    partnerIds: Joi.array()
+      .items(schemas.partnerId)
+      .min(1)
+      .max(100)
+      .when("zoneType", {
+        is: "DISTANCE",
+        then: Joi.required().messages({
+          "any.required": "partnerIds is required for DISTANCE zones",
+        }),
+        otherwise: Joi.forbidden().messages({
+          "any.unknown": "partnerIds is only allowed for DISTANCE zones",
+        }),
+      }),
+
+    // For DISTANCE zones: milestones (required when zoneType=DISTANCE)
+    milestones: Joi.array()
+      .items(schemas.milestone)
+      .min(1)
+      .max(26)
+      .when("zoneType", {
+        is: "DISTANCE",
+        then: Joi.required().messages({
+          "any.required": "milestones is required for DISTANCE zones",
+          "array.min": "At least one milestone is required",
+          "array.max": "Cannot have more than 26 milestones (A-Z)",
+        }),
+        otherwise: Joi.forbidden().messages({
+          "any.unknown": "milestones is only allowed for DISTANCE zones",
+        }),
+      }),
+
+    // For GEOLOGICAL zones: geographical associations (optional)
     geographical: Joi.object({
       stateIds: Joi.array().items(schemas.uuid).optional(),
       cityIds: Joi.array().items(schemas.uuid).optional(),
       areaIds: Joi.array().items(schemas.uuid).optional(),
       pincodes: Joi.array().items(schemas.pincode).optional(),
-    }).optional(),
-
-    // Service type configurations (optional during creation)
-    services: Joi.array()
-      .items(
-        Joi.object({
-          serviceType: Joi.string()
-            .valid("PICKUP", "DELIVERY", "COD", "PREPAID", "ODA", "HILL")
-            .required()
-            .messages({
-              "any.only":
-                "Service type must be one of: PICKUP, DELIVERY, COD, PREPAID, ODA, HILL",
-              "any.required": "Service type is required",
-            }),
-          isAvailable: Joi.boolean().default(true),
-          additionalCharges: Joi.number()
-            .min(0)
-            .max(999999.99)
-            .optional()
-            .messages({
-              "number.min": "Additional charges cannot be negative",
-              "number.max": "Additional charges cannot exceed 999,999.99",
-            }),
-          remarks: Joi.string().max(500).optional().allow("", null).messages({
-            "string.max": "Remarks cannot exceed 500 characters",
-          }),
-        }),
-      )
-      .optional(),
+    }).when("zoneType", {
+      is: "DISTANCE",
+      then: Joi.forbidden().messages({
+        "any.unknown": "geographical is not allowed for DISTANCE zones",
+      }),
+      otherwise: Joi.optional(),
+    }),
   }),
 };
 
@@ -258,6 +316,7 @@ const listZones = {
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20),
     status: Joi.boolean().optional(),
+    zoneType: schemas.zoneType.optional(),
     search: Joi.string().min(1).max(100).optional().messages({
       "string.min": "Search term must be at least 1 character",
       "string.max": "Search term cannot exceed 100 characters",
@@ -315,59 +374,8 @@ const deleteZone = {
   }),
 };
 
-/**
- * GET /api/v1/zones/:id/services - Get Zone Services
- */
-const getZoneServices = {
-  params: Joi.object({
-    id: schemas.uuid,
-  }),
-};
-
-/**
- * PUT /api/v1/zones/:id/services - Update Zone Services
- */
-const updateZoneServices = {
-  params: Joi.object({
-    id: schemas.uuid,
-  }),
-  body: Joi.object({
-    services: Joi.array()
-      .items(
-        Joi.object({
-          serviceType: Joi.string()
-            .valid("PICKUP", "DELIVERY", "COD", "PREPAID", "ODA", "HILL")
-            .required()
-            .messages({
-              "any.only":
-                "Service type must be one of: PICKUP, DELIVERY, COD, PREPAID, ODA, HILL",
-              "any.required": "Service type is required",
-            }),
-          isAvailable: Joi.boolean().required().messages({
-            "any.required": "isAvailable is required",
-          }),
-          additionalCharges: Joi.number()
-            .min(0)
-            .max(999999.99)
-            .optional()
-            .allow(null)
-            .messages({
-              "number.min": "Additional charges cannot be negative",
-              "number.max": "Additional charges cannot exceed 999,999.99",
-            }),
-          remarks: Joi.string().max(500).optional().allow("", null).messages({
-            "string.max": "Remarks cannot exceed 500 characters",
-          }),
-        }),
-      )
-      .min(1)
-      .required()
-      .messages({
-        "array.min": "At least one service configuration is required",
-        "any.required": "Services array is required",
-      }),
-  }),
-};
+// NOTE: Zone services endpoints (getZoneServices, updateZoneServices) have been
+// removed in Zone System v2. Use Pincode Types for service-based configuration.
 
 /**
  * GET /api/v1/zones/:id/geography - Get Zone Geography
@@ -446,6 +454,61 @@ const validateZoneCoverage = {
 };
 
 // ========================================
+// DISTANCE ZONE SCHEMAS
+// ========================================
+
+/**
+ * GET /api/v1/zones/:id/milestones - Get Zone Milestones (DISTANCE zones only)
+ */
+const getMilestones = {
+  params: Joi.object({
+    id: schemas.uuid,
+  }),
+};
+
+/**
+ * PUT /api/v1/zones/:id/milestones - Update Zone Milestones (DISTANCE zones only)
+ */
+const updateMilestones = {
+  params: Joi.object({
+    id: schemas.uuid,
+  }),
+  body: Joi.object({
+    milestones: Joi.array()
+      .items(schemas.milestone)
+      .min(1)
+      .max(26)
+      .required()
+      .messages({
+        "array.min": "At least one milestone is required",
+        "array.max": "Cannot have more than 26 milestones (A-Z)",
+        "any.required": "milestones array is required",
+      }),
+  }),
+};
+
+/**
+ * POST /api/v1/zones/calculate-distance - Calculate distance between pincodes
+ */
+const calculateDistance = {
+  body: Joi.object({
+    fromPincode: schemas.pincode,
+    toPincode: schemas.pincode,
+  }),
+};
+
+/**
+ * POST /api/v1/zones/match - Match zone by distance
+ */
+const matchZone = {
+  body: Joi.object({
+    fromPincode: schemas.pincode,
+    toPincode: schemas.pincode,
+    partnerId: schemas.partnerIdOptional,
+  }),
+};
+
+// ========================================
 // EXPORTS
 // ========================================
 
@@ -465,7 +528,7 @@ module.exports = {
     getPincodesByAreas,
   },
 
-  // Zone management endpoints (10)
+  // Zone management endpoints (8) - services endpoints removed
   zones: {
     createZone,
     listZones,
@@ -473,10 +536,16 @@ module.exports = {
     getZoneComplete,
     updateZone,
     deleteZone,
-    getZoneServices,
-    updateZoneServices,
     getZoneGeography,
     updateZoneGeography,
+  },
+
+  // Distance zone endpoints (4)
+  distance: {
+    getMilestones,
+    updateMilestones,
+    calculateDistance,
+    matchZone,
   },
 
   // Coverage validation endpoints (5)

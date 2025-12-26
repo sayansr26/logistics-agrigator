@@ -14,13 +14,22 @@ interface Partner {
   id: string;
   name: string;
   code: string;
+  displayName?: string;
   apiEndpoint?: string;
+  apiUrl?: string;
   isActive: boolean;
-  supportedServices: string[];
+  supportsCOD?: boolean;
+  supportsReverse?: boolean;
+  supportedServices?: string[];
   minWeight?: number;
   maxWeight?: number;
+  defaultDeliveryDays?: number;
   createdAt: string;
   updatedAt: string;
+  _count?: {
+    shipments?: number;
+    rates?: number;
+  };
 }
 
 interface PartnersListResponse {
@@ -54,20 +63,54 @@ interface GetPartnersParams {
   sortOrder?: "asc" | "desc";
 }
 
+// ===========================
+// Serviceability Types (Zone v2)
+// ===========================
+
 interface ServiceabilityRequest {
-  originPincode: string;
-  destinationPincode: string;
-  weight: number;
-  paymentMode: "prepaid" | "cod";
+  originPincode?: string;
+  destinationPincode?: string;
+  fromPincode?: string;
+  toPincode?: string;
+  weight?: number;
+  paymentMode?: "prepaid" | "cod";
   partnerId?: string;
+  serviceType?: string;
+}
+
+interface ServiceabilityPartner {
+  partnerId: string;
+  partnerName: string;
+  isServiceable: boolean;
+  serviceable: boolean;
+  distanceKm?: number;
+  zoneSuffix?: string;
+  zoneId?: string;
+  zoneName?: string;
+  estimatedDays?: number;
+  deliveryDays?: number | Record<string, string>;
+  serviceTypes?: string[];
+  cod?: boolean;
+  prepaid?: boolean;
+  error?: string;
+}
+
+interface ServiceabilitySummary {
+  fromPincode: string;
+  toPincode: string;
+  serviceableCount: number;
+  totalPartners: number;
 }
 
 interface ServiceabilityResponse {
   status: string;
   message: string;
   data: {
-    serviceable: boolean;
-    partners: Array<{
+    serviceability: ServiceabilityPartner[];
+    summary?: ServiceabilitySummary;
+    // Legacy format support
+    serviceable?: boolean;
+    partners?: Array<{
       partnerId: string;
       partnerName: string;
       serviceable: boolean;
@@ -77,36 +120,88 @@ interface ServiceabilityResponse {
   };
 }
 
+// ===========================
+// Rate Calculation Types (Quote Engine v2)
+// ===========================
+
 interface RateCalculationRequest {
-  originPincode: string;
-  destinationPincode: string;
+  originPincode?: string;
+  destinationPincode?: string;
+  fromPincode?: string;
+  toPincode?: string;
   weight: number;
   dimensions?: {
     length: number;
     width: number;
     height: number;
   };
-  paymentMode: "prepaid" | "cod";
+  paymentMode?: "prepaid" | "cod";
+  paymentType?: "PREPAID" | "COD";
   codAmount?: number;
-  shipmentValue: number;
+  shipmentValue?: number;
+  declaredValue?: number;
   partnerId?: string;
+  serviceType?: string;
+  sortBy?: "cheapest" | "fastest";
+}
+
+interface ChargeBreakdownItem {
+  name: string;
+  type: "WEIGHT" | "DISTANCE" | "GENERIC" | "PINCODE_TYPE";
+  amount: number;
+  description?: string;
+  baseCharge?: number;
+  addonCharge?: number;
+  units?: number;
+}
+
+interface RatePartner {
+  partnerId: string;
+  partnerName: string;
+  serviceable: boolean;
+  isServiceable?: boolean;
+  rate?: number;
+  baseRate?: number;
+  totalRate: number;
+  totalAmount?: number;
+  distanceKm?: number;
+  zoneSuffix?: string;
+  zoneName?: string;
+  estimatedDays?: number;
+  deliveryDays?: number;
+  breakdown?: ChargeBreakdownItem[];
+  // Legacy fields
+  codCharges?: number;
+  codCharge?: number;
+  fuelSurcharge?: number;
+  gst?: number;
+  serviceType?: string;
+}
+
+interface RateSummary {
+  partnerId: string;
+  partnerName: string;
+  totalRate: number;
+  estimatedDays?: number;
+}
+
+interface QuoteSummary {
+  fromPincode: string;
+  toPincode: string;
+  distanceKm: number;
+  paymentType: string;
+  weight: number;
+  ratesCount: number;
 }
 
 interface RateCalculationResponse {
   status: string;
   message: string;
   data: {
-    rates: Array<{
-      partnerId: string;
-      partnerName: string;
-      baseRate: number;
-      codCharges?: number;
-      fuelSurcharge?: number;
-      gst?: number;
-      totalRate: number;
-      estimatedDays?: number;
-      serviceable: boolean;
-    }>;
+    rates: RatePartner[];
+    cheapestRate?: RateSummary;
+    fastestRate?: RateSummary;
+    summary?: QuoteSummary;
   };
 }
 
@@ -114,25 +209,20 @@ interface PartnerRateResponse {
   status: string;
   message: string;
   data: {
-    rate: {
-      partnerId: string;
-      partnerName: string;
-      baseRate: number;
-      codCharges?: number;
-      fuelSurcharge?: number;
-      gst?: number;
-      totalRate: number;
-      estimatedDays?: number;
-      serviceable: boolean;
-    };
+    rate: RatePartner;
   };
 }
+
+// ===========================
+// Partner CRUD Types
+// ===========================
 
 interface CreatePartnerRequest {
   name: string;
   displayName: string;
   code: string;
   apiEndpoint?: string;
+  apiUrl?: string;
   apiKey?: string;
   supportsCOD?: boolean;
   supportsReverse?: boolean;
@@ -141,6 +231,7 @@ interface CreatePartnerRequest {
   perKgRate?: number;
   minWeight?: number;
   maxWeight?: number;
+  defaultDeliveryDays?: number;
 }
 
 interface UpdatePartnerRequest {
@@ -148,6 +239,7 @@ interface UpdatePartnerRequest {
   displayName?: string;
   code?: string;
   apiEndpoint?: string;
+  apiUrl?: string;
   apiKey?: string;
   supportsCOD?: boolean;
   supportsReverse?: boolean;
@@ -156,6 +248,7 @@ interface UpdatePartnerRequest {
   perKgRate?: number;
   minWeight?: number;
   maxWeight?: number;
+  defaultDeliveryDays?: number;
 }
 
 interface DeletePartnerResponse {
@@ -199,30 +292,60 @@ export const partnersApi = baseApi.injectEndpoints({
 
     /**
      * Check Serviceability - Check if partners can service a route
+     * Uses Zone System v2 with distance zones
      */
     checkServiceability: builder.mutation<
       ServiceabilityResponse,
       ServiceabilityRequest
     >({
-      query: (serviceabilityData) => ({
-        url: "/api/v1/partners/serviceability",
-        method: "POST",
-        body: serviceabilityData,
-      }),
+      query: (serviceabilityData) => {
+        // Normalize field names for backend compatibility
+        const payload = {
+          fromPincode:
+            serviceabilityData.fromPincode || serviceabilityData.originPincode,
+          toPincode:
+            serviceabilityData.toPincode ||
+            serviceabilityData.destinationPincode,
+          partnerId: serviceabilityData.partnerId,
+          serviceType: serviceabilityData.serviceType,
+        };
+        return {
+          url: "/api/v1/partners/serviceability",
+          method: "POST",
+          body: payload,
+        };
+      },
     }),
 
     /**
      * Calculate Rates - Get shipping rates from partners
+     * Uses Quote Engine v2 with charge packages
      */
     calculateRates: builder.mutation<
       RateCalculationResponse,
       RateCalculationRequest
     >({
-      query: (rateData) => ({
-        url: "/api/v1/partners/calculate",
-        method: "POST",
-        body: rateData,
-      }),
+      query: (rateData) => {
+        // Normalize field names for backend compatibility
+        const payload = {
+          fromPincode: rateData.fromPincode || rateData.originPincode,
+          toPincode: rateData.toPincode || rateData.destinationPincode,
+          weight: rateData.weight,
+          dimensions: rateData.dimensions,
+          paymentMode: rateData.paymentMode,
+          paymentType: rateData.paymentType,
+          codAmount: rateData.codAmount,
+          shipmentValue: rateData.shipmentValue || rateData.declaredValue,
+          partnerId: rateData.partnerId,
+          serviceType: rateData.serviceType,
+          sortBy: rateData.sortBy,
+        };
+        return {
+          url: "/api/v1/partners/calculate",
+          method: "POST",
+          body: payload,
+        };
+      },
     }),
 
     /**
@@ -327,8 +450,14 @@ export type {
   GetPartnersParams,
   ServiceabilityRequest,
   ServiceabilityResponse,
+  ServiceabilityPartner,
+  ServiceabilitySummary,
   RateCalculationRequest,
   RateCalculationResponse,
+  RatePartner,
+  RateSummary,
+  QuoteSummary,
+  ChargeBreakdownItem,
   PartnerRateResponse,
   CreatePartnerRequest,
   UpdatePartnerRequest,
