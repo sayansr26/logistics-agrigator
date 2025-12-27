@@ -128,4 +128,64 @@ router.get(
   bootstrapController.checkBootstrapStatus,
 );
 
+/**
+ * @swagger
+ * /api/v1/internal/user-context/{userId}:
+ *   get:
+ *     summary: Get user context for authentication enrichment
+ *     description: Returns customerId, customerRole, clientId for JWT token enrichment. Called by auth-service during login.
+ *     tags: [Internal]
+ *     security:
+ *       - internalAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The auth-service user ID
+ *     responses:
+ *       200:
+ *         description: User context retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                       format: uuid
+ *                     customerId:
+ *                       type: string
+ *                       format: uuid
+ *                       nullable: true
+ *                     customerRole:
+ *                       type: string
+ *                       nullable: true
+ *                     clientId:
+ *                       type: string
+ *                       format: uuid
+ *                       nullable: true
+ *                     customerType:
+ *                       type: string
+ *                       enum: [DIRECT, OUTLET]
+ *                       nullable: true
+ *                     found:
+ *                       type: boolean
+ *       403:
+ *         description: Unauthorized - missing internal request header
+ */
+router.get(
+  "/user-context/:userId",
+  requireInternalRequest,
+  bootstrapController.getUserContext,
+);
+
 module.exports = router;

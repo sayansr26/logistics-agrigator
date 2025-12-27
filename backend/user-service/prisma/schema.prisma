@@ -39,9 +39,13 @@ model UserProfile {
   // Client association for multi-tenancy
   clientId String? @map("client_id") @db.Uuid
 
-  // Customer association for RBAC
+  // Customer association for RBAC (for B2C customers)
   customerId   String? @map("customer_id") @db.Uuid
   customerRole String? @map("customer_role") @db.VarChar(50)
+
+  // Outlet association for RBAC (for outlet users)
+  outletId   String? @map("outlet_id") @db.Uuid
+  outletRole String? @map("outlet_role") @db.VarChar(50)
 
   // Timestamps
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -51,11 +55,13 @@ model UserProfile {
   // Relationships
   client    Client?    @relation(fields: [clientId], references: [id])
   customer  Customer?  @relation(fields: [customerId], references: [id])
+  outlet    Outlet?    @relation(fields: [outletId], references: [id])
   auditLogs AuditLog[]
 
   @@index([userId])
   @@index([clientId])
   @@index([customerId])
+  @@index([outletId])
   @@index([isActive])
   @@map("user_profiles")
 }
@@ -233,48 +239,42 @@ model ClientUser {
   @@map("client_users")
 }
 
-// Customer - End customers of a client (B2B/B2C customers using the logistics platform)
-// CustomerType: DIRECT (B2C self-signup) or OUTLET (B2B managed by admin)
+// Customer - End customers (B2C = system-level, B2B = belongs to an outlet)
+// CustomerType: B2C (direct/system, no outletId) or B2B (belongs to an outlet, has outletId)
 model Customer {
   id           String       @id @default(uuid()) @db.Uuid
   clientId     String?      @map("client_id") @db.Uuid // Optional for direct customers
-  customerType CustomerType @default(DIRECT) @map("customer_type")
+  customerType CustomerType @default(B2C) @map("customer_type")
   name         String       @db.VarChar(200)
   email        String       @db.VarChar(255)
   phone        String?      @db.VarChar(20)
+
+  // Outlet association (required for B2B customers)
+  outletId String? @map("outlet_id") @db.Uuid
 
   // Feature access control
   monthlyShipmentLimit Int?     @map("monthly_shipment_limit")
   enabledModules       String[] @map("enabled_modules") // ['shipment', 'billing', 'wallet', 'analytics']
 
-  // Outlet-specific fields (only for customerType=OUTLET)
-  outletCode    String? @unique @map("outlet_code") @db.VarChar(50)
-  outletName    String? @map("outlet_name") @db.VarChar(200)
-  retailerName  String? @map("retailer_name") @db.VarChar(200)
-  contactPerson String? @map("contact_person") @db.VarChar(100)
-  outletStatus  String? @map("outlet_status") @db.VarChar(20) // active, inactive, suspended
-  outletType    String? @map("outlet_type") @db.VarChar(50) // franchise, direct, retail, warehouse
-
-  // Outlet business details
-  businessHours    String?  @map("business_hours") @db.VarChar(255)
-  gstNumber        String?  @map("gst_number") @db.VarChar(20)
-  panNumber        String?  @map("pan_number") @db.VarChar(20)
-  bankDetails      Json?    @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
-  assignedCouriers String[] @map("assigned_couriers") // courier codes available at this outlet
-  serviceAreas     String[] @map("service_areas") // pincodes or zones served
-
-  // Outlet address (separate from client address)
+  // Address (for B2B customers address can differ from outlet)
   address String? @db.VarChar(500)
   city    String? @db.VarChar(100)
   state   String? @db.VarChar(100)
   pincode String? @db.VarChar(10)
   country String? @default("India") @db.VarChar(100)
 
+  // Business details (for B2B customers)
+  gstNumber   String? @map("gst_number") @db.VarChar(20)
+  panNumber   String? @map("pan_number") @db.VarChar(20)
+  bankDetails Json?   @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
+
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Relationships
   client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  outlet        Outlet?        @relation("OutletCustomers", fields: [outletId], references: [id], onDelete: SetNull)
   userProfiles  UserProfile[]
   customerUsers CustomerUser[]
   commissions   Commission[] // Commissions for affiliate who referred this customer
@@ -284,6 +284,7 @@ model Customer {
   @@index([clientId])
   @@index([email])
   @@index([customerType])
+  @@index([outletId])
   @@map("customers")
 }
 
@@ -304,6 +305,69 @@ model CustomerUser {
   @@index([customerId])
   @@index([userId])
   @@map("customer_users")
+}
+
+// Outlet - Tenant entity (NOT a customer)
+// Outlets own B2B customers, courier partners, zones, charges, shipments
+model Outlet {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @map("outlet_code") @db.VarChar(50) // Unique outlet code
+
+  // Basic outlet info
+  name          String  @db.VarChar(200)
+  contactPerson String? @map("contact_person") @db.VarChar(100)
+  email         String  @db.VarChar(255)
+  phone         String? @db.VarChar(20)
+
+  // Outlet type and status
+  type   OutletType   @default(RETAIL) @map("outlet_type")
+  status OutletStatus @default(ACTIVE) @map("outlet_status")
+
+  // Address
+  address String? @db.VarChar(500)
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  pincode String? @db.VarChar(10)
+  country String? @default("India") @db.VarChar(100)
+
+  // Business details
+  gstNumber   String? @map("gst_number") @db.VarChar(20)
+  panNumber   String? @map("pan_number") @db.VarChar(20)
+  bankDetails Json?   @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
+
+  // Status and timestamps
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  outletUsers  OutletUser[]
+  customers    Customer[]   @relation("OutletCustomers")
+  userProfiles UserProfile[]
+
+  @@index([code])
+  @@index([status])
+  @@index([isActive])
+  @@map("outlets")
+}
+
+// OutletUser - Links auth users to outlets with outlet-specific roles
+model OutletUser {
+  id             String   @id @default(uuid()) @db.Uuid
+  outletId       String   @map("outlet_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid // Reference to auth-service User
+  role           String   @db.VarChar(50) // outlet_admin, outlet_staff
+  enabledModules String[] @map("enabled_modules") // Sub-access control within outlet
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, userId])
+  @@index([outletId])
+  @@index([userId])
+  @@map("outlet_users")
 }
 
 // Commission - Affiliate commission tracking for referred customers
@@ -345,6 +409,8 @@ enum Role {
   customer_account
   customer_sales
   customer_support
+  outlet_admin
+  outlet_staff
   affiliate
 }
 
@@ -381,6 +447,22 @@ enum CommissionStatus {
 }
 
 enum CustomerType {
-  DIRECT // B2C direct self-signup customer
-  OUTLET // B2B outlet/franchise managed by admin
+  B2C    // Direct self-signup customer (system-level, no outlet)
+  B2B    // Customer under an outlet (has outletId)
+  DIRECT // @deprecated - Use B2C instead. Kept for backward compatibility.
+  OUTLET // @deprecated - Use Outlet model instead. Kept for migration.
+}
+
+enum OutletType {
+  RETAIL     // Retail outlet
+  FRANCHISE  // Franchise outlet
+  WAREHOUSE  // Warehouse outlet
+  DIRECT     // Direct outlet
+}
+
+enum OutletStatus {
+  ACTIVE     // Outlet is active and operational
+  INACTIVE   // Outlet is temporarily inactive
+  SUSPENDED  // Outlet is suspended
+  PENDING    // Outlet is pending approval
 }

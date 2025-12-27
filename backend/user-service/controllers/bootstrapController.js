@@ -362,8 +362,174 @@ async function checkBootstrapStatus(req, res) {
   }
 }
 
+/**
+ * Get user context for authentication enrichment
+ * Returns outletId, outletRole, customerId, customerRole, clientId for JWT token enrichment
+ * Called by auth-service during login to include outlet/customer scoping in token
+ * 
+ * User types:
+ * - Outlet users: have outletId + outletRole (outlet_admin/outlet_staff)
+ * - B2C customers: have customerId + customerRole (no outlet)
+ * - B2B customers: would have customerId + outletId (customer belongs to outlet)
+ */
+async function getUserContext(req, res) {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      throw new UserServiceError(
+        "User ID is required",
+        "USER_ID_REQUIRED",
+        400,
+      );
+    }
+
+    // Find user profile with outlet and customer associations
+    const userProfile = await prisma.userProfile.findUnique({
+      where: { userId },
+      include: {
+        outlet: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            status: true,
+            isActive: true,
+          },
+        },
+        customer: {
+          select: {
+            id: true,
+            customerType: true,
+            name: true,
+            email: true,
+            clientId: true,
+            isActive: true,
+            outletId: true,
+          },
+        },
+      },
+    });
+
+    if (!userProfile) {
+      // User exists in auth but not bootstrapped in user-service
+      // Return null context - auth-service will handle this case
+      return res.json(
+        APIResponse.success({
+          userId,
+          outletId: null,
+          outletRole: null,
+          customerId: null,
+          customerRole: null,
+          customerType: null,
+          clientId: null,
+          found: false,
+        }),
+      );
+    }
+
+    // Check for outlet user association (new Outlet model)
+    let outletId = userProfile.outletId || null;
+    let outletRole = userProfile.outletRole || null;
+
+    // If not directly on profile, check OutletUser table
+    if (!outletId) {
+      const outletUser = await prisma.outletUser.findFirst({
+        where: {
+          userId,
+          isActive: true,
+        },
+        include: {
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              status: true,
+              isActive: true,
+            },
+          },
+        },
+      });
+
+      if (outletUser) {
+        outletId = outletUser.outletId;
+        outletRole = outletUser.role;
+      }
+    }
+
+    // Check CustomerUser for customer associations (B2C/B2B customers)
+    const customerUser = await prisma.customerUser.findFirst({
+      where: {
+        userId,
+        isActive: true,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            customerType: true,
+            name: true,
+            clientId: true,
+            isActive: true,
+            outletId: true,
+          },
+        },
+      },
+    });
+
+    // Get customer context
+    const customerId = userProfile.customerId || customerUser?.customerId || null;
+    const customerRole = userProfile.customerRole || customerUser?.role || null;
+    const clientId = userProfile.clientId || customerUser?.customer?.clientId || null;
+    const customerType = userProfile.customer?.customerType || customerUser?.customer?.customerType || null;
+
+    // If customer is B2B and has an outletId, include that too
+    const customerOutletId = userProfile.customer?.outletId || customerUser?.customer?.outletId || null;
+
+    logger.info("User context retrieved", {
+      userId,
+      outletId,
+      outletRole,
+      customerId,
+      customerRole,
+      clientId,
+      customerType,
+      customerOutletId,
+      service: "user-service",
+    });
+
+    res.json(
+      APIResponse.success({
+        userId,
+        // Outlet context (for outlet users)
+        outletId,
+        outletRole,
+        outlet: userProfile.outlet || null,
+        // Customer context (for B2C/B2B customers)
+        customerId,
+        customerRole,
+        customerType,
+        clientId,
+        customer: userProfile.customer || customerUser?.customer || null,
+        // For B2B customers, their outlet affiliation
+        customerOutletId,
+        found: true,
+      }),
+    );
+  } catch (error) {
+    logger.error("Get user context error", {
+      error: error.message,
+      userId: req.params.userId,
+      service: "user-service",
+    });
+    throw error;
+  }
+}
+
 module.exports = {
   bootstrapDirectCustomer,
   rollbackBootstrap,
   checkBootstrapStatus,
+  getUserContext,
 };

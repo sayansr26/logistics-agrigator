@@ -138,7 +138,7 @@ services:
       - ./backend/user-service:/app
       - ./shared:/app/shared
       - ./logs:/app/logs
-      - shipment_node_modules:/app/node_modules
+      - user_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy

@@ -5,8 +5,75 @@ const { prisma } = require("../config/database");
 const { getRedisClient } = require("../config/redis");
 const APIResponse = require("../shared/lib/response");
 const { ConflictError, errorUtils } = require("../shared/lib/errors");
+const logger = require("../shared/lib/logger");
 
 class AuthController {
+  /**
+   * Fetch user context (outletId, outletRole, customerId, customerRole, clientId) from user-service
+   * Used to enrich JWT tokens with tenant scoping information
+   * @param {string} userId - The auth user ID
+   * @returns {Promise<Object|null>} User context or null if not found
+   * 
+   * Returns:
+   * - outletId: For outlet users (outlet_admin/outlet_staff)
+   * - outletRole: outlet_admin or outlet_staff
+   * - customerId: For B2C/B2B customers
+   * - customerRole: customer, customer_account, customer_sales, customer_support
+   * - customerType: B2C or B2B
+   * - customerClientId: Client ID from customer's association
+   * - customerOutletId: For B2B customers, their outlet affiliation
+   */
+  static async fetchUserContext(userId) {
+    try {
+      const userServiceUrl =
+        process.env.USER_SERVICE_URL || "http://user-service:3003";
+      const internalSecret =
+        process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+
+      const response = await fetch(
+        `${userServiceUrl}/api/v1/internal/user-context/${userId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Request": internalSecret,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        logger.warn("Failed to fetch user context from user-service", {
+          userId,
+          status: response.status,
+        });
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.status === "success" && data.data?.found) {
+        return {
+          // Outlet context (for outlet users)
+          outletId: data.data.outletId || null,
+          outletRole: data.data.outletRole || null,
+          // Customer context (for B2C/B2B customers)
+          customerId: data.data.customerId || null,
+          customerRole: data.data.customerRole || null,
+          customerClientId: data.data.clientId || null,
+          customerType: data.data.customerType || null,
+          // For B2B customers, their outlet affiliation
+          customerOutletId: data.data.customerOutletId || null,
+        };
+      }
+      return null;
+    } catch (error) {
+      logger.error("Error fetching user context", {
+        userId,
+        error: error.message,
+      });
+      return null;
+    }
+  }
+
   // User registration - Public signup creates DIRECT customers only
   static async register(req, res) {
     try {
@@ -162,15 +229,27 @@ class AuthController {
         return res.status(500).json(errorResponse);
       }
 
+      // For DIRECT customers, customerId equals userId (set during bootstrap)
       // Generate tokens like login - auto-login after successful registration
       const permissions = AuthController.getRolePermissions(user.role);
+      const tokenPayload = {
+        userId: user.id,
+        clientId: user.clientId,
+        role: user.role,
+        permissions,
+        // For DIRECT customers created via signup, customerId = userId
+        customerId: user.id,
+        customerRole: "customer",
+        customerType: "DIRECT",
+        // RBAC fields from auth-service (null for new users)
+        accessLevel: null,
+        assignedCustomerIds: [],
+        parentClientId: null,
+        parentUserId: null,
+      };
+
       const accessToken = jwt.sign(
-        {
-          userId: user.id,
-          clientId: user.clientId,
-          role: user.role,
-          permissions,
-        },
+        tokenPayload,
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
       );
@@ -197,7 +276,7 @@ class AuthController {
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role }),
+        JSON.stringify({ userId: user.id, role: user.role, customerId: user.id }),
       );
 
       // Return same format as login - auto-login the user
@@ -211,6 +290,9 @@ class AuthController {
             lastName: user.lastName,
             role: user.role,
             clientId: user.clientId,
+            customerId: user.id, // DIRECT customer: customerId = userId
+            customerRole: "customer",
+            customerType: "DIRECT",
             permissions,
           },
           accessToken,
@@ -313,15 +395,34 @@ class AuthController {
         }
       }
 
-      // Generate tokens
+      // Fetch user context from user-service for tenant scoping (customerId, customerRole)
+      const userContext = await AuthController.fetchUserContext(user.id);
+
+      // Generate tokens with enhanced claims including outletId and customerId for tenant scoping
       const permissions = AuthController.getRolePermissions(user.role);
+      const tokenPayload = {
+        userId: user.id,
+        clientId: user.clientId,
+        role: user.role,
+        permissions,
+        // Include outlet context for outlet users (outlet_admin/outlet_staff)
+        outletId: userContext?.outletId || null,
+        outletRole: userContext?.outletRole || null,
+        // Include customer context for B2C/B2B customers
+        customerId: userContext?.customerId || null,
+        customerRole: userContext?.customerRole || null,
+        customerType: userContext?.customerType || null,
+        // For B2B customers, their outlet affiliation
+        customerOutletId: userContext?.customerOutletId || null,
+        // Include auth-service RBAC fields
+        accessLevel: user.accessLevel || null,
+        assignedCustomerIds: user.assignedCustomerIds || [],
+        parentClientId: user.parentClientId || null,
+        parentUserId: user.parentUserId || null,
+      };
+
       const accessToken = jwt.sign(
-        {
-          userId: user.id,
-          clientId: user.clientId,
-          role: user.role,
-          permissions,
-        },
+        tokenPayload,
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
       );
@@ -343,12 +444,17 @@ class AuthController {
         },
       });
 
-      // Store session in Redis
+      // Store session in Redis with customer context
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role }),
+        JSON.stringify({
+          userId: user.id,
+          role: user.role,
+          customerId: userContext?.customerId || null,
+          customerType: userContext?.customerType || null,
+        }),
       );
 
       // Log successful login
@@ -357,6 +463,10 @@ class AuthController {
           userId: user.id,
           action: "LOGIN",
           resource: "session",
+          changes: {
+            customerId: userContext?.customerId || null,
+            customerType: userContext?.customerType || null,
+          },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
         },
@@ -370,6 +480,13 @@ class AuthController {
             email: user.email,
             role: user.role,
             clientId: user.clientId,
+            // Outlet context for outlet users (outlet_admin/outlet_staff)
+            outletId: userContext?.outletId || null,
+            outletRole: userContext?.outletRole || null,
+            // Customer context for B2C/B2B customers
+            customerId: userContext?.customerId || null,
+            customerRole: userContext?.customerRole || null,
+            customerType: userContext?.customerType || null,
             permissions,
           },
           accessToken,
@@ -378,7 +495,7 @@ class AuthController {
         },
       });
     } catch (error) {
-      console.error("Login error:", error);
+      logger.error("Login error:", error);
       res.status(500).json({
         status: "error",
         error: {
@@ -433,15 +550,34 @@ class AuthController {
 
       const user = session.user;
 
-      // Generate new access token
+      // Fetch user context from user-service for tenant scoping (customerId, customerRole)
+      const userContext = await AuthController.fetchUserContext(user.id);
+
+      // Generate new access token with enhanced claims
       const permissions = AuthController.getRolePermissions(user.role);
+      const tokenPayload = {
+        userId: user.id,
+        clientId: user.clientId,
+        role: user.role,
+        permissions,
+        // Include outlet context for outlet users (outlet_admin/outlet_staff)
+        outletId: userContext?.outletId || null,
+        outletRole: userContext?.outletRole || null,
+        // Include customer context for B2C/B2B customers
+        customerId: userContext?.customerId || null,
+        customerRole: userContext?.customerRole || null,
+        customerType: userContext?.customerType || null,
+        // For B2B customers, their outlet affiliation
+        customerOutletId: userContext?.customerOutletId || null,
+        // Include auth-service RBAC fields
+        accessLevel: user.accessLevel || null,
+        assignedCustomerIds: user.assignedCustomerIds || [],
+        parentClientId: user.parentClientId || null,
+        parentUserId: user.parentUserId || null,
+      };
+
       const newAccessToken = jwt.sign(
-        {
-          userId: user.id,
-          clientId: user.clientId,
-          role: user.role,
-          permissions,
-        },
+        tokenPayload,
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
       );
@@ -464,12 +600,17 @@ class AuthController {
         },
       });
 
-      // Update session in Redis
+      // Update session in Redis with customer context
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role }),
+        JSON.stringify({
+          userId: user.id,
+          role: user.role,
+          customerId: userContext?.customerId || null,
+          customerType: userContext?.customerType || null,
+        }),
       );
 
       // Log token refresh
@@ -755,17 +896,10 @@ class AuthController {
     }
   }
 
-  // Get role permissions
+  // Get role permissions - uses shared constants for consistency
   static getRolePermissions(role) {
-    const permissions = {
-      admin: ["all_permissions"],
-      finance: ["wallet_access", "billing_access", "reports_access"],
-      operations: ["shipment_access", "tracking_access", "partner_access"],
-      client: ["own_shipments", "tracking", "wallet_view"],
-      support: ["ticket_access", "user_support", "knowledge_base"],
-    };
-
-    return permissions[role] || [];
+    const { getPermissionsForRole } = require("../shared/constants/permissions");
+    return getPermissionsForRole(role);
   }
 
   // Get current user basic info

@@ -27,6 +27,8 @@ const listUsersSchema = Joi.object({
       "customer_account",
       "customer_sales",
       "customer_support",
+      "outlet_admin",
+      "outlet_staff",
       "affiliate",
     )
     .optional(),
@@ -608,7 +610,7 @@ router.get(
  *         name: role
  *         schema:
  *           type: string
- *           enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *           enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, outlet_admin, outlet_staff, affiliate]
  *         description: Filter by role
  *       - in: query
  *         name: isActive
@@ -934,7 +936,7 @@ router.get(
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *                 enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, outlet_admin, outlet_staff, affiliate]
  *               clientId:
  *                 type: string
  *                 format: uuid
@@ -1160,6 +1162,134 @@ router.delete(
   authenticate,
   sharedAuthMiddleware.requirePermission("user", "manage", "all"),
   AuthController.deleteUser,
+);
+
+/**
+ * @swagger
+ * /auth/internal/users:
+ *   post:
+ *     tags: [Internal]
+ *     summary: Create user (internal service-to-service)
+ *     description: Create a new user account via internal service call. Requires INTERNAL_SECRET header.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - role
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [outlet_admin, outlet_staff, customer]
+ *               isActive:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Missing or invalid internal secret
+ *       403:
+ *         description: Forbidden - not an internal request
+ */
+// Middleware to verify internal service requests
+const verifyInternalRequest = (req, res, next) => {
+  const internalSecret = req.headers["x-internal-request"];
+  if (!internalSecret || internalSecret !== process.env.INTERNAL_SECRET) {
+    return res.status(403).json({
+      status: "error",
+      error: {
+        code: "FORBIDDEN",
+        message: "Internal service access only",
+      },
+    });
+  }
+  next();
+};
+
+// Internal user creation (service-to-service only)
+router.post(
+  "/internal/users",
+  verifyInternalRequest,
+  authenticate, // Still require JWT for audit trail
+  AuthController.createUser, // Use existing createUser logic
+);
+
+/**
+ * @swagger
+ * /auth/internal/users/{id}:
+ *   put:
+ *     tags: [Internal]
+ *     summary: Update user (internal service-to-service)
+ *     description: Update user account via internal service call. Requires INTERNAL_SECRET header.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Missing or invalid internal secret
+ *       403:
+ *         description: Forbidden - not an internal request
+ *       404:
+ *         description: User not found
+ */
+// Internal user update (service-to-service only)
+router.put(
+  "/internal/users/:id",
+  verifyInternalRequest,
+  authenticate, // Still require JWT for audit trail
+  AuthController.updateUser, // Use existing updateUser logic
 );
 
 module.exports = router;

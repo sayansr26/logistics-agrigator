@@ -36,6 +36,10 @@ const getNavigationSections = () => {
   const { hasPermission, canAccessResource } = usePermission();
   const { hasRole, isSystemAdmin } = useRole();
 
+  // Check if user is an outlet user
+  const isOutletUser = hasRole(["outlet_admin", "outlet_staff"]);
+  const outletId = user?.outletId;
+
   // Filter function to check if user can see menu item
   const canSeeMenuItem = (item) => {
     // Check permission if specified
@@ -53,7 +57,76 @@ const getNavigationSections = () => {
     return true;
   };
 
-  // Filter sections and items based on permissions
+  // Check if outlet admin (can manage team)
+  const isOutletAdmin = hasRole(["outlet_admin"]);
+
+  // Special navigation for outlet users
+  if (isOutletUser) {
+    const outletSections = [
+      {
+        title: "Core Operations",
+        items: [
+          {
+            title: "Dashboard",
+            href: "/dashboard",
+            icon: Home,
+            disabled: false,
+          },
+          // {
+          //   title: "Shipments",
+          //   href: "/shipments",
+          //   icon: Package,
+          //   disabled: false,
+          // },
+        ],
+      },
+      {
+        title: "Pricing & Services",
+        items: [
+          {
+            title: "Zone Management",
+            href: "/zones",
+            icon: Globe,
+            disabled: false,
+          },
+          {
+            title: "Charge Packages",
+            href: "/charges",
+            icon: IndianRupee,
+            disabled: false,
+          },
+        ],
+      },
+      {
+        title: "Management",
+        items: [
+          {
+            title: "Customers",
+            href: outletId ? `/outlets/${outletId}/customers` : "/customers",
+            icon: UserCheck,
+            disabled: false,
+          },
+          {
+            title: "Courier Partners",
+            href: "/partners",
+            icon: Truck,
+            disabled: false,
+          },
+          // Team management - only for outlet_admin
+          ...(isOutletAdmin && outletId ? [{
+            title: "Team Management",
+            href: `/outlet/team`,
+            icon: Users,
+            disabled: false,
+          }] : []),
+        ],
+      },
+    ];
+
+    return outletSections.filter((section) => section.items.length > 0);
+  }
+
+  // Filter sections and items based on permissions for non-outlet users
   const sections = [
     {
       title: "Core Operations",
@@ -65,15 +138,14 @@ const getNavigationSections = () => {
           disabled: false, // Dashboard not implemented yet
           // Everyone can see dashboard
         },
-        {
-          title: "Shipments",
-          href: "/shipments",
-          icon: Package,
-          badge: "89",
-          permission: "shipment:list:own",
-          disabled: true, // Shipments module not ready
-          tooltip: "Under Development",
-        },
+        // {
+        //   title: "Shipments",
+        //   href: "/shipments",
+        //   icon: Package,
+        //   // badge: "89",
+        //   permission: "shipment:list:own",
+        //   disabled: false,
+        // },
       ].filter(canSeeMenuItem),
     },
     {
@@ -104,28 +176,28 @@ const getNavigationSections = () => {
         },
       ].filter(canSeeMenuItem),
     },
-    {
-      title: "Finance & Billing",
-      items: [
-        {
-          title: "Wallet & Billing",
-          href: "/wallet",
-          icon: CreditCard,
-          permission: "wallet:read:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
-        {
-          title: "Remittance",
-          href: "/remittance",
-          icon: CreditCard,
-          permission: "billing:manage:own",
-          roles: ["superadmin", "admin", "accounts", "customer_account"],
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
-      ].filter(canSeeMenuItem),
-    },
+    // {
+    //   title: "Finance & Billing",
+    //   items: [
+    //     {
+    //       title: "Wallet & Billing",
+    //       href: "/wallet",
+    //       icon: CreditCard,
+    //       permission: "wallet:read:own",
+    //       disabled: true, // Not implemented
+    //       tooltip: "Coming Soon",
+    //     },
+    //     {
+    //       title: "Remittance",
+    //       href: "/remittance",
+    //       icon: CreditCard,
+    //       permission: "billing:manage:own",
+    //       roles: ["superadmin", "admin", "accounts", "customer_account"],
+    //       disabled: true, // Not implemented
+    //       tooltip: "Coming Soon",
+    //     },
+    //   ].filter(canSeeMenuItem),
+    // },
     {
       title: "Administration",
       items: [
@@ -146,21 +218,29 @@ const getNavigationSections = () => {
           disabled: false, // Working - DIRECT and OUTLET customers
         },
         {
+          title: "Outlets",
+          href: "/outlets",
+          icon: Store,
+          roles: ["superadmin", "admin", "client"],
+          permission: "customer:list:own",
+          disabled: false, // Outlet management for B2B customers
+        },
+        {
           title: "Geography",
           href: "/geography",
           icon: Map,
           roles: ["superadmin"],
           disabled: false, // Working and completed
         },
-        {
-          title: "Client Management",
-          href: "/clients",
-          icon: Briefcase,
-          permission: "client:list:all",
-          roles: ["superadmin"],
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
+        // {
+        //   title: "Client Management",
+        //   href: "/clients",
+        //   icon: Briefcase,
+        //   permission: "client:list:all",
+        //   roles: ["superadmin"],
+        //   disabled: true, // Not implemented
+        //   tooltip: "Coming Soon",
+        // },
         {
           title: "Courier Partners",
           href: "/partners",
@@ -171,41 +251,41 @@ const getNavigationSections = () => {
         },
       ].filter(canSeeMenuItem),
     },
-    {
-      title: "Reports & Analytics",
-      items: [
-        {
-          title: "Analytics & Reports",
-          href: "/reports",
-          icon: BarChart3,
-          permission: "analytics:read:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
-      ].filter(canSeeMenuItem),
-    },
-    {
-      title: "Integration & Support",
-      items: [
-        {
-          title: "Platform Integration",
-          href: "/platforms",
-          icon: Globe,
-          permission: "platform:read:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
-        {
-          title: "Disputes & Support",
-          href: "/support",
-          icon: AlertTriangle,
-          badge: "3",
-          permission: "support:list:own",
-          disabled: true, // Not implemented
-          tooltip: "Coming Soon",
-        },
-      ].filter(canSeeMenuItem),
-    },
+    // {
+    //   title: "Reports & Analytics",
+    //   items: [
+    //     {
+    //       title: "Analytics & Reports",
+    //       href: "/reports",
+    //       icon: BarChart3,
+    //       permission: "analytics:read:own",
+    //       disabled: true, // Not implemented
+    //       tooltip: "Coming Soon",
+    //     },
+    //   ].filter(canSeeMenuItem),
+    // },
+    // {
+    //   title: "Integration & Support",
+    //   items: [
+    //     {
+    //       title: "Platform Integration",
+    //       href: "/platforms",
+    //       icon: Globe,
+    //       permission: "platform:read:own",
+    //       disabled: true, // Not implemented
+    //       tooltip: "Coming Soon",
+    //     },
+    //     {
+    //       title: "Disputes & Support",
+    //       href: "/support",
+    //       icon: AlertTriangle,
+    //       badge: "3",
+    //       permission: "support:list:own",
+    //       disabled: true, // Not implemented
+    //       tooltip: "Coming Soon",
+    //     },
+    //   ].filter(canSeeMenuItem),
+    // },
   ];
 
   // Filter out empty sections

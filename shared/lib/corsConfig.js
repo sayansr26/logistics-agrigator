@@ -37,6 +37,7 @@ const developmentOrigins = [
   // Additional Development URLs
   "http://127.0.0.1:3000", // Alternative localhost
   "http://127.0.0.1:3001", // Alternative API Gateway
+  "https://logistics.tech-sayan.space",
 ];
 
 /**

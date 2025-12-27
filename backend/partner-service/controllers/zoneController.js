@@ -187,7 +187,7 @@ async function createZone(req, res) {
 /**
  * 2. List zones with pagination and filters
  * @route GET /api/v1/zones?page=1&limit=20&status=true&search=name&zoneType=GEOLOGICAL
- * @access Authenticated (Admin/superadmin see all zones, partners see own zones)
+ * @access Authenticated (Admin/superadmin see all zones, partners see own zones, outlets see their zones)
  */
 async function listZones(req, res) {
   try {
@@ -196,12 +196,16 @@ async function listZones(req, res) {
       userRole,
     );
 
-    // Extract partnerId from authenticated user (null for admin/superadmin)
+    // Extract partnerId and outletId from authenticated user
     const partnerId = req.user?.partnerId;
+    const outletId = req.user?.outletId; // Tenant key for outlet scoping
 
-    // Non-admin users must have a partnerId
-    if (!isAdminOrSuperadmin && !partnerId) {
-      logger.warn("Partner ID missing from request for non-admin user", {
+    // For outlet users (outlet_admin/outlet_staff), filter by outletId
+    const isOutletUser = ["outlet_admin", "outlet_staff"].includes(userRole) && outletId;
+
+    // Non-admin users must have a partnerId OR outletId (outlet users)
+    if (!isAdminOrSuperadmin && !partnerId && !isOutletUser) {
+      logger.warn("Partner ID or Outlet ID missing from request for non-admin user", {
         userId: req.user?.id,
         role: userRole,
         ip: req.ip,
@@ -210,7 +214,7 @@ async function listZones(req, res) {
         .status(401)
         .json(
           APIResponse.error(
-            "Unauthorized: Partner ID required",
+            "Unauthorized: Partner ID or Outlet ID required",
             "UNAUTHORIZED",
           ),
         );
@@ -227,10 +231,13 @@ async function listZones(req, res) {
       search: req.query.search,
       sortBy: req.query.sortBy || "createdAt",
       sortOrder: req.query.sortOrder || "desc",
+      // Add outletId filter for outlet tenant scoping
+      outletId: isOutletUser ? outletId : (req.query.outletId || undefined),
     };
 
     logger.info("Listing zones", {
       partnerId: partnerId || "ALL (admin)",
+      outletId: filters.outletId || "ALL",
       filters,
       userId: req.user?.id,
       role: userRole,
@@ -247,6 +254,7 @@ async function listZones(req, res) {
 
     logger.info("Zones listed successfully", {
       partnerId: partnerId || "ALL (admin)",
+      outletId: filters.outletId || "ALL",
       count: result.zones.length,
       total: result.pagination.total,
       userId: req.user?.id,
@@ -258,6 +266,7 @@ async function listZones(req, res) {
       error: error.message,
       stack: error.stack,
       partnerId: req.user?.partnerId,
+      outletId: req.user?.outletId,
       filters: req.query,
       userId: req.user?.id,
     });

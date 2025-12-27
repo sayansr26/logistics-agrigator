@@ -20,34 +20,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
   Store,
-  MapPin,
   Phone,
   Building2,
   ShoppingCart,
   Warehouse,
   ArrowLeft,
   Save,
-  X,
-  Plus,
   CreditCard,
-  Globe,
   ChevronRight,
   ChevronLeft,
   CheckCircle,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GeographicalApiService } from "@/services/api/geographical-api";
 import { useAuth } from "@/hooks/useAuth";
+import { useCreateOutletMutation } from "@/store/api/endpoints/customerApi";
+import { User, Lock, Eye, EyeOff } from "lucide-react";
+
+// Generate a unique outlet code
+const generateOutletCode = () => {
+  const prefix = "OUT";
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${prefix}-${timestamp}-${random}`;
+};
 
 const initialFormData = {
-  outletCode: "",
+  outletCode: generateOutletCode(),
   outletName: "",
   retailerName: "",
   contactPerson: "",
@@ -59,7 +64,6 @@ const initialFormData = {
   pincode: "",
   status: "pending",
   type: "retail",
-  businessHours: "",
   gstNumber: "",
   panNumber: "",
   businessAddress: "",
@@ -72,21 +76,15 @@ const initialFormData = {
     ifscCode: "",
     bankName: "",
   },
-  assignedCouriers: [],
-  serviceAreas: [],
+  // Admin credentials for outlet login
+  adminCredentials: {
+    email: "",
+    password: "",
+    confirmPassword: "",
+    firstName: "",
+    lastName: "",
+  },
 };
-
-// Dynamic data will be fetched from API
-const availableCouriers = [
-  "Delhivery",
-  "Blue Dart",
-  "DTDC",
-  "FedEx",
-  "Aramex",
-  "UPS",
-  "Ecom Express",
-  "XpressBees",
-];
 
 // Fallback states in case API fails
 const fallbackStates = [
@@ -147,8 +145,8 @@ const steps = [
   { id: 3, title: "Bank Details", description: "Banking information" },
   {
     id: 4,
-    title: "Services & Areas",
-    description: "Courier assignment and service areas",
+    title: "Admin Account",
+    description: "Outlet admin login credentials",
   },
 ];
 
@@ -158,7 +156,9 @@ export default function AddOutletPage() {
   const [formData, setFormData] = useState(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const [newServiceArea, setNewServiceArea] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [createOutlet] = useCreateOutletMutation();
 
   // Geographical data state
   const [states, setStates] = useState([]);
@@ -301,6 +301,14 @@ export default function AddOutletPage() {
     }
   };
 
+  // Regenerate outlet code
+  const regenerateOutletCode = () => {
+    setFormData((prev) => ({
+      ...prev,
+      outletCode: generateOutletCode(),
+    }));
+  };
+
   const handleBankDetailsChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -311,29 +319,13 @@ export default function AddOutletPage() {
     }));
   };
 
-  const handleCourierChange = (courier, checked) => {
+  const handleAdminCredentialsChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
-      assignedCouriers: checked
-        ? [...prev.assignedCouriers, courier]
-        : prev.assignedCouriers.filter((c) => c !== courier),
-    }));
-  };
-
-  const addServiceArea = () => {
-    if (newServiceArea && !formData.serviceAreas.includes(newServiceArea)) {
-      setFormData((prev) => ({
-        ...prev,
-        serviceAreas: [...prev.serviceAreas, newServiceArea],
-      }));
-      setNewServiceArea("");
-    }
-  };
-
-  const removeServiceArea = (area) => {
-    setFormData((prev) => ({
-      ...prev,
-      serviceAreas: prev.serviceAreas.filter((a) => a !== area),
+      adminCredentials: {
+        ...prev.adminCredentials,
+        [field]: value,
+      },
     }));
   };
 
@@ -358,9 +350,27 @@ export default function AddOutletPage() {
           formData.pincode
         );
       case 3:
-        return formData.bankDetails.accountHolderName;
+        return true; // Bank details are optional
       case 4:
-        return true; // No required fields in step 4
+        // Admin credentials are required
+        const { email, password, confirmPassword, firstName, lastName } = formData.adminCredentials;
+        if (!email || !password || !confirmPassword || !firstName || !lastName) {
+          return false;
+        }
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return false;
+        }
+        // Validate password match
+        if (password !== confirmPassword) {
+          return false;
+        }
+        // Validate password strength (minimum 8 characters)
+        if (password.length < 8) {
+          return false;
+        }
+        return true;
       default:
         return false;
     }
@@ -388,30 +398,62 @@ export default function AddOutletPage() {
     e.preventDefault();
 
     // Final validation before submission
-    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
+    if (!validateStep(1) || !validateStep(2) || !validateStep(3) || !validateStep(4)) {
       alert(
-        "Please complete all required fields in the previous steps before creating the outlet.",
+        "Please complete all required fields in all steps before creating the outlet.",
       );
+      return;
+    }
+
+    // Validate password match
+    if (formData.adminCredentials.password !== formData.adminCredentials.confirmPassword) {
+      alert("Passwords do not match!");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Prepare outlet data for API
+      const outletData = {
+        code: formData.outletCode,
+        name: formData.outletName,
+        contactPerson: formData.contactPerson,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        status: formData.status === "active" ? "ACTIVE" : formData.status === "inactive" ? "INACTIVE" : "PENDING",
+        type: formData.type.toUpperCase(),
+        gstNumber: formData.gstNumber || undefined,
+        panNumber: formData.panNumber || undefined,
+        bankDetails: formData.bankDetails.accountNumber ? formData.bankDetails : undefined,
+        // Admin credentials for outlet login
+        adminCredentials: {
+          email: formData.adminCredentials.email,
+          password: formData.adminCredentials.password,
+          name: `${formData.adminCredentials.firstName} ${formData.adminCredentials.lastName}`,
+          firstName: formData.adminCredentials.firstName,
+          lastName: formData.adminCredentials.lastName,
+        },
+      };
 
-      // In real implementation, make API call here
-      console.log("Creating outlet:", formData);
+      console.log("Creating outlet with data:", outletData);
+      
+      const result = await createOutlet(outletData).unwrap();
+      console.log("Outlet created successfully:", result);
 
       // Show success message
-      alert("Outlet created successfully!");
+      alert("Outlet created successfully! The outlet admin can now login with the provided credentials.");
 
       // Redirect to outlets list
       router.push("/outlets");
     } catch (error) {
       console.error("Error creating outlet:", error);
-      alert("Failed to create outlet. Please try again.");
+      const errorMessage = error?.data?.error?.message || error?.message || "Failed to create outlet. Please try again.";
+      alert(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -450,15 +492,26 @@ export default function AddOutletPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="outletCode">Outlet Code *</Label>
-                  <Input
-                    id="outletCode"
-                    value={formData.outletCode}
-                    onChange={(e) =>
-                      handleInputChange("outletCode", e.target.value)
-                    }
-                    placeholder="Enter Outlet Code"
-                    required
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="outletCode"
+                      value={formData.outletCode}
+                      readOnly
+                      className="bg-muted font-mono"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={regenerateOutletCode}
+                      title="Regenerate Code"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Auto-generated outlet code
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="outletName">Business Name *</Label>
@@ -539,17 +592,6 @@ export default function AddOutletPage() {
                       <SelectItem value="pending">Pending</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessHours">Business Hours</Label>
-                  <Input
-                    id="businessHours"
-                    value={formData.businessHours}
-                    onChange={(e) =>
-                      handleInputChange("businessHours", e.target.value)
-                    }
-                    placeholder="Enter Business Hours"
-                  />
                 </div>
               </div>
 
@@ -914,90 +956,133 @@ export default function AddOutletPage() {
 
       case 4:
         return (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Courier Assignment
-                </CardTitle>
-                <CardDescription>
-                  Select courier partners for this outlet
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {availableCouriers.map((courier) => (
-                    <div key={courier} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={courier}
-                        checked={formData.assignedCouriers.includes(courier)}
-                        onCheckedChange={(checked) =>
-                          handleCourierChange(courier, checked)
-                        }
-                      />
-                      <Label
-                        htmlFor={courier}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {courier}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Service Areas
-                </CardTitle>
-                <CardDescription>
-                  Areas where this outlet provides services
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Admin Account
+              </CardTitle>
+              <CardDescription>
+                Create login credentials for the outlet administrator. The outlet admin can use these credentials to login and manage the outlet.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="adminFirstName">First Name *</Label>
                   <Input
-                    value={newServiceArea}
-                    onChange={(e) => setNewServiceArea(e.target.value)}
-                    placeholder="Enter service area"
-                    onKeyPress={(e) =>
-                      e.key === "Enter" &&
-                      (e.preventDefault(), addServiceArea())
+                    id="adminFirstName"
+                    value={formData.adminCredentials.firstName}
+                    onChange={(e) =>
+                      handleAdminCredentialsChange("firstName", e.target.value)
                     }
+                    placeholder="e.g., Rajesh"
+                    required
                   />
-                  <Button
-                    type="button"
-                    onClick={addServiceArea}
-                    disabled={!newServiceArea}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {formData.serviceAreas.map((area) => (
-                    <Badge
-                      key={area}
-                      variant="outline"
-                      className="flex items-center gap-1"
+                <div className="space-y-2">
+                  <Label htmlFor="adminLastName">Last Name *</Label>
+                  <Input
+                    id="adminLastName"
+                    value={formData.adminCredentials.lastName}
+                    onChange={(e) =>
+                      handleAdminCredentialsChange("lastName", e.target.value)
+                    }
+                    placeholder="e.g., Kumar"
+                    required
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="adminEmail">Admin Email *</Label>
+                  <Input
+                    id="adminEmail"
+                    type="email"
+                    value={formData.adminCredentials.email}
+                    onChange={(e) =>
+                      handleAdminCredentialsChange("email", e.target.value)
+                    }
+                    placeholder="e.g., admin@outlet.com"
+                    required
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    This email will be used to login to the outlet dashboard
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adminPassword">Password *</Label>
+                  <div className="relative">
+                    <Input
+                      id="adminPassword"
+                      type={showPassword ? "text" : "password"}
+                      value={formData.adminCredentials.password}
+                      onChange={(e) =>
+                        handleAdminCredentialsChange("password", e.target.value)
+                      }
+                      placeholder="Minimum 8 characters"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      onClick={() => setShowPassword(!showPassword)}
                     >
-                      {area}
-                      <button
-                        type="button"
-                        onClick={() => removeServiceArea(area)}
-                        className="ml-1 hover:text-red-500"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                  {formData.adminCredentials.password && formData.adminCredentials.password.length < 8 && (
+                    <p className="text-sm text-red-500">
+                      Password must be at least 8 characters
+                    </p>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adminConfirmPassword">Confirm Password *</Label>
+                  <div className="relative">
+                    <Input
+                      id="adminConfirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={formData.adminCredentials.confirmPassword}
+                      onChange={(e) =>
+                        handleAdminCredentialsChange("confirmPassword", e.target.value)
+                      }
+                      placeholder="Confirm password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                  {formData.adminCredentials.confirmPassword && 
+                   formData.adminCredentials.password !== formData.adminCredentials.confirmPassword && (
+                    <p className="text-sm text-red-500">
+                      Passwords do not match
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="font-medium text-blue-900 flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  Important
+                </h4>
+                <p className="text-sm text-blue-700 mt-1">
+                  The outlet admin will receive an email with login instructions once the outlet is created. They will be able to manage customers, shipments, and other outlet-specific settings.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         );
 
       default:

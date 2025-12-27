@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
@@ -22,119 +22,117 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Save,
   ArrowLeft,
+  ArrowRight,
   User,
   Store,
   MapPin,
-  Building2,
-  CreditCard,
+  Lock,
   AlertCircle,
   Loader2,
+  Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   useCreateCustomerMutation,
+  useGetOutletsQuery,
   type CreateCustomerRequest,
   type CustomerType,
-  type OutletType,
-  type OutletStatus,
 } from "@/store/api/endpoints/customerApi";
-
-const outletTypes: { value: OutletType; label: string }[] = [
-  { value: "RETAIL", label: "Retail Store" },
-  { value: "WHOLESALE", label: "Wholesale" },
-  { value: "FRANCHISE", label: "Franchise" },
-  { value: "DISTRIBUTOR", label: "Distributor" },
-  { value: "OTHER", label: "Other" },
-];
-
-const outletStatuses: { value: OutletStatus; label: string }[] = [
-  { value: "ACTIVE", label: "Active" },
-  { value: "INACTIVE", label: "Inactive" },
-  { value: "PENDING", label: "Pending Approval" },
-  { value: "SUSPENDED", label: "Suspended" },
-];
-
-const weekDays = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+import {
+  useGetStatesQuery,
+  useGetCitiesQuery,
+  useSearchPincodesQuery,
+} from "@/store/api/endpoints/geoApi";
+import { useAuth } from "@/hooks/useAuth";
 
 interface FormData {
-  // Basic info
+  // Step 1: Customer Type
+  customerType: CustomerType;
+  outletId: string;
+  // Step 2: Basic Info
   name: string;
   email: string;
   phone: string;
-  customerType: CustomerType;
-  // Address
+  // Step 3: Address
   address: string;
-  city: string;
-  state: string;
+  stateId: string;
+  stateName: string;
+  cityId: string;
+  cityName: string;
   pincode: string;
-  // Business info
-  gstNumber: string;
-  panNumber: string;
-  businessType: string;
-  // Outlet-specific
-  outletCode: string;
-  outletName: string;
-  retailerName: string;
-  contactPerson: string;
-  outletType: OutletType | "";
-  outletStatus: OutletStatus;
-  // Business hours
-  businessHoursOpen: string;
-  businessHoursClose: string;
-  businessDays: string[];
-  // Bank details
-  accountName: string;
-  accountNumber: string;
-  bankName: string;
-  ifscCode: string;
-  // Additional
-  serviceAreas: string;
+  // Step 4: Login Details
+  password: string;
+  confirmPassword: string;
 }
 
 const initialFormData: FormData = {
+  customerType: "B2C",
+  outletId: "",
   name: "",
   email: "",
   phone: "",
-  customerType: "DIRECT",
   address: "",
-  city: "",
-  state: "",
+  stateId: "",
+  stateName: "",
+  cityId: "",
+  cityName: "",
   pincode: "",
-  gstNumber: "",
-  panNumber: "",
-  businessType: "",
-  outletCode: "",
-  outletName: "",
-  retailerName: "",
-  contactPerson: "",
-  outletType: "",
-  outletStatus: "ACTIVE",
-  businessHoursOpen: "09:00",
-  businessHoursClose: "18:00",
-  businessDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-  accountName: "",
-  accountNumber: "",
-  bankName: "",
-  ifscCode: "",
-  serviceAreas: "",
+  password: "",
+  confirmPassword: "",
 };
+
+// 4-step wizard
+const formSteps = [
+  { id: "type", title: "Customer Type", icon: User },
+  { id: "basic", title: "Basic Info", icon: User },
+  { id: "address", title: "Address", icon: MapPin },
+  { id: "login", title: "Login Details", icon: Lock },
+];
 
 export default function AddCustomerPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [currentStep, setCurrentStep] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [createCustomer, { isLoading }] = useCreateCustomerMutation();
+
+  // Check if user can create B2B customers (superadmin, admin)
+  const canCreateB2BCustomer =
+    user?.role === "superadmin" || user?.role === "admin";
+
+  // Fetch outlets for dropdown (only if user can create B2B customers)
+  const { data: outletsData, isLoading: isLoadingOutlets } = useGetOutletsQuery(
+    { page: 1, limit: 100 },
+    { skip: !canCreateB2BCustomer },
+  );
+  const outlets = outletsData?.data?.outlets || [];
+
+  // Geo API hooks
+  const { data: statesData, isLoading: isLoadingStates } = useGetStatesQuery();
+  const { data: citiesData, isLoading: isLoadingCities } = useGetCitiesQuery(
+    { stateId: formData.stateId },
+    { skip: !formData.stateId },
+  );
+  const [pincodeSearch, setPincodeSearch] = useState("");
+  const { data: pincodeData, isFetching: isSearchingPincode } =
+    useSearchPincodesQuery(
+      { code: pincodeSearch },
+      { skip: !pincodeSearch || pincodeSearch.length < 3 },
+    );
+
+  const states = statesData?.data || [];
+  const cities = citiesData?.data || [];
+
+  const totalSteps = formSteps.length;
+  const isLastStep = currentStep === totalSteps - 1;
+  const isFirstStep = currentStep === 0;
 
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
@@ -142,10 +140,7 @@ export default function AddCustomerPage() {
     { title: "Add Customer" },
   ];
 
-  const handleInputChange = (
-    field: keyof FormData,
-    value: string | string[],
-  ) => {
+  const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -153,90 +148,145 @@ export default function AddCustomerPage() {
     }
   };
 
-  const toggleBusinessDay = (day: string) => {
-    const currentDays = formData.businessDays;
-    if (currentDays.includes(day)) {
-      handleInputChange(
-        "businessDays",
-        currentDays.filter((d) => d !== day),
-      );
-    } else {
-      handleInputChange("businessDays", [...currentDays, day]);
-    }
+  // Handle state selection
+  const handleStateChange = (stateId: string) => {
+    const selectedState = states.find(
+      (s: { id: string; name: string }) => s.id === stateId,
+    );
+    setFormData((prev) => ({
+      ...prev,
+      stateId,
+      stateName: selectedState?.name || "",
+      cityId: "",
+      cityName: "",
+    }));
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+  // Handle city selection
+  const handleCityChange = (cityId: string) => {
+    const selectedCity = cities.find(
+      (c: { id: string; name: string }) => c.id === cityId,
+    );
+    setFormData((prev) => ({
+      ...prev,
+      cityId,
+      cityName: selectedCity?.name || "",
+    }));
+  };
 
-    // Required fields for all customers
-    if (!formData.name.trim()) newErrors.name = "Name is required";
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Invalid email format";
+  // Handle pincode input with debounce for search
+  const handlePincodeChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, pincode: value }));
+    if (value.length >= 3) {
+      setPincodeSearch(value);
     }
-    if (!formData.phone.trim()) newErrors.phone = "Phone is required";
+  }, []);
 
-    // Outlet-specific required fields
-    if (formData.customerType === "OUTLET") {
-      if (!formData.outletCode.trim())
-        newErrors.outletCode = "Outlet code is required";
-      if (!formData.outletName.trim())
-        newErrors.outletName = "Outlet name is required";
-      if (!formData.outletType)
-        newErrors.outletType = "Outlet type is required";
+  // Auto-fill state/city from pincode selection
+  // API returns: pincode.state and pincode.area.city (city is nested inside area)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlePincodeSelect = (pincode: any) => {
+    // City is nested inside area.city in the API response
+    const city = pincode.area?.city;
+    
+    setFormData((prev) => ({
+      ...prev,
+      pincode: pincode.code,
+      stateId: pincode.state?.id || "",
+      stateName: pincode.state?.name || "",
+      cityId: city?.id || "",
+      cityName: city?.name || "",
+    }));
+    // Clear search to close dropdown
+    setPincodeSearch("");
+  };
+
+  // Validate current step
+  const validateStep = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    const stepId = formSteps[currentStep].id;
+
+    switch (stepId) {
+      case "type":
+        // B2B requires outlet selection
+        if (formData.customerType === "B2B" && !formData.outletId) {
+          newErrors.outletId = "Please select an outlet for B2B customer";
+        }
+        break;
+
+      case "basic":
+        if (!formData.name.trim()) {
+          newErrors.name = "Name is required";
+        }
+        if (!formData.email.trim()) {
+          newErrors.email = "Email is required";
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          newErrors.email = "Invalid email format";
+        }
+        if (!formData.phone.trim()) {
+          newErrors.phone = "Phone number is required";
+        }
+        break;
+
+      case "address":
+        // Address is optional, no required validation
+        break;
+
+      case "login":
+        if (!formData.password) {
+          newErrors.password = "Password is required";
+        } else if (formData.password.length < 8) {
+          newErrors.password = "Password must be at least 8 characters";
+        }
+        if (!formData.confirmPassword) {
+          newErrors.confirmPassword = "Please confirm password";
+        } else if (formData.password !== formData.confirmPassword) {
+          newErrors.confirmPassword = "Passwords do not match";
+        }
+        break;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleNext = () => {
+    if (validateStep()) {
+      setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));
+    }
+  };
 
-    if (!validateForm()) return;
+  const handlePrevious = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleStepClick = (index: number) => {
+    // Only allow going back to previous steps
+    if (index <= currentStep) {
+      setCurrentStep(index);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
 
     // Build request payload
     const payload: CreateCustomerRequest = {
       name: formData.name.trim(),
       email: formData.email.trim().toLowerCase(),
-      phone: formData.phone.trim(),
+      phone: formData.phone.trim() || undefined,
       customerType: formData.customerType,
+      password: formData.password,
+      // Address fields (optional)
       address: formData.address.trim() || undefined,
-      city: formData.city.trim() || undefined,
-      state: formData.state.trim() || undefined,
+      city: formData.cityName || undefined,
+      state: formData.stateName || undefined,
       pincode: formData.pincode.trim() || undefined,
-      gstNumber: formData.gstNumber.trim() || undefined,
-      panNumber: formData.panNumber.trim() || undefined,
-      businessType: formData.businessType.trim() || undefined,
     };
 
-    // Add outlet-specific fields
-    if (formData.customerType === "OUTLET") {
-      payload.outletCode = formData.outletCode.trim();
-      payload.outletName = formData.outletName.trim();
-      payload.retailerName = formData.retailerName.trim() || undefined;
-      payload.contactPerson = formData.contactPerson.trim() || undefined;
-      payload.outletType = formData.outletType as OutletType;
-      payload.outletStatus = formData.outletStatus;
-      payload.businessHours = {
-        open: formData.businessHoursOpen,
-        close: formData.businessHoursClose,
-        days: formData.businessDays,
-      };
-      if (formData.accountNumber.trim()) {
-        payload.bankDetails = {
-          accountName: formData.accountName.trim() || undefined,
-          accountNumber: formData.accountNumber.trim(),
-          bankName: formData.bankName.trim() || undefined,
-          ifscCode: formData.ifscCode.trim() || undefined,
-        };
-      }
-      if (formData.serviceAreas.trim()) {
-        payload.serviceAreas = formData.serviceAreas
-          .split(",")
-          .map((s) => s.trim());
-      }
+    // Add outlet association for B2B customers
+    if (formData.customerType === "B2B" && formData.outletId) {
+      payload.outletId = formData.outletId;
     }
 
     try {
@@ -256,558 +306,533 @@ export default function AddCustomerPage() {
     }
   };
 
-  const isOutlet = formData.customerType === "OUTLET";
+  // Render step content
+  const renderStepContent = () => {
+    const stepId = formSteps[currentStep].id;
 
-  return (
-    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">
-                Add Customer
-              </h1>
-              <p className="text-muted-foreground">
-                Create a new direct customer or outlet
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          {errors.submit && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{errors.submit}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Customer Type Selection */}
-          <Card className="mb-6">
+    switch (stepId) {
+      case "type":
+        return (
+          <Card>
             <CardHeader>
               <CardTitle>Customer Type</CardTitle>
               <CardDescription>
                 Select the type of customer you want to create
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* B2C Option */}
                 <button
                   type="button"
-                  onClick={() => handleInputChange("customerType", "DIRECT")}
-                  className={`p-4 rounded-lg border-2 transition-all ${
-                    formData.customerType === "DIRECT"
+                  onClick={() => {
+                    handleInputChange("customerType", "B2C");
+                    handleInputChange("outletId", "");
+                  }}
+                  className={`p-6 rounded-lg border-2 transition-all text-left ${
+                    formData.customerType === "B2C"
                       ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
                   }`}
                 >
-                  <div className="flex flex-col items-center gap-2">
+                  <div className="flex flex-col items-center gap-3">
                     <User
-                      className={`h-8 w-8 ${formData.customerType === "DIRECT" ? "text-blue-500" : "text-gray-500"}`}
+                      className={`h-10 w-10 ${
+                        formData.customerType === "B2C"
+                          ? "text-blue-500"
+                          : "text-gray-500"
+                      }`}
                     />
-                    <span className="font-medium">Direct Customer (B2C)</span>
+                    <span className="font-semibold text-lg">
+                      Direct Customer (B2C)
+                    </span>
                     <span className="text-sm text-muted-foreground text-center">
-                      Individual customers who register themselves
+                      Individual end-customers without outlet association
                     </span>
                   </div>
                 </button>
-                {/* Outlet type disabled - Coming Soon */}
-                <div className="p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed relative">
-                  <div className="flex flex-col items-center gap-2">
-                    <Store className="h-8 w-8 text-gray-400" />
-                    <span className="font-medium text-gray-500">
-                      Outlet (B2B)
-                    </span>
-                    <span className="text-sm text-muted-foreground text-center">
-                      Business outlets managed by admin
+
+                {/* B2B Option */}
+                {canCreateB2BCustomer ? (
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange("customerType", "B2B")}
+                    className={`p-6 rounded-lg border-2 transition-all text-left ${
+                      formData.customerType === "B2B"
+                        ? "border-green-500 bg-green-50 dark:bg-green-950"
+                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <Store
+                        className={`h-10 w-10 ${
+                          formData.customerType === "B2B"
+                            ? "text-green-500"
+                            : "text-gray-500"
+                        }`}
+                      />
+                      <span className="font-semibold text-lg">
+                        Outlet Customer (B2B)
+                      </span>
+                      <span className="text-sm text-muted-foreground text-center">
+                        Business customer linked to a specific outlet
+                      </span>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="p-6 rounded-lg border-2 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed relative">
+                    <div className="flex flex-col items-center gap-3">
+                      <Store className="h-10 w-10 text-gray-400" />
+                      <span className="font-semibold text-lg text-gray-500">
+                        Outlet Customer (B2B)
+                      </span>
+                      <span className="text-sm text-muted-foreground text-center">
+                        Admin access required
+                      </span>
+                    </div>
+                    <span className="absolute top-2 right-2 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
+                      Admin Only
                     </span>
                   </div>
-                  <span className="absolute top-2 right-2 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
-                    Coming Soon
-                  </span>
+                )}
+              </div>
+
+              {/* Outlet Selection for B2B */}
+              {formData.customerType === "B2B" && canCreateB2BCustomer && (
+                <div className="space-y-2 pt-4 border-t">
+                  <Label htmlFor="outletId">Select Outlet *</Label>
+                  <Select
+                    value={formData.outletId}
+                    onValueChange={(value) =>
+                      handleInputChange("outletId", value)
+                    }
+                  >
+                    <SelectTrigger
+                      className={errors.outletId ? "border-red-500" : ""}
+                    >
+                      <SelectValue
+                        placeholder={
+                          isLoadingOutlets
+                            ? "Loading outlets..."
+                            : "Select an outlet"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {outlets.map((outlet) => (
+                        <SelectItem key={outlet.id} value={outlet.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{outlet.name}</span>
+                            {outlet.code && (
+                              <span className="text-xs text-muted-foreground">
+                                ({outlet.code})
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                      {outlets.length === 0 && !isLoadingOutlets && (
+                        <SelectItem value="" disabled>
+                          No outlets available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {errors.outletId && (
+                    <p className="text-sm text-red-500">{errors.outletId}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    This customer will be associated with the selected outlet.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
+      case "basic":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Basic Information
+              </CardTitle>
+              <CardDescription>
+                Enter the customer&apos;s contact information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  placeholder="Enter customer name"
+                  className={errors.name ? "border-red-500" : ""}
+                />
+                {errors.name && (
+                  <p className="text-sm text-red-500">{errors.name}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange("email", e.target.value)}
+                    placeholder="email@example.com"
+                    className={errors.email ? "border-red-500" : ""}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-red-500">{errors.email}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    This email will be used for login
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone *</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    placeholder="+91 9876543210"
+                    className={errors.phone ? "border-red-500" : ""}
+                  />
+                  {errors.phone && (
+                    <p className="text-sm text-red-500">{errors.phone}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
+        );
 
-          <Tabs defaultValue="basic" className="space-y-4">
-            <TabsList
-              className={`grid w-full ${isOutlet ? "grid-cols-4" : "grid-cols-2"}`}
-            >
-              <TabsTrigger value="basic">Basic Info</TabsTrigger>
-              <TabsTrigger value="address">Address</TabsTrigger>
-              {isOutlet && (
-                <TabsTrigger value="outlet">Outlet Details</TabsTrigger>
-              )}
-              {isOutlet && <TabsTrigger value="bank">Bank Details</TabsTrigger>}
-            </TabsList>
+      case "address":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Address Details
+              </CardTitle>
+              <CardDescription>
+                Enter the customer&apos;s address (optional)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address">Street Address</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) =>
+                    handleInputChange("address", e.target.value)
+                  }
+                  placeholder="Enter street address"
+                  rows={2}
+                />
+              </div>
 
-            {/* Basic Info Tab */}
-            <TabsContent value="basic">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    Basic Information
-                  </CardTitle>
-                  <CardDescription>
-                    Enter the customer&apos;s basic contact information
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">
-                        {isOutlet ? "Business Name" : "Full Name"} *
-                      </Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) =>
-                          handleInputChange("name", e.target.value)
-                        }
-                        placeholder={
-                          isOutlet ? "Enter business name" : "Enter full name"
-                        }
-                        className={errors.name ? "border-red-500" : ""}
-                      />
-                      {errors.name && (
-                        <p className="text-sm text-red-500">{errors.name}</p>
-                      )}
+              {/* Pincode with auto-fill */}
+              <div className="space-y-2">
+                <Label htmlFor="pincode">Pincode</Label>
+                <div className="relative">
+                  <Input
+                    id="pincode"
+                    value={formData.pincode}
+                    onChange={(e) => handlePincodeChange(e.target.value)}
+                    placeholder="Enter pincode (auto-fills state & city)"
+                    maxLength={6}
+                  />
+                  {isSearchingPincode && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) =>
-                          handleInputChange("email", e.target.value)
-                        }
-                        placeholder="Enter email address"
-                        className={errors.email ? "border-red-500" : ""}
-                      />
-                      {errors.email && (
-                        <p className="text-sm text-red-500">{errors.email}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone *</Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) =>
-                          handleInputChange("phone", e.target.value)
-                        }
-                        placeholder="+91 9876543210"
-                        className={errors.phone ? "border-red-500" : ""}
-                      />
-                      {errors.phone && (
-                        <p className="text-sm text-red-500">{errors.phone}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="businessType">Business Type</Label>
-                      <Input
-                        id="businessType"
-                        value={formData.businessType}
-                        onChange={(e) =>
-                          handleInputChange("businessType", e.target.value)
-                        }
-                        placeholder="e.g., E-commerce, Retail"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="gstNumber">GST Number</Label>
-                      <Input
-                        id="gstNumber"
-                        value={formData.gstNumber}
-                        onChange={(e) =>
-                          handleInputChange("gstNumber", e.target.value)
-                        }
-                        placeholder="e.g., 22AAAAA0000A1Z5"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="panNumber">PAN Number</Label>
-                      <Input
-                        id="panNumber"
-                        value={formData.panNumber}
-                        onChange={(e) =>
-                          handleInputChange("panNumber", e.target.value)
-                        }
-                        placeholder="e.g., ABCDE1234F"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Address Tab */}
-            <TabsContent value="address">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Address Information
-                  </CardTitle>
-                  <CardDescription>
-                    Enter the customer&apos;s address details
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Street Address</Label>
-                    <Textarea
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) =>
-                        handleInputChange("address", e.target.value)
-                      }
-                      placeholder="Enter street address"
-                      rows={2}
-                    />
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="city">City</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) =>
-                          handleInputChange("city", e.target.value)
-                        }
-                        placeholder="Enter city"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="state">State</Label>
-                      <Input
-                        id="state"
-                        value={formData.state}
-                        onChange={(e) =>
-                          handleInputChange("state", e.target.value)
-                        }
-                        placeholder="Enter state"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pincode">Pincode</Label>
-                      <Input
-                        id="pincode"
-                        value={formData.pincode}
-                        onChange={(e) =>
-                          handleInputChange("pincode", e.target.value)
-                        }
-                        placeholder="Enter pincode"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Outlet Details Tab (Only for OUTLET type) */}
-            {isOutlet && (
-              <TabsContent value="outlet">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5" />
-                      Outlet Details
-                    </CardTitle>
-                    <CardDescription>
-                      Enter outlet-specific information
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="outletCode">Outlet Code *</Label>
-                        <Input
-                          id="outletCode"
-                          value={formData.outletCode}
-                          onChange={(e) =>
-                            handleInputChange("outletCode", e.target.value)
-                          }
-                          placeholder="e.g., OUT-001"
-                          className={errors.outletCode ? "border-red-500" : ""}
-                        />
-                        {errors.outletCode && (
-                          <p className="text-sm text-red-500">
-                            {errors.outletCode}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="outletName">Outlet Name *</Label>
-                        <Input
-                          id="outletName"
-                          value={formData.outletName}
-                          onChange={(e) =>
-                            handleInputChange("outletName", e.target.value)
-                          }
-                          placeholder="Enter outlet name"
-                          className={errors.outletName ? "border-red-500" : ""}
-                        />
-                        {errors.outletName && (
-                          <p className="text-sm text-red-500">
-                            {errors.outletName}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="retailerName">Retailer Name</Label>
-                        <Input
-                          id="retailerName"
-                          value={formData.retailerName}
-                          onChange={(e) =>
-                            handleInputChange("retailerName", e.target.value)
-                          }
-                          placeholder="Enter retailer name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="contactPerson">Contact Person</Label>
-                        <Input
-                          id="contactPerson"
-                          value={formData.contactPerson}
-                          onChange={(e) =>
-                            handleInputChange("contactPerson", e.target.value)
-                          }
-                          placeholder="Enter contact person name"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="outletType">Outlet Type *</Label>
-                        <Select
-                          value={formData.outletType}
-                          onValueChange={(value) =>
-                            handleInputChange("outletType", value)
-                          }
-                        >
-                          <SelectTrigger
-                            className={
-                              errors.outletType ? "border-red-500" : ""
-                            }
-                          >
-                            <SelectValue placeholder="Select outlet type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {outletTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {errors.outletType && (
-                          <p className="text-sm text-red-500">
-                            {errors.outletType}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="outletStatus">Status</Label>
-                        <Select
-                          value={formData.outletStatus}
-                          onValueChange={(value) =>
-                            handleInputChange("outletStatus", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {outletStatuses.map((status) => (
-                              <SelectItem
-                                key={status.value}
-                                value={status.value}
-                              >
-                                {status.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Business Hours */}
-                    <div className="space-y-3">
-                      <Label>Business Hours</Label>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="businessHoursOpen"
-                            className="text-sm text-muted-foreground"
-                          >
-                            Opening Time
-                          </Label>
-                          <Input
-                            id="businessHoursOpen"
-                            type="time"
-                            value={formData.businessHoursOpen}
-                            onChange={(e) =>
-                              handleInputChange(
-                                "businessHoursOpen",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="businessHoursClose"
-                            className="text-sm text-muted-foreground"
-                          >
-                            Closing Time
-                          </Label>
-                          <Input
-                            id="businessHoursClose"
-                            type="time"
-                            value={formData.businessHoursClose}
-                            onChange={(e) =>
-                              handleInputChange(
-                                "businessHoursClose",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm text-muted-foreground">
-                          Business Days
-                        </Label>
-                        <div className="flex flex-wrap gap-2">
-                          {weekDays.map((day) => (
-                            <Button
-                              key={day}
-                              type="button"
-                              variant={
-                                formData.businessDays.includes(day)
-                                  ? "default"
-                                  : "outline"
+                  )}
+                  {/* Pincode search results dropdown */}
+                  {pincodeData?.data?.length > 0 && pincodeSearch && (
+                    <div 
+                      className="absolute z-[100] w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto"
+                      onMouseDown={(e) => e.preventDefault()} // Prevent input blur on click
+                    >
+                      {pincodeData.data.map((pincode) => (
+                          <div
+                            key={pincode.id}
+                            role="button"
+                            tabIndex={0}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent transition-colors cursor-pointer"
+                            onClick={() => handlePincodeSelect(pincode)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                handlePincodeSelect(pincode);
                               }
-                              size="sm"
-                              onClick={() => toggleBusinessDay(day)}
-                            >
-                              {day.slice(0, 3)}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
+                            }}
+                          >
+                            <span className="font-medium">{pincode.code}</span>
+                            <span className="text-muted-foreground ml-2">
+                              {pincode.area?.city?.name ? `${pincode.area.city.name}, ` : ""}{pincode.state?.name}
+                            </span>
+                          </div>
+                        ),
+                      )}
                     </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter pincode to auto-fill state and city
+                </p>
+              </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="serviceAreas">
-                        Service Areas (comma-separated)
-                      </Label>
-                      <Input
-                        id="serviceAreas"
-                        value={formData.serviceAreas}
-                        onChange={(e) =>
-                          handleInputChange("serviceAreas", e.target.value)
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* State dropdown */}
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Select
+                    value={formData.stateId}
+                    onValueChange={handleStateChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          isLoadingStates ? "Loading..." : "Select state"
                         }
-                        placeholder="e.g., Delhi, Mumbai, Bangalore"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            )}
+                      >
+                        {formData.stateName || "Select state"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {states.map(
+                        (state: { id: string; name: string; code: string }) => (
+                          <SelectItem key={state.id} value={state.id}>
+                            {state.name}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Bank Details Tab (Only for OUTLET type) */}
-            {isOutlet && (
-              <TabsContent value="bank">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CreditCard className="h-5 w-5" />
-                      Bank Details
-                    </CardTitle>
-                    <CardDescription>
-                      Enter bank account details for payments (optional)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="accountName">Account Holder Name</Label>
-                        <Input
-                          id="accountName"
-                          value={formData.accountName}
-                          onChange={(e) =>
-                            handleInputChange("accountName", e.target.value)
-                          }
-                          placeholder="Enter account holder name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="accountNumber">Account Number</Label>
-                        <Input
-                          id="accountNumber"
-                          value={formData.accountNumber}
-                          onChange={(e) =>
-                            handleInputChange("accountNumber", e.target.value)
-                          }
-                          placeholder="Enter account number"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="bankName">Bank Name</Label>
-                        <Input
-                          id="bankName"
-                          value={formData.bankName}
-                          onChange={(e) =>
-                            handleInputChange("bankName", e.target.value)
-                          }
-                          placeholder="Enter bank name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="ifscCode">IFSC Code</Label>
-                        <Input
-                          id="ifscCode"
-                          value={formData.ifscCode}
-                          onChange={(e) =>
-                            handleInputChange("ifscCode", e.target.value)
-                          }
-                          placeholder="e.g., SBIN0001234"
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            )}
-          </Tabs>
+                {/* City dropdown */}
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Select
+                    value={formData.cityId}
+                    onValueChange={handleCityChange}
+                    disabled={!formData.stateId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          isLoadingCities ? "Loading..." : "Select city"
+                        }
+                      >
+                        {formData.cityName || "Select city"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cities.map(
+                        (city: { id: string; name: string }) => (
+                          <SelectItem key={city.id} value={city.id}>
+                            {city.name}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {!formData.stateId && (
+                    <p className="text-xs text-muted-foreground">
+                      Select state first
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
 
-          {/* Submit Button */}
-          <div className="flex justify-end gap-4 mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
+      case "login":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5" />
+                Login Details
+              </CardTitle>
+              <CardDescription>
+                Set up login credentials for the customer
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  The email <strong>{formData.email || "(not set)"}</strong>{" "}
+                  will be used as the login username.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) =>
+                      handleInputChange("password", e.target.value)
+                    }
+                    placeholder="Enter password"
+                    className={errors.password ? "border-red-500 pr-10" : "pr-10"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-sm text-red-500">{errors.password}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Password must be at least 8 characters
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={(e) =>
+                      handleInputChange("confirmPassword", e.target.value)
+                    }
+                    placeholder="Confirm password"
+                    className={
+                      errors.confirmPassword ? "border-red-500 pr-10" : "pr-10"
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.confirmPassword && (
+                  <p className="text-sm text-red-500">{errors.confirmPassword}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Add Customer</h1>
+            <p className="text-sm text-muted-foreground">
+              Create a new {formData.customerType === "B2B" ? "B2B (Outlet)" : "B2C (Direct)"} customer
+            </p>
+          </div>
+        </div>
+
+        {/* Step Progress Indicator */}
+        <div className="flex items-center justify-center gap-1 sm:gap-2">
+          {formSteps.map((step, index) => {
+            const StepIcon = step.icon;
+            const isCompleted = index < currentStep;
+            const isCurrent = index === currentStep;
+
+            return (
+              <div key={step.id} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => handleStepClick(index)}
+                  disabled={index > currentStep}
+                  className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all text-sm ${
+                    isCurrent
+                      ? "bg-primary text-primary-foreground"
+                      : isCompleted
+                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 cursor-pointer hover:bg-green-200 dark:hover:bg-green-800"
+                        : "bg-muted text-muted-foreground cursor-not-allowed"
+                  }`}
+                >
+                  {isCompleted ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <StepIcon className="h-4 w-4" />
+                  )}
+                  <span className="font-medium hidden sm:inline">
+                    {step.title}
+                  </span>
+                </button>
+                {index < formSteps.length - 1 && (
+                  <div
+                    className={`w-4 sm:w-8 h-0.5 mx-0.5 sm:mx-1 ${
+                      index < currentStep ? "bg-green-500" : "bg-muted"
+                    }`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Error Alert */}
+        {errors.submit && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{errors.submit}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Step Content */}
+        {renderStepContent()}
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={isFirstStep ? () => router.back() : handlePrevious}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {isFirstStep ? "Cancel" : "Previous"}
+          </Button>
+
+          {isLastStep ? (
+            <Button onClick={handleSubmit} disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -816,12 +841,17 @@ export default function AddCustomerPage() {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Create {isOutlet ? "Outlet" : "Customer"}
+                  Create Customer
                 </>
               )}
             </Button>
-          </div>
-        </form>
+          ) : (
+            <Button onClick={handleNext}>
+              Next
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

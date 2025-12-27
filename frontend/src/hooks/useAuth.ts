@@ -299,7 +299,11 @@ export function useAuth() {
 
   // Update Redux permission slice when permissions are loaded
   if (permissionsData?.data?.permissions && !isLoadingPermissions) {
-    dispatch(setPermissions(permissionsData.data.permissions));
+    // Convert Permission objects to permission strings (module:action:scope)
+    const permissionStrings = permissionsData.data.permissions.map(
+      (p) => `${p.module}:${p.action}:${p.scope}`,
+    );
+    dispatch(setPermissions(permissionStrings));
   }
 
   return {

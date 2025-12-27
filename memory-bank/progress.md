@@ -1,21 +1,21 @@
 # Project Progress Tracker
 
-## Last Updated: December 2025 (2025-12-26)
+## Last Updated: December 2025 (2025-12-27)
 
-## Overall Project Status: 85% Complete
+## Overall Project Status: 90% Complete
 
 ### Service Status Dashboard
 
 | Service          | Development | Testing | Documentation | Production Ready | Notes                                                                          |
 | ---------------- | ----------- | ------- | ------------- | ---------------- | ------------------------------------------------------------------------------ |
-| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 10 endpoints, JWT + RBAC complete                                              |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 25+ endpoints, **CustomerTypes + Outlets + Bootstrap** - COMPLETE              |
-| Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Quote Engine + Distance Calc - COMPLETE** |
+| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 12+ endpoints, JWT + RBAC + outlet roles + internal user endpoints             |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 30+ endpoints, **Outlet Tenant System + CustomerTypes** - COMPLETE             |
+| Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Outlet Scoping** - COMPLETE               |
 | Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                                |
-| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | Stable, nodemon configured, bulk pending                                       |
+| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet scoping added**, stable, bulk pending                                 |
 | License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                                  |
-| API Gateway      | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **ALL SECURITY + CHARGE PACKAGES ROUTING COMPLETE**                            |
-| Frontend         | ✅ 90%      | ⚠️ 60%  | ⚠️ 70%        | ✅ Yes           | **Charge Packages UI complete with modals**                                    |
+| API Gateway      | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **ALL SECURITY + ALL SERVICE ROUTING COMPLETE**                                |
+| Frontend         | ✅ 95%      | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet Management + Customer Management + Outlet-specific sidebar**          |
 | Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
 | Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
 
@@ -73,6 +73,52 @@
   - [x] FE-011: Superadmin user management
 
 ### Recent Achievements
+
+#### Outlet Tenant Refactor (December 2025) ✅
+
+- **Multi-Tenant Outlet System**: Complete outlet management with tenant isolation (Completed 2025-12-27)
+  - **Backend - User Service Outlet System**:
+    - ✅ Created full `Outlet` model (code, name, type, status, address, bank details)
+    - ✅ Implemented `outletController.js` with complete CRUD operations
+    - ✅ Added outlet user management (outlet_admin, outlet_staff roles)
+    - ✅ Created `/api/v1/outlets/:id/users` endpoints for user CRUD
+    - ✅ Added outlet tenant scoping to customer queries
+  - **Backend - Auth Service Enhancements**:
+    - ✅ Added `outlet_admin` and `outlet_staff` to Role enum
+    - ✅ Created internal endpoint `/auth/internal/users` for service-to-service user creation
+    - ✅ Created internal endpoint `/auth/internal/users/:id` for service-to-service user updates
+    - ✅ Added outlet permissions to shared/constants/permissions.js
+    - ✅ Updated login response to include outletId and outletRole
+  - **Backend - Partner Service Outlet Scoping**:
+    - ✅ Added `outletId` field to Zone and ChargePackage models
+    - ✅ Updated controllers to filter by outletId for tenant isolation
+    - ✅ Created migrations: `20251226132802_add_outlet_tenant_scoping`, `20251227094334_outlet_id_rename`
+  - **Backend - Shipment Service Outlet Scoping**:
+    - ✅ Added `outletId` field to Shipment model
+    - ✅ Created migrations: `20251226132808_add_outlet_tenant_scoping`, `20251227094344_add_outlet_id`
+  - **Frontend - Outlet Management**:
+    - ✅ Created `/outlets` listing page with statistics, filters, search
+    - ✅ Created `/outlets/add` page with 4-step wizard
+    - ✅ Created `/outlets/[id]` detail page with overview and quick actions
+    - ✅ Created `/outlets/[id]/edit` page with tabbed form
+    - ✅ Created `/outlets/[id]/users` page for outlet user management
+    - ✅ Created `/outlets/[id]/customers` page (view-only) for B2B customer listing
+  - **Frontend - Customer Management Refactor**:
+    - ✅ Created `/customers/[id]` detail page
+    - ✅ Created `/customers/[id]/edit` page with conditional outlet fields
+    - ✅ Refactored `/customers/add` into 4-step wizard (Customer Type, Basic Info, Address, Login Details)
+    - ✅ Added B2B/Outlet customer type with outlet selection dropdown
+    - ✅ Integrated Geo API for pincode-based auto-fill of city/state
+    - ✅ Converted outlet customers page to use RTK Query
+  - **Frontend - Outlet-Specific Sidebar Navigation**:
+    - ✅ Updated sidebar to show outlet-specific menu for outlet_admin and outlet_staff
+    - ✅ Menu includes: Dashboard, Shipments, Pincode Types, Zone Management, Charge Packages, Customer Management
+    - ✅ Added `outletId` and `outletRole` to auth state and useAuth hook
+    - ✅ Updated useRole.ts with outlet roles in ROLE_HIERARCHY
+  - **Infrastructure**:
+    - ✅ Updated shared/lib/auth.js with internalServiceOnly middleware
+    - ✅ Added outlet permissions to shared/constants/permissions.js
+    - ✅ Updated geoApi.ts with proper Pincode interface for nested city data
 
 #### Customer Types + Public Signup (December 2025) ✅
 
@@ -726,19 +772,19 @@
 
 ---
 
-**Current Focus**: CustomerTypes + Public Signup COMPLETE. DIRECT customers can self-register, OUTLET creation pending outlet management module.
+**Current Focus**: Outlet Tenant Refactor COMPLETE. Multi-tenant outlet system with B2B customer support fully operational.
 
 **Completed This Sprint (December 2025)**:
 
-- ✅ **CustomerTypes + Signup**: DIRECT vs OUTLET customer model with public registration (6/6 tasks)
-- ✅ **User Service Bootstrap**: Internal endpoint for signup orchestration with atomic record creation
-- ✅ **Auth Service Refactor**: Public register enforces customer role, calls user-service bootstrap
-- ✅ **Frontend Registration**: New `/auth/register` page with validation and auto-login
-- ✅ **Frontend Customer Management**: Listing and add pages with RTK Query integration
-- ✅ **Inter-Service Auth**: INTERNAL_SERVICE_SECRET configured across all 9 services
-- ✅ **Zone System v2**: Complete redesign with PincodeType management, Distance zones with milestones, and zone matching
-- ✅ **Charge Packages**: WEIGHT/DISTANCE/GENERIC packages with multi-partner support and modal-based frontend UI
-- ✅ **Quote Calculation Engine**: Zone-based rate calculation with breakdown, pincode type charges, and sorting
+- ✅ **Outlet Tenant Refactor**: Full multi-tenant outlet system with user management
+- ✅ **Backend Outlet Scoping**: Partner-service and shipment-service now support outletId tenant isolation
+- ✅ **Auth Service Internal Endpoints**: `/auth/internal/users` for cross-service user creation/updates
+- ✅ **Frontend Outlet Management**: Complete CRUD with users page and customers (view-only)
+- ✅ **Frontend Customer Refactor**: 4-step wizard, B2B/B2C types, Geo API integration
+- ✅ **Outlet-Specific Navigation**: Sidebar menu for outlet_admin and outlet_staff roles
+- ✅ **CustomerTypes + Signup**: DIRECT vs OUTLET customer model with public registration
+- ✅ **Zone System v2**: Complete redesign with PincodeType management and distance zones
+- ✅ **Charge Packages**: WEIGHT/DISTANCE/GENERIC packages with multi-partner support
 
 **Previously Completed**:
 
@@ -749,7 +795,7 @@
 
 **Next Priorities**:
 
-- OUTLET Customer CRUD (enable frontend creation after outlet management ready)
 - Platform Service with Shopify integration
 - Support Service with ticketing system
 - Shipment bulk operations
+- Enhanced outlet analytics and reporting

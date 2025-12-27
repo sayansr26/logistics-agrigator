@@ -309,4 +309,193 @@ router.delete(
   outletController.deleteOutlet,
 );
 
+/**
+ * @swagger
+ * /api/v1/outlets/{outletId}/users:
+ *   get:
+ *     summary: List users for an outlet
+ *     tags: [Outlets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: List of users for the outlet
+ *       404:
+ *         description: Outlet not found
+ */
+router.get(
+  "/:outletId/users",
+  authMiddleware.authenticate,
+  authMiddleware.authorize("customer:read:assigned"),
+  outletController.listOutletUsers,
+);
+
+/**
+ * @swagger
+ * /api/v1/outlets/{outletId}/users:
+ *   post:
+ *     summary: Add a user to an outlet
+ *     description: Creates UserProfile and CustomerUser linkage. The auth user must already exist in auth-service.
+ *     tags: [Outlets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Auth-service user ID
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [customer, customer_account, customer_sales, customer_support]
+ *                 default: customer
+ *               enabledModules:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 default: [shipment, billing, wallet, analytics]
+ *     responses:
+ *       201:
+ *         description: User added to outlet successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Outlet not found
+ *       409:
+ *         description: User already associated with outlet
+ */
+router.post(
+  "/:outletId/users",
+  authMiddleware.authenticate,
+  authMiddleware.authorize("customer:create:parent"),
+  outletController.addOutletUser,
+);
+
+/**
+ * @swagger
+ * /api/v1/outlets/{outletId}/users/{userId}:
+ *   put:
+ *     summary: Update an outlet user
+ *     description: Update outlet user's profile and role
+ *     tags: [Outlets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [outlet_admin, outlet_staff]
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       404:
+ *         description: User not associated with outlet
+ */
+router.put(
+  "/:outletId/users/:userId",
+  authMiddleware.authenticate,
+  authMiddleware.authorize("customer:update:assigned"),
+  outletController.updateOutletUser,
+);
+
+/**
+ * @swagger
+ * /api/v1/outlets/{outletId}/users/{userId}:
+ *   delete:
+ *     summary: Remove a user from an outlet
+ *     description: Deactivates the CustomerUser association (soft delete)
+ *     tags: [Outlets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: User removed from outlet successfully
+ *       404:
+ *         description: User not associated with outlet
+ */
+router.delete(
+  "/:outletId/users/:userId",
+  authMiddleware.authenticate,
+  authMiddleware.authorize("customer:delete:assigned"),
+  outletController.removeOutletUser,
+);
+
 module.exports = router;

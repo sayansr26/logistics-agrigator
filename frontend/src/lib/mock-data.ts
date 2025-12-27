@@ -540,8 +540,10 @@ export function getPriorityColor(priority: Shipment["priority"]): string {
   }
 }
 
-export function getRoleColor(role: User["role"]): string {
+export function getRoleColor(role: string): string {
   switch (role) {
+    case "superadmin":
+      return "bg-red-100 text-red-800";
     case "admin":
       return "bg-purple-100 text-purple-800";
     case "client":
@@ -550,12 +552,18 @@ export function getRoleColor(role: User["role"]): string {
       return "bg-green-100 text-green-800";
     case "support":
       return "bg-yellow-100 text-yellow-800";
+    case "customer":
+      return "bg-cyan-100 text-cyan-800";
+    case "outlet_admin":
+      return "bg-indigo-100 text-indigo-800";
+    case "outlet_staff":
+      return "bg-teal-100 text-teal-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
 }
 
-export function getUserStatusColor(status: User["status"]): string {
+export function getUserStatusColor(status: string): string {
   switch (status) {
     case "active":
       return "bg-green-100 text-green-800";

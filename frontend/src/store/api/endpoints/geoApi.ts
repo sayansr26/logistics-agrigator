@@ -135,21 +135,34 @@ interface Pincode {
   id: string;
   code: string; // Backend uses 'code' not 'pincode'
   stateId: string;
-  cityId: string;
   areaId?: string;
+  areaName?: string;
+  district?: string;
+  latitude?: string;
+  longitude?: string;
+  odaApplicable?: boolean;
+  hillApplicable?: boolean;
   status: boolean;
   state?: {
     id: string;
     name: string;
     code: string;
   };
-  city?: {
-    id: string;
-    name: string;
-  };
+  // City is nested inside area in the API response
   area?: {
     id: string;
     name: string;
+    cityId?: string;
+    city?: {
+      id: string;
+      name: string;
+      stateId?: string;
+      state?: {
+        id: string;
+        name: string;
+        code: string;
+      };
+    };
   };
   createdAt: string;
   updatedAt: string;

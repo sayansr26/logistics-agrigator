@@ -62,6 +62,8 @@ interface User {
   isLicenseActive?: boolean;
   licenseValidUntil?: string;
   accessLevel?: string;
+  outletId?: string;
+  outletRole?: string;
   assignedCustomerIds?: string[];
   commissionRate?: number;
   commissionType?: string;

@@ -21,41 +21,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Store,
-  MapPin,
   Phone,
   Building2,
   ShoppingCart,
   Warehouse,
   ArrowLeft,
   Save,
-  X,
-  Plus,
   CreditCard,
-  Globe,
   Loader2,
   ChevronRight,
   ChevronLeft,
   CheckCircle,
+  AlertCircle,
+  Users,
+  Mail,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { mockOutlets } from "@/lib/mock-data";
-
-const availableCouriers = [
-  "Delhivery",
-  "Blue Dart",
-  "DTDC",
-  "FedEx",
-  "Aramex",
-  "UPS",
-  "Ecom Express",
-  "XpressBees",
-];
+import { useGetOutletByIdQuery, useUpdateOutletMutation, useGetOutletUsersQuery } from "@/store/api/endpoints/customerApi";
 
 const indianStates = [
   "Andhra Pradesh",
@@ -108,11 +96,7 @@ const steps = [
     description: "Contact details and addresses",
   },
   { id: 3, title: "Bank Details", description: "Banking information" },
-  {
-    id: 4,
-    title: "Services & Areas",
-    description: "Courier assignment and service areas",
-  },
+  { id: 4, title: "Admin Users", description: "Manage outlet admin users" },
 ];
 
 export default function EditOutletPage() {
@@ -121,54 +105,62 @@ export default function EditOutletPage() {
   const outletId = params.id;
 
   const [formData, setFormData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const [newServiceArea, setNewServiceArea] = useState("");
 
-  const outlet = mockOutlets.find((o) => o.id === outletId);
+  // API hooks
+  const { data, isLoading, error } = useGetOutletByIdQuery(outletId, {
+    skip: !outletId,
+  });
+  const [updateOutlet, { isLoading: isSubmitting }] = useUpdateOutletMutation();
+  const { data: usersData, isLoading: isLoadingUsers } = useGetOutletUsersQuery(
+    { outletId },
+    { skip: !outletId }
+  );
+
+  // Get outlet users from API response
+  const outletUsers = usersData?.data?.users || [];
+
+  // Get outlet from API response
+  const outlet = data?.data?.outlet || data?.data?.customer || null;
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
     { title: "Outlets", href: "/outlets" },
-    { title: outlet?.outletName || "Outlet", href: `/outlets/${outletId}` },
+    { title: outlet?.name || outlet?.outletName || "Outlet", href: `/outlets/${outletId}` },
     { title: "Edit" },
   ];
 
+  // Initialize form data when outlet is loaded
   useEffect(() => {
-    if (outlet) {
+    if (outlet && !formData) {
       setFormData({
-        outletCode: outlet.outletCode,
-        outletName: outlet.outletName,
-        retailerName: outlet.retailerName,
-        contactPerson: outlet.contactPerson,
-        phone: outlet.phone,
-        email: outlet.email,
-        address: outlet.address,
-        city: outlet.city,
-        state: outlet.state,
-        pincode: outlet.pincode,
-        status: outlet.status,
-        type: outlet.type,
-        businessHours: outlet.businessHours,
+        outletCode: outlet.code || outlet.outletCode || "",
+        outletName: outlet.name || outlet.outletName || "",
+        retailerName: outlet.retailerName || "",
+        contactPerson: outlet.contactPerson || "",
+        phone: outlet.phone || "",
+        email: outlet.email || "",
+        address: outlet.address || "",
+        city: outlet.city || "",
+        state: outlet.state || "",
+        pincode: outlet.pincode || "",
+        status: outlet.status || outlet.outletStatus || "active",
+        type: outlet.type || outlet.outletType || "retail",
         gstNumber: outlet.gstNumber || "",
         panNumber: outlet.panNumber || "",
-        businessAddress: "", // New field, will be empty for existing outlets
+        businessAddress: "",
         businessCity: "",
         businessState: "",
         businessPincode: "",
         bankDetails: {
-          accountHolderName: "", // New field, will be empty for existing outlets
+          accountHolderName: outlet.bankDetails?.accountHolderName || "",
           accountNumber: outlet.bankDetails?.accountNumber || "",
           ifscCode: outlet.bankDetails?.ifscCode || "",
           bankName: outlet.bankDetails?.bankName || "",
         },
-        assignedCouriers: outlet.assignedCouriers,
-        serviceAreas: outlet.serviceAreas,
       });
     }
-    setIsLoading(false);
-  }, [outlet]);
+  }, [outlet, formData]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) =>
@@ -195,48 +187,6 @@ export default function EditOutletPage() {
     );
   };
 
-  const handleCourierChange = (courier, checked) => {
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            assignedCouriers: checked
-              ? [...prev.assignedCouriers, courier]
-              : prev.assignedCouriers.filter((c) => c !== courier),
-          }
-        : null,
-    );
-  };
-
-  const addServiceArea = () => {
-    if (
-      newServiceArea &&
-      formData &&
-      !formData.serviceAreas.includes(newServiceArea)
-    ) {
-      setFormData((prev) =>
-        prev
-          ? {
-              ...prev,
-              serviceAreas: [...prev.serviceAreas, newServiceArea],
-            }
-          : null,
-      );
-      setNewServiceArea("");
-    }
-  };
-
-  const removeServiceArea = (area) => {
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            serviceAreas: prev.serviceAreas.filter((a) => a !== area),
-          }
-        : null,
-    );
-  };
-
   const nextStep = () => {
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
@@ -249,42 +199,38 @@ export default function EditOutletPage() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!formData) return;
 
-    setIsSubmitting(true);
-
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Prepare data for API
+      const updateData = {
+        name: formData.outletName,
+        contactPerson: formData.contactPerson,
+        email: formData.email,
+        phone: formData.phone,
+        type: formData.type?.toUpperCase(),
+        status: formData.status?.toUpperCase(),
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        gstNumber: formData.gstNumber || undefined,
+        panNumber: formData.panNumber || undefined,
+        bankDetails: formData.bankDetails.accountNumber ? formData.bankDetails : undefined,
+      };
 
-      // In real implementation, make API call here
-      // console.log("Updating outlet:", formData);
+      await updateOutlet({ id: outletId, data: updateData }).unwrap();
 
-      // Redirect to outlet details
+      // Show success and redirect to outlet details
+      alert("Outlet updated successfully!");
       router.push(`/outlets/${outletId}`);
     } catch (error) {
-      // console.error("Error updating outlet:", error);
-    } finally {
-      setIsSubmitting(false);
+      console.error("Error updating outlet:", error);
+      const errorMessage = error?.data?.error?.message || error?.message || "Failed to update outlet. Please try again.";
+      alert(errorMessage);
     }
   };
-
-  // const getOutletTypeIcon = (type) => {
-  //   switch (type) {
-  //     case "retail":
-  //       return <Store className="h-4 w-4" />;
-  //     case "wholesale":
-  //       return <Warehouse className="h-4 w-4" />;
-  //     case "ecommerce":
-  //       return <ShoppingCart className="h-4 w-4" />;
-  //     case "franchise":
-  //       return <Building2 className="h-4 w-4" />;
-  //     default:
-  //       return <Store className="h-4 w-4" />;
-  //   }
-  // };
 
   const renderStepContent = () => {
     if (!formData) return null;
@@ -305,16 +251,17 @@ export default function EditOutletPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="outletCode">Outlet Code *</Label>
+                  <Label htmlFor="outletCode">Outlet Code</Label>
                   <Input
                     id="outletCode"
                     value={formData.outletCode}
-                    onChange={(e) =>
-                      handleInputChange("outletCode", e.target.value)
-                    }
-                    placeholder="e.g., OUT001"
-                    required
+                    readOnly
+                    disabled
+                    className="bg-muted font-mono"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Outlet code cannot be changed
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="outletName">Business Name *</Label>
@@ -329,7 +276,7 @@ export default function EditOutletPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="retailerName">Business Owner Name *</Label>
+                  <Label htmlFor="retailerName">Business Owner Name</Label>
                   <Input
                     id="retailerName"
                     value={formData.retailerName}
@@ -337,13 +284,12 @@ export default function EditOutletPage() {
                       handleInputChange("retailerName", e.target.value)
                     }
                     placeholder="e.g., RG ENTERPRISES"
-                    required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="type">Outlet Type *</Label>
                   <Select
-                    value={formData.type}
+                    value={formData.type?.toLowerCase()}
                     onValueChange={(value) => handleInputChange("type", value)}
                   >
                     <SelectTrigger>
@@ -356,16 +302,10 @@ export default function EditOutletPage() {
                           Retail
                         </div>
                       </SelectItem>
-                      <SelectItem value="wholesale">
+                      <SelectItem value="warehouse">
                         <div className="flex items-center gap-2">
                           <Warehouse className="h-4 w-4" />
-                          Wholesale
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="ecommerce">
-                        <div className="flex items-center gap-2">
-                          <ShoppingCart className="h-4 w-4" />
-                          E-commerce
+                          Warehouse
                         </div>
                       </SelectItem>
                       <SelectItem value="franchise">
@@ -374,13 +314,19 @@ export default function EditOutletPage() {
                           Franchise
                         </div>
                       </SelectItem>
+                      <SelectItem value="direct">
+                        <div className="flex items-center gap-2">
+                          <ShoppingCart className="h-4 w-4" />
+                          Direct
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="status">Status *</Label>
                   <Select
-                    value={formData.status}
+                    value={formData.status?.toLowerCase()}
                     onValueChange={(value) =>
                       handleInputChange("status", value)
                     }
@@ -395,17 +341,6 @@ export default function EditOutletPage() {
                       <SelectItem value="pending">Pending</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessHours">Business Hours</Label>
-                  <Input
-                    id="businessHours"
-                    value={formData.businessHours}
-                    onChange={(e) =>
-                      handleInputChange("businessHours", e.target.value)
-                    }
-                    placeholder="e.g., 9:00 AM - 8:00 PM"
-                  />
                 </div>
               </div>
 
@@ -564,69 +499,6 @@ export default function EditOutletPage() {
                   </div>
                 </div>
               </div>
-
-              <Separator />
-
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Business Address</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="businessAddress">Complete Address</Label>
-                    <Textarea
-                      id="businessAddress"
-                      value={formData.businessAddress}
-                      onChange={(e) =>
-                        handleInputChange("businessAddress", e.target.value)
-                      }
-                      placeholder="e.g., Registered business address for legal purposes"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="businessCity">City</Label>
-                      <Input
-                        id="businessCity"
-                        value={formData.businessCity}
-                        onChange={(e) =>
-                          handleInputChange("businessCity", e.target.value)
-                        }
-                        placeholder="e.g., Mumbai"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="businessState">State</Label>
-                      <Select
-                        value={formData.businessState}
-                        onValueChange={(value) =>
-                          handleInputChange("businessState", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select State" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {indianStates.map((state) => (
-                            <SelectItem key={state} value={state}>
-                              {state}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="businessPincode">Pincode</Label>
-                      <Input
-                        id="businessPincode"
-                        value={formData.businessPincode}
-                        onChange={(e) =>
-                          handleInputChange("businessPincode", e.target.value)
-                        }
-                        placeholder="e.g., 400001"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
             </CardContent>
           </Card>
         );
@@ -647,7 +519,7 @@ export default function EditOutletPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="accountHolderName">
-                    Account Holder Name *
+                    Account Holder Name
                   </Label>
                   <Input
                     id="accountHolderName"
@@ -659,7 +531,6 @@ export default function EditOutletPage() {
                       )
                     }
                     placeholder="e.g., Rajesh Gupta"
-                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -702,90 +573,89 @@ export default function EditOutletPage() {
 
       case 4:
         return (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Courier Assignment
-                </CardTitle>
-                <CardDescription>
-                  Select courier partners for this outlet
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {availableCouriers.map((courier) => (
-                    <div key={courier} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={courier}
-                        checked={formData.assignedCouriers.includes(courier)}
-                        onCheckedChange={(checked) =>
-                          handleCourierChange(courier, checked)
-                        }
-                      />
-                      <Label
-                        htmlFor={courier}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {courier}
-                      </Label>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Admin Users
+              </CardTitle>
+              <CardDescription>
+                View and manage users who can access this outlet
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingUsers ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>Loading users...</span>
+                </div>
+              ) : outletUsers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No admin users found for this outlet.</p>
+                  <p className="text-sm mt-2">
+                    Admin users are created when the outlet is first set up.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {outletUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Users className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {user.profile?.firstName || ""}{" "}
+                            {user.profile?.lastName || ""}
+                            {!user.profile?.firstName && !user.profile?.lastName && "Outlet User"}
+                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Mail className="h-3 w-3" />
+                            <span>
+                              {user.email || user.profile?.email || "No email"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-blue-500" />
+                          <span className="text-sm capitalize">
+                            {user.role?.replace(/_/g, " ") || "User"}
+                          </span>
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            user.isActive
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {user.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
                     </div>
                   ))}
+                  <div className="pt-4 border-t flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Note:</strong> To add, edit, or remove users, use the Manage Users page.
+                    </p>
+                    <Button variant="outline" asChild>
+                      <Link href={`/outlets/${outletId}/users`}>
+                        <Users className="h-4 w-4 mr-2" />
+                        Manage Users
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Service Areas
-                </CardTitle>
-                <CardDescription>
-                  Manage areas where this outlet provides services
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={newServiceArea}
-                    onChange={(e) => setNewServiceArea(e.target.value)}
-                    placeholder="Enter service area"
-                    onKeyPress={(e) =>
-                      e.key === "Enter" &&
-                      (e.preventDefault(), addServiceArea())
-                    }
-                  />
-                  <Button
-                    type="button"
-                    onClick={addServiceArea}
-                    disabled={!newServiceArea}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {formData.serviceAreas.map((area) => (
-                    <Badge
-                      key={area}
-                      variant="outline"
-                      className="flex items-center gap-1"
-                    >
-                      {area}
-                      <button
-                        type="button"
-                        onClick={() => removeServiceArea(area)}
-                        className="ml-1 hover:text-red-500"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+          </Card>
         );
 
       default:
@@ -793,31 +663,60 @@ export default function EditOutletPage() {
     }
   };
 
+  // Loading state
   if (isLoading) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex items-center justify-center h-64">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span>Loading outlet data...</span>
+          <div className="flex items-center justify-between">
+            <div>
+              <Skeleton className="h-8 w-48 mb-2" />
+              <Skeleton className="h-4 w-64" />
             </div>
+            <Skeleton className="h-10 w-32" />
           </div>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
       </DashboardLayout>
     );
   }
 
+  // Error state
+  if (error) {
+    return (
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-foreground mb-4">
+                Error Loading Outlet
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                {error?.data?.error?.message || "Failed to load outlet details"}
+              </p>
+              <Button asChild>
+                <Link href="/outlets">Back to Outlets</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Not found state
   if (!outlet || !formData) {
     return (
       <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardContent className="p-8 text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-foreground mb-4">
                 Outlet Not Found
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-muted-foreground mb-6">
                 The outlet you&apos;re looking for doesn&apos;t exist or has
                 been removed.
               </p>
@@ -837,8 +736,8 @@ export default function EditOutletPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Edit Outlet</h1>
-            <p className="text-gray-600 mt-2">
+            <h1 className="text-3xl font-bold text-foreground">Edit Outlet</h1>
+            <p className="text-muted-foreground mt-2">
               Update outlet information and settings
             </p>
           </div>
@@ -898,7 +797,7 @@ export default function EditOutletPage() {
           </CardContent>
         </Card>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
           {renderStepContent()}
 
           {/* Form Actions */}
@@ -915,28 +814,36 @@ export default function EditOutletPage() {
 
             <div className="flex gap-4">
               {currentStep < steps.length ? (
+                // Steps 1-3: Show Next button
                 <Button type="button" onClick={nextStep}>
                   Next
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : (
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Update Outlet
-                    </>
-                  )}
-                </Button>
+                // Step 4 (Admin Users): Show Save and Done buttons
+                <>
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </>
               )}
             </div>
           </div>
-        </form>
+        </div>
       </div>
     </DashboardLayout>
   );

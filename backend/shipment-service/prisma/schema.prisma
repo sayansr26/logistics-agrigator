@@ -13,6 +13,8 @@ model Shipment {
   orderId       String         @map("order_id") @db.VarChar(100)
   clientId      String?        @map("client_id") @db.Uuid
   userId        String         @map("user_id") @db.Uuid
+  customerId    String?        @map("customer_id") @db.Uuid // Customer reference (B2C or B2B)
+  outletId      String?        @map("outlet_id") @db.Uuid   // Outlet tenant key (B2B shipments have this, B2C do not)
   status        ShipmentStatus @default(CREATED)
   paymentType   PaymentType    @default(PREPAID) @map("payment_type")
   paymentStatus PaymentStatus  @default(PENDING) @map("payment_status")
@@ -98,6 +100,10 @@ model Shipment {
   @@index([status])
   @@index([partnerId])
   @@index([pickupScheduleId])
+  @@index([customerId, status, createdAt]) // Index for customer scoping
+  @@index([customerId])
+  @@index([outletId, status, createdAt])   // Index for outlet scoping
+  @@index([outletId])
   @@map("shipments")
 }
 

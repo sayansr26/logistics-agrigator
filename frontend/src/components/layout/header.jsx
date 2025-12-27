@@ -78,7 +78,7 @@ export function Header({ className }) {
             </Sheet>
 
             {/* Desktop Quick Actions - Compact (Role-based) */}
-            <div className="hidden md:flex items-center space-x-2">
+            {/* <div className="hidden md:flex items-center space-x-2">
               {canCreateShipment && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/shipments/create">
@@ -95,13 +95,13 @@ export function Header({ className }) {
                   </Link>
                 </Button>
               )}
-            </div>
+            </div> */}
           </div>
 
           {/* Right side */}
           <div className="flex items-center space-x-2">
             {/* Notifications */}
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon"
               className="relative h-8 w-8"
@@ -110,12 +110,11 @@ export function Header({ className }) {
               <Link href="/notifications">
                 <Bell className="h-4 w-4" />
                 <span className="sr-only">Notifications</span>
-                {/* Notification badge */}
                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
                   5
                 </span>
               </Link>
-            </Button>
+            </Button> */}
 
             {/* Dark Mode Toggle */}
             <DarkModeToggle />
@@ -159,7 +158,7 @@ export function Header({ className }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
+                {/* <DropdownMenuItem asChild>
                   <Link href="/profile">
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
@@ -170,7 +169,7 @@ export function Header({ className }) {
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </Link>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />

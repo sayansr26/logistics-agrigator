@@ -1,5 +1,6 @@
 // Customer Controller - Customer management for RBAC system
 // Handles customer CRUD operations, sub-user management, and module access control
+// Updated to use B2C/B2B customer types with outletId linking
 
 const { PrismaClient } = require("@prisma/client");
 const APIResponse = require("../shared/lib/response");
@@ -10,68 +11,158 @@ const { UserServiceError } = require("../middleware/errorHandler");
 const prisma = new PrismaClient();
 
 /**
- * Create a new customer under a client
+ * Create auth user via internal auth-service endpoint
+ * @param {Object} userData - User data for creation
+ * @param {string} authToken - Authorization token for internal call
+ * @returns {Object} Created auth user
+ */
+async function createAuthUser(userData, authToken) {
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
+  const internalSecret = process.env.INTERNAL_SECRET;
+
+  const response = await fetch(`${authServiceUrl}/auth/internal/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authToken,
+      "X-Internal-Request": internalSecret,
+    },
+    body: JSON.stringify({
+      email: userData.email,
+      password: userData.password,
+      firstName: userData.firstName || userData.name?.split(" ")[0] || "Customer",
+      lastName: userData.lastName || userData.name?.split(" ").slice(1).join(" ") || "",
+      phone: userData.phone,
+      role: "customer",
+      isActive: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new UserServiceError(
+      errorData.error?.message || "Failed to create user account",
+      errorData.error?.code || "AUTH_USER_CREATION_FAILED",
+      response.status,
+    );
+  }
+
+  const result = await response.json();
+  return result.data?.user;
+}
+
+/**
+ * Update auth user via internal auth-service endpoint
+ * @param {string} userId - User ID to update
+ * @param {Object} updateData - Data to update (email, password, isActive)
+ * @param {string} authToken - Authorization token for internal call
+ */
+async function updateAuthUser(userId, updateData, authToken) {
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
+  const internalSecret = process.env.INTERNAL_SECRET;
+
+  const response = await fetch(`${authServiceUrl}/auth/internal/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authToken,
+      "X-Internal-Request": internalSecret,
+    },
+    body: JSON.stringify(updateData),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    logger.error("Failed to update auth user", {
+      userId,
+      error: errorData.error?.message,
+      status: response.status,
+    });
+    throw new UserServiceError(
+      errorData.error?.message || "Failed to update user account",
+      errorData.error?.code || "AUTH_USER_UPDATE_FAILED",
+      response.status,
+    );
+  }
+
+  return await response.json();
+}
+
+/**
+ * Create a new customer with login account
  * Permission: customer:create:parent
- * Supports both DIRECT (B2C) and OUTLET (B2B) customer types
+ * Supports B2C (direct) and B2B (outlet-linked) customer types
  */
 async function createCustomer(req, res) {
+  const authToken = req.headers.authorization;
   try {
     const {
       name,
       email,
       phone,
-      monthlyShipmentLimit,
-      enabledModules = ["shipment", "billing", "wallet", "analytics"],
-      isActive = true,
-      customerType = "DIRECT",
-      // Outlet-specific fields
-      outletCode,
-      outletName,
-      retailerName,
-      contactPerson,
-      outletStatus = "active",
-      outletType,
-      businessHours,
-      gstNumber,
-      panNumber,
-      bankDetails,
-      assignedCouriers = [],
-      serviceAreas = [],
+      password, // Required for creating login account
+      customerType = "B2C",
+      outletId, // Required for B2B customers
+      // Address fields
       address,
       city,
       state,
       pincode,
       country = "India",
-      // Optional clientId for direct customers (can be null)
+      // Optional fields
+      monthlyShipmentLimit,
+      enabledModules = ["shipment", "billing", "wallet", "analytics"],
+      isActive = true,
       clientId: requestClientId,
     } = req.body;
 
-    // Get client ID - for admin/superadmin it can come from request body, for client role it's their own ID
-    let clientId;
-    if (["superadmin", "admin"].includes(req.user.role)) {
-      clientId = requestClientId || null; // Admin can create direct customers without client
-    } else {
-      clientId =
-        req.user.role === "client" ? req.user.id : req.user.parentClientId;
+    // Validate password is provided
+    if (!password) {
+      throw new UserServiceError(
+        "Password is required to create customer login",
+        "PASSWORD_REQUIRED",
+        400,
+      );
     }
 
-    // Check if customer email already exists (using the new partial index logic)
+    // Get client ID based on user role
+    let clientId;
+    if (["superadmin", "admin"].includes(req.user.role)) {
+      clientId = requestClientId || null;
+    } else {
+      clientId = req.user.role === "client" ? req.user.id : req.user.parentClientId;
+    }
+
+    // For B2B customers, verify outlet exists
+    if (customerType === "B2B") {
+      if (!outletId) {
+        throw new UserServiceError(
+          "outletId is required for B2B customers",
+          "OUTLET_ID_REQUIRED",
+          400,
+        );
+      }
+      const outlet = await prisma.outlet.findUnique({
+        where: { id: outletId },
+      });
+      if (!outlet) {
+        throw new UserServiceError(
+          `Outlet with ID '${outletId}' not found`,
+          "OUTLET_NOT_FOUND",
+          404,
+        );
+      }
+    }
+
+    // Check if customer email already exists
     let existingCustomer;
     if (clientId) {
-      // Check within client scope
       existingCustomer = await prisma.customer.findFirst({
-        where: {
-          clientId,
-          email,
-        },
+        where: { clientId, email },
       });
     } else {
-      // Check direct customers (no client)
       existingCustomer = await prisma.customer.findFirst({
-        where: {
-          clientId: null,
-          email,
-        },
+        where: { clientId: null, email },
       });
     }
 
@@ -79,78 +170,73 @@ async function createCustomer(req, res) {
       throw new UserServiceError(
         clientId
           ? `Customer with email '${email}' already exists for this client`
-          : `Direct customer with email '${email}' already exists`,
+          : `Customer with email '${email}' already exists`,
         "CUSTOMER_EMAIL_EXISTS",
         409,
       );
     }
 
-    // For OUTLET type, check outlet code uniqueness
-    if (customerType === "OUTLET" && outletCode) {
-      const existingOutlet = await prisma.customer.findFirst({
-        where: { outletCode },
-      });
-      if (existingOutlet) {
-        throw new UserServiceError(
-          `Outlet with code '${outletCode}' already exists`,
-          "OUTLET_CODE_EXISTS",
-          409,
-        );
-      }
-    }
+    // Create auth user first
+    const authUser = await createAuthUser(
+      { name, email, password, phone },
+      authToken,
+    );
 
-    // Create customer with transaction for audit logging
+    // Create customer with related records in transaction
     const result = await prisma.$transaction(async (tx) => {
-      const customerData = {
-        clientId,
-        customerType,
-        name,
-        email,
-        phone,
-        monthlyShipmentLimit,
-        enabledModules,
-        isActive,
-      };
-
-      // Add outlet-specific fields if OUTLET type
-      if (customerType === "OUTLET") {
-        Object.assign(customerData, {
-          outletCode,
-          outletName,
-          retailerName,
-          contactPerson,
-          outletStatus,
-          outletType,
-          businessHours,
-          gstNumber,
-          panNumber,
-          bankDetails,
-          assignedCouriers,
-          serviceAreas,
+      // Create Customer record
+      const customer = await tx.customer.create({
+        data: {
+          clientId,
+          customerType,
+          outletId: customerType === "B2B" ? outletId : null,
+          name,
+          email,
+          phone,
           address,
           city,
           state,
           pincode,
           country,
-        });
-      }
-
-      const customer = await tx.customer.create({
-        data: customerData,
+          monthlyShipmentLimit,
+          enabledModules,
+          isActive,
+        },
         include: {
           client: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+            select: { id: true, name: true, slug: true },
+          },
+          outlet: {
+            select: { id: true, name: true, code: true },
           },
           _count: {
-            select: {
-              userProfiles: true,
-              customerUsers: true,
-            },
+            select: { userProfiles: true, customerUsers: true },
           },
+        },
+      });
+
+      // Create UserProfile linked to auth user and customer
+      await tx.userProfile.create({
+        data: {
+          userId: authUser.id,
+          firstName: name.split(" ")[0] || "Customer",
+          lastName: name.split(" ").slice(1).join(" ") || "",
+          phoneNumber: phone,
+          clientId,
+          customerId: customer.id,
+          customerRole: "customer",
+          isActive: true,
+        },
+      });
+
+      // Create CustomerUser link
+      await tx.customerUser.create({
+        data: {
+          customerId: customer.id,
+          userId: authUser.id,
+          role: "customer",
+          enabledModules,
+          isActive: true,
         },
       });
 
@@ -167,9 +253,8 @@ async function createCustomer(req, res) {
               name: customer.name,
               email: customer.email,
               customerType: customer.customerType,
-              monthlyShipmentLimit: customer.monthlyShipmentLimit,
-              enabledModules: customer.enabledModules,
-              ...(customerType === "OUTLET" && { outletCode, outletName }),
+              outletId: customer.outletId,
+              authUserId: authUser.id,
             },
           },
           metadata: {
@@ -183,13 +268,15 @@ async function createCustomer(req, res) {
         },
       });
 
-      return customer;
+      return { customer, authUserId: authUser.id };
     });
 
     logger.info("Customer created successfully", {
-      customerId: result.id,
-      name: result.name,
-      customerType: result.customerType,
+      customerId: result.customer.id,
+      name: result.customer.name,
+      customerType: result.customer.customerType,
+      outletId: result.customer.outletId,
+      authUserId: result.authUserId,
       clientId,
       createdBy: req.user.id,
       service: "user-service",
@@ -197,15 +284,15 @@ async function createCustomer(req, res) {
 
     res.status(201).json(
       APIResponse.success({
-        customer: result,
-        message: "Customer created successfully",
+        customer: result.customer,
+        message: "Customer created successfully with login account",
       }),
     );
   } catch (error) {
     logger.error("Create customer error", {
       error: error.message,
       userId: req.user.id,
-      requestBody: req.body,
+      requestBody: { ...req.body, password: "[REDACTED]" },
       service: "user-service",
     });
     throw error;
@@ -215,7 +302,7 @@ async function createCustomer(req, res) {
 /**
  * List all customers with pagination and filtering
  * Permission: customer:read:assigned or customer:read:parent
- * Supports filtering by customerType (DIRECT or OUTLET)
+ * Supports filtering by customerType (B2C or B2B)
  */
 async function listCustomers(req, res) {
   try {
@@ -228,10 +315,19 @@ async function listCustomers(req, res) {
       isActive,
       startDate,
       endDate,
-      customerType, // Filter by DIRECT or OUTLET
-      clientId: filterClientId, // Filter by specific client
-      outletStatus, // Filter by outlet status
+      customerType, // Filter by B2C or B2B
+      clientId: filterClientId,
+      outletId: filterOutletId, // Filter by outlet for B2B customers
     } = req.query;
+
+    // Debug logging for outlet customer filtering
+    logger.info("listCustomers called", {
+      customerType,
+      outletId: filterOutletId,
+      query: req.query,
+      userId: req.user?.id,
+      userRole: req.user?.role,
+    });
 
     const skip = (page - 1) * limit;
 
@@ -242,8 +338,6 @@ async function listCustomers(req, res) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
         { email: { contains: search, mode: "insensitive" } },
-        { outletCode: { contains: search, mode: "insensitive" } },
-        { outletName: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -252,15 +346,23 @@ async function listCustomers(req, res) {
     }
 
     if (customerType) {
-      where.customerType = customerType;
+      // Handle B2B/OUTLET equivalence for backward compatibility
+      // B2B and OUTLET are equivalent (OUTLET is deprecated)
+      if (customerType === "B2B" || customerType === "OUTLET") {
+        where.customerType = { in: ["B2B", "OUTLET"] };
+      } else if (customerType === "B2C" || customerType === "DIRECT") {
+        where.customerType = { in: ["B2C", "DIRECT"] };
+      } else {
+        where.customerType = customerType;
+      }
     }
 
     if (filterClientId) {
       where.clientId = filterClientId;
     }
 
-    if (outletStatus) {
-      where.outletStatus = outletStatus;
+    if (filterOutletId) {
+      where.outletId = filterOutletId;
     }
 
     if (startDate || endDate) {
@@ -269,20 +371,22 @@ async function listCustomers(req, res) {
       if (endDate) where.createdAt.lte = new Date(endDate);
     }
 
-    // Apply RBAC scope filtering - handle customer table differently
-    // The applyScopeFilter assumes customerId field exists, but for Customer table we filter by id
+    // Apply RBAC scope filtering
     if (["superadmin", "admin"].includes(req.user.role)) {
       // Full access - no additional filtering
     } else if (req.user.role === "client") {
       where.clientId = req.user.id;
     } else if (req.user.parentClientId) {
       where.clientId = req.user.parentClientId;
-    } else if (
-      req.user.assignedCustomerIds &&
-      req.user.assignedCustomerIds.length > 0
-    ) {
+    } else if (req.user.assignedCustomerIds?.length > 0) {
       where.id = { in: req.user.assignedCustomerIds };
     }
+
+    // Debug: Log the final where clause
+    logger.info("listCustomers where clause", {
+      where: JSON.stringify(where),
+      userRole: req.user?.role,
+    });
 
     const [customers, total] = await Promise.all([
       prisma.customer.findMany({
@@ -292,17 +396,13 @@ async function listCustomers(req, res) {
         orderBy: { [sortBy]: sortOrder },
         include: {
           client: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+            select: { id: true, name: true, slug: true },
+          },
+          outlet: {
+            select: { id: true, name: true, code: true },
           },
           _count: {
-            select: {
-              userProfiles: true,
-              customerUsers: true,
-            },
+            select: { userProfiles: true, customerUsers: true },
           },
         },
       }),
@@ -318,7 +418,7 @@ async function listCustomers(req, res) {
         metadata: {
           source: "user-service",
           endpoint: "/api/v1/customers",
-          filters: { search, isActive, customerType, outletStatus },
+          filters: { search, isActive, customerType },
           pagination: { page, limit },
           resultCount: customers.length,
           totalCount: total,
@@ -347,7 +447,7 @@ async function listCustomers(req, res) {
           search,
           isActive,
           customerType,
-          outletStatus,
+          outletId: filterOutletId,
           startDate,
           endDate,
         },
@@ -372,9 +472,8 @@ async function getCustomer(req, res) {
   try {
     const { customerId } = req.params;
 
-    // Check access using checkCustomerAccess
+    // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to view this customer.",
@@ -387,11 +486,10 @@ async function getCustomer(req, res) {
       where: { id: customerId },
       include: {
         client: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
+          select: { id: true, name: true, slug: true },
+        },
+        outlet: {
+          select: { id: true, name: true, code: true },
         },
         userProfiles: {
           select: {
@@ -416,10 +514,7 @@ async function getCustomer(req, res) {
           orderBy: { createdAt: "desc" },
         },
         _count: {
-          select: {
-            userProfiles: true,
-            customerUsers: true,
-          },
+          select: { userProfiles: true, customerUsers: true },
         },
       },
     });
@@ -465,16 +560,19 @@ async function getCustomer(req, res) {
 /**
  * Update a customer
  * Permission: customer:update:assigned
- * Supports updating both DIRECT and OUTLET customer fields
+ * Supports updating B2C and B2B customer fields + password reset
  */
 async function updateCustomer(req, res) {
+  const authToken = req.headers.authorization;
   try {
     const { customerId } = req.params;
-    const updateData = req.body;
+    const {
+      password, // Optional - for password reset
+      ...updateData
+    } = req.body;
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to update this customer.",
@@ -483,9 +581,15 @@ async function updateCustomer(req, res) {
       );
     }
 
-    // Get current customer for audit trail
+    // Get current customer
     const currentCustomer = await prisma.customer.findUnique({
       where: { id: customerId },
+      include: {
+        customerUsers: {
+          where: { isActive: true },
+          take: 1,
+        },
+      },
     });
 
     if (!currentCustomer) {
@@ -496,7 +600,36 @@ async function updateCustomer(req, res) {
       );
     }
 
-    // Check for email conflicts if updating email (using new partial index logic)
+    // Validate B2B customer outletId
+    if (updateData.customerType === "B2B" || (currentCustomer.customerType === "B2B" && updateData.outletId)) {
+      const effectiveOutletId = updateData.outletId || currentCustomer.outletId;
+      if (!effectiveOutletId) {
+        throw new UserServiceError(
+          "outletId is required for B2B customers",
+          "OUTLET_ID_REQUIRED",
+          400,
+        );
+      }
+      if (updateData.outletId && updateData.outletId !== currentCustomer.outletId) {
+        const outlet = await prisma.outlet.findUnique({
+          where: { id: updateData.outletId },
+        });
+        if (!outlet) {
+          throw new UserServiceError(
+            `Outlet with ID '${updateData.outletId}' not found`,
+            "OUTLET_NOT_FOUND",
+            404,
+          );
+        }
+      }
+    }
+
+    // If changing from B2B to B2C, clear outletId
+    if (updateData.customerType === "B2C") {
+      updateData.outletId = null;
+    }
+
+    // Check email conflict if updating email
     if (updateData.email && updateData.email !== currentCustomer.email) {
       let existingEmail;
       if (currentCustomer.clientId) {
@@ -519,34 +652,22 @@ async function updateCustomer(req, res) {
 
       if (existingEmail) {
         throw new UserServiceError(
-          currentCustomer.clientId
-            ? `Customer with email '${updateData.email}' already exists for this client`
-            : `Direct customer with email '${updateData.email}' already exists`,
+          `Customer with email '${updateData.email}' already exists`,
           "CUSTOMER_EMAIL_EXISTS",
           409,
         );
       }
     }
 
-    // Check for outlet code conflicts if updating outletCode
-    if (
-      updateData.outletCode &&
-      updateData.outletCode !== currentCustomer.outletCode
-    ) {
-      const existingOutlet = await prisma.customer.findFirst({
-        where: {
-          outletCode: updateData.outletCode,
-          id: { not: customerId },
-        },
-      });
-
-      if (existingOutlet) {
-        throw new UserServiceError(
-          `Outlet with code '${updateData.outletCode}' already exists`,
-          "OUTLET_CODE_EXISTS",
-          409,
-        );
+    // Update auth user if password or email changed
+    const linkedAuthUserId = currentCustomer.customerUsers[0]?.userId;
+    if (linkedAuthUserId && (password || (updateData.email && updateData.email !== currentCustomer.email))) {
+      const authUpdateData = {};
+      if (password) authUpdateData.password = password;
+      if (updateData.email && updateData.email !== currentCustomer.email) {
+        authUpdateData.email = updateData.email;
       }
+      await updateAuthUser(linkedAuthUserId, authUpdateData, authToken);
     }
 
     // Update customer with transaction
@@ -556,34 +677,49 @@ async function updateCustomer(req, res) {
         data: updateData,
         include: {
           client: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+            select: { id: true, name: true, slug: true },
+          },
+          outlet: {
+            select: { id: true, name: true, code: true },
           },
           _count: {
-            select: {
-              userProfiles: true,
-              customerUsers: true,
-            },
+            select: { userProfiles: true, customerUsers: true },
           },
         },
       });
 
-      // Create audit log with before/after changes
+      // Also update UserProfile if email changed
+      if (updateData.email && updateData.email !== currentCustomer.email && linkedAuthUserId) {
+        // Update the linked UserProfile name if name changed
+        const profileUpdate = {};
+        if (updateData.name) {
+          profileUpdate.firstName = updateData.name.split(" ")[0] || "";
+          profileUpdate.lastName = updateData.name.split(" ").slice(1).join(" ") || "";
+        }
+        if (updateData.phone) {
+          profileUpdate.phoneNumber = updateData.phone;
+        }
+        if (Object.keys(profileUpdate).length > 0) {
+          await tx.userProfile.updateMany({
+            where: { userId: linkedAuthUserId },
+            data: profileUpdate,
+          });
+        }
+      }
+
+      // Create audit log
       const changes = {};
       Object.keys(updateData).forEach((key) => {
-        if (
-          JSON.stringify(currentCustomer[key]) !==
-          JSON.stringify(updateData[key])
-        ) {
+        if (JSON.stringify(currentCustomer[key]) !== JSON.stringify(updateData[key])) {
           changes[key] = {
             before: currentCustomer[key],
             after: updateData[key],
           };
         }
       });
+      if (password) {
+        changes.password = { before: "[REDACTED]", after: "[UPDATED]" };
+      }
 
       await tx.auditLog.create({
         data: {
@@ -598,7 +734,7 @@ async function updateCustomer(req, res) {
             endpoint: `/api/v1/customers/${customerId}`,
             updatedBy: req.user.role,
             fieldsUpdated: Object.keys(updateData),
-            customerType: updatedCustomer.customerType,
+            passwordReset: !!password,
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
@@ -612,6 +748,7 @@ async function updateCustomer(req, res) {
       customerId: result.id,
       customerType: result.customerType,
       updatedFields: Object.keys(updateData),
+      passwordReset: !!password,
       updatedBy: req.user.id,
       service: "user-service",
     });
@@ -627,7 +764,7 @@ async function updateCustomer(req, res) {
       error: error.message,
       customerId: req.params.customerId,
       userId: req.user.id,
-      updateData: req.body,
+      updateData: { ...req.body, password: req.body.password ? "[REDACTED]" : undefined },
       service: "user-service",
     });
     throw error;
@@ -644,7 +781,6 @@ async function deleteCustomer(req, res) {
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to delete this customer.",
@@ -657,10 +793,7 @@ async function deleteCustomer(req, res) {
       where: { id: customerId },
       include: {
         _count: {
-          select: {
-            userProfiles: true,
-            customerUsers: true,
-          },
+          select: { userProfiles: true, customerUsers: true },
         },
       },
     });
@@ -680,7 +813,7 @@ async function deleteCustomer(req, res) {
         data: { isActive: false },
       });
 
-      // Also deactivate all user profiles for this customer
+      // Deactivate user profiles
       await tx.userProfile.updateMany({
         where: { customerId },
         data: { isActive: false },
@@ -770,7 +903,6 @@ async function addCustomerUser(req, res) {
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to manage this customer.",
@@ -792,13 +924,10 @@ async function addCustomerUser(req, res) {
       );
     }
 
-    // Check if user is already assigned to this customer
+    // Check if user is already assigned
     const existingAssignment = await prisma.customerUser.findUnique({
       where: {
-        customerId_userId: {
-          customerId,
-          userId,
-        },
+        customerId_userId: { customerId, userId },
       },
     });
 
@@ -810,7 +939,7 @@ async function addCustomerUser(req, res) {
       );
     }
 
-    // Create customer user with transaction
+    // Create customer user
     const result = await prisma.$transaction(async (tx) => {
       const customerUser = await tx.customerUser.create({
         data: {
@@ -821,7 +950,6 @@ async function addCustomerUser(req, res) {
         },
       });
 
-      // Create audit log
       await tx.auditLog.create({
         data: {
           userId: req.user.id,
@@ -830,12 +958,7 @@ async function addCustomerUser(req, res) {
           resource: "CustomerUser",
           resourceId: customerUser.id,
           changes: {
-            created: {
-              customerId,
-              userId,
-              role,
-              enabledModules,
-            },
+            created: { customerId, userId, role, enabledModules },
           },
           metadata: {
             source: "user-service",
@@ -887,7 +1010,6 @@ async function listCustomerUsers(req, res) {
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to view this customer.",
@@ -929,7 +1051,6 @@ async function updateCustomerUser(req, res) {
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to update this customer.",
@@ -938,13 +1059,10 @@ async function updateCustomerUser(req, res) {
       );
     }
 
-    // Get current customer user for audit trail
+    // Get current customer user
     const currentCustomerUser = await prisma.customerUser.findUnique({
       where: {
-        customerId_userId: {
-          customerId,
-          userId,
-        },
+        customerId_userId: { customerId, userId },
       },
     });
 
@@ -960,15 +1078,11 @@ async function updateCustomerUser(req, res) {
     const result = await prisma.$transaction(async (tx) => {
       const updatedCustomerUser = await tx.customerUser.update({
         where: {
-          customerId_userId: {
-            customerId,
-            userId,
-          },
+          customerId_userId: { customerId, userId },
         },
         data: updateData,
       });
 
-      // Create audit log
       const changes = {};
       Object.keys(updateData).forEach((key) => {
         if (currentCustomerUser[key] !== updateData[key]) {
@@ -1041,7 +1155,6 @@ async function removeCustomerUser(req, res) {
 
     // Check access
     const hasAccess = await authUtils.checkCustomerAccess(req.user, customerId);
-
     if (!hasAccess) {
       throw new UserServiceError(
         "Access denied. You do not have permission to manage this customer.",
@@ -1054,10 +1167,7 @@ async function removeCustomerUser(req, res) {
     const result = await prisma.$transaction(async (tx) => {
       const customerUser = await tx.customerUser.update({
         where: {
-          customerId_userId: {
-            customerId,
-            userId,
-          },
+          customerId_userId: { customerId, userId },
         },
         data: { isActive: false },
       });

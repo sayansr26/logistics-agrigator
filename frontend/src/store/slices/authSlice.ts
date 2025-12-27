@@ -8,9 +8,17 @@ interface User {
   name: string;
   role: string;
   clientId?: string;
+  parentClientId?: string;
   parentUserId?: string;
-  accessLevel?: "FULL" | "RESTRICTED";
+  licenseId?: string;
+  assignedCustomerIds?: string[];
+  accessLevel?: string;
+  commissionRate?: number;
+  commissionType?: string;
   isActive: boolean;
+  createdAt?: string;
+  outletId?: string;
+  outletRole?: string;
 }
 
 // Define the auth state interface

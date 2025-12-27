@@ -1,37 +1,3 @@
----
-name: CustomerTypes+Signup
-overview: Introduce CustomerType (DIRECT vs OUTLET) using the existing user-service Customer table, add outlet fields, and implement a public signup that only creates DIRECT customers while admin-managed flows can create OUTLET customers.
-todos:
-  - id: schema-customerType
-    content: Add CustomerType + outlet fields to user-service Customer model; implement safe uniqueness for email when clientId is null.
-    status: completed
-  - id: user-outlets-api
-    content: Add outlets routes/controller in user-service as filtered Customer(OUTLET) CRUD, mount in server.js, update validation.
-    status: completed
-    dependencies:
-      - schema-customerType
-  - id: user-bootstrap-endpoint
-    content: Add internal bootstrap endpoint in user-service to create Customer/DIRECT + UserProfile + CustomerUser for new signup users.
-    status: completed
-    dependencies:
-      - schema-customerType
-  - id: auth-register-direct
-    content: Refactor auth-service /auth/register to enforce role=customer, call user-service bootstrap, and return tokens like login.
-    status: completed
-    dependencies:
-      - user-bootstrap-endpoint
-  - id: gateway-routes
-    content: Add api-gateway proxy routes for /api/v1/customers and /api/v1/outlets to user-service (optional but recommended).
-    status: completed
-    dependencies:
-      - user-outlets-api
-  - id: frontend-register-page
-    content: Create frontend /auth/register page + update authApi RegisterRequest + re-add signup link on login.
-    status: completed
-    dependencies:
-      - auth-register-direct
----
-
 # Customer types + direct-customer signup
 
 ## Goal
@@ -43,7 +9,6 @@ todos:
 ## Key findings (current state)
 
 - **User-service mounts customers under `/api/v1/customers`** via `app.use("/api", customerRoutes)`:
-
 ```583:590:backend/user-service/server.js
 // API Routes
 app.use("/api", userRoutes);
@@ -54,8 +19,10 @@ app.use("/api", dashboardRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);
 ```
 
-- **User-service Customer model currently requires `clientId` and has no outlet/type fields**:
 
+
+
+- **User-service Customer model currently requires `clientId` and has no outlet/type fields**:
 ```236:261:backend/user-service/prisma/schema.prisma
 model Customer {
   id       String  @id @default(uuid()) @db.Uuid
@@ -69,8 +36,10 @@ model Customer {
 }
 ```
 
-- **Auth-service register currently allows only admin/finance/operations/client/support** and expects `name`, while controller expects `firstName/lastName` and returns only `{ user }` (no tokens):
 
+
+
+- **Auth-service register currently allows only admin/finance/operations/client/support** and expects `name`, while controller expects `firstName/lastName` and returns only `{ user }` (no tokens):
 ```82:99:backend/auth-service/routes/auth.js
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -82,7 +51,6 @@ const registerSchema = Joi.object({
   clientId: Joi.string().uuid().optional(),
 });
 ```
-
 ```9:76:backend/auth-service/controllers/authController.js
 static async register(req, res) {
   const { email, password, role = "client", clientId, firstName, lastName, phone } = req.body;
@@ -91,8 +59,10 @@ static async register(req, res) {
 }
 ```
 
-- Frontend has routing/RTK endpoints for `/auth/register`, but **no register page exists**; `authApi.register` currently sends `{email,password,name,phone,role?}`:
 
+
+
+- Frontend has routing/RTK endpoints for `/auth/register`, but **no register page exists**; `authApi.register` currently sends `{email,password,name,phone,role?}`:
 ```19:25:frontend/src/store/api/endpoints/authApi.ts
 interface RegisterRequest {
   email: string;
@@ -103,8 +73,10 @@ interface RegisterRequest {
 }
 ```
 
-- Login page currently says “Contact your administrator” (no signup link):
 
+
+
+- Login page currently says “Contact your administrator” (no signup link):
 ```229:237:frontend/src/app/auth/login/page.jsx
 {/* Contact Admin */}
 <div className="mt-6 text-center">
@@ -117,6 +89,9 @@ interface RegisterRequest {
 </div>
 ```
 
+
+
+
 ## Proposed data model (agreed)
 
 You selected:
@@ -124,7 +99,6 @@ You selected:
 - `customer` role can be **both** B2B and B2C.
 - Public signup should create **auth + user-service records**.
 - Outlet should be modeled as **Customer with `customerType=OUTLET`**.
-
 ```mermaid
 flowchart TD
   DirectCustomer[DirectCustomer] -->|customerType=DIRECT| CustomerTable[UserService.Customer]
@@ -134,6 +108,9 @@ flowchart TD
   AuthUser --> CustomerUser[UserService.CustomerUser(customerId,userId)]
 ```
 
+
+
+
 ## Implementation plan
 
 ### 1) User-service: extend Customer model to support DIRECT vs OUTLET
@@ -142,11 +119,11 @@ flowchart TD
 - Add `enum CustomerType { DIRECT OUTLET }`
 - Add `customerType CustomerType @default(DIRECT)`
 - Add outlet fields (optional) matching the frontend outlet interface:
-  - `outletCode`, `outletName`, `retailerName`, `contactPerson`, `status`, `type`, `businessHours`, `gstNumber`, `panNumber`, `bankDetails` (Json), `assignedCouriers` (String[]), `serviceAreas` (String[]), address fields (`address`, `city`, `state`, `pincode`)
+- `outletCode`, `outletName`, `retailerName`, `contactPerson`, `status`, `type`, `businessHours`, `gstNumber`, `panNumber`, `bankDetails` (Json), `assignedCouriers` (String[]), `serviceAreas` (String[]), address fields (`address`, `city`, `state`, `pincode`)
 - Make `clientId` optional to support direct customers not under a client.
 - Replace the current `@@unique([clientId, email])` with a migration strategy that enforces:
-  - Unique `(clientId,email)` when `clientId IS NOT NULL`
-  - Unique `(email)` when `clientId IS NULL`
+- Unique `(clientId,email)` when `clientId IS NOT NULL`
+- Unique `(email)` when `clientId IS NULL`
 
 (implemented via SQL migration).
 
@@ -210,5 +187,3 @@ This avoids the awkward current “/api/v1/user/v1/...” path requirement.
 ## Verification (after implementation)
 
 - User signup flow:
-- `POST /api/v1/auth/register` creates auth user + user-service Customer (DIRECT) + profile + link, returns tokens.
-- Outlet flow:

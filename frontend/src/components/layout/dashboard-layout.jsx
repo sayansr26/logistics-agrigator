@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 
 export function DashboardLayout({
   children,
-  className,
+  className = "",
   showBreadcrumbs = true,
-  customBreadcrumbs,
+  customBreadcrumbs = undefined,
 }) {
   return (
     <div className="min-h-screen bg-background">

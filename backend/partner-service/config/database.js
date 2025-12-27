@@ -1,9 +1,13 @@
-// Use shared database utilities
-const { createPrismaClient, prismaHelpers } = require("../shared/lib/database");
+// Use service-specific Prisma client (generated from partner-service schema)
+const { PrismaClient } = require("@prisma/client");
+const { prismaHelpers } = require("../shared/lib/database");
 
-// Create service-specific Prisma client
-const prisma = createPrismaClient({
-  // Partner service specific options can go here
+// Create service-specific Prisma client with partner-service models
+const prisma = new PrismaClient({
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["error"],
 });
 
 const connectDB = async () => {

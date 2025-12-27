@@ -20,9 +20,10 @@ const logger = require("../shared/lib/logger");
 
 /**
  * Build where clause for listing packages
+ * Supports customerId filtering for outlet tenant scoping
  */
 function buildWhereClause(filters) {
-  const { partnerId, type, isActive, search } = filters;
+  const { partnerId, type, isActive, search, customerId } = filters;
   const where = {};
 
   if (partnerId) {
@@ -42,6 +43,15 @@ function buildWhereClause(filters) {
       contains: search,
       mode: "insensitive",
     };
+  }
+
+  // Filter by customerId for outlet tenant scoping
+  // Shows outlet-specific packages + global packages (customerId=null)
+  if (customerId) {
+    where.OR = [
+      { customerId: customerId },
+      { customerId: null }, // Include global packages
+    ];
   }
 
   return where;

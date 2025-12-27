@@ -364,6 +364,195 @@ docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
 
 **If ANY verification step fails, the task is NOT complete!**
 
+## **🚨 CRITICAL: Docker Service Verification**
+
+### **Rule 1: Service Verification After Changes**
+
+**MANDATORY: After ANY changes to backend services, verify the service loads correctly using Docker exec:**
+
+```bash
+# Service verification pattern (replace {service-name} with actual service)
+docker exec logistics-{service-name} node -e "
+try {
+  console.log('Loading server.js...');
+  require('./server.js');
+} catch (error) {
+  console.error('Error:', error.message);
+  console.error('Stack:', error.stack);
+}
+" 2>&1
+```
+
+**Service Container Names:**
+- `logistics-auth-service` (main) or `logistics-auth-service-dev` (backend compose)
+- `logistics-user-service` or `logistics-user-service-dev`
+- `logistics-partner-service` or `logistics-partner-service-dev`
+- `logistics-shipment-service` or `logistics-shipment-service-dev`
+- `logistics-wallet-service` or `logistics-wallet-service-dev`
+- `logistics-support-service` or `logistics-support-service-dev`
+- `logistics-platform-service` or `logistics-platform-service-dev`
+- `logistics-license-service`
+- `logistics-api-gateway` or `logistics-api-gateway-dev`
+
+**Example for user-service:**
+```bash
+docker exec logistics-user-service node -e "
+try {
+  console.log('Loading server.js...');
+  require('./server.js');
+} catch (error) {
+  console.error('Error:', error.message);
+  console.error('Stack:', error.stack);
+}
+" 2>&1
+```
+
+**This verification MUST be run:**
+- After modifying `server.js` or entry point files
+- After changing import paths or shared library usage
+- After updating dependencies or package.json
+- Before marking any backend task as complete
+
+### **Rule 2: Database Commands Inside Docker Containers**
+
+**CRITICAL: Database ports are NOT publicly exposed. ALL database and migration commands MUST run inside Docker containers.**
+
+**❌ FORBIDDEN: Running migrations locally**
+```bash
+# WRONG - Will fail because ports aren't exposed
+cd backend/user-service
+npx prisma migrate dev
+npx prisma studio
+```
+
+**✅ CORRECT: Run inside Docker container**
+```bash
+# Prisma migrations
+docker exec logistics-user-service npx prisma migrate dev
+docker exec logistics-user-service npx prisma migrate deploy
+docker exec logistics-user-service npx prisma generate
+
+# Prisma Studio (requires port mapping or exec)
+docker exec logistics-user-service npx prisma studio
+
+# Database seeding
+docker exec logistics-user-service pnpm run db:seed
+
+# Database queries
+docker exec logistics-user-service npx prisma db push
+docker exec logistics-user-service npx prisma db pull
+```
+
+**Use package.json monorepo commands when available:**
+```bash
+# Use these commands from root (they run inside containers)
+pnpm run migrate:deploy:all
+pnpm run db:seed
+pnpm run db:seed:user
+pnpm run prisma:license:deploy
+```
+
+### **Rule 3: Check Docker Logs Before Next Task**
+
+**MANDATORY: ALWAYS check Docker logs before moving to the next task to verify service health.**
+
+```bash
+# Check logs for specific service
+docker logs logistics-{service-name} --tail=50
+
+# Check for errors specifically
+docker logs logistics-{service-name} --tail=50 | grep -i error
+
+# Check for MODULE_NOT_FOUND errors
+docker logs logistics-{service-name} --tail=50 | grep "MODULE_NOT_FOUND"
+
+# Follow logs in real-time
+docker logs logistics-{service-name} -f
+
+# Check all backend services
+pnpm run logs:backend
+```
+
+**Log checking workflow:**
+1. After making changes to a service
+2. After restarting a Docker container
+3. After running migrations or database commands
+4. Before moving to the next task or marking current task complete
+5. If service health check fails
+
+**Common log patterns to check:**
+- `Error:` - Any error messages
+- `MODULE_NOT_FOUND` - Import path issues
+- `Cannot find module` - Missing dependencies
+- `ECONNREFUSED` - Database/Redis connection issues
+- `EADDRINUSE` - Port conflicts
+- `PrismaClientInitializationError` - Database connection problems
+
+### **Rule 4: Use Monorepo Package.json Commands**
+
+**CRITICAL: This is a PNPM monorepo. ALWAYS check `package.json` for available commands before running direct Docker commands.**
+
+**Available Monorepo Commands (from root `package.json`):**
+
+**Service Management:**
+```bash
+pnpm run dev:backend          # Start all backend services
+pnpm run dev:user            # Start user service only
+pnpm run dev:partner         # Start partner service only
+pnpm run dev:wallet          # Start wallet service only
+pnpm run dev:license         # Start license service only
+pnpm run stop:backend        # Stop all backend services
+pnpm run logs:backend        # View backend logs
+pnpm run logs:user           # View user service logs
+pnpm run logs:partner        # View partner service logs
+```
+
+**Database & Migrations:**
+```bash
+pnpm run migrate:deploy:all  # Deploy migrations for all services
+pnpm run db:seed             # Seed all databases
+pnpm run db:seed:user         # Seed user service database
+pnpm run db:seed:partner      # Seed partner service database
+pnpm run prisma:license:deploy  # Deploy license service migrations
+```
+
+**Health Checks:**
+```bash
+pnpm run health              # Check API gateway health
+pnpm run health:wallet       # Check wallet service health
+pnpm run health:license      # Check license service health
+```
+
+**Development Workflow:**
+```bash
+pnpm run setup:backend       # Setup backend environment
+pnpm run fresh:backend       # Clean and fresh backend setup
+pnpm run cleanup:backend     # Clean backend Docker resources
+```
+
+**When to use monorepo commands vs direct Docker:**
+- ✅ **Use monorepo commands** for common operations (start, stop, logs, migrations)
+- ✅ **Use direct Docker exec** for service verification, debugging, or one-off commands
+- ✅ **Check package.json first** - if a command exists, use it instead of direct Docker
+
+**Example workflow:**
+```bash
+# 1. Start services using monorepo command
+pnpm run dev:backend
+
+# 2. Check logs using monorepo command
+pnpm run logs:user
+
+# 3. Run migrations using monorepo command
+pnpm run migrate:deploy:all
+
+# 4. Verify service loads (direct Docker exec - no monorepo command for this)
+docker exec logistics-user-service node -e "require('./server.js')"
+
+# 5. Check logs before next task (monorepo command)
+pnpm run logs:backend
+```
+
 ## **NEVER DO**
 
 - ❌ Use inline functions in routes (ALL logic in controllers)
@@ -376,6 +565,10 @@ docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
 - ❌ **Mark task complete without Docker testing**
 - ❌ **Ignore MODULE_NOT_FOUND or import errors**
 - ❌ **Skip health endpoint verification**
+- ❌ **Run database/migration commands locally** (ports not exposed - use Docker exec)
+- ❌ **Skip service verification after changes** (must run Docker exec node -e test)
+- ❌ **Move to next task without checking Docker logs**
+- ❌ **Use direct Docker commands when monorepo commands exist** (check package.json first)
 
 ## **ALWAYS DO**
 
@@ -390,3 +583,7 @@ docker logs logistics-service-name | grep "MODULE_NOT_FOUND"
 - ✅ **Verify health endpoint responds successfully**
 - ✅ **Check Docker logs for any errors**
 - ✅ **Test API endpoints before marking complete**
+- ✅ **Verify service loads after changes** (run `docker exec logistics-{service} node -e "require('./server.js')"`)
+- ✅ **Run all database/migration commands inside Docker containers** (ports not exposed)
+- ✅ **Check Docker logs before moving to next task** (verify service health)
+- ✅ **Check package.json for monorepo commands** before using direct Docker commands

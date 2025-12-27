@@ -1586,6 +1586,276 @@ const completionCriteria = {
 └── development-workflow.mdc # Quality standards
 ```
 
+## Outlet Tenant Architecture Patterns (NEW - December 2025)
+
+### Outlet Model Pattern
+
+**1. Outlet Entity with Full Business Details**
+
+```prisma
+enum OutletType {
+  RETAIL
+  WAREHOUSE
+  HUB
+  FRANCHISE
+}
+
+enum OutletStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model Outlet {
+  id            String       @id @default(uuid())
+  code          String       @unique // Auto-generated: OUT-{random}-{hash}
+  name          String
+  type          OutletType   @default(RETAIL)
+  status        OutletStatus @default(ACTIVE)
+  
+  // Contact info
+  email         String
+  phone         String?
+  contactPerson String?
+  
+  // Address
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  country       String       @default("India")
+  
+  // Business details
+  gstNumber     String?
+  panNumber     String?
+  bankDetails   Json?        // { accountNumber, bankName, ifscCode, accountHolderName }
+  
+  // Relationships
+  outletUsers   OutletUser[]
+  customers     Customer[]   // B2B customers linked to this outlet
+  
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+```
+
+**2. Outlet User Roles**
+
+```prisma
+model OutletUser {
+  id             String   @id @default(uuid())
+  outletId       String
+  userId         String   // Links to auth-service User
+  role           String   // 'outlet_admin' | 'outlet_staff'
+  enabledModules String[] // ['shipment', 'billing', 'wallet', 'analytics', 'customer', 'partner']
+  isActive       Boolean  @default(true)
+  
+  outlet         Outlet   @relation(fields: [outletId], references: [id])
+  
+  @@unique([outletId, userId])
+}
+```
+
+### Outlet Tenant Scoping Pattern
+
+**1. Adding outletId to Service Models**
+
+```prisma
+// partner-service/schema.prisma
+model Zone {
+  id        String  @id @default(cuid())
+  partnerId String
+  outletId  String? // Tenant scoping - null for global zones
+  // ... other fields
+  
+  @@index([outletId])
+}
+
+model ChargePackage {
+  id        String  @id @default(cuid())
+  partnerId String
+  outletId  String? // Tenant scoping
+  // ... other fields
+  
+  @@index([outletId])
+}
+
+// shipment-service/schema.prisma
+model Shipment {
+  id        String  @id @default(uuid())
+  outletId  String? // Tenant scoping
+  // ... other fields
+  
+  @@index([outletId])
+}
+```
+
+**2. Controller Query Filtering**
+
+```javascript
+// Outlet-scoped queries in controllers
+async function listZones(req, res) {
+  const { outletId } = req.query;
+  
+  const where = { partnerId: req.params.partnerId };
+  
+  // Filter by outlet if provided
+  if (outletId) {
+    where.outletId = outletId;
+  }
+  
+  const zones = await prisma.zone.findMany({ where });
+  res.json(APIResponse.success({ zones }));
+}
+```
+
+### Internal Service Communication Pattern
+
+**1. Service-to-Service User Creation**
+
+```javascript
+// auth-service/routes/auth.js - Internal endpoint (no requirePermission)
+router.post(
+  "/internal/users",
+  sharedAuthMiddleware.authenticate,
+  sharedAuthMiddleware.internalServiceOnly, // Only checks X-Internal-Request header
+  AuthController.createUser
+);
+
+// PUT for updates
+router.put(
+  "/internal/users/:id",
+  sharedAuthMiddleware.internalServiceOnly,
+  AuthController.updateUser
+);
+```
+
+**2. Calling Internal Endpoint from Other Services**
+
+```javascript
+// user-service calling auth-service
+async function createAuthUser(userData, authToken) {
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
+  const internalSecret = process.env.INTERNAL_SECRET;
+
+  const response = await fetch(`${authServiceUrl}/auth/internal/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authToken, // Pass through original auth
+      "X-Internal-Request": internalSecret, // Internal service identification
+    },
+    body: JSON.stringify({
+      email: userData.email,
+      password: userData.password,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      role: userData.role, // 'outlet_admin' | 'outlet_staff'
+      isActive: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || "Failed to create user");
+  }
+  
+  return (await response.json()).data.user;
+}
+```
+
+### Outlet-Specific Frontend Navigation Pattern
+
+**1. Role-Based Sidebar Menu**
+
+```javascript
+// sidebar.jsx
+const getNavigationForRole = (user) => {
+  // Outlet users get outlet-specific navigation
+  if (user?.outletRole === "outlet_admin" || user?.outletRole === "outlet_staff") {
+    return [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { title: "Shipments", href: "/shipments", icon: Package },
+      { title: "Pincode Types", href: "/pricing/pincode-types", icon: MapPin },
+      { title: "Zone Management", href: "/zones", icon: Globe },
+      { title: "Charge Packages", href: "/charge-packages", icon: IndianRupee },
+      { title: "Customer Management", href: "/customers", icon: Users },
+    ];
+  }
+  
+  // Default admin/superadmin navigation
+  return defaultNavigation;
+};
+```
+
+**2. Auth State with Outlet Context**
+
+```typescript
+// authSlice.ts
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  outletId?: string;    // Outlet user's outlet ID
+  outletRole?: string;  // 'outlet_admin' | 'outlet_staff'
+}
+
+// Login response includes outlet context
+{
+  user: {
+    id: "...",
+    role: "outlet_admin",
+    outletId: "f7043064-...",
+    outletRole: "outlet_admin"
+  },
+  accessToken: "..."
+}
+```
+
+### B2B Customer Linking Pattern
+
+**1. Customer with Outlet Association**
+
+```javascript
+// Customer creation with outlet link
+const customerData = {
+  name: formData.name,
+  email: formData.email,
+  customerType: "B2B",  // or "OUTLET" for backwards compatibility
+  outletId: selectedOutletId, // Links customer to specific outlet
+  // ... other fields
+};
+```
+
+**2. Filtering Customers by Outlet**
+
+```javascript
+// customerController.js - listCustomers
+const where = {};
+
+if (customerType) {
+  // Handle both B2B and legacy OUTLET types
+  if (customerType === "B2B") {
+    where.customerType = { in: ["B2B", "OUTLET"] };
+  } else {
+    where.customerType = customerType;
+  }
+}
+
+if (outletId) {
+  where.outletId = outletId;
+}
+
+const customers = await prisma.customer.findMany({
+  where,
+  include: {
+    outlet: { select: { id: true, name: true, code: true } },
+  },
+});
+```
+
 ---
 
 These patterns ensure consistency, maintainability, and scalability across all services while leveraging modern development practices and tools. The rule enforcement system guarantees quality standards are maintained throughout development.

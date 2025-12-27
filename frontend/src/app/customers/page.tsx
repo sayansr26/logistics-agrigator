@@ -67,9 +67,11 @@ import {
   type Customer,
   type CustomerType,
 } from "@/store/api/endpoints/customerApi";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function CustomersPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [customerTypeFilter, setCustomerTypeFilter] = useState<
     CustomerType | "ALL"
@@ -82,6 +84,10 @@ export default function CustomersPage() {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(
     null,
   );
+
+  // Check if user can manage B2B customers (superadmin, admin)
+  const canManageB2BCustomers =
+    user?.role === "superadmin" || user?.role === "admin";
 
   // Build query params
   const queryParams = {
@@ -131,18 +137,18 @@ export default function CustomersPage() {
   };
 
   const getCustomerTypeBadge = (type: CustomerType) => {
-    if (type === "DIRECT") {
+    if (type === "B2C") {
       return (
         <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
           <UserCheck className="w-3 h-3 mr-1" />
-          Direct
+          B2C
         </Badge>
       );
     }
     return (
       <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
         <Store className="w-3 h-3 mr-1" />
-        Outlet
+        B2B
       </Badge>
     );
   };
@@ -163,12 +169,8 @@ export default function CustomersPage() {
   };
 
   // Stats calculation
-  const directCount = customers.filter(
-    (c) => c.customerType === "DIRECT",
-  ).length;
-  const outletCount = customers.filter(
-    (c) => c.customerType === "OUTLET",
-  ).length;
+  const b2cCount = customers.filter((c) => c.customerType === "B2C").length;
+  const b2bCount = customers.filter((c) => c.customerType === "B2B").length;
   const activeCount = customers.filter((c) => c.isActive).length;
 
   return (
@@ -181,7 +183,7 @@ export default function CustomersPage() {
               Customer Management
             </h1>
             <p className="text-muted-foreground">
-              Manage direct customers (B2C) and outlets (B2B)
+              Manage B2C (Direct) and B2B (Outlet) customers
             </p>
           </div>
           <Button
@@ -206,39 +208,32 @@ export default function CustomersPage() {
               <div className="text-2xl font-bold">
                 {pagination?.total || customers.length}
               </div>
-              <p className="text-xs text-muted-foreground">
-                All customer types
-              </p>
+              <p className="text-xs text-muted-foreground">All customer types</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Direct Customers
+                B2C Customers
               </CardTitle>
               <UserCheck className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {directCount}
-              </div>
-              <p className="text-xs text-muted-foreground">B2C customers</p>
+              <div className="text-2xl font-bold text-blue-600">{b2cCount}</div>
+              <p className="text-xs text-muted-foreground">Direct customers</p>
             </CardContent>
           </Card>
-          <Card className="relative">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Outlets
+              <CardTitle className="text-sm font-medium">
+                B2B Customers
               </CardTitle>
-              <Store className="h-4 w-4 text-gray-400" />
+              <Store className="h-4 w-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-400">—</div>
-              <p className="text-xs text-muted-foreground">B2B outlets</p>
+              <div className="text-2xl font-bold text-purple-600">{b2bCount}</div>
+              <p className="text-xs text-muted-foreground">Outlet customers</p>
             </CardContent>
-            <span className="absolute top-2 right-2 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
-              Coming Soon
-            </span>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -286,15 +281,19 @@ export default function CustomersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Types</SelectItem>
-                  <SelectItem value="DIRECT">Direct (B2C)</SelectItem>
-                  <SelectItem value="OUTLET" disabled>
-                    <span className="flex items-center gap-2">
-                      Outlet (B2B)
-                      <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                        Soon
+                  <SelectItem value="B2C">B2C (Direct)</SelectItem>
+                  {canManageB2BCustomers ? (
+                    <SelectItem value="B2B">B2B (Outlet)</SelectItem>
+                  ) : (
+                    <SelectItem value="B2B" disabled>
+                      <span className="flex items-center gap-2">
+                        B2B (Outlet)
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                          Admin
+                        </span>
                       </span>
-                    </span>
-                  </SelectItem>
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               <Select
@@ -369,7 +368,7 @@ export default function CustomersPage() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Contact</TableHead>
-                      <TableHead>Location</TableHead>
+                      <TableHead>Outlet</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -378,15 +377,7 @@ export default function CustomersPage() {
                     {customers.map((customer) => (
                       <TableRow key={customer.id}>
                         <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{customer.name}</span>
-                            {customer.customerType === "OUTLET" &&
-                              customer.outletCode && (
-                                <span className="text-xs text-muted-foreground">
-                                  Code: {customer.outletCode}
-                                </span>
-                              )}
-                          </div>
+                          <span className="font-medium">{customer.name}</span>
                         </TableCell>
                         <TableCell>
                           {getCustomerTypeBadge(customer.customerType)}
@@ -402,18 +393,20 @@ export default function CustomersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col text-sm">
-                            {customer.city && <span>{customer.city}</span>}
-                            {customer.state && (
-                              <span className="text-muted-foreground">
-                                {customer.state}
-                              </span>
-                            )}
-                          </div>
+                          {customer.customerType === "B2B" && customer.outlet ? (
+                            <span className="text-sm">
+                              {customer.outlet.name}
+                              {customer.outlet.code && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({customer.outlet.code})
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
-                        <TableCell>
-                          {getStatusBadge(customer.isActive)}
-                        </TableCell>
+                        <TableCell>{getStatusBadge(customer.isActive)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

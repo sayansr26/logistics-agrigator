@@ -36,6 +36,10 @@ const ROLES = {
   CUSTOMER_SALES: "customer_sales", // Customer sales
   CUSTOMER_SUPPORT: "customer_support", // Customer support
 
+  // Outlet Level (Tenant Users)
+  OUTLET_ADMIN: "outlet_admin", // Outlet administrator (full outlet access)
+  OUTLET_STAFF: "outlet_staff", // Outlet staff (limited outlet access)
+
   // Partner Level
   AFFILIATE: "affiliate", // Commission partner
 };
@@ -48,6 +52,7 @@ const PERMISSION_MODULES = {
   CLIENT: "client", // Client management (license-based customers)
   LICENSE: "license", // License generation and management
   CUSTOMER: "customer", // End customers (client's customers)
+  OUTLET: "outlet", // Outlet management (tenant entities)
   SHIPMENT: "shipment", // Shipment operations
   WALLET: "wallet", // Wallet and payment operations
   PARTNER: "partner", // Partner/courier management
@@ -86,6 +91,7 @@ const PERMISSION_SCOPES = {
   PARENT: "parent", // Parent client's data (for client role and sub-users)
   ASSIGNED: "assigned", // Assigned customers/entities only
   ALL: "all", // All data within tenant/client scope
+  OUTLET: "outlet", // Outlet-scoped data (for outlet roles)
   WILDCARD: "*", // System-wide access (superadmin only)
 };
 
@@ -185,6 +191,43 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "customer:read:assigned",
     "analytics:read:assigned",
   ],
+
+  outlet_admin: [
+    // Outlet administrator - full outlet-scoped access
+    "outlet:*:outlet",
+    "customer:*:outlet",
+    "shipment:*:outlet",
+    "partner:*:outlet",
+    "wallet:*:outlet",
+    "billing:*:outlet",
+    "analytics:read:outlet",
+    "support:*:outlet",
+    "settings:*:own",
+    "user:create:outlet",
+    "user:read:outlet",
+    "user:update:outlet",
+    // Additional permissions for outlet user management routes (require :assigned/:parent scope)
+    "customer:read:assigned",
+    "customer:create:parent",
+    "customer:update:assigned",
+    "customer:delete:assigned",
+  ],
+
+  outlet_staff: [
+    // Outlet staff - limited outlet-scoped access
+    "customer:read:outlet",
+    "customer:create:outlet",
+    "shipment:read:outlet",
+    "shipment:create:outlet",
+    "partner:read:outlet",
+    "wallet:read:outlet",
+    "analytics:read:outlet",
+    "support:create:outlet",
+    "support:read:outlet",
+    "settings:read:own",
+    // Additional permissions for viewing outlet data via routes that require :assigned scope
+    "customer:read:assigned",
+  ],
 };
 
 /**
@@ -222,6 +265,35 @@ const PERMISSION_DESCRIPTIONS = {
 
   "settings:update:own": "Modify your personal settings",
   "settings:manage:all": "Manage system-wide settings",
+
+  // Outlet-scoped permissions
+  "outlet:create:all": "Create new outlets in the system",
+  "outlet:read:all": "View all outlet information",
+  "outlet:update:all": "Modify outlet details and settings",
+  "outlet:delete:all": "Remove outlets from the system",
+  "outlet:manage:outlet": "Full outlet management within your outlet",
+
+  "customer:create:outlet": "Create customers within your outlet",
+  "customer:read:outlet": "View customers within your outlet",
+  "customer:update:outlet": "Modify customers within your outlet",
+  "customer:manage:outlet": "Full customer management within your outlet",
+
+  "shipment:create:outlet": "Create shipments within your outlet",
+  "shipment:read:outlet": "View shipments within your outlet",
+  "shipment:update:outlet": "Modify shipments within your outlet",
+  "shipment:manage:outlet": "Full shipment management within your outlet",
+
+  "partner:read:outlet": "View partners within your outlet",
+  "partner:manage:outlet": "Full partner management within your outlet",
+
+  "wallet:read:outlet": "View wallet within your outlet",
+  "wallet:manage:outlet": "Full wallet management within your outlet",
+
+  "analytics:read:outlet": "View analytics for your outlet",
+
+  "support:create:outlet": "Create support tickets within your outlet",
+  "support:read:outlet": "View support tickets within your outlet",
+  "support:manage:outlet": "Full support management within your outlet",
 };
 
 /**

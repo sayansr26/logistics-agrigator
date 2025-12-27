@@ -1,62 +1,7 @@
 ---
-name: Partner packages + zone-based quotes
-overview: Implement the new WEIGHT/DISTANCE/GENERIC “Charge Package” feature in partner-service, expose it via API Gateway, and add the corresponding frontend (RTK Query + sidebar) while replacing rate/serviceability calculation to use Distance Zones + Pincode Types + Packages (ignoring legacy flows) and keeping shipment-service compatibility.
-todos:
-  - id: schema-charge-packages
-    content: Add Prisma models/enums for ChargePackage + Partner.defaultDeliveryDays and create migration.
-    status: completed
-  - id: charge-packages-crud
-    content: Implement /api/v1/charge-packages CRUD (multi-partner create) with Joi validation + audit logs.
-    status: completed
-    dependencies:
-      - schema-charge-packages
-  - id: gateway-charge-packages-route
-    content: Add API Gateway proxy route for /api/v1/charge-packages (partner-service) and verify calls are available via gateway only.
-    status: completed
-    dependencies:
-      - charge-packages-crud
-  - id: quote-engine
-    content: "Implement quoteCalculationService: distance zone match + package charges + pincode type charges + breakdown + sorting."
-    status: completed
-    dependencies:
-      - schema-charge-packages
-  - id: partner-calc-endpoints
-    content: Update /api/partners/calculate and /api/partners/serviceability to use quote engine and keep response shape (deliveryDays included).
-    status: completed
-    dependencies:
-      - quote-engine
-      - charge-packages-crud
-  - id: routes-no-inline
-    content: Refactor partner-service routes touched (especially partners + charge-packages) to remove inline functions and delegate to controllers.
-    status: completed
-    dependencies:
-      - partner-calc-endpoints
-  - id: shipment-integration-header
-    content: Update shipment-service PartnerIntegrationService to send X-Internal-Request and forward Authorization when calling partner-service.
-    status: completed
-    dependencies:
-      - partner-calc-endpoints
-  - id: frontend-charge-packages-rtk
-    content: Add Charge Packages UI on existing /charges routes using RTK Query (list/create/update/disable) and multi-partner selection.
-    status: completed
-    dependencies:
-      - charge-packages-crud
-      - gateway-charge-packages-route
-  - id: frontend-fix-partnersApi-shapes
-    content: Update frontend partnersApi types/payloads for /api/v1/partners/serviceability and /api/v1/partners/calculate to match the new quote engine response (breakdown + sorting).
-    status: completed
-    dependencies:
-      - partner-calc-endpoints
-  - id: frontend-sidebar-unblock-charges
-    content: Unblock sidebar navigation for /charges (rename to Charge Packages) and restrict visibility to superadmin/admin/operations.
-    status: completed
-    dependencies:
-      - frontend-charge-packages-rtk
-  - id: deprecate-legacy
-    content: Disable legacy partner-service endpoints (packages/customer-charges/discounts/charge-calculation/partner-assignment) with 410 responses and update swagger/server route mounts.
-    status: completed
-    dependencies:
-      - partner-calc-endpoints
+name: ""
+overview: ""
+todos: []
 ---
 
 # Partner Service: Charge Packages + Zone-Based Charge Calculation
@@ -97,10 +42,12 @@ cheapest/highest]
 rates + cheapestRate + fastestRate]
 ```
 
+
+
 ## Phase 0 — API Gateway routing (mandatory: gateway-only)
 
 - Add API Gateway proxy for the new partner-service module:
-  - `GET/POST/PUT/DELETE /api/v1/charge-packages/*` → partner-service `/api/v1/charge-packages/*`
+- `GET/POST/PUT/DELETE /api/v1/charge-packages/*` → partner-service `/api/v1/charge-packages/*`
 - Update: [backend/api-gateway/server.js](backend/api-gateway/server.js)
 - Swagger aggregation already pulls partner-service OpenAPI from `http://partner-service:3005/openapi.json` and rewrites `servers` to gateway, so **no change expected** unless partner-service OpenAPI path changes.
 
@@ -111,17 +58,17 @@ rates + cheapestRate + fastestRate]
 - `enum ChargePackageCalcType { FLAT PERCENTAGE_OF_COD PERCENTAGE_OF_DECLARED_VALUE }` (store but initially only use `FLAT`)
 - `enum ChargePackageAppliesTo { ANY COD PREPAID }`
 - `model ChargePackage` (UUID id) with:
-  - `partnerId` (CUID string)
-  - `name` (unique per partner)
-  - `type` (WEIGHT/DISTANCE/GENERIC)
-  - `baseCharge` (Decimal)
-  - `baseUnit` (Decimal, nullable; used for WEIGHT/DISTANCE)
-  - `addonUnit` (Decimal, nullable; used for WEIGHT/DISTANCE)
-  - `addonCharge` (Decimal, nullable; used for WEIGHT/DISTANCE)
-  - `appliesTo` (ANY/COD/PREPAID; relevant for GENERIC)
-  - `calcType` (default FLAT)
-  - `metadata` (Json? for future)
-  - `isActive`, `createdAt`, `updatedAt`
+- `partnerId` (CUID string)
+- `name` (unique per partner)
+- `type` (WEIGHT/DISTANCE/GENERIC)
+- `baseCharge` (Decimal)
+- `baseUnit` (Decimal, nullable; used for WEIGHT/DISTANCE)
+- `addonUnit` (Decimal, nullable; used for WEIGHT/DISTANCE)
+- `addonCharge` (Decimal, nullable; used for WEIGHT/DISTANCE)
+- `appliesTo` (ANY/COD/PREPAID; relevant for GENERIC)
+- `calcType` (default FLAT)
+- `metadata` (Json? for future)
+- `isActive`, `createdAt`, `updatedAt`
 - Add `defaultDeliveryDays Int?` to `model Partner`.
 - Create a migration under `backend/partner-service/prisma/migrations/*`.
 
@@ -134,10 +81,10 @@ rates + cheapestRate + fastestRate]
 - [backend/partner-service/routes/chargePackages.js](backend/partner-service/routes/chargePackages.js)
 - Endpoints (all **function-based controllers**, no inline route logic):
 - `POST /api/v1/charge-packages` body:
-  - `partnerIds: string[]` (single or many)
-  - `name, type, baseCharge`
-  - `baseUnit/addonUnit/addonCharge` required when type=WEIGHT/DISTANCE
-  - `appliesTo/calcType` used when type=GENERIC
+- `partnerIds: string[]` (single or many)
+- `name, type, baseCharge`
+- `baseUnit/addonUnit/addonCharge` required when type=WEIGHT/DISTANCE
+- `appliesTo/calcType` used when type=GENERIC
 - `GET /api/v1/charge-packages?partnerId=&type=&isActive=&search=&page=&limit=`
 - `GET /api/v1/charge-packages/:id`
 - `PUT /api/v1/charge-packages/:id`
@@ -154,8 +101,8 @@ rates + cheapestRate + fastestRate]
 - Replace current external/local rate-card logic in [backend/partner-service/controllers/partnerController.js](backend/partner-service/controllers/partnerController.js) (function `checkServiceability`).
 - New logic:
 - For each active partner (or a requested partner):
-  - Use [backend/partner-service/services/distanceZoneService.js](backend/partner-service/services/distanceZoneService.js) `getZoneForShipment(partnerId, fromPincode, toPincode)`.
-  - `isServiceable = matched === true`.
+- Use [backend/partner-service/services/distanceZoneService.js](backend/partner-service/services/distanceZoneService.js) `getZoneForShipment(partnerId, fromPincode, toPincode)`.
+- `isServiceable = matched === true`.
 - Return the existing response shape (`{ serviceability: [...] }`).
 
 ### `POST /api/partners/calculate`
@@ -164,20 +111,20 @@ rates + cheapestRate + fastestRate]
 - New logic:
 - Compute `distanceKm` once (or per partner via `getZoneForShipment`).
 - Compute pincode type charges once:
-  - `pickupTypes = pincodeTypeService.getTypesByPincode(fromPincode)`
-  - `deliveryTypes = pincodeTypeService.getTypesByPincode(toPincode)`
-  - `pincodeTypeCharge = pickup.totalCharge + delivery.totalCharge` (active types only)
+- `pickupTypes = pincodeTypeService.getTypesByPincode(fromPincode)`
+- `deliveryTypes = pincodeTypeService.getTypesByPincode(toPincode)`
+- `pincodeTypeCharge = pickup.totalCharge + delivery.totalCharge` (active types only)
 - For each serviceable partner:
-  - Load partner’s active `ChargePackage`s.
-  - Apply:
-  - **DISTANCE packages**: stepped formula with `baseUnit/addonUnit` against `distanceKm`.
-  - **WEIGHT packages**: stepped formula against `weight` (kg).
-  - **GENERIC packages**: include if `appliesTo` matches shipment paymentType.
-  - Add pincode type charge.
-  - Use partner’s `defaultDeliveryDays` as `deliveryDays`.
-  - Return per-partner quote with a **breakdown**.
+- Load partner’s active `ChargePackage`s.
+- Apply:
+- **DISTANCE packages**: stepped formula with `baseUnit/addonUnit` against `distanceKm`.
+- **WEIGHT packages**: stepped formula against `weight` (kg).
+- **GENERIC packages**: include if `appliesTo` matches shipment paymentType.
+- Add pincode type charge.
+- Use partner’s `defaultDeliveryDays` as `deliveryDays`.
+- Return per-partner quote with a **breakdown**.
 - Add sorting support (cheapest/highest) while still returning:
-  - `rates`, `cheapestRate`, `fastestRate`.
+- `rates`, `cheapestRate`, `fastestRate`.
 
 ## Phase 4 — Align routing + permissions (and remove inline route handlers)
 
@@ -212,26 +159,26 @@ rates + cheapestRate + fastestRate]
 
 - Add: `frontend/src/store/api/endpoints/chargePackagesApi.ts`
 - Endpoints (gateway-only):
-  - `GET /api/v1/charge-packages?partnerId=&type=&isActive=&search=&page=&limit=`
-  - `POST /api/v1/charge-packages` (multi-partner create with `partnerIds: []`)
-  - `GET /api/v1/charge-packages/:id`
-  - `PUT /api/v1/charge-packages/:id`
-  - `DELETE /api/v1/charge-packages/:id` (soft disable)
+- `GET /api/v1/charge-packages?partnerId=&type=&isActive=&search=&page=&limit=`
+- `POST /api/v1/charge-packages` (multi-partner create with `partnerIds: []`)
+- `GET /api/v1/charge-packages/:id`
+- `PUT /api/v1/charge-packages/:id`
+- `DELETE /api/v1/charge-packages/:id` (soft disable)
 
 ### Pages/components (reuse existing route)
 
 - Reuse existing route and repurpose it to Charge Packages:
-  - `frontend/src/app/charges/page.jsx` → list + filters + disable/enable
-  - `frontend/src/app/charges/create/page.jsx` → create package form
+- `frontend/src/app/charges/page.jsx` → list + filters + disable/enable
+- `frontend/src/app/charges/create/page.jsx` → create package form
 - Partner selection should use the existing partners RTK query (`useGetPartnersQuery`) and allow selecting **single or multiple** partners.
 
 ### Sidebar unblock + naming
 
 - Update: `frontend/src/components/layout/sidebar.jsx`
-  - Rename `"Charges Management"` → `"Charge Packages"`
-  - `disabled: false`
-  - Ensure roles include: `["superadmin","admin","operations"]`
-  - Align permission to the backend module/action used for `/charge-packages`
+- Rename `"Charges Management"` → `"Charge Packages"`
+- `disabled: false`
+- Ensure roles include: `["superadmin","admin","operations"]`
+- Align permission to the backend module/action used for `/charge-packages`
 
 ### Frontend cleanup (avoid duplicate API clients)
 
@@ -252,8 +199,8 @@ rates + cheapestRate + fastestRate]
 - `POST /api/partners/serviceability`
 - `POST /api/partners/calculate` and confirm breakdown + sorting
 - Verify gateway routing (no direct service calls from frontend):
-  - `GET http://localhost:3001/api/v1/charge-packages`
-  - Confirm `frontend/src/constants/api.ts` points to `NEXT_PUBLIC_API_BASE_URL=http://localhost:3001` in dev.
+- `GET http://localhost:3001/api/v1/charge-packages`
+- Confirm `frontend/src/constants/api.ts` points to `NEXT_PUBLIC_API_BASE_URL=http://localhost:3001` in dev.
 
 ## Implementation todos
 
@@ -263,6 +210,3 @@ rates + cheapestRate + fastestRate]
 - **quote-engine**: Implement quoteCalculationService (distance+weight+generic+pincodeTypes)
 - **partner-calc-endpoints**: Replace `/api/partners/calculate` and `/api/partners/serviceability` to use new quote engine
 - **routes-no-inline**: Refactor touched routes to remove inline handlers
-- **frontend-charge-packages-rtk**: Add RTK Query slice + replace `/charges` pages to manage Charge Packages
-- **frontend-fix-partnersApi-shapes**: Align frontend partners calculate/serviceability types with new backend responses
-- **frontend-sidebar-unblock-charges**: Enable Charge Packages nav entry for superadmin/admin/operations

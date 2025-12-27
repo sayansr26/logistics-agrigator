@@ -45,7 +45,35 @@ import {
   getDefaultPermissionsForRole,
 } from "@/lib/mock-data";
 
-const initialFormData = {
+interface FormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  company: string;
+  department: string;
+  position: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  notes: string;
+  permissions: string[];
+}
+
+interface FormErrors {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  company?: string;
+  [key: string]: string | undefined;
+}
+
+const initialFormData: FormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -98,10 +126,10 @@ const steps = [
 
 export default function AddUserPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState(initialFormData);
+  const [formData, setFormData] = useState<FormData>(initialFormData);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const customBreadcrumbs = [
     { title: "Home", href: "/" },
@@ -109,7 +137,7 @@ export default function AddUserPage() {
     { title: "Add New User" },
   ];
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: keyof FormData, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
 
     // Auto-assign default permissions when role changes
@@ -124,7 +152,7 @@ export default function AddUserPage() {
     }
   };
 
-  const handlePermissionToggle = (permission) => {
+  const handlePermissionToggle = (permission: string) => {
     setFormData((prev) => ({
       ...prev,
       permissions: prev.permissions.includes(permission)
@@ -134,7 +162,7 @@ export default function AddUserPage() {
   };
 
   const validateCurrentStep = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
 
     switch (currentStep) {
       case 1: // Basic Information
@@ -167,7 +195,7 @@ export default function AddUserPage() {
   };
 
   const validateAllSteps = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
 
     if (!formData.firstName.trim())
       newErrors.firstName = "First name is required";
@@ -195,14 +223,14 @@ export default function AddUserPage() {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const goToStep = (step) => {
+  const goToStep = (step: number) => {
     // Only allow going to completed steps or current step
     if (step <= currentStep) {
       setCurrentStep(step);
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateAllSteps()) {
@@ -230,13 +258,16 @@ export default function AddUserPage() {
   };
 
   // Group permissions by category for better organization
-  const permissionsByCategory = userPermissions.reduce((acc, permission) => {
-    if (!acc[permission.category]) {
-      acc[permission.category] = [];
-    }
-    acc[permission.category].push(permission);
-    return acc;
-  }, {});
+  const permissionsByCategory = userPermissions.reduce(
+    (acc: Record<string, typeof userPermissions>, permission) => {
+      if (!acc[permission.category]) {
+        acc[permission.category] = [];
+      }
+      acc[permission.category].push(permission);
+      return acc;
+    },
+    {},
+  );
 
   const renderStepContent = () => {
     switch (currentStep) {

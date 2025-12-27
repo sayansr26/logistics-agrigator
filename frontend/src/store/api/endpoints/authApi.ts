@@ -51,6 +51,8 @@ interface User {
   commissionRate?: number;
   commissionType?: string;
   createdAt: string;
+  outletId?: string;
+  outletRole?: string;
 }
 
 interface Permission {

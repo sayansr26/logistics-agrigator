@@ -64,6 +64,7 @@ async function createChargePackage(req, res, next) {
 /**
  * List charge packages with filters and pagination
  * GET /api/v1/charge-packages
+ * Supports outletId filtering for outlet tenant scoping
  */
 async function listChargePackages(req, res, next) {
   try {
@@ -78,6 +79,10 @@ async function listChargePackages(req, res, next) {
       sortOrder,
     } = req.query;
 
+    const userRole = req.user?.role;
+    const userOutletId = req.user?.outletId;
+    const isOutletUser = ["outlet_admin", "outlet_staff"].includes(userRole) && userOutletId;
+
     const filters = {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
@@ -86,12 +91,20 @@ async function listChargePackages(req, res, next) {
       search,
       sortBy: sortBy || "createdAt",
       sortOrder: sortOrder || "desc",
+      // Add outletId filter for outlet tenant scoping
+      outletId: isOutletUser ? userOutletId : (req.query.outletId || undefined),
     };
 
     // Parse boolean
     if (typeof isActive === "string") {
       filters.isActive = isActive === "true";
     }
+
+    logger.info("Listing charge packages", {
+      filters,
+      userId: req.user?.id,
+      outletId: filters.outletId || "ALL",
+    });
 
     const result = await chargePackageService.listChargePackages(filters);
 

@@ -1,9 +1,13 @@
-// Use shared database utilities
-const { createPrismaClient, prismaHelpers } = require("../shared/lib/database");
+// Use service-specific Prisma client (generated from wallet-service schema)
+const { PrismaClient } = require("@prisma/client");
+const { prismaHelpers } = require("../shared/lib/database");
 
-// Create service-specific Prisma client
-const prisma = createPrismaClient({
-  // Wallet service specific options can go here
+// Create service-specific Prisma client with wallet-service models
+const prisma = new PrismaClient({
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["error"],
 });
 
 const connectDB = async () => {

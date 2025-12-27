@@ -9,11 +9,12 @@ const quoteCalculationService = require("../services/quoteCalculationService");
 const logger = require("../shared/lib/logger");
 
 /**
- * Get all partners with optional filtering, search, pagination, and sorting
+ * Get all partners with optional filtering, search, pagination, sorting, and tenant scoping
  * @param {Object} filters - Filter criteria
+ * @param {Object} user - Authenticated user (from req.user) for tenant scoping
  * @returns {Promise<Object>} List of partners with pagination info
  */
-async function getAllPartners(filters = {}) {
+async function getAllPartners(filters = {}, user = null) {
   const {
     isActive,
     supportsCOD,
@@ -23,8 +24,10 @@ async function getAllPartners(filters = {}) {
     limit = 10,
     sortBy = "createdAt",
     sortOrder = "desc",
+    outletId: filterOutletId, // Allow explicit outletId filter
   } = filters;
 
+  // Build base where clause
   const where = {
     ...(typeof isActive === "boolean" && { isActive }),
     ...(typeof supportsCOD === "boolean" && { supportsCOD }),
@@ -37,6 +40,35 @@ async function getAllPartners(filters = {}) {
       ],
     }),
   };
+
+  // Apply tenant scoping for outlet users (outletId from JWT)
+  // For outlet users: show their outlet's partners + system-level partners (outletId=null)
+  // For admin/superadmin: show all partners
+  if (user) {
+    const userRole = user.role;
+    const userOutletId = user.outletId;
+    
+    if (userRole === "superadmin" || userRole === "admin") {
+      // Admin/superadmin can see all, or filter by specific outletId
+      if (filterOutletId) {
+        where.outletId = filterOutletId;
+      }
+    } else if (["outlet_admin", "outlet_staff"].includes(userRole) && userOutletId) {
+      // Outlet users: see their partners + system-level partners
+      where.OR = where.OR || [];
+      where.AND = [
+        { OR: [{ outletId: userOutletId }, { outletId: null }] },
+        ...(where.OR.length > 0 ? [{ OR: where.OR }] : []),
+      ];
+      // Remove the original OR since we moved it into AND
+      if (where.OR.length > 0 && where.AND.length > 0) {
+        delete where.OR;
+      }
+    } else {
+      // Other users (B2C customers): only see system-level partners
+      where.outletId = null;
+    }
+  }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -96,8 +128,8 @@ async function getPartnerById(id) {
 
 /**
  * Create a new partner
- * @param {Object} data - Partner data
- * @param {Object} req - Request object for audit logging
+ * @param {Object} data - Partner data (may include outletId for outlet-scoped partners)
+ * @param {Object} req - Request object for audit logging and user context
  * @returns {Promise<Object>} Created partner
  */
 async function createPartner(data, req = {}) {
@@ -111,19 +143,45 @@ async function createPartner(data, req = {}) {
     );
   }
 
-  // Check for unique constraints
+  // For non-admin users, force outletId to their own outletId (tenant scoping)
+  const user = req.user;
+  let partnerOutletId = data.outletId || null;
+  
+  if (user && user.role !== "superadmin" && user.role !== "admin") {
+    // Outlet users can only create partners for their own outlet
+    if (["outlet_admin", "outlet_staff"].includes(user.role) && user.outletId) {
+      partnerOutletId = user.outletId;
+    }
+  }
+
+  // Check for unique constraints (scoped by outletId if provided)
+  const uniqueWhere = partnerOutletId
+    ? {
+        AND: [
+          { OR: [{ name: data.name }, { code: data.code }] },
+          { outletId: partnerOutletId },
+        ],
+      }
+    : {
+        OR: [{ name: data.name }, { code: data.code }],
+      };
+
   const existing = await prisma.partner.findFirst({
-    where: {
-      OR: [{ name: data.name }, { code: data.code }],
-    },
+    where: uniqueWhere,
   });
 
   if (existing) {
     throw new ValidationError("Partner with this name or code already exists");
   }
 
+  // Create partner with outletId for tenant scoping
+  const partnerData = {
+    ...data,
+    outletId: partnerOutletId,
+  };
+
   const partner = await prisma.partner.create({
-    data,
+    data: partnerData,
     include: {
       _count: {
         select: {

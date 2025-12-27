@@ -67,22 +67,26 @@ export function ProtectedRoute({
   }
 
   // Check permission requirement
-  if (requiredPermission && !hasPermission(requiredPermission)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-2">
-            Access Denied
-          </h1>
-          <p className="text-muted-foreground">
-            You don't have permission to access this page.
-          </p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Required permission: {requiredPermission}
-          </p>
+  // requiredPermission format: "module:action:scope" (e.g., "user:read:all")
+  if (requiredPermission) {
+    const [module, action, scope = "own"] = requiredPermission.split(":");
+    if (!hasPermission(module, action, scope)) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-red-600 mb-2">
+              Access Denied
+            </h1>
+            <p className="text-muted-foreground">
+              You don&apos;t have permission to access this page.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Required permission: {requiredPermission}
+            </p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   // User is authenticated and has required permissions

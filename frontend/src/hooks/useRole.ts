@@ -15,6 +15,10 @@ export enum SystemRole {
   SALES = "sales",
   SUPPORT = "support",
 
+  // Outlet Level
+  OUTLET_ADMIN = "outlet_admin",
+  OUTLET_STAFF = "outlet_staff",
+
   // Customer Level (End Users)
   CUSTOMER = "customer",
   CUSTOMER_ACCOUNT = "customer_account",
@@ -36,6 +40,8 @@ const ROLE_HIERARCHY: Record<string, number> = {
   accounts: 60,
   sales: 60,
   support: 60,
+  outlet_admin: 50,
+  outlet_staff: 45,
   customer: 40,
   customer_account: 30,
   customer_sales: 30,
@@ -49,6 +55,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
 const ROLE_GROUPS = {
   system: ["superadmin", "admin"],
   client_level: ["client", "accounts", "sales", "support"],
+  outlet_level: ["outlet_admin", "outlet_staff"],
   customer_level: [
     "customer",
     "customer_account",
@@ -59,6 +66,7 @@ const ROLE_GROUPS = {
   sales_team: ["sales", "customer_sales"],
   support_team: ["support", "customer_support"],
   management: ["superadmin", "admin", "client"],
+  outlet_management: ["outlet_admin"],
 };
 
 /**
@@ -185,6 +193,20 @@ export function useRole() {
   }, [isInGroup]);
 
   /**
+   * Check if user is an outlet-level user
+   */
+  const isOutletUser = useCallback((): boolean => {
+    return isInGroup("outlet_level");
+  }, [isInGroup]);
+
+  /**
+   * Check if user is an outlet admin
+   */
+  const isOutletAdmin = useCallback((): boolean => {
+    return currentRole === "outlet_admin";
+  }, [currentRole]);
+
+  /**
    * Check if user can manage other users
    */
   const canManageUsers = useCallback((): boolean => {
@@ -232,6 +254,8 @@ export function useRole() {
         accounts: "Accounts Team",
         sales: "Sales Team",
         support: "Support Team",
+        outlet_admin: "Outlet Admin",
+        outlet_staff: "Outlet Staff",
         customer: "Customer",
         customer_account: "Customer Finance",
         customer_sales: "Customer Sales",
@@ -260,6 +284,8 @@ export function useRole() {
         accounts: "bg-yellow-100 text-yellow-800",
         sales: "bg-orange-100 text-orange-800",
         support: "bg-indigo-100 text-indigo-800",
+        outlet_admin: "bg-emerald-100 text-emerald-800",
+        outlet_staff: "bg-sky-100 text-sky-800",
         customer: "bg-teal-100 text-teal-800",
         customer_account: "bg-amber-100 text-amber-800",
         customer_sales: "bg-lime-100 text-lime-800",
@@ -285,6 +311,8 @@ export function useRole() {
         "accounts",
         "sales",
         "support",
+        "outlet_admin",
+        "outlet_staff",
         "customer",
         "customer_account",
         "customer_sales",
@@ -296,6 +324,8 @@ export function useRole() {
         "accounts",
         "sales",
         "support",
+        "outlet_admin",
+        "outlet_staff",
         "customer",
         "customer_account",
         "customer_sales",
@@ -306,10 +336,15 @@ export function useRole() {
         "accounts",
         "sales",
         "support",
+        "outlet_admin",
+        "outlet_staff",
         "customer",
         "customer_account",
         "customer_sales",
         "customer_support",
+      ],
+      outlet_admin: [
+        "outlet_staff",
       ],
       // Other roles cannot create users
     };
@@ -330,6 +365,8 @@ export function useRole() {
     isSystemAdmin,
     isClientLevel,
     isCustomerLevel,
+    isOutletUser,
+    isOutletAdmin,
     canManageUsers,
     canAccessFinance,
     canAccessSales,

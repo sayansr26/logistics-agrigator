@@ -1,10 +1,20 @@
 # Active Development Context
 
-## Current Sprint: Customer Types + Public Signup (COMPLETED ✅)
+## Current Sprint: Outlet Tenant Refactor (COMPLETED ✅)
 
 ### Overview
 
-**COMPLETED**: Full implementation of CustomerType system (DIRECT vs OUTLET) with public signup flow for direct customers. The plan introduces a two-tier customer model where DIRECT customers can self-register while OUTLET customers are admin-managed (coming soon).
+**COMPLETED**: Full implementation of multi-tenant outlet system with B2C (DIRECT) vs B2B (OUTLET) customer types. Outlets now function as independent business units with their own users (outlet_admin, outlet_staff), customers, zones, and charge packages. The refactor includes:
+
+- Outlet CRUD with user management
+- B2B customers linked to specific outlets
+- Outlet-scoped data isolation in partner-service and shipment-service
+- Role-based sidebar navigation for outlet users
+- Internal service-to-service endpoints for cross-service user creation
+
+### Previous Sprint: Customer Types + Public Signup (COMPLETED ✅)
+
+Full implementation of CustomerType system (DIRECT vs OUTLET) with public signup flow for direct customers.
 
 ### Previous Sprint: Partner Service - Zone System v2 + Charge Packages (COMPLETED ✅)
 
@@ -54,50 +64,71 @@ Full implementation of Zone System v2 (Distance/Geological zones with Pincode Ty
 
 ### Recent Accomplishments
 
+✅ **Outlet Tenant Refactor**: Complete multi-tenant outlet system (Completed 2025-12-27)
+
+- **Backend - User Service Outlet System**:
+  - Created full `Outlet` model with code, name, type (RETAIL/WAREHOUSE/HUB/FRANCHISE), status (ACTIVE/INACTIVE/SUSPENDED)
+  - Implemented `outletController.js` with complete CRUD operations
+  - Added outlet user management (outlet_admin, outlet_staff roles)
+  - Created internal endpoint `/auth/internal/users` for service-to-service user creation
+  - Added outlet tenant scoping to customer queries
+
+- **Backend - Partner Service Outlet Scoping**:
+  - Added `outletId` field to Zone, ChargePackage models
+  - Updated zone and charge package controllers to filter by outletId
+  - Created migrations for outlet tenant scoping
+
+- **Backend - Shipment Service Outlet Scoping**:
+  - Added `outletId` field to Shipment model
+  - Updated shipment queries to respect outlet tenant isolation
+
+- **Backend - Auth Service Enhancements**:
+  - Added `outlet_admin` and `outlet_staff` roles to Role enum
+  - Created internal endpoint `/auth/internal/users/:id` for service-to-service user updates
+  - Added outlet permissions to shared/constants/permissions.js
+  - Updated login response to include outletId and outletRole
+
+- **Frontend - Outlet Management**:
+  - Created `/outlets` listing page with statistics and filters
+  - Created `/outlets/add` page with 4-step wizard (Basic Info, Address, Bank Details, Admin User)
+  - Created `/outlets/[id]` detail page with overview and quick actions
+  - Created `/outlets/[id]/edit` page with tabbed form
+  - Created `/outlets/[id]/users` page for outlet user management
+  - Created `/outlets/[id]/customers` page (view-only) for B2B customer listing
+
+- **Frontend - Customer Management Refactor**:
+  - Created `/customers/[id]` detail page
+  - Created `/customers/[id]/edit` page with conditional outlet fields
+  - Refactored `/customers/add` into 4-step wizard (Customer Type, Basic Info, Address, Login Details)
+  - Added B2B/Outlet customer type with outlet selection
+  - Integrated Geo API for pincode-based auto-fill of city/state
+  - Removed Location column from customer list (redundant data)
+
+- **Frontend - Outlet-Specific Sidebar Navigation**:
+  - Updated sidebar to show outlet-specific menu for outlet_admin and outlet_staff
+  - Menu includes: Dashboard, Shipments, Pincode Types, Zone Management, Charge Packages, Customer Management
+  - Added `outletId` and `outletRole` to auth state
+
+- **Frontend - RTK Query Integration**:
+  - Updated customerApi.ts with proper B2B/B2C type handling
+  - Used RTK Query for outlet customers page (replaced manual fetch)
+  - Integrated geoApi for pincode search and auto-fill
+
 ✅ **Customer Types + Public Signup**: Complete feature implementation (Completed 2025-12-26)
 
 - **Backend - User Service Customer Model Extension**:
   - Added `CustomerType` enum (DIRECT | OUTLET) to Prisma schema
-  - Extended Customer model with outlet-specific fields (outletCode, outletAddress, contactPerson\*, etc.)
-  - Made `clientId` optional to support DIRECT customers without client association
-  - Added unique constraint for email when clientId is null (DIRECT customers)
-  - Created migration: `20251226100000_add_customer_types_and_outlets`
-
-- **Backend - User Service Outlets API**:
-  - Created `outletController.js` for OUTLET customer CRUD operations
-  - Created `outlets.js` routes mounted at `/api/v1/outlets`
-  - Updated `customerSchemas.js` with validation for customerType and outlet fields
-  - Updated `customerController.js` to handle customerType filtering
-
-- **Backend - User Service Bootstrap Endpoint**:
-  - Created `bootstrapController.js` for internal signup orchestration
-  - Created `internal.js` routes at `/api/v1/internal/bootstrap-customer`
-  - Created `internal.js` middleware for X-Internal-Request validation
-  - Bootstrap creates: Customer (DIRECT) + UserProfile + CustomerUser atomically
+  - Extended Customer model with outlet-specific fields
+  - Made `clientId` optional to support DIRECT customers
+  - Created migration for customer types and outlets
 
 - **Backend - Auth Service Registration Refactor**:
   - Updated `/auth/register` to enforce `role=customer` for public signup
   - Calls user-service bootstrap endpoint to create associated records
-  - Returns tokens like login (accessToken, refreshToken, user)
-  - Implements rollback on bootstrap failure (deletes auth user)
-
-- **Backend - Inter-Service Communication**:
-  - Added `INTERNAL_SERVICE_SECRET` and `INTERNAL_SECRET` to all 9 services in docker-compose.yml
-  - Fixed API Gateway to use correct env var (`INTERNAL_SERVICE_SECRET`)
-  - Direct service-to-service calls within Docker network (not through gateway)
-
-- **Frontend - Public Registration Page**:
-  - Created `/auth/register/page.tsx` with firstName, lastName, email, phone, password fields
-  - Password validation with requirements display (8+ chars, upper/lower/number/special)
-  - Uses `useRegisterMutation` from RTK Query authApi
-  - Auto-login on successful registration
 
 - **Frontend - Customer Management UI**:
   - Created RTK Query slice `customerApi.ts` for customer CRUD
   - Created `/customers/page.tsx` with listing, filtering, search
-  - Created `/customers/add/page.tsx` with customer type selection
-  - OUTLET type creation disabled with "Coming Soon" message
-  - Updated sidebar with "Customer Management" under Administration
 
 - **API Gateway Integration**:
   - Added proxy routes for `/api/v1/customers` and `/api/v1/outlets` to user-service
@@ -421,31 +452,34 @@ If critical issues arise:
 
 ### Services Status Summary
 
-- ✅ Auth Service (3002) - RBAC complete, public signup with customer role enforcement
-- ✅ User Service (3003) - **CustomerTypes + Outlets + Bootstrap** - COMPLETE, DIRECT/OUTLET model
-- ✅ Shipment Service (3004) - 100% stable, crash loop fixed, nodemon configured
-- ✅ Partner Service (3005) - **100% COMPLETE** - Zone System v2 + Charge Packages + Quote Engine + Distance Calculator
+- ✅ Auth Service (3002) - RBAC complete, outlet roles (outlet_admin, outlet_staff), internal user creation endpoint
+- ✅ User Service (3003) - **Outlet Tenant System + CustomerTypes** - COMPLETE, full outlet CRUD with user management
+- ✅ Shipment Service (3004) - **Outlet scoping added** - outletId field for tenant isolation
+- ✅ Partner Service (3005) - **Outlet scoping added** - Zone and ChargePackage tenant isolation
 - ✅ Wallet Service (3006) - Commission system complete, stable with nodemon config
 - ❌ Support Service (3007) - Not started, nodemon pre-configured
 - ❌ Platform Service (3008) - Not started, nodemon pre-configured
 - ✅ License Service (3011) - Complete, stable with nodemon config
-- ✅ API Gateway (3001) - JWT validation complete, RBAC middleware ready, Charge Packages routed
-- ✅ Frontend (3000) - Redux/RTK Query complete, Charge Packages UI with modals
+- ✅ API Gateway (3001) - JWT validation complete, RBAC middleware ready, all service routes proxied
+- ✅ Frontend (3000) - **Outlet Management Complete** - CRUD, users, customers (view-only), outlet-specific sidebar
 
 ---
 
-**Last Updated**: December 2025 (2025-12-26)
+**Last Updated**: December 2025 (2025-12-27)
 **Sprint Duration**: 2 weeks
 **Current Day**: COMPLETED
-**Backend Work**: ALL COMPLETE ✅ (CustomerTypes+Signup 6/6 + Zone Migration 6/6 + Charge Packages 11/11 = 23 tasks)
-**Frontend Work**: COMPLETE ✅ (Registration page + Customer Management UI)
-**Latest Achievement**: CustomerTypes + Public Signup - DIRECT customers can self-register
+**Backend Work**: ALL COMPLETE ✅ (Outlet Tenant Refactor + CustomerTypes+Signup + Zone Migration + Charge Packages)
+**Frontend Work**: COMPLETE ✅ (Outlet Management + Customer Management + Outlet-specific navigation)
+**Latest Achievement**: Outlet Tenant Refactor - Multi-tenant outlet system with B2B customer support
 **Completed Initiatives**:
 
-- CustomerTypes + Public Signup (6 tasks) ✅
+- Outlet Tenant Refactor (outlet CRUD, users, tenant scoping) ✅
+- CustomerTypes + Public Signup (B2C/B2B model) ✅
 - Zone System v2 Migration (PARTNER-012 to PARTNER-017) ✅
 - Charge Packages + Quote Engine (11 tasks) ✅
 
 **Pending Features**:
 
-- OUTLET customer creation (frontend disabled with "Coming Soon" until outlet CRUD ready)
+- Platform Service with Shopify integration
+- Support Service with ticketing system
+- Shipment bulk operations
