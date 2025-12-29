@@ -29,8 +29,8 @@ const getDistanceZoneService = () => {
 
 const getPincodeTypeService = () => {
   if (!_pincodeTypeService) {
-    const PincodeTypeService = require("./pincodeTypeService");
-    _pincodeTypeService = new PincodeTypeService();
+    // pincodeTypeService exports a singleton instance, not the class
+    _pincodeTypeService = require("./pincodeTypeService");
   }
   return _pincodeTypeService;
 };
@@ -340,31 +340,6 @@ async function calculateRates(params) {
     effectiveWeight = Math.max(weight, volumetricWeight);
   }
 
-  // Get pincode type charges for both locations
-  let pickupTypeCharges = { totalCharge: 0, activeTypes: [] };
-  let deliveryTypeCharges = { totalCharge: 0, activeTypes: [] };
-
-  try {
-    pickupTypeCharges = await pincodeTypeService.getTypesByPincode(fromPincode);
-  } catch (error) {
-    logger.debug("No pincode type for pickup", {
-      fromPincode,
-      error: error.message,
-    });
-  }
-
-  try {
-    deliveryTypeCharges = await pincodeTypeService.getTypesByPincode(toPincode);
-  } catch (error) {
-    logger.debug("No pincode type for delivery", {
-      toPincode,
-      error: error.message,
-    });
-  }
-
-  const pincodeTypeCharge =
-    pickupTypeCharges.totalCharge + deliveryTypeCharges.totalCharge;
-
   // Get active partners
   const partnerWhere = { isActive: true };
   if (partnerId) {
@@ -400,6 +375,39 @@ async function calculateRates(params) {
             reason: "No matching distance zone",
           };
         }
+
+        // Get partner-specific pincode type charges for both locations
+        let pickupTypeCharges = { totalCharge: 0, activeTypes: [] };
+        let deliveryTypeCharges = { totalCharge: 0, activeTypes: [] };
+
+        try {
+          pickupTypeCharges = await pincodeTypeService.getTypesByPincode(
+            fromPincode,
+            partner.id, // Partner-specific lookup
+          );
+        } catch (error) {
+          logger.debug("No pincode type for pickup", {
+            fromPincode,
+            partnerId: partner.id,
+            error: error.message,
+          });
+        }
+
+        try {
+          deliveryTypeCharges = await pincodeTypeService.getTypesByPincode(
+            toPincode,
+            partner.id, // Partner-specific lookup
+          );
+        } catch (error) {
+          logger.debug("No pincode type for delivery", {
+            toPincode,
+            partnerId: partner.id,
+            error: error.message,
+          });
+        }
+
+        const pincodeTypeCharge =
+          pickupTypeCharges.totalCharge + deliveryTypeCharges.totalCharge;
 
         // Get partner's charge packages
         const packages = await chargePackageService.getPackagesByPartner(

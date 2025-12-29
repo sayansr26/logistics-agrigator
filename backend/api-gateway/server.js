@@ -877,9 +877,9 @@ Object.keys(services).forEach((service) => {
       },
       onProxyReq: (proxyReq, req, _res) => {
         // Add internal secret header for backend service validation
-        const internalSecret = process.env.INTERNAL_SERVICE_SECRET;
+        const internalSecret = process.env.INTERNAL_SECRET;
         if (!internalSecret) {
-          logger.error("INTERNAL_SERVICE_SECRET not configured!");
+          logger.error("INTERNAL_SECRET not configured!");
         }
         proxyReq.setHeader("X-Internal-Request", internalSecret);
 

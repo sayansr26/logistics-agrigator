@@ -1,17 +1,26 @@
 import { baseApi } from "../baseApi";
 
 // Types for Pincode Types
+export interface PartnerInfo {
+  id: string;
+  name: string;
+  displayName: string;
+}
+
 export interface PincodeType {
   id: string; // UUID
+  partnerId: string; // Partner ID (CUID format)
   name: string; // e.g., "Metro", "ODA", "Hill"
   charge: string; // Decimal as string (e.g., "25.00")
   description?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  partner?: PartnerInfo;
 }
 
 export interface PincodeTypeWithStats extends PincodeType {
+  assignedPincodeCount?: number;
   _count?: {
     assignments: number;
   };
@@ -22,13 +31,35 @@ export interface GetPincodeTypesParams {
   limit?: number;
   search?: string;
   isActive?: boolean;
+  partnerId?: string; // Filter by partner
 }
 
+// Create input requires partnerIds and pincodeCodes
 export interface CreatePincodeTypeInput {
   name: string;
   charge: string;
   description?: string;
   isActive?: boolean;
+  partnerIds: string[]; // Required: at least one partner
+  pincodeCodes: string[]; // Required: at least one pincode
+}
+
+// Create response structure (multiple types created per partner)
+export interface CreatePincodeTypeResult {
+  createdTypes: Array<{
+    id: string;
+    partnerId: string;
+    partnerName: string;
+    name: string;
+    charge: string;
+    assignedCount: number;
+  }>;
+  summary: {
+    totalTypesCreated: number;
+    totalPincodesRequested: number;
+    validPincodes: number;
+    missingPincodes: string[];
+  };
 }
 
 export interface UpdatePincodeTypeInput {
@@ -93,9 +124,9 @@ export const pincodeTypeApi = baseApi.injectEndpoints({
       providesTags: (result, error, id) => [{ type: "PincodeType", id }],
     }),
 
-    // Create pincode type
+    // Create pincode type(s) for one or more partners with mandatory pincode assignment
     createPincodeType: builder.mutation<
-      { data: PincodeType },
+      { data: CreatePincodeTypeResult },
       CreatePincodeTypeInput
     >({
       query: (data) => ({

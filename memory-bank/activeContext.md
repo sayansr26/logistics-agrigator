@@ -1,8 +1,20 @@
 # Active Development Context
 
-## Current Sprint: Outlet Tenant Refactor (COMPLETED ✅)
+## Current Sprint: Partner-Specific Pincode Types (COMPLETED ✅)
 
 ### Overview
+
+**COMPLETED**: Enhanced pincode types system to be partner-specific with mandatory pincode assignment during creation. The Edit form now matches the Create form, allowing full partner and pincode management.
+
+### Latest Changes (December 2025)
+
+- **Partner-Specific Pincode Types**: Each pincode type is now tied to a specific courier partner
+- **Mandatory Pincode Assignment**: Creating a pincode type requires selecting at least one pincode
+- **Unified Create/Edit Forms**: Edit dialog now has the same layout and capabilities as Create
+- **Partner Management in Edit**: Can add new partners (creates copies) or remove current partner (deletes)
+- **Integrated Pincode Management**: Removed separate "Manage Pincodes" dialog - now part of Edit form
+
+### Previous Sprint: Outlet Tenant Refactor (COMPLETED ✅)
 
 **COMPLETED**: Full implementation of multi-tenant outlet system with B2C (DIRECT) vs B2B (OUTLET) customer types. Outlets now function as independent business units with their own users (outlet_admin, outlet_staff), customers, zones, and charge packages. The refactor includes:
 
@@ -63,6 +75,41 @@ Full implementation of Zone System v2 (Distance/Geological zones with Pincode Ty
 8. 🔲 **FE-002**: Setup Redux store with RTK Query
 
 ### Recent Accomplishments
+
+✅ **Partner-Specific Pincode Types**: Enhanced pincode types with partner association (Completed 2025-12-29)
+
+- **Backend - Partner Service Schema Changes**:
+  - Added `partnerId` field to `PincodeType` model
+  - Changed unique constraint from `name` to composite `@@unique([partnerId, name])`
+  - Added indexes on `(partnerId, isActive)` and `(partnerId, name)`
+  - Created migration `20251229100000_add_partner_to_pincode_types`
+
+- **Backend - Validation Updates**:
+  - `createPincodeTypeSchema` now requires `partnerIds` (array, min 1) and `pincodeCodes` (array, min 1)
+  - Added optional `partnerId` filter to list and getTypesByPincode queries
+
+- **Backend - Service Layer Refactor**:
+  - `createPincodeType` → `createPincodeTypesForPartners` for multi-partner creation
+  - Uses Prisma transaction for atomic creation of types + assignments
+  - `getPincodeTypes` and `getTypesByPincode` now support partner filtering
+  - Updated cache keys to include partnerId for partner-specific caching
+
+- **Backend - Quote Calculation Updates**:
+  - Pincode type charges now fetched per-partner inside the quote calculation loop
+  - Each partner gets their own pincode type charge calculation
+
+- **Frontend - RTK Query API Updates**:
+  - `PincodeType` interface now includes `partnerId` and `partner` relation
+  - `CreatePincodeTypeInput` requires `partnerIds[]` and `pincodeCodes[]`
+  - Added `GetPincodeTypesParams.partnerId` for filtering
+
+- **Frontend - Pincode Types Page Refactor**:
+  - Added partner filter dropdown to the listing page
+  - Table now displays partner name for each pincode type
+  - Create dialog requires selecting partners and pincodes with autocomplete chips
+  - Edit dialog now matches Create layout with full partner/pincode management
+  - Removed separate "Manage Pincodes" dialog - functionality integrated into Edit
+  - Partners can be added (creates copies) or removed (deletes type) in Edit
 
 ✅ **Outlet Tenant Refactor**: Complete multi-tenant outlet system (Completed 2025-12-27)
 
@@ -465,14 +512,15 @@ If critical issues arise:
 
 ---
 
-**Last Updated**: December 2025 (2025-12-27)
+**Last Updated**: December 2025 (2025-12-29)
 **Sprint Duration**: 2 weeks
 **Current Day**: COMPLETED
-**Backend Work**: ALL COMPLETE ✅ (Outlet Tenant Refactor + CustomerTypes+Signup + Zone Migration + Charge Packages)
-**Frontend Work**: COMPLETE ✅ (Outlet Management + Customer Management + Outlet-specific navigation)
-**Latest Achievement**: Outlet Tenant Refactor - Multi-tenant outlet system with B2B customer support
+**Backend Work**: ALL COMPLETE ✅ (Partner-Specific Pincode Types + Outlet Tenant Refactor + CustomerTypes+Signup + Zone Migration + Charge Packages)
+**Frontend Work**: COMPLETE ✅ (Pincode Types Refactor + Outlet Management + Customer Management + Outlet-specific navigation)
+**Latest Achievement**: Partner-Specific Pincode Types - Pincode types now partner-specific with unified Create/Edit forms
 **Completed Initiatives**:
 
+- Partner-Specific Pincode Types (partner association, mandatory pincodes, unified forms) ✅
 - Outlet Tenant Refactor (outlet CRUD, users, tenant scoping) ✅
 - CustomerTypes + Public Signup (B2C/B2B model) ✅
 - Zone System v2 Migration (PARTNER-012 to PARTNER-017) ✅

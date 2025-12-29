@@ -1,23 +1,23 @@
 # Project Progress Tracker
 
-## Last Updated: December 2025 (2025-12-27)
+## Last Updated: December 2025 (2025-12-29)
 
 ## Overall Project Status: 90% Complete
 
 ### Service Status Dashboard
 
-| Service          | Development | Testing | Documentation | Production Ready | Notes                                                                          |
-| ---------------- | ----------- | ------- | ------------- | ---------------- | ------------------------------------------------------------------------------ |
-| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 12+ endpoints, JWT + RBAC + outlet roles + internal user endpoints             |
-| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 30+ endpoints, **Outlet Tenant System + CustomerTypes** - COMPLETE             |
-| Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Outlet Scoping** - COMPLETE               |
-| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                                |
-| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet scoping added**, stable, bulk pending                                 |
-| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                                  |
-| API Gateway      | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **ALL SECURITY + ALL SERVICE ROUTING COMPLETE**                                |
-| Frontend         | ✅ 95%      | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet Management + Customer Management + Outlet-specific sidebar**          |
-| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
-| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                            |
+| Service          | Development | Testing | Documentation | Production Ready | Notes                                                                 |
+| ---------------- | ----------- | ------- | ------------- | ---------------- | --------------------------------------------------------------------- |
+| Auth Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 12+ endpoints, JWT + RBAC + outlet roles + internal user endpoints    |
+| User Service     | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 30+ endpoints, **Outlet Tenant System + CustomerTypes** - COMPLETE    |
+| Partner Service  | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **Zone System v2 + Charge Packages + Outlet Scoping** - COMPLETE      |
+| Wallet Service   | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | 14 endpoints, commission system                                       |
+| Shipment Service | ✅ 100%     | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet scoping added**, stable, bulk pending                        |
+| License Service  | ✅ 100%     | ✅ 100% | ⚠️ 80%        | ✅ Yes           | 12 endpoints, auto-generation                                         |
+| API Gateway      | ✅ 100%     | ✅ 100% | ✅ 100%       | ✅ Yes           | **ALL SECURITY + ALL SERVICE ROUTING COMPLETE**                       |
+| Frontend         | ✅ 95%      | ⚠️ 70%  | ⚠️ 70%        | ✅ Yes           | **Outlet Management + Customer Management + Outlet-specific sidebar** |
+| Platform Service | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                   |
+| Support Service  | ❌ 0%       | ❌ 0%   | ❌ 0%         | ❌ No            | Not started, nodemon pre-configured                                   |
 
 ### Current Sprint: Frontend Architecture Migration (Redux/RTK Query)
 
@@ -73,6 +73,38 @@
   - [x] FE-011: Superadmin user management
 
 ### Recent Achievements
+
+#### Partner-Specific Pincode Types (December 2025) ✅
+
+- **Pincode Types Partner Association**: Enhanced pincode types to be partner-specific (Completed 2025-12-29)
+  - **Backend - Schema Changes**:
+    - ✅ Added `partnerId` field to `PincodeType` model with foreign key to Partner
+    - ✅ Changed unique constraint from `name` to composite `@@unique([partnerId, name])`
+    - ✅ Added indexes for efficient querying: `(partnerId, isActive)`, `(partnerId, name)`
+    - ✅ Created migration `20251229100000_add_partner_to_pincode_types`
+  - **Backend - Service Layer**:
+    - ✅ Refactored `createPincodeType` to `createPincodeTypesForPartners` for multi-partner creation
+    - ✅ Uses Prisma transaction for atomic type + assignment creation
+    - ✅ Updated `getPincodeTypes` with optional `partnerId` filter
+    - ✅ Updated `getTypesByPincode` with partner-specific lookup
+    - ✅ Updated cache keys to include partnerId for data isolation
+  - **Backend - Validation**:
+    - ✅ `createPincodeTypeSchema` now requires `partnerIds[]` (min 1) and `pincodeCodes[]` (min 1)
+    - ✅ Added optional `partnerId` to list and getTypesByPincode query params
+  - **Backend - Quote Calculation**:
+    - ✅ Pincode type charges now calculated per-partner in quote loop
+    - ✅ Each partner gets partner-specific pincode type charges
+  - **Frontend - RTK Query**:
+    - ✅ Updated `PincodeType` interface with `partnerId` and `partner` relation
+    - ✅ Updated `CreatePincodeTypeInput` with required `partnerIds[]` and `pincodeCodes[]`
+    - ✅ Added `partnerId` filter to `GetPincodeTypesParams`
+  - **Frontend - UI Refactor**:
+    - ✅ Added partner filter dropdown to pincode types listing page
+    - ✅ Table displays partner name column for each pincode type
+    - ✅ Create dialog with autocomplete chips for partner and pincode selection
+    - ✅ Edit dialog matches Create layout with full partner/pincode management
+    - ✅ Removed separate "Manage Pincodes" dialog - integrated into Edit
+    - ✅ In Edit: add partners (creates copies), remove partner (deletes type)
 
 #### Outlet Tenant Refactor (December 2025) ✅
 
@@ -150,7 +182,7 @@
     - ✅ Created `/customers/add` page (OUTLET disabled with "Coming Soon")
     - ✅ Updated sidebar navigation with Customer Management
   - **Infrastructure**:
-    - ✅ Added `INTERNAL_SERVICE_SECRET` + `INTERNAL_SECRET` to all 9 services
+    - ✅ Added `INTERNAL_SECRET` + `INTERNAL_SECRET` to all 9 services
     - ✅ Fixed API Gateway env var usage
     - ✅ Added gateway proxy routes for `/api/v1/customers` and `/api/v1/outlets`
 
@@ -772,10 +804,13 @@
 
 ---
 
-**Current Focus**: Outlet Tenant Refactor COMPLETE. Multi-tenant outlet system with B2B customer support fully operational.
+**Current Focus**: Partner-Specific Pincode Types COMPLETE. Pincode types are now partner-specific with unified Create/Edit forms.
 
 **Completed This Sprint (December 2025)**:
 
+- ✅ **Partner-Specific Pincode Types**: Pincode types now tied to partners with mandatory pincode assignment
+- ✅ **Unified Create/Edit Forms**: Edit dialog matches Create with full partner/pincode management
+- ✅ **Quote Calculation Update**: Partner-specific pincode type charges in quote engine
 - ✅ **Outlet Tenant Refactor**: Full multi-tenant outlet system with user management
 - ✅ **Backend Outlet Scoping**: Partner-service and shipment-service now support outletId tenant isolation
 - ✅ **Auth Service Internal Endpoints**: `/auth/internal/users` for cross-service user creation/updates

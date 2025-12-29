@@ -23,25 +23,31 @@ const pincodeTypeService = require("../services/pincodeTypeService");
 const { prisma } = require("../config/database");
 
 /**
- * 1. Create a new pincode type
+ * 1. Create pincode types for one or more partners with mandatory pincode assignment
  * @route POST /api/v1/pincode-types
  * @access Admin, Operations
  */
 async function createPincodeType(req, res) {
   try {
-    const { name, charge, description, isActive } = req.body;
+    const { name, charge, description, isActive, partnerIds, pincodeCodes } =
+      req.body;
 
-    logger.info("Creating pincode type", {
+    logger.info("Creating pincode types for partners", {
       name,
       charge,
+      partnerCount: partnerIds?.length,
+      pincodeCount: pincodeCodes?.length,
       userId: req.user?.id,
     });
 
-    const pincodeType = await pincodeTypeService.createPincodeType({
+    const result = await pincodeTypeService.createPincodeType({
       name,
       charge,
       description,
       isActive,
+      partnerIds,
+      pincodeCodes,
+      assignedBy: req.user?.id,
     });
 
     // Audit log
@@ -49,26 +55,36 @@ async function createPincodeType(req, res) {
       data: {
         action: "PINCODE_TYPE_CREATED",
         resourceType: "PINCODE_TYPE",
-        resourceId: pincodeType.id,
+        resourceId: result.createdTypes.map((t) => t.id).join(","),
         userId: req.user?.id,
         ipAddress: req.ip,
         userAgent: req.get("User-Agent"),
-        requestData: { name, charge, description, isActive },
-        responseData: { id: pincodeType.id, success: true },
+        requestData: {
+          name,
+          charge,
+          description,
+          isActive,
+          partnerIds,
+          pincodeCount: pincodeCodes?.length,
+          sampleCodes: pincodeCodes?.slice(0, 10),
+        },
+        responseData: {
+          typesCreated: result.createdTypes.length,
+          summary: result.summary,
+          success: true,
+        },
       },
     });
 
-    logger.info("Pincode type created successfully", {
-      id: pincodeType.id,
-      name: pincodeType.name,
+    logger.info("Pincode types created successfully", {
+      typesCreated: result.createdTypes.length,
+      summary: result.summary,
       userId: req.user?.id,
     });
 
     res
       .status(201)
-      .json(
-        APIResponse.success(pincodeType, "Pincode type created successfully"),
-      );
+      .json(APIResponse.success(result, "Pincode types created successfully"));
   } catch (error) {
     logger.error("Failed to create pincode type", {
       error: error.message,
@@ -79,6 +95,12 @@ async function createPincodeType(req, res) {
 
     if (error.statusCode === 409) {
       return res.status(409).json(APIResponse.error(error.message, "CONFLICT"));
+    }
+
+    if (error.statusCode === 400) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
     }
 
     res
@@ -104,6 +126,7 @@ async function listPincodeTypes(req, res) {
         req.query.isActive !== undefined
           ? req.query.isActive === "true"
           : undefined,
+      partnerId: req.query.partnerId || undefined,
       sortBy: req.query.sortBy || "createdAt",
       sortOrder: req.query.sortOrder || "desc",
     };
@@ -118,6 +141,7 @@ async function listPincodeTypes(req, res) {
     logger.info("Pincode types listed successfully", {
       count: result.pincodeTypes.length,
       total: result.pagination.total,
+      partnerId: filters.partnerId,
       userId: req.user?.id,
     });
 
@@ -504,23 +528,26 @@ async function getAssignedPincodes(req, res) {
 }
 
 /**
- * 9. Get types assigned to a pincode
+ * 9. Get types assigned to a pincode (optionally filtered by partner)
  * @route GET /api/v1/pincodes/:code/types
  * @access Admin, Operations
  */
 async function getTypesByPincode(req, res) {
   try {
     const { code } = req.params;
+    const { partnerId } = req.query;
 
     logger.info("Getting types for pincode", {
       code,
+      partnerId,
       userId: req.user?.id,
     });
 
-    const result = await pincodeTypeService.getTypesByPincode(code);
+    const result = await pincodeTypeService.getTypesByPincode(code, partnerId);
 
     logger.info("Types by pincode retrieved successfully", {
       code,
+      partnerId,
       typeCount: result.types.length,
       userId: req.user?.id,
     });
@@ -531,6 +558,7 @@ async function getTypesByPincode(req, res) {
       error: error.message,
       stack: error.stack,
       code: req.params.code,
+      partnerId: req.query.partnerId,
       userId: req.user?.id,
     });
 

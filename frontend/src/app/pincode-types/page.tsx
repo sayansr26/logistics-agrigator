@@ -48,8 +48,10 @@ import {
   useUnassignPincodesFromTypeMutation,
   useGetPincodesByTypeQuery,
   type PincodeTypeWithStats,
+  type CreatePincodeTypeInput,
 } from "@/store/api/endpoints/pincodeTypeApi";
 import { useSearchPincodesQuery } from "@/store/api/endpoints/geoApi";
+import { useGetPartnersQuery } from "@/store/api/endpoints/partnersApi";
 import {
   Settings,
   Plus,
@@ -67,6 +69,7 @@ import {
   AlertCircle,
   Tag,
   Hash,
+  Truck,
 } from "lucide-react";
 
 export default function PincodeTypesPage() {
@@ -537,6 +540,7 @@ function PincodeTypesTable({
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
+          <TableHead>Partner</TableHead>
           <TableHead>Description</TableHead>
           <TableHead>Charge</TableHead>
           <TableHead>Status</TableHead>
@@ -547,7 +551,7 @@ function PincodeTypesTable({
       <TableBody>
         {pincodeTypes.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="text-center py-12">
+            <TableCell colSpan={7} className="text-center py-12">
               <div className="flex flex-col items-center justify-center text-muted-foreground">
                 <Tag className="h-12 w-12 mb-4" />
                 <p className="text-lg font-semibold">No pincode types found</p>
@@ -582,7 +586,6 @@ function PincodeTypeRow({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showPincodesDialog, setShowPincodesDialog] = useState(false);
 
   const handleToggleStatus = () => {
     setShowConfirmDialog(true);
@@ -620,6 +623,16 @@ function PincodeTypeRow({
             <div className="font-medium">{pincodeType.name}</div>
           </div>
         </TableCell>
+        <TableCell>
+          <div className="flex items-center space-x-2">
+            <Truck className="h-4 w-4 text-purple-600" />
+            <span className="text-sm">
+              {pincodeType.partner?.displayName ||
+                pincodeType.partner?.name ||
+                "-"}
+            </span>
+          </div>
+        </TableCell>
         <TableCell className="max-w-xs truncate">
           {pincodeType.description || "-"}
         </TableCell>
@@ -644,7 +657,11 @@ function PincodeTypeRow({
         <TableCell>
           <div className="flex items-center space-x-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
-            <span>{pincodeType._count?.assignments || 0}</span>
+            <span>
+              {pincodeType.assignedPincodeCount ||
+                pincodeType._count?.assignments ||
+                0}
+            </span>
           </div>
         </TableCell>
         <TableCell className="text-right">
@@ -658,11 +675,7 @@ function PincodeTypeRow({
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                 <Edit className="mr-2 h-4 w-4" />
-                Edit Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowPincodesDialog(true)}>
-                <MapPin className="mr-2 h-4 w-4" />
-                Manage Pincodes
+                Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -829,18 +842,11 @@ function PincodeTypeRow({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Manage Pincodes Dialog */}
-      <ManagePincodesDialog
-        open={showPincodesDialog}
-        onOpenChange={setShowPincodesDialog}
-        pincodeType={pincodeType}
-      />
     </>
   );
 }
 
-// Create Pincode Type Dialog Component
+// Create Pincode Type Dialog Component with Partner and Pincode selection
 function CreatePincodeTypeDialog({
   open,
   onOpenChange,
@@ -849,17 +855,126 @@ function CreatePincodeTypeDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [createPincodeType, { isLoading }] = useCreatePincodeTypeMutation();
+
+  // Fetch partners for selection
+  const { data: partnersData, isLoading: isLoadingPartners } =
+    useGetPartnersQuery({ isActive: true, limit: 100 }, { skip: !open });
+  const partners = partnersData?.data?.partners || [];
+
+  // Form state
   const [formData, setFormData] = useState({
     name: "",
     charge: "0",
     description: "",
     isActive: true,
   });
+  const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([]);
+  const [selectedPincodeCodes, setSelectedPincodeCodes] = useState<string[]>(
+    [],
+  );
+
+  // Partner search state
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
+
+  // Pincode search state
+  const [pincodeSearch, setPincodeSearch] = useState("");
+  const [debouncedPincodeSearch, setDebouncedPincodeSearch] = useState("");
+  const [showPincodeSuggestions, setShowPincodeSuggestions] = useState(false);
+
+  // Error state
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+
+  // Debounce pincode search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPincodeSearch(pincodeSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pincodeSearch]);
+
+  // Fetch pincodes for autocomplete
+  const { data: pincodeResults, isLoading: isPincodeSearching } =
+    useSearchPincodesQuery(
+      { code: debouncedPincodeSearch },
+      { skip: !debouncedPincodeSearch || debouncedPincodeSearch.length < 2 },
+    );
+  const pincodeSuggestions = Array.isArray(pincodeResults?.data)
+    ? pincodeResults.data
+    : [];
+
+  // Filter out already selected pincodes
+  const filteredPincodeSuggestions = pincodeSuggestions.filter(
+    (p: any) => !selectedPincodeCodes.includes(p.code),
+  );
+
+  // Filter partners by search
+  const filteredPartners = partners.filter(
+    (p: any) =>
+      !selectedPartnerIds.includes(p.id) &&
+      (p.displayName?.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+        p.name?.toLowerCase().includes(partnerSearch.toLowerCase())),
+  );
+
+  const handlePartnerSelect = (partnerId: string) => {
+    if (!selectedPartnerIds.includes(partnerId)) {
+      setSelectedPartnerIds([...selectedPartnerIds, partnerId]);
+    }
+    setPartnerSearch("");
+    setShowPartnerDropdown(false);
+  };
+
+  const handlePartnerRemove = (partnerId: string) => {
+    setSelectedPartnerIds(selectedPartnerIds.filter((id) => id !== partnerId));
+  };
+
+  const handlePincodeSelect = (pincode: any) => {
+    if (!selectedPincodeCodes.includes(pincode.code)) {
+      setSelectedPincodeCodes([...selectedPincodeCodes, pincode.code]);
+    }
+    setPincodeSearch("");
+    setShowPincodeSuggestions(false);
+  };
+
+  const handlePincodeRemove = (code: string) => {
+    setSelectedPincodeCodes(selectedPincodeCodes.filter((c) => c !== code));
+  };
+
+  const validateForm = (): boolean => {
+    const errors: string[] = [];
+
+    if (!formData.name.trim()) {
+      errors.push("Name is required");
+    }
+    if (selectedPartnerIds.length === 0) {
+      errors.push("At least one partner must be selected");
+    }
+    if (selectedPincodeCodes.length === 0) {
+      errors.push("At least one pincode must be selected");
+    }
+
+    setFormErrors(errors);
+    return errors.length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
     try {
-      await createPincodeType(formData).unwrap();
+      const payload: CreatePincodeTypeInput = {
+        name: formData.name,
+        charge: formData.charge,
+        description: formData.description || undefined,
+        isActive: formData.isActive,
+        partnerIds: selectedPartnerIds,
+        pincodeCodes: selectedPincodeCodes,
+      };
+
+      await createPincodeType(payload).unwrap();
 
       // Reset form and close dialog
       setFormData({
@@ -868,28 +983,54 @@ function CreatePincodeTypeDialog({
         description: "",
         isActive: true,
       });
+      setSelectedPartnerIds([]);
+      setSelectedPincodeCodes([]);
+      setFormErrors([]);
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create pincode type:", error);
+      setFormErrors([
+        error?.data?.error?.message || "Failed to create pincode type",
+      ]);
     }
+  };
+
+  // Get partner display name by ID
+  const getPartnerDisplayName = (partnerId: string) => {
+    const partner = partners.find((p: any) => p.id === partnerId);
+    return partner?.displayName || partner?.name || partnerId;
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Plus className="h-5 w-5 text-blue-600" />
             <span>Create New Pincode Type</span>
           </DialogTitle>
           <DialogDescription>
-            Add a new pincode type with a charge for special delivery areas
-            (Metro, ODA, Hill, etc.)
+            Add a new pincode type with a charge for special delivery areas.
+            Select courier partners and pincodes to assign.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="grid gap-4 py-4 pr-2">
+            {/* Error Messages */}
+            {formErrors.length > 0 && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <ul className="text-sm text-red-800 space-y-1">
+                  {formErrors.map((error, index) => (
+                    <li key={index} className="flex items-center space-x-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{error}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
@@ -903,7 +1044,7 @@ function CreatePincodeTypeDialog({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                A unique name for this pincode type
+                A unique name for this pincode type (per partner)
               </p>
             </div>
 
@@ -927,6 +1068,194 @@ function CreatePincodeTypeDialog({
               </p>
             </div>
 
+            {/* Partner Selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center space-x-1">
+                <Truck className="h-4 w-4" />
+                <span>Courier Partners *</span>
+              </Label>
+
+              {/* Selected Partners Chips */}
+              {selectedPartnerIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {selectedPartnerIds.map((partnerId) => (
+                    <Badge
+                      key={partnerId}
+                      variant="secondary"
+                      className="bg-purple-100 text-purple-800 cursor-pointer hover:bg-purple-200 pr-1"
+                    >
+                      <Truck className="h-3 w-3 mr-1" />
+                      {getPartnerDisplayName(partnerId)}
+                      <button
+                        type="button"
+                        onClick={() => handlePartnerRemove(partnerId)}
+                        className="ml-1 p-0.5 rounded-full hover:bg-purple-300"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Partner Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search and select courier partners..."
+                  value={partnerSearch}
+                  onChange={(e) => {
+                    setPartnerSearch(e.target.value);
+                    setShowPartnerDropdown(true);
+                  }}
+                  onFocus={() => setShowPartnerDropdown(true)}
+                  className="pl-10"
+                />
+                {isLoadingPartners && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+
+                {/* Partner Dropdown */}
+                {showPartnerDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {isLoadingPartners ? (
+                      <div className="p-3 text-center text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                        Loading partners...
+                      </div>
+                    ) : filteredPartners.length === 0 ? (
+                      <div className="p-3 text-center text-sm text-muted-foreground">
+                        {partnerSearch
+                          ? "No matching partners found"
+                          : "All partners selected"}
+                      </div>
+                    ) : (
+                      filteredPartners.map((partner: any) => (
+                        <button
+                          key={partner.id}
+                          type="button"
+                          onClick={() => handlePartnerSelect(partner.id)}
+                          className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Truck className="h-4 w-4 text-purple-600" />
+                            <span className="font-medium">
+                              {partner.displayName || partner.name}
+                            </span>
+                            {partner.code && (
+                              <span className="text-muted-foreground text-xs">
+                                ({partner.code})
+                              </span>
+                            )}
+                          </div>
+                          <Plus className="h-4 w-4 text-purple-600" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select one or more courier partners for this pincode type
+              </p>
+            </div>
+
+            {/* Pincode Selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center space-x-1">
+                <MapPin className="h-4 w-4" />
+                <span>Pincodes *</span>
+              </Label>
+
+              {/* Selected Pincodes Chips */}
+              {selectedPincodeCodes.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {selectedPincodeCodes.map((code) => (
+                    <Badge
+                      key={code}
+                      variant="secondary"
+                      className="bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200 pr-1"
+                    >
+                      <MapPin className="h-3 w-3 mr-1" />
+                      {code}
+                      <button
+                        type="button"
+                        onClick={() => handlePincodeRemove(code)}
+                        className="ml-1 p-0.5 rounded-full hover:bg-blue-300"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Pincode Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search pincodes (type at least 2 characters)..."
+                  value={pincodeSearch}
+                  onChange={(e) => {
+                    setPincodeSearch(e.target.value);
+                    setShowPincodeSuggestions(true);
+                  }}
+                  onFocus={() => setShowPincodeSuggestions(true)}
+                  className="pl-10"
+                />
+                {isPincodeSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+
+                {/* Pincode Suggestions Dropdown */}
+                {showPincodeSuggestions &&
+                  debouncedPincodeSearch.length >= 2 && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {isPincodeSearching ? (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                          Searching...
+                        </div>
+                      ) : filteredPincodeSuggestions.length === 0 ? (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          No matching pincodes found
+                        </div>
+                      ) : (
+                        filteredPincodeSuggestions.map((pincode: any) => (
+                          <button
+                            key={pincode.id}
+                            type="button"
+                            onClick={() => handlePincodeSelect(pincode)}
+                            className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                          >
+                            <div>
+                              <span className="font-medium">
+                                {pincode.code}
+                              </span>
+                              {pincode.areaName && (
+                                <span className="text-muted-foreground ml-2">
+                                  {pincode.areaName}
+                                </span>
+                              )}
+                              {pincode.state?.name && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({pincode.state.code || pincode.state.name})
+                                </span>
+                              )}
+                            </div>
+                            <Plus className="h-4 w-4 text-blue-600" />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Selected: {selectedPincodeCodes.length} pincode(s). Search and
+                select pincodes to assign.
+              </p>
+            </div>
+
             {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
@@ -937,7 +1266,7 @@ function CreatePincodeTypeDialog({
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
-                rows={3}
+                rows={2}
               />
             </div>
 
@@ -957,7 +1286,7 @@ function CreatePincodeTypeDialog({
             </div>
           </div>
 
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-4 pt-4 border-t">
             <Button
               type="button"
               variant="outline"
@@ -986,7 +1315,7 @@ function CreatePincodeTypeDialog({
   );
 }
 
-// Edit Pincode Type Dialog Component
+// Edit Pincode Type Dialog Component - Same layout as Create form
 function EditPincodeTypeDialog({
   open,
   onOpenChange,
@@ -997,12 +1326,94 @@ function EditPincodeTypeDialog({
   pincodeType: PincodeTypeWithStats;
 }) {
   const [updatePincodeType, { isLoading }] = useUpdatePincodeTypeMutation();
+  const [createPincodeType] = useCreatePincodeTypeMutation();
+  const [deletePincodeType] = useDeletePincodeTypeMutation();
+  const [assignPincodes, { isLoading: isAssigning }] =
+    useAssignPincodesToTypeMutation();
+  const [unassignPincodes, { isLoading: isUnassigning }] =
+    useUnassignPincodesFromTypeMutation();
+
+  // Fetch partners for selection
+  const { data: partnersData, isLoading: isLoadingPartners } =
+    useGetPartnersQuery({ isActive: true, limit: 100 }, { skip: !open });
+  const partners = partnersData?.data?.partners || [];
+
+  // Fetch assigned pincodes
+  const { data: pincodesData, isLoading: isLoadingPincodes } =
+    useGetPincodesByTypeQuery(
+      { id: pincodeType.id, page: 1, limit: 500 },
+      { skip: !open },
+    );
+
   const [formData, setFormData] = useState({
     name: pincodeType.name,
     charge: pincodeType.charge,
     description: pincodeType.description || "",
     isActive: pincodeType.isActive,
   });
+
+  // Partner management state
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
+  const [partnersToAdd, setPartnersToAdd] = useState<string[]>([]);
+  const [removeCurrentPartner, setRemoveCurrentPartner] = useState(false);
+
+  // Pincode management state
+  const [pincodeSearch, setPincodeSearch] = useState("");
+  const [debouncedPincodeSearch, setDebouncedPincodeSearch] = useState("");
+  const [showPincodeSuggestions, setShowPincodeSuggestions] = useState(false);
+  const [pincodesToAdd, setPincodesToAdd] = useState<string[]>([]);
+  const [pincodesToRemove, setPincodesToRemove] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+
+  // Filter partners for dropdown
+  const currentPartnerId = pincodeType.partnerId;
+  const filteredPartners = partners.filter(
+    (p: any) =>
+      p.id !== currentPartnerId &&
+      !partnersToAdd.includes(p.id) &&
+      (p.name?.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+        p.displayName?.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+        p.code?.toLowerCase().includes(partnerSearch.toLowerCase())),
+  );
+
+  // Debounce pincode search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPincodeSearch(pincodeSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pincodeSearch]);
+
+  // Fetch pincodes for autocomplete
+  const { data: pincodeResults, isLoading: isPincodeSearching } =
+    useSearchPincodesQuery(
+      { code: debouncedPincodeSearch },
+      { skip: !debouncedPincodeSearch || debouncedPincodeSearch.length < 2 },
+    );
+  const pincodeSuggestions = Array.isArray(pincodeResults?.data)
+    ? pincodeResults.data
+    : [];
+
+  // Get assigned pincodes from API
+  const assignedPincodesFromApi = Array.isArray(pincodesData?.data)
+    ? pincodesData.data
+    : [];
+  const assignedCodes = assignedPincodesFromApi.map(
+    (p: any) => p.pincode?.code || p.code,
+  );
+
+  // Calculate current pincodes (existing - removed + new)
+  const currentPincodes = [
+    ...assignedCodes.filter((code: string) => !pincodesToRemove.includes(code)),
+    ...pincodesToAdd,
+  ];
+
+  // Filter pincode suggestions
+  const filteredPincodeSuggestions = pincodeSuggestions.filter(
+    (p: any) =>
+      !assignedCodes.includes(p.code) && !pincodesToAdd.includes(p.code),
+  );
 
   // Update form data when pincodeType prop changes
   useEffect(() => {
@@ -1012,48 +1423,186 @@ function EditPincodeTypeDialog({
       description: pincodeType.description || "",
       isActive: pincodeType.isActive,
     });
+    setPartnersToAdd([]);
+    setRemoveCurrentPartner(false);
+    setPincodesToAdd([]);
+    setPincodesToRemove([]);
+    setFormErrors([]);
   }, [pincodeType]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await updatePincodeType({
-        id: pincodeType.id,
-        data: formData,
-      }).unwrap();
-      onOpenChange(false);
-    } catch (error) {
-      console.error("Failed to update pincode type:", error);
+  // Get partner display name by ID
+  const getPartnerDisplayName = (partnerId: string) => {
+    if (partnerId === currentPartnerId) {
+      return (
+        pincodeType.partner?.displayName ||
+        pincodeType.partner?.name ||
+        partnerId
+      );
+    }
+    const partner = partners.find((p: any) => p.id === partnerId);
+    return partner?.displayName || partner?.name || partnerId;
+  };
+
+  // Partner handlers
+  const handlePartnerSelect = (partnerId: string) => {
+    if (!partnersToAdd.includes(partnerId)) {
+      setPartnersToAdd([...partnersToAdd, partnerId]);
+    }
+    setPartnerSearch("");
+    setShowPartnerDropdown(false);
+  };
+
+  const handlePartnerRemove = (partnerId: string) => {
+    if (partnerId === currentPartnerId) {
+      setRemoveCurrentPartner(true);
+    } else {
+      setPartnersToAdd(partnersToAdd.filter((id) => id !== partnerId));
     }
   };
 
+  const handlePartnerRestore = () => {
+    setRemoveCurrentPartner(false);
+  };
+
+  // Pincode handlers
+  const handlePincodeSelect = (pincode: any) => {
+    if (
+      !pincodesToAdd.includes(pincode.code) &&
+      !assignedCodes.includes(pincode.code)
+    ) {
+      setPincodesToAdd([...pincodesToAdd, pincode.code]);
+    }
+    setPincodeSearch("");
+    setShowPincodeSuggestions(false);
+  };
+
+  const handlePincodeRemove = (code: string) => {
+    if (pincodesToAdd.includes(code)) {
+      setPincodesToAdd(pincodesToAdd.filter((c) => c !== code));
+    } else if (assignedCodes.includes(code)) {
+      if (!pincodesToRemove.includes(code)) {
+        setPincodesToRemove([...pincodesToRemove, code]);
+      }
+    }
+  };
+
+  const handlePincodeRestore = (code: string) => {
+    setPincodesToRemove(pincodesToRemove.filter((c) => c !== code));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormErrors([]);
+
+    // Validate - need at least one partner
+    const totalPartners = (removeCurrentPartner ? 0 : 1) + partnersToAdd.length;
+    if (totalPartners === 0) {
+      setFormErrors(["At least one courier partner is required"]);
+      return;
+    }
+
+    // Validate - need at least one pincode
+    if (currentPincodes.length === 0) {
+      setFormErrors(["At least one pincode is required"]);
+      return;
+    }
+
+    try {
+      // If keeping current partner, update its details
+      if (!removeCurrentPartner) {
+        await updatePincodeType({
+          id: pincodeType.id,
+          data: formData,
+        }).unwrap();
+
+        // Assign new pincodes if any
+        if (pincodesToAdd.length > 0) {
+          await assignPincodes({
+            id: pincodeType.id,
+            data: { pincodeCodes: pincodesToAdd },
+          }).unwrap();
+        }
+
+        // Remove pincodes if any
+        if (pincodesToRemove.length > 0) {
+          await unassignPincodes({
+            id: pincodeType.id,
+            data: { pincodeCodes: pincodesToRemove },
+          }).unwrap();
+        }
+      } else {
+        // If removing current partner, delete this pincode type
+        await deletePincodeType(pincodeType.id).unwrap();
+      }
+
+      // Create new pincode types for additional partners
+      if (partnersToAdd.length > 0) {
+        await createPincodeType({
+          partnerIds: partnersToAdd,
+          name: formData.name,
+          charge: formData.charge,
+          description: formData.description,
+          isActive: formData.isActive,
+          pincodeCodes: currentPincodes,
+        }).unwrap();
+      }
+
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error("Failed to update pincode type:", error);
+      setFormErrors([
+        error?.data?.error?.message || "Failed to update pincode type",
+      ]);
+    }
+  };
+
+  const isSaving = isLoading || isAssigning || isUnassigning;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center space-x-2">
-              <Edit className="h-5 w-5 text-blue-600" />
-              <span>Edit Pincode Type</span>
-            </DialogTitle>
-            <DialogDescription>
-              Update the pincode type details
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center space-x-2">
+            <Edit className="h-5 w-5 text-blue-600" />
+            <span>Edit Pincode Type</span>
+          </DialogTitle>
+          <DialogDescription>
+            Update the pincode type details. Add partners to create copies for
+            them.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="grid gap-4 py-4 pr-2">
+            {/* Error Messages */}
+            {formErrors.length > 0 && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <ul className="text-sm text-red-800 space-y-1">
+                  {formErrors.map((error, index) => (
+                    <li key={index} className="flex items-center space-x-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{error}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="edit-name">Name *</Label>
               <Input
                 id="edit-name"
+                placeholder="e.g., Metro, ODA, Hill"
                 value={formData.name}
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="e.g., Metro, ODA, Hill"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                A unique name for this pincode type (per partner)
+              </p>
             </div>
 
             {/* Charge */}
@@ -1064,13 +1613,319 @@ function EditPincodeTypeDialog({
                 type="number"
                 min="0"
                 step="0.01"
+                placeholder="0.00"
                 value={formData.charge}
                 onChange={(e) =>
                   setFormData({ ...formData, charge: e.target.value })
                 }
-                placeholder="0.00"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Additional charge applied to shipments with this pincode type
+              </p>
+            </div>
+
+            {/* Partner Selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center space-x-1">
+                <Truck className="h-4 w-4" />
+                <span>Courier Partners *</span>
+              </Label>
+
+              {/* Current and Selected Partners Chips */}
+              <div className="flex flex-wrap gap-2 mb-2">
+                {/* Current partner (if not removed) */}
+                {!removeCurrentPartner && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-purple-100 text-purple-800 cursor-pointer hover:bg-purple-200 pr-1"
+                  >
+                    <Truck className="h-3 w-3 mr-1" />
+                    {getPartnerDisplayName(currentPartnerId)}
+                    <button
+                      type="button"
+                      onClick={() => handlePartnerRemove(currentPartnerId)}
+                      className="ml-1 p-0.5 rounded-full hover:bg-purple-300"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+
+                {/* New partners to add (green) */}
+                {partnersToAdd.map((partnerId) => (
+                  <Badge
+                    key={partnerId}
+                    variant="secondary"
+                    className="bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 pr-1"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    {getPartnerDisplayName(partnerId)}
+                    <button
+                      type="button"
+                      onClick={() => handlePartnerRemove(partnerId)}
+                      className="ml-1 p-0.5 rounded-full hover:bg-green-300"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+
+              {/* Removed partner (if any) */}
+              {removeCurrentPartner && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <span className="text-xs text-red-600 w-full">
+                    Will be removed (pincode type deleted):
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="bg-red-50 text-red-800 border-red-300 cursor-pointer hover:bg-red-100 pr-1 line-through"
+                  >
+                    <Truck className="h-3 w-3 mr-1" />
+                    {getPartnerDisplayName(currentPartnerId)}
+                    <button
+                      type="button"
+                      onClick={handlePartnerRestore}
+                      className="ml-1 p-0.5 rounded-full hover:bg-red-200"
+                      title="Restore"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                </div>
+              )}
+
+              {/* Partner Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search and add more courier partners..."
+                  value={partnerSearch}
+                  onChange={(e) => {
+                    setPartnerSearch(e.target.value);
+                    setShowPartnerDropdown(true);
+                  }}
+                  onFocus={() => setShowPartnerDropdown(true)}
+                  className="pl-10"
+                />
+                {isLoadingPartners && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+
+                {/* Partner Dropdown */}
+                {showPartnerDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {isLoadingPartners ? (
+                      <div className="p-3 text-center text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                        Loading partners...
+                      </div>
+                    ) : filteredPartners.length === 0 ? (
+                      <div className="p-3 text-center text-sm text-muted-foreground">
+                        {partnerSearch
+                          ? "No matching partners found"
+                          : "All partners selected"}
+                      </div>
+                    ) : (
+                      filteredPartners.map((partner: any) => (
+                        <button
+                          key={partner.id}
+                          type="button"
+                          onClick={() => handlePartnerSelect(partner.id)}
+                          className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Truck className="h-4 w-4 text-purple-600" />
+                            <span className="font-medium">
+                              {partner.displayName || partner.name}
+                            </span>
+                            {partner.code && (
+                              <span className="text-muted-foreground text-xs">
+                                ({partner.code})
+                              </span>
+                            )}
+                          </div>
+                          <Plus className="h-4 w-4 text-purple-600" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Adding partners will create copies of this pincode type for them
+              </p>
+            </div>
+
+            {/* Pincode Selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center space-x-1">
+                <MapPin className="h-4 w-4" />
+                <span>Pincodes *</span>
+              </Label>
+
+              {/* Current Pincodes Chips */}
+              {isLoadingPincodes ? (
+                <div className="flex items-center space-x-2 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <span className="text-sm text-muted-foreground">
+                    Loading pincodes...
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {/* Existing pincodes */}
+                  {(assignedCodes.length > 0 || pincodesToAdd.length > 0) && (
+                    <div className="flex flex-wrap gap-2 mb-2 max-h-32 overflow-y-auto p-2 border rounded-lg">
+                      {/* Existing assigned pincodes (not marked for removal) */}
+                      {assignedCodes
+                        .filter(
+                          (code: string) => !pincodesToRemove.includes(code),
+                        )
+                        .map((code: string) => (
+                          <Badge
+                            key={code}
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200 pr-1"
+                          >
+                            <MapPin className="h-3 w-3 mr-1" />
+                            {code}
+                            <button
+                              type="button"
+                              onClick={() => handlePincodeRemove(code)}
+                              className="ml-1 p-0.5 rounded-full hover:bg-blue-300"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+
+                      {/* Newly added pincodes (highlighted differently) */}
+                      {pincodesToAdd.map((code) => (
+                        <Badge
+                          key={`new-${code}`}
+                          variant="secondary"
+                          className="bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 pr-1"
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          {code}
+                          <button
+                            type="button"
+                            onClick={() => handlePincodeRemove(code)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-green-300"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Pincodes marked for removal */}
+                  {pincodesToRemove.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="text-xs text-red-600 w-full">
+                        Will be removed:
+                      </span>
+                      {pincodesToRemove.map((code) => (
+                        <Badge
+                          key={`remove-${code}`}
+                          variant="outline"
+                          className="bg-red-50 text-red-800 border-red-300 cursor-pointer hover:bg-red-100 pr-1 line-through"
+                        >
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {code}
+                          <button
+                            type="button"
+                            onClick={() => handlePincodeRestore(code)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-red-200"
+                            title="Restore"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Pincode Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search pincodes (type at least 2 characters)..."
+                  value={pincodeSearch}
+                  onChange={(e) => {
+                    setPincodeSearch(e.target.value);
+                    setShowPincodeSuggestions(true);
+                  }}
+                  onFocus={() => setShowPincodeSuggestions(true)}
+                  className="pl-10"
+                />
+                {isPincodeSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+
+                {/* Pincode Suggestions Dropdown */}
+                {showPincodeSuggestions &&
+                  debouncedPincodeSearch.length >= 2 && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {isPincodeSearching ? (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                          Searching...
+                        </div>
+                      ) : filteredPincodeSuggestions.length === 0 ? (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          No matching pincodes found
+                        </div>
+                      ) : (
+                        filteredPincodeSuggestions.map((pincode: any) => (
+                          <button
+                            key={pincode.id}
+                            type="button"
+                            onClick={() => handlePincodeSelect(pincode)}
+                            className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                          >
+                            <div>
+                              <span className="font-medium">
+                                {pincode.code}
+                              </span>
+                              {pincode.areaName && (
+                                <span className="text-muted-foreground ml-2">
+                                  {pincode.areaName}
+                                </span>
+                              )}
+                              {pincode.state?.name && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({pincode.state.code || pincode.state.name})
+                                </span>
+                              )}
+                            </div>
+                            <Plus className="h-4 w-4 text-blue-600" />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Current: {currentPincodes.length} pincode(s)
+                {pincodesToAdd.length > 0 && (
+                  <span className="text-green-600">
+                    {" "}
+                    (+{pincodesToAdd.length} new)
+                  </span>
+                )}
+                {pincodesToRemove.length > 0 && (
+                  <span className="text-red-600">
+                    {" "}
+                    (-{pincodesToRemove.length} removing)
+                  </span>
+                )}
+              </p>
             </div>
 
             {/* Description */}
@@ -1078,12 +1933,12 @@ function EditPincodeTypeDialog({
               <Label htmlFor="edit-description">Description</Label>
               <Textarea
                 id="edit-description"
+                placeholder="Enter a description for this pincode type..."
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
-                placeholder="Enter a description..."
-                rows={3}
+                rows={2}
               />
             </div>
 
@@ -1103,20 +1958,20 @@ function EditPincodeTypeDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-4 pt-4 border-t">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isLoading}
+              disabled={isSaving}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
+                  Saving...
                 </>
               ) : (
                 <>
@@ -1127,382 +1982,6 @@ function EditPincodeTypeDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Manage Pincodes Dialog Component
-function ManagePincodesDialog({
-  open,
-  onOpenChange,
-  pincodeType,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  pincodeType: PincodeTypeWithStats;
-}) {
-  const [assignPincodes, { isLoading: isAssigning }] =
-    useAssignPincodesToTypeMutation();
-  const [unassignPincodes, { isLoading: isUnassigning }] =
-    useUnassignPincodesFromTypeMutation();
-  const {
-    data: pincodesData,
-    isLoading: isLoadingPincodes,
-    refetch,
-  } = useGetPincodesByTypeQuery(
-    { id: pincodeType.id, page: 1, limit: 100 },
-    { skip: !open },
-  );
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [selectedToAssign, setSelectedToAssign] = useState<string[]>([]);
-  const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Fetch pincodes for autocomplete - use search endpoint with 'code' parameter
-  const { data: searchResults, isLoading: isSearching } =
-    useSearchPincodesQuery(
-      { code: debouncedSearch },
-      { skip: !debouncedSearch || debouncedSearch.length < 2 },
-    );
-
-  const suggestions = Array.isArray(searchResults?.data)
-    ? searchResults.data
-    : [];
-  const assignedPincodes = Array.isArray(pincodesData?.data)
-    ? pincodesData.data
-    : [];
-  const assignedCodes = assignedPincodes.map(
-    (p: any) => p.pincode?.code || p.code,
-  );
-
-  // Filter out already assigned and already selected pincodes from suggestions
-  const filteredSuggestions = suggestions.filter(
-    (p: any) =>
-      !assignedCodes.includes(p.code) && !selectedToAssign.includes(p.code),
-  );
-
-  const handleSelectSuggestion = (pincode: any) => {
-    if (!selectedToAssign.includes(pincode.code)) {
-      setSelectedToAssign([...selectedToAssign, pincode.code]);
-    }
-    setSearchQuery("");
-    setShowSuggestions(false);
-  };
-
-  const handleRemoveFromSelection = (code: string) => {
-    setSelectedToAssign(selectedToAssign.filter((c) => c !== code));
-  };
-
-  const handleAssign = async () => {
-    setAssignError(null);
-    setAssignSuccess(null);
-
-    if (selectedToAssign.length === 0) {
-      setAssignError("Please select at least one pincode to assign");
-      return;
-    }
-
-    try {
-      const result = await assignPincodes({
-        id: pincodeType.id,
-        data: { pincodeCodes: selectedToAssign },
-      }).unwrap();
-
-      setSelectedToAssign([]);
-      setAssignSuccess(
-        `Assigned ${result.data?.assigned || 0} pincodes. ${
-          result.data?.skipped
-            ? `Skipped ${result.data.skipped} (already assigned or not found).`
-            : ""
-        }`,
-      );
-      refetch();
-    } catch (error: any) {
-      setAssignError(
-        error?.data?.error?.message || "Failed to assign pincodes",
-      );
-    }
-  };
-
-  const handleUnassign = async () => {
-    if (selectedPincodes.length === 0) return;
-
-    setAssignError(null);
-    setAssignSuccess(null);
-
-    try {
-      const result = await unassignPincodes({
-        id: pincodeType.id,
-        data: { pincodeCodes: selectedPincodes },
-      }).unwrap();
-
-      setSelectedPincodes([]);
-      setAssignSuccess(
-        `Unassigned ${result.data?.unassigned || selectedPincodes.length} pincodes`,
-      );
-      refetch();
-    } catch (error: any) {
-      setAssignError(
-        error?.data?.error?.message || "Failed to unassign pincodes",
-      );
-    }
-  };
-
-  const togglePincodeSelection = (code: string) => {
-    setSelectedPincodes((prev) =>
-      prev.includes(code) ? prev.filter((p) => p !== code) : [...prev, code],
-    );
-  };
-
-  const selectAllPincodes = () => {
-    if (selectedPincodes.length === assignedPincodes.length) {
-      setSelectedPincodes([]);
-    } else {
-      setSelectedPincodes(
-        assignedPincodes.map((p: any) => p.pincode?.code || p.code),
-      );
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <MapPin className="h-5 w-5 text-blue-600" />
-            <span>Manage Pincodes - {pincodeType.name}</span>
-          </DialogTitle>
-          <DialogDescription>
-            Assign or remove pincodes from this pincode type. Charge: ₹
-            {pincodeType.charge}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
-          {/* Assign New Pincodes Section */}
-          <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-            <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-              Assign New Pincodes
-            </h3>
-
-            {/* Autocomplete Search */}
-            <div className="relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search pincodes (type at least 2 characters)..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowSuggestions(true);
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  className="pl-10"
-                />
-                {isSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
-
-              {/* Suggestions Dropdown */}
-              {showSuggestions && debouncedSearch.length >= 2 && (
-                <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {isSearching ? (
-                    <div className="p-3 text-center text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                      Searching...
-                    </div>
-                  ) : filteredSuggestions.length === 0 ? (
-                    <div className="p-3 text-center text-sm text-muted-foreground">
-                      No matching pincodes found
-                    </div>
-                  ) : (
-                    filteredSuggestions.map((pincode: any) => (
-                      <button
-                        key={pincode.id}
-                        type="button"
-                        onClick={() => handleSelectSuggestion(pincode)}
-                        className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
-                      >
-                        <div>
-                          <span className="font-medium">{pincode.code}</span>
-                          {pincode.area?.name && (
-                            <span className="text-muted-foreground ml-2">
-                              {pincode.area.name}
-                            </span>
-                          )}
-                          {(pincode.area?.city?.name || pincode.city?.name) && (
-                            <span className="text-muted-foreground ml-1">
-                              , {pincode.area?.city?.name || pincode.city?.name}
-                            </span>
-                          )}
-                          {pincode.state?.name && (
-                            <span className="text-muted-foreground ml-1">
-                              ({pincode.state.code || pincode.state.name})
-                            </span>
-                          )}
-                        </div>
-                        <Plus className="h-4 w-4 text-blue-600" />
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Selected Pincodes to Assign */}
-            {selectedToAssign.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">
-                  Selected to assign ({selectedToAssign.length}):
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {selectedToAssign.map((code) => (
-                    <Badge
-                      key={code}
-                      variant="secondary"
-                      className="bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
-                      onClick={() => handleRemoveFromSelection(code)}
-                    >
-                      {code}
-                      <X className="ml-1 h-3 w-3" />
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <Button
-              onClick={handleAssign}
-              disabled={isAssigning || selectedToAssign.length === 0}
-              size="sm"
-            >
-              {isAssigning ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Assigning...
-                </>
-              ) : (
-                <>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Assign{" "}
-                  {selectedToAssign.length > 0
-                    ? `(${selectedToAssign.length})`
-                    : ""}{" "}
-                  Pincodes
-                </>
-              )}
-            </Button>
-          </div>
-
-          {/* Success/Error Messages */}
-          {assignSuccess && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
-              <CheckCircle className="h-4 w-4 inline mr-2" />
-              {assignSuccess}
-            </div>
-          )}
-          {assignError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-              <AlertCircle className="h-4 w-4 inline mr-2" />
-              {assignError}
-            </div>
-          )}
-
-          {/* Assigned Pincodes Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                Assigned Pincodes ({assignedPincodes.length})
-              </h3>
-              {assignedPincodes.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={selectAllPincodes}
-                  >
-                    {selectedPincodes.length === assignedPincodes.length
-                      ? "Deselect All"
-                      : "Select All"}
-                  </Button>
-                  {selectedPincodes.length > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleUnassign}
-                      disabled={isUnassigning}
-                    >
-                      {isUnassigning ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Removing...
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove ({selectedPincodes.length})
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {isLoadingPincodes ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              </div>
-            ) : assignedPincodes.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No pincodes assigned yet</p>
-                <p className="text-xs">Use the form above to assign pincodes</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-lg">
-                {assignedPincodes.map((assignment: any) => {
-                  const code = assignment.pincode?.code || assignment.code;
-                  const isSelected = selectedPincodes.includes(code);
-                  return (
-                    <Badge
-                      key={assignment.id || code}
-                      variant={isSelected ? "default" : "outline"}
-                      className={`cursor-pointer text-center justify-center py-1.5 transition-all ${
-                        isSelected
-                          ? "bg-red-100 text-red-800 border-red-300 hover:bg-red-200"
-                          : "hover:bg-gray-100"
-                      }`}
-                      onClick={() => togglePincodeSelection(code)}
-                    >
-                      {code}
-                    </Badge>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

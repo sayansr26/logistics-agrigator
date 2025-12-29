@@ -2,34 +2,34 @@ services:
   # Database Services
   postgres:
     image: postgres:15-alpine
-    container_name: logistics-postgres
+    container_name: ${POSTGRES_CONTAINER_NAME:-logistics-postgres}
     environment:
-      - POSTGRES_USER=logistics
-      - POSTGRES_PASSWORD=logistics123
-      - POSTGRES_DB=logistics_main
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     # Port removed for security - accessible only within Docker network
     expose:
-      - "5432"
+      - "${DB_PORT}"
     networks:
       - logistics-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U logistics -d logistics_main"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: logistics-redis
+    container_name: ${REDIS_CONTAINER_NAME:-logistics-redis}
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     # Port removed for security - accessible only within Docker network
     expose:
-      - "6379"
+      - "${REDIS_PORT}"
     networks:
       - logistics-network
     healthcheck:
@@ -43,27 +43,27 @@ services:
     build:
       context: .
       dockerfile: ./backend/api-gateway/Dockerfile
-    container_name: logistics-api-gateway
+    container_name: ${API_GATEWAY_CONTAINER_NAME:-logistics-api-gateway}
     environment:
-      - NODE_ENV=development
-      - PORT=3001
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - CORS_ORIGIN=http://localhost:3000
-      - SERVICE_NAME=api-gateway
-      # Service URLs for proxy routing
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
-      - PARTNER_SERVICE_URL=http://partner-service:3005
-      - WALLET_SERVICE_URL=http://wallet-service:3006
-      - SUPPORT_SERVICE_URL=http://support-service:3007
-      - PLATFORM_SERVICE_URL=http://platform-service:3008
-      - LICENSE_SERVICE_URL=http://license-service:3011
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
+      - NODE_ENV=${NODE_ENV}
+      - PORT=${API_GATEWAY_PORT}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=${CROSS_ORIGIN}
+      - SERVICE_NAME=${SERVICE_NAME}
+      # Service URLs for proxy routing (using container names for internal access)
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service}:${SHIPMENT_SERVICE_PORT}
+      - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service}:${PARTNER_SERVICE_PORT}
+      - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service}:${WALLET_SERVICE_PORT}
+      - SUPPORT_SERVICE_URL=http://${SUPPORT_SERVICE_CONTAINER_NAME:-logistics-support-service}:${SUPPORT_SERVICE_PORT}
+      - PLATFORM_SERVICE_URL=http://${PLATFORM_SERVICE_CONTAINER_NAME:-logistics-platform-service}:${PLATFORM_SERVICE_PORT}
+      - LICENSE_SERVICE_URL=http://${LICENSE_SERVICE_CONTAINER_NAME:-logistics-license-service}:${LICENSE_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
     ports:
-      - "3001:3001"
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
     volumes:
       - ./backend/api-gateway:/app
       - ./shared:/app/shared
@@ -77,28 +77,31 @@ services:
     networks:
       - logistics-network
     command: pnpm run dev
+    profiles:
+      - all-services
+      - api-gateway
 
   # Auth Service with Prisma (Core Service)
   auth-service:
     build:
       context: .
       dockerfile: ./backend/auth-service/Dockerfile
-    container_name: logistics-auth-service
+    container_name: ${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3002
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - JWT_EXPIRES_IN=8h
-      - JWT_REFRESH_EXPIRES_IN=604800
+      - NODE_ENV=${NODE_ENV}
+      - PORT=${AUTH_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN}
       # Inter-service communication (direct within Docker network)
-      - USER_SERVICE_URL=http://user-service:3003
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
-      - "3002"
+      - "${AUTH_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/auth-service:/app
@@ -112,27 +115,30 @@ services:
         condition: service_healthy
     networks:
       - logistics-network
+    profiles:
+      - all-services
+      - auth-service
 
   # User Service (Week 2 Development)
   user-service:
     build:
       context: .
       dockerfile: ./backend/user-service/Dockerfile
-    container_name: logistics-user-service
+    container_name: ${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3003
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_users
-      - AUTH_DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${USER_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${USER_DATABASE_NAME:-logistics_users}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
       # Inter-service communication secret (must match auth-service)
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3003"
+      - "${USER_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/user-service:/app
@@ -158,25 +164,23 @@ services:
     build:
       context: .
       dockerfile: backend/shipment-service/Dockerfile
-    container_name: logistics-shipment-service
+    container_name: ${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3004
-      - SERVICE_NAME=shipment-service
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_shipments
-      - AUTH_DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - WALLET_SERVICE_URL=http://wallet-service:3006
-      - PARTNER_SERVICE_URL=http://partner-service:3005
-      - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${SHIPMENT_SERVICE_PORT}
+      - SERVICE_NAME=${SHIPMENT_SERVICE_NAME:-shipment-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${SHIPMENT_DATABASE_NAME:-logistics_shipments}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service}:${WALLET_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3004"
+      - "${SHIPMENT_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/shipment-service:/app
@@ -202,37 +206,26 @@ services:
     build:
       context: .
       dockerfile: backend/partner-service/Dockerfile
-    container_name: logistics-partner-service
+    container_name: ${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3005
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_partners
-      - AUTH_DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
-      # External Partner Micro Service Configuration
-      - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
-      - PARTNER_SERVICE_API_KEY=your_super_secret_hmac_key_minimum_32_characters
-      - EXTERNAL_COURIER_TIMEOUT=15000
-      # Partner Micro Service Authentication (HMAC SHA-256)
-      - SERVICE_ID=TESTING_1
-      - HMAC_SECRET=hmac_super_secret_key_2024_partner_services
-      - API_SECRET_SALT=api_secret_salt_2024_partner_services
-      - PARTNER_SERVICE_TIMEOUT=5000
-      - PARTNER_SERVICE_RETRY_ATTEMPTS=3
-      - PARTNER_SERVICE_CACHE_TTL=300
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PARTNER_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${PARTNER_DATABASE_NAME:-logistics_partners}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://user-service:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://shipment-service:${SHIPMENT_SERVICE_PORT}
       # External courier API configurations
-      - DELHIVERY_API_URL=https://track.delhivery.com/api/cmu/push/json
-      - BLUEDART_API_URL=https://apigateway.bluedart.com
-      - DTDC_API_URL=https://blktracksvc.dtdc.com
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - DELHIVERY_API_URL=${DELHIVERY_API_URL}
+      - BLUEDART_API_URL=${BLUEDART_API_URL}
+      - DTDC_API_URL=${DTDC_API_URL}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3005"
+      - "${PARTNER_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/partner-service:/app
@@ -258,47 +251,47 @@ services:
     build:
       context: .
       dockerfile: backend/wallet-service/Dockerfile
-    container_name: logistics-wallet-service
+    container_name: ${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3006
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_wallet
-      - AUTH_DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - PARTNER_SERVICE_URL=http://partner-service:3005
-      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${WALLET_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${WALLET_DATABASE_NAME:-logistics_wallet}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service}:${PARTNER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service}:${SHIPMENT_SERVICE_PORT}
       # External Wallet API Configuration
-      - EXTERNAL_WALLET_API_URL=https://wapi.websiteduniya.com/api/v1
-      - EXTERNAL_WALLET_SECRET_KEY=production-hmac-secret-key-256-bit-minimum-ultra-secure-change-me
-      - EXTERNAL_WALLET_USER_ID=wallet-service
-      - EXTERNAL_WALLET_JWT_TOKEN=
+      - EXTERNAL_WALLET_API_URL=${EXTERNAL_WALLET_API_URL}
+      - EXTERNAL_WALLET_SECRET_KEY=${EXTERNAL_WALLET_SECRET_KEY}
+      - EXTERNAL_WALLET_USER_ID=${EXTERNAL_WALLET_USER_ID:-wallet-service}
+      - EXTERNAL_WALLET_JWT_TOKEN=${EXTERNAL_WALLET_JWT_TOKEN}
       # JWT Configuration
-      - JWT_EXPIRES_IN=8h
-      - JWT_REFRESH_EXPIRES_IN=2592000
+      - JWT_EXPIRES_IN=${WALLET_JWT_EXPIRES_IN:-8h}
+      - JWT_REFRESH_EXPIRES_IN=${WALLET_JWT_REFRESH_EXPIRES_IN:-2592000}
       # Default Client Configuration
-      - DEFAULT_CLIENT_CODE=DEFAULT
+      - DEFAULT_CLIENT_CODE=${WALLET_DEFAULT_CLIENT_CODE:-DEFAULT}
       # Cache Configuration
-      - CACHE_WALLET_TTL=600
-      - CACHE_BALANCE_TTL=300
-      - CACHE_TRANSACTIONS_TTL=60
+      - CACHE_WALLET_TTL=${CACHE_WALLET_TTL:-600}
+      - CACHE_BALANCE_TTL=${CACHE_BALANCE_TTL:-300}
+      - CACHE_TRANSACTIONS_TTL=${CACHE_TRANSACTIONS_TTL:-60}
       # Circuit Breaker Configuration
-      - CIRCUIT_BREAKER_TIMEOUT=30000
-      - CIRCUIT_BREAKER_ERROR_THRESHOLD=50
-      - CIRCUIT_BREAKER_RESET_TIMEOUT=60000
+      - CIRCUIT_BREAKER_TIMEOUT=${CIRCUIT_BREAKER_TIMEOUT:-30000}
+      - CIRCUIT_BREAKER_ERROR_THRESHOLD=${CIRCUIT_BREAKER_ERROR_THRESHOLD:-50}
+      - CIRCUIT_BREAKER_RESET_TIMEOUT=${CIRCUIT_BREAKER_RESET_TIMEOUT:-60000}
       # Rate Limiting Configuration
-      - RATE_LIMIT_WINDOW_MS=900000
-      - RATE_LIMIT_MAX=1000
-      - RATE_LIMIT_STRICT_MAX=50
-      - RATE_LIMIT_BALANCE_MAX=100
-      - RATE_LIMIT_TRANSACTION_MAX=30
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-1000}
+      - RATE_LIMIT_STRICT_MAX=${RATE_LIMIT_STRICT_MAX:-50}
+      - RATE_LIMIT_BALANCE_MAX=${RATE_LIMIT_BALANCE_MAX:-100}
+      - RATE_LIMIT_TRANSACTION_MAX=${RATE_LIMIT_TRANSACTION_MAX:-30}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3006"
+      - "${WALLET_SERVICE_PORT}"
     # For live reload in development, enable these volumes:
     volumes:
       - ./backend/wallet-service:/app
@@ -318,34 +311,33 @@ services:
     profiles:
       - all-services
       - wallet-service
-      - future-services
 
   # Support Service (Week 4+ Development)
   support-service:
     build:
       context: .
       dockerfile: backend/support-service/Dockerfile
-    container_name: logistics-support-service
+    container_name: ${SUPPORT_SERVICE_CONTAINER_NAME:-logistics-support-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3007
-      - SERVICE_NAME=support-service
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_support
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${SUPPORT_SERVICE_PORT}
+      - SERVICE_NAME=${SUPPORT_SERVICE_NAME:-support-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${SUPPORT_DATABASE_NAME:-logistics_support}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3007"
+      - "${SUPPORT_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/support-service:/app
       - ./shared:/app/shared
       - ./logs:/app/logs
-      - shipment_node_modules:/app/node_modules
+      - support_node_modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -365,24 +357,24 @@ services:
     build:
       context: .
       dockerfile: backend/platform-service/Dockerfile
-    container_name: logistics-platform-service
+    container_name: ${PLATFORM_SERVICE_CONTAINER_NAME:-logistics-platform-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3008
-      - SERVICE_NAME=platform-service
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_platforms
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - SHIPMENT_SERVICE_URL=http://shipment-service:3004
-      - SHOPIFY_CLIENT_ID=your_shopify_client_id
-      - SHOPIFY_CLIENT_SECRET=your_shopify_client_secret
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PLATFORM_SERVICE_PORT}
+      - SERVICE_NAME=${PLATFORM_SERVICE_NAME:-platform-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${PLATFORM_DATABASE_NAME:-logistics_platforms}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service}:${SHIPMENT_SERVICE_PORT}
+      - SHOPIFY_CLIENT_ID=${SHOPIFY_CLIENT_ID}
+      - SHOPIFY_CLIENT_SECRET=${SHOPIFY_CLIENT_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3008"
+      - "${PLATFORM_SERVICE_PORT}"
     # For live reload in development, uncomment these volumes:
     volumes:
       - ./backend/platform-service:/app
@@ -408,28 +400,28 @@ services:
     build:
       context: .
       dockerfile: backend/license-service/Dockerfile
-    container_name: logistics-license-service
+    container_name: ${LICENSE_SERVICE_CONTAINER_NAME:-logistics-license-service}
     environment:
-      - NODE_ENV=development
-      - PORT=3011
-      - SERVICE_NAME=license-service
-      - DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_license
-      - AUTH_DATABASE_URL=postgresql://logistics:logistics123@postgres:5432/logistics_auth
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - JWT_EXPIRES_IN=8h
-      - JWT_REFRESH_EXPIRES_IN=604800
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${LICENSE_SERVICE_PORT}
+      - SERVICE_NAME=${LICENSE_SERVICE_NAME:-license-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${LICENSE_DATABASE_NAME:-logistics_license}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${LICENSE_JWT_EXPIRES_IN:-8h}
+      - JWT_REFRESH_EXPIRES_IN=${LICENSE_JWT_REFRESH_EXPIRES_IN:-604800}
       # License encryption keys
-      - LICENSE_SECRET_KEY=ultra-secure-license-key-min-32-chars-required-change-in-prod
-      - LICENSE_SIGNING_KEY=signing-key-for-license-validation-hmac-sha256-change-in-prod
+      - LICENSE_SECRET_KEY=${LICENSE_SECRET_KEY}
+      - LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY}
       # Service URLs
-      - AUTH_SERVICE_URL=http://auth-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
-      - INTERNAL_SECRET=internal-service-secret
-    # Port removed for security - accessible only through API Gateway (3001)
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    # Port removed for security - accessible only through API Gateway
     expose:
-      - "3011"
+      - "${LICENSE_SERVICE_PORT}"
     volumes:
       - ./backend/license-service:/app
       - ./shared:/app/shared
@@ -455,13 +447,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: logistics-frontend
+    container_name: ${FRONTEND_CONTAINER_NAME:-logistics-frontend}
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_APP_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:${API_GATEWAY_PORT}}
+      - NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-development}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -470,6 +462,9 @@ services:
     networks:
       - logistics-network
     command: pnpm run dev
+    profiles:
+      - all-services
+      - frontend
 
 volumes:
   postgres_data:
@@ -490,20 +485,3 @@ volumes:
 networks:
   logistics-network:
     driver: bridge
-# 🚀 Development Commands:
-#
-# Core Services (default):
-#   pnpm run dev                    # postgres + redis + api-gateway + auth-service + frontend
-#
-# Extended Development:
-#   docker-compose --profile user-service up          # + user-service
-#   docker-compose --profile shipment-service up      # + shipment-service
-#   docker-compose --profile partner-service up       # + partner-service
-#   docker-compose --profile wallet-service up        # + wallet-service
-#   docker-compose --profile support-service up       # + support-service
-#   docker-compose --profile platform-service up      # + platform-service
-#   docker-compose --profile all-services up          # All services
-#
-# Specialized Docker Compose Files:
-#   pnpm run dev:frontend          # Frontend-focused development
-#   pnpm run dev:backend           # Backend-focused development

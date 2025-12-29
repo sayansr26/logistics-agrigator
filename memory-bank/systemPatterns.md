@@ -1183,10 +1183,7 @@ router.post(
 // Internal auth middleware
 const internalAuth = (req, res, next) => {
   const internalHeader = req.headers["x-internal-request"];
-  if (
-    !internalHeader ||
-    internalHeader !== process.env.INTERNAL_SERVICE_SECRET
-  ) {
+  if (!internalHeader || internalHeader !== process.env.INTERNAL_SECRET) {
     return res.status(403).json({
       status: "error",
       error: { code: "INTERNAL_ACCESS_DENIED", message: "Internal endpoint" },
@@ -1273,7 +1270,7 @@ static async register(req, res) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': process.env.INTERNAL_SERVICE_SECRET
+          'X-Internal-Request': process.env.INTERNAL_SECRET
         }
       }
     );
@@ -1304,18 +1301,18 @@ static async register(req, res) {
 services:
   api-gateway:
     environment:
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
       - INTERNAL_SECRET=internal-service-secret # Alias for older code
 
   auth-service:
     environment:
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
       - INTERNAL_SECRET=internal-service-secret
       - USER_SERVICE_URL=http://user-service:3003 # Direct internal URL
 
   user-service:
     environment:
-      - INTERNAL_SERVICE_SECRET=internal-service-secret
+      - INTERNAL_SECRET=internal-service-secret
       - INTERNAL_SECRET=internal-service-secret
 
   # ... repeat for all 9 services
@@ -1607,36 +1604,36 @@ enum OutletStatus {
 }
 
 model Outlet {
-  id            String       @id @default(uuid())
-  code          String       @unique // Auto-generated: OUT-{random}-{hash}
-  name          String
-  type          OutletType   @default(RETAIL)
-  status        OutletStatus @default(ACTIVE)
-  
+  id     String       @id @default(uuid())
+  code   String       @unique // Auto-generated: OUT-{random}-{hash}
+  name   String
+  type   OutletType   @default(RETAIL)
+  status OutletStatus @default(ACTIVE)
+
   // Contact info
   email         String
   phone         String?
   contactPerson String?
-  
+
   // Address
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  country       String       @default("India")
-  
+  address String?
+  city    String?
+  state   String?
+  pincode String?
+  country String  @default("India")
+
   // Business details
-  gstNumber     String?
-  panNumber     String?
-  bankDetails   Json?        // { accountNumber, bankName, ifscCode, accountHolderName }
-  
+  gstNumber   String?
+  panNumber   String?
+  bankDetails Json? // { accountNumber, bankName, ifscCode, accountHolderName }
+
   // Relationships
-  outletUsers   OutletUser[]
-  customers     Customer[]   // B2B customers linked to this outlet
-  
-  isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  outletUsers OutletUser[]
+  customers   Customer[] // B2B customers linked to this outlet
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 ```
 
@@ -1646,13 +1643,13 @@ model Outlet {
 model OutletUser {
   id             String   @id @default(uuid())
   outletId       String
-  userId         String   // Links to auth-service User
-  role           String   // 'outlet_admin' | 'outlet_staff'
+  userId         String // Links to auth-service User
+  role           String // 'outlet_admin' | 'outlet_staff'
   enabledModules String[] // ['shipment', 'billing', 'wallet', 'analytics', 'customer', 'partner']
   isActive       Boolean  @default(true)
-  
-  outlet         Outlet   @relation(fields: [outletId], references: [id])
-  
+
+  outlet Outlet @relation(fields: [outletId], references: [id])
+
   @@unique([outletId, userId])
 }
 ```
@@ -1668,7 +1665,7 @@ model Zone {
   partnerId String
   outletId  String? // Tenant scoping - null for global zones
   // ... other fields
-  
+
   @@index([outletId])
 }
 
@@ -1677,16 +1674,16 @@ model ChargePackage {
   partnerId String
   outletId  String? // Tenant scoping
   // ... other fields
-  
+
   @@index([outletId])
 }
 
 // shipment-service/schema.prisma
 model Shipment {
-  id        String  @id @default(uuid())
-  outletId  String? // Tenant scoping
+  id       String  @id @default(uuid())
+  outletId String? // Tenant scoping
   // ... other fields
-  
+
   @@index([outletId])
 }
 ```
@@ -1697,14 +1694,14 @@ model Shipment {
 // Outlet-scoped queries in controllers
 async function listZones(req, res) {
   const { outletId } = req.query;
-  
+
   const where = { partnerId: req.params.partnerId };
-  
+
   // Filter by outlet if provided
   if (outletId) {
     where.outletId = outletId;
   }
-  
+
   const zones = await prisma.zone.findMany({ where });
   res.json(APIResponse.success({ zones }));
 }
@@ -1720,14 +1717,14 @@ router.post(
   "/internal/users",
   sharedAuthMiddleware.authenticate,
   sharedAuthMiddleware.internalServiceOnly, // Only checks X-Internal-Request header
-  AuthController.createUser
+  AuthController.createUser,
 );
 
 // PUT for updates
 router.put(
   "/internal/users/:id",
   sharedAuthMiddleware.internalServiceOnly,
-  AuthController.updateUser
+  AuthController.updateUser,
 );
 ```
 
@@ -1736,7 +1733,8 @@ router.put(
 ```javascript
 // user-service calling auth-service
 async function createAuthUser(userData, authToken) {
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
+  const authServiceUrl =
+    process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
   const internalSecret = process.env.INTERNAL_SECRET;
 
   const response = await fetch(`${authServiceUrl}/auth/internal/users`, {
@@ -1760,7 +1758,7 @@ async function createAuthUser(userData, authToken) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error?.message || "Failed to create user");
   }
-  
+
   return (await response.json()).data.user;
 }
 ```
@@ -1773,7 +1771,10 @@ async function createAuthUser(userData, authToken) {
 // sidebar.jsx
 const getNavigationForRole = (user) => {
   // Outlet users get outlet-specific navigation
-  if (user?.outletRole === "outlet_admin" || user?.outletRole === "outlet_staff") {
+  if (
+    user?.outletRole === "outlet_admin" ||
+    user?.outletRole === "outlet_staff"
+  ) {
     return [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { title: "Shipments", href: "/shipments", icon: Package },
@@ -1783,7 +1784,7 @@ const getNavigationForRole = (user) => {
       { title: "Customer Management", href: "/customers", icon: Users },
     ];
   }
-  
+
   // Default admin/superadmin navigation
   return defaultNavigation;
 };
@@ -1823,7 +1824,7 @@ interface User {
 const customerData = {
   name: formData.name,
   email: formData.email,
-  customerType: "B2B",  // or "OUTLET" for backwards compatibility
+  customerType: "B2B", // or "OUTLET" for backwards compatibility
   outletId: selectedOutletId, // Links customer to specific outlet
   // ... other fields
 };

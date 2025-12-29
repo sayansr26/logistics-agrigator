@@ -84,7 +84,7 @@ app.use((req, res, next) => {
   // Validate internal requests for all other endpoints
   const internalHeader = req.headers["x-internal-request"];
   const expectedSecret =
-    process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+    process.env.INTERNAL_SECRET || "internal-service-secret";
 
   if (!internalHeader || internalHeader !== expectedSecret) {
     logger.warn(`Direct access attempt blocked from ${req.ip} to ${req.path}`);

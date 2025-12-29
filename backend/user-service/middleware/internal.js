@@ -11,7 +11,7 @@ const logger = require("../shared/lib/logger");
 function requireInternalRequest(req, res, next) {
   const internalSecret = req.get("X-Internal-Request");
   const expectedSecret =
-    process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+    process.env.INTERNAL_SECRET || "internal-service-secret";
 
   // In development, also allow requests without secret for testing
   const isDevelopment = process.env.NODE_ENV !== "production";
@@ -90,7 +90,7 @@ function requireInternalRequest(req, res, next) {
 function checkInternalRequest(req, res, next) {
   const internalSecret = req.get("X-Internal-Request");
   const expectedSecret =
-    process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+    process.env.INTERNAL_SECRET || "internal-service-secret";
 
   req.isInternalRequest = internalSecret === expectedSecret;
   next();

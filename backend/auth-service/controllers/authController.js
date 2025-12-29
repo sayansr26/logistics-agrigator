@@ -13,7 +13,7 @@ class AuthController {
    * Used to enrich JWT tokens with tenant scoping information
    * @param {string} userId - The auth user ID
    * @returns {Promise<Object|null>} User context or null if not found
-   * 
+   *
    * Returns:
    * - outletId: For outlet users (outlet_admin/outlet_staff)
    * - outletRole: outlet_admin or outlet_staff
@@ -28,7 +28,7 @@ class AuthController {
       const userServiceUrl =
         process.env.USER_SERVICE_URL || "http://user-service:3003";
       const internalSecret =
-        process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+        process.env.INTERNAL_SECRET || "internal-service-secret";
 
       const response = await fetch(
         `${userServiceUrl}/api/v1/internal/user-context/${userId}`,
@@ -161,7 +161,7 @@ class AuthController {
         const userServiceUrl =
           process.env.USER_SERVICE_URL || "http://user-service:3003";
         const internalSecret =
-          process.env.INTERNAL_SERVICE_SECRET || "internal-service-secret";
+          process.env.INTERNAL_SECRET || "internal-service-secret";
 
         const bootstrapResponse = await fetch(
           `${userServiceUrl}/api/v1/internal/bootstrap-customer`,
@@ -248,11 +248,9 @@ class AuthController {
         parentUserId: null,
       };
 
-      const accessToken = jwt.sign(
-        tokenPayload,
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
-      );
+      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+      });
 
       const refreshToken = jwt.sign(
         { userId: user.id },
@@ -276,7 +274,11 @@ class AuthController {
       await redisClient.setEx(
         `session:${user.id}`,
         3600,
-        JSON.stringify({ userId: user.id, role: user.role, customerId: user.id }),
+        JSON.stringify({
+          userId: user.id,
+          role: user.role,
+          customerId: user.id,
+        }),
       );
 
       // Return same format as login - auto-login the user
@@ -421,11 +423,9 @@ class AuthController {
         parentUserId: user.parentUserId || null,
       };
 
-      const accessToken = jwt.sign(
-        tokenPayload,
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
-      );
+      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+      });
 
       const refreshToken = jwt.sign(
         { userId: user.id },
@@ -576,11 +576,9 @@ class AuthController {
         parentUserId: user.parentUserId || null,
       };
 
-      const newAccessToken = jwt.sign(
-        tokenPayload,
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" },
-      );
+      const newAccessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+      });
 
       // Generate new refresh token
       const newRefreshToken = jwt.sign(
@@ -898,7 +896,9 @@ class AuthController {
 
   // Get role permissions - uses shared constants for consistency
   static getRolePermissions(role) {
-    const { getPermissionsForRole } = require("../shared/constants/permissions");
+    const {
+      getPermissionsForRole,
+    } = require("../shared/constants/permissions");
     return getPermissionsForRole(role);
   }
 

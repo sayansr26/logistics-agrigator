@@ -15,6 +15,9 @@ const Joi = require("joi");
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// CUID validation pattern (for Partner IDs)
+const cuidPattern = /^c[a-z0-9]{24,}$/i;
+
 // Pincode validation pattern (6 digits)
 const pincodePattern = /^\d{6}$/;
 
@@ -27,6 +30,15 @@ const schemas = {
 
   uuidOptional: Joi.string().pattern(uuidPattern).optional().messages({
     "string.pattern.base": "Invalid UUID format",
+  }),
+
+  cuid: Joi.string().pattern(cuidPattern).required().messages({
+    "string.pattern.base": "Invalid CUID format",
+    "any.required": "Partner ID is required",
+  }),
+
+  cuidOptional: Joi.string().pattern(cuidPattern).optional().messages({
+    "string.pattern.base": "Invalid CUID format",
   }),
 
   pincode: Joi.string().pattern(pincodePattern).required().messages({
@@ -45,6 +57,7 @@ const schemas = {
 
 /**
  * POST /api/v1/pincode-types - Create Pincode Type
+ * Now requires partnerIds and pincodeCodes for partner-specific assignment
  */
 const createPincodeTypeSchema = {
   body: Joi.object({
@@ -81,6 +94,30 @@ const createPincodeTypeSchema = {
     isActive: Joi.boolean().optional().default(true).messages({
       "boolean.base": "isActive must be a boolean",
     }),
+
+    // Required: At least one partner must be selected
+    partnerIds: Joi.array()
+      .items(schemas.cuid)
+      .min(1)
+      .max(50)
+      .required()
+      .messages({
+        "array.min": "At least one partner is required",
+        "array.max": "Cannot assign more than 50 partners at once",
+        "any.required": "partnerIds array is required",
+      }),
+
+    // Required: At least one pincode must be assigned
+    pincodeCodes: Joi.array()
+      .items(schemas.pincode)
+      .min(1)
+      .max(1000)
+      .required()
+      .messages({
+        "array.min": "At least one pincode is required",
+        "array.max": "Cannot assign more than 1000 pincodes at once",
+        "any.required": "pincodeCodes array is required",
+      }),
   }),
 };
 
@@ -104,6 +141,8 @@ const listPincodeTypesSchema = {
     isActive: Joi.boolean().optional().messages({
       "boolean.base": "isActive must be a boolean",
     }),
+    // Optional: Filter by partner ID (CUID format)
+    partnerId: schemas.cuidOptional,
     sortBy: Joi.string()
       .valid("name", "charge", "createdAt", "updatedAt")
       .optional()
@@ -256,10 +295,15 @@ const getAssignedPincodesSchema = {
 
 /**
  * GET /api/v1/pincodes/:code/types - Get Types for a Pincode
+ * Optionally filter by partnerId for partner-specific charges
  */
 const getTypesByPincodeSchema = {
   params: Joi.object({
     code: schemas.pincode,
+  }),
+  query: Joi.object({
+    // Optional: Filter by partner ID for partner-specific pincode types
+    partnerId: schemas.cuidOptional,
   }),
 };
 

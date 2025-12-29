@@ -53,6 +53,7 @@ model Partner {
   rates               PartnerRate[]
   serviceabilityCache ServiceabilityCache[]
   chargePackages      ChargePackage[]
+  pincodeTypes        PincodeType[]
 
   @@index([outletId, isActive])
   @@index([outletId])
@@ -299,12 +300,12 @@ model Zone {
   description String?  @db.Text
   zoneType    ZoneType @default(GEOLOGICAL) @map("zone_type")
   status      Boolean  @default(true)
-  
+
   // Tenant scoping (null = system-level zone, set = outlet-specific)
   outletId String? @map("outlet_id") @db.Uuid
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   zoneStates   ZoneState[]
@@ -409,12 +410,13 @@ model ZoneMilestone {
 }
 
 // ========================================
-// PINCODE TYPE MANAGEMENT (Global/Admin-managed)
+// PINCODE TYPE MANAGEMENT (Partner-specific)
 // ========================================
 
 model PincodeType {
   id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(50)
+  partnerId   String   @map("partner_id") // Reference to Partner model (CUID format)
+  name        String   @db.VarChar(50)
   charge      Decimal  @db.Decimal(10, 2)
   description String?  @db.VarChar(255)
   isActive    Boolean  @default(true) @map("is_active")
@@ -422,9 +424,12 @@ model PincodeType {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
+  partner     Partner                 @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   assignments PincodeTypeAssignment[]
 
-  @@index([name])
+  @@unique([partnerId, name])
+  @@index([partnerId, isActive])
+  @@index([partnerId, name])
   @@index([isActive])
   @@map("pincode_types")
 }
