@@ -132,9 +132,9 @@ const router = express.Router();
  *                   maxShipments:
  *                     type: integer
  *                     description: Maximum number of shipments per month
- *                   maxCustomers:
+ *                   maxSubUsers:
  *                     type: integer
- *                     description: Maximum number of customers
+ *                     description: Maximum number of sub-users
  *                   maxApiCalls:
  *                     type: integer
  *                     description: Maximum API calls per day

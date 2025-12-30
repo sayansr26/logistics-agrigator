@@ -1,103 +1,202 @@
-# Technical Context: Technology Stack & Development Environment
+# Tech Context - Logistics Aggregator Portal
 
-## Technology Stack Overview
+> Technologies, tools, and development setup | Last Updated: December 2024
 
-### Backend Technologies
+## Technology Stack
 
-**Runtime Environment**
+### Backend
 
-- **Node.js 18+**: Modern JavaScript runtime with excellent npm ecosystem
-- **PNPM 8.15.1**: Fast, disk-space efficient package manager for monorepo
-- **Express.js**: Lightweight, flexible web application framework
+| Layer      | Technology | Version | Purpose                       |
+| ---------- | ---------- | ------- | ----------------------------- |
+| Runtime    | Node.js    | 18+     | JavaScript runtime            |
+| Framework  | Express.js | 4.x     | Web framework                 |
+| ORM        | Prisma     | 5.x     | Type-safe database operations |
+| Database   | PostgreSQL | 15+     | Primary data store            |
+| Cache      | Redis      | 7+      | Sessions, caching, queues     |
+| Auth       | JWT        | -       | Token-based authentication    |
+| Validation | Joi        | 17.x    | Input validation              |
+| Logging    | Winston    | 3.x     | Structured logging            |
 
-**Database & ORM**
+### Frontend
 
-- **PostgreSQL 15+**: Primary database for all microservices
-- **Prisma ORM**: Type-safe database client with migration management
-- **Redis 7+**: Caching, session management, and rate limiting
+| Layer             | Technology      | Version | Purpose                      |
+| ----------------- | --------------- | ------- | ---------------------------- |
+| Framework         | Next.js         | 14.x    | React framework (App Router) |
+| Language          | TypeScript      | 5.x     | Type safety                  |
+| Styling           | Tailwind CSS    | 3.x     | Utility-first CSS            |
+| Components        | Radix UI        | -       | Accessible primitives        |
+| State             | Zustand         | 4.x     | Client state management      |
+| State (migrating) | Redux Toolkit   | 2.x     | Global state + RTK Query     |
+| Forms             | React Hook Form | 7.x     | Form handling                |
+| Validation        | Zod             | 3.x     | Schema validation            |
+| HTTP              | Axios           | 1.x     | API client                   |
 
-**Authentication & Security**
+### DevOps & Tools
 
-- **JWT (jsonwebtoken)**: Access and refresh token authentication
-- **bcrypt**: Password hashing with configurable rounds
-- **TOTP (speakeasy)**: Two-factor authentication support
-- **Joi**: Request validation and sanitization
+| Tool           | Purpose                    |
+| -------------- | -------------------------- |
+| Docker         | Containerization           |
+| Docker Compose | Service orchestration      |
+| PNPM           | Package manager (monorepo) |
+| Husky          | Git hooks                  |
+| Commitlint     | Commit message linting     |
+| ESLint         | Code linting               |
+| Prettier       | Code formatting            |
 
-### Frontend Technologies
+## Development Setup
 
-**Framework & Languages**
+### Prerequisites
 
-- **Next.js 14**: React framework with App Router and server-side rendering
-- **TypeScript**: Type safety throughout the application
-- **Tailwind CSS**: Utility-first CSS framework with custom design system
+```bash
+# Required software
+- Node.js 18+ (LTS recommended)
+- PNPM 8.15.1+
+- Docker Desktop (or Docker Engine + Docker Compose)
+- Git
 
-**State & Form Management**
-
-- **Redux Toolkit**: Global state management with RTK Query for data fetching
-- **RTK Query**: Automatic caching, invalidation, and optimistic updates
-- **React Hook Form**: Performant forms with validation
-- **Zod**: TypeScript-first schema validation
-
-**HTTP & API Integration**
-
-- **RTK Query**: Primary data fetching via API Gateway (replaced Axios/SWR)
-- **Axios**: Used only for internal service-to-service communication
-
-## Development Environment
-
-### Containerization & Orchestration
-
-**Docker Configuration**
-
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-RUN npm install -g pnpm@8.15.1
-COPY package*.json ./
-RUN pnpm install --prod --frozen-lockfile
-COPY . .
-EXPOSE 8001
-CMD ["node", "server.js"]
+# Install PNPM globally
+npm install -g pnpm@8.15.1
 ```
 
-**Docker Compose Structure**
+### Project Structure
+
+```
+logistics-agrigator/
+├── backend/
+│   ├── api-gateway/       # Port 3001
+│   ├── auth-service/      # Port 3002
+│   ├── user-service/      # Port 3003
+│   ├── shipment-service/  # Port 3004
+│   ├── partner-service/   # Port 3005
+│   ├── wallet-service/    # Port 3006
+│   ├── support-service/   # Port 3007
+│   ├── platform-service/  # Port 3008
+│   └── license-service/   # Port 3009
+├── frontend/              # Port 3000
+├── shared/                # Shared utilities
+├── scripts/               # Automation scripts
+├── docs/                  # Documentation
+├── memory-bank/           # Project intelligence
+├── docker-compose.yml     # Main compose file
+└── package.json           # Root workspace config
+```
+
+### Quick Start Commands
+
+```bash
+# Initial setup
+pnpm run fresh:install          # Complete fresh installation
+pnpm run setup:dev              # Auto-create .env + dependencies
+
+# Development
+pnpm run dev                    # Start all services
+pnpm run dev:frontend           # Frontend only
+pnpm run dev:backend            # Backend only
+pnpm run stop                   # Stop all services
+
+# Database
+pnpm run prisma:studio          # Visual database browser
+pnpm run prisma:generate        # Generate Prisma clients
+pnpm run migrate:deploy:all     # Deploy all migrations
+
+# Logs & Health
+pnpm run logs                   # All service logs
+pnpm run logs:backend           # Backend logs only
+pnpm run health                 # Health check all services
+```
+
+## Environment Configuration
+
+### Environment Files
+
+```
+.env                           # Root environment
+frontend/.env                  # Frontend config
+backend/auth-service/.env      # Auth service config
+backend/user-service/.env      # User service config
+... (per service)
+```
+
+### Key Environment Variables
+
+```bash
+# Database (per service)
+DATABASE_URL="postgresql://user:pass@localhost:5432/logistics_service"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# JWT
+JWT_SECRET="your-secret-key"
+JWT_ACCESS_EXPIRY="15m"
+JWT_REFRESH_EXPIRY="7d"
+
+# Service URLs
+AUTH_SERVICE_URL="http://auth-service:3002"
+USER_SERVICE_URL="http://user-service:3003"
+PARTNER_SERVICE_URL="http://partner-service:3005"
+WALLET_SERVICE_URL="http://wallet-service:3006"
+
+# External APIs
+PARTNER_API_URL="https://calc.websiteduniya.com"
+WALLET_API_URL="https://wapi.websiteduniya.com/api/v1"
+```
+
+## Docker Configuration
+
+### Main Docker Compose
 
 ```yaml
+# docker-compose.yml
 services:
-  auth-service: # Port 3002 - ✅ COMPLETED (JWT + RBAC)
-  user-service: # Port 3003 - ✅ COMPLETED (Customer Management)
-  partner-service: # Port 3005 - ✅ 100% COMPLETED (Zone v2 + Charge Packages + Quote Engine)
-  shipment-service: # Port 3004 - ✅ OPERATIONAL (Integrated with Partner Service)
-  wallet-service: # Port 3006 - ✅ COMPLETED (Commission System)
-  license-service: # Port 3011 - ✅ COMPLETED (Auto-generation)
-  support-service: # Port 3007 - ❌ NOT STARTED
-  platform-service: # Port 3008 - ❌ NOT STARTED
-  api-gateway: # Port 3001 - ✅ COMPLETED (JWT + RBAC + All Routes)
-  frontend: # Port 3000 - ✅ COMPLETED (Redux/RTK Query + Charge Packages UI)
-  postgres: # Port 5432 - ✅ OPERATIONAL (Internal only)
-  redis: # Port 6379 - ✅ OPERATIONAL (Internal only)
+  postgres:
+    image: postgres:15-alpine
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  api-gateway:
+    build: ./backend/api-gateway
+    ports: ["3001:3001"]
+
+  auth-service:
+    build: ./backend/auth-service
+    ports: ["3002:3002"]
+
+  # ... other services
+
+  frontend:
+    build: ./frontend
+    ports: ["3000:3000"]
 ```
 
-### Database Architecture
+### Service Container Names
 
-**Service-Specific Databases**
-
-```sql
--- Each service has its own PostgreSQL database
-CREATE DATABASE auth_service;        -- ✅ OPERATIONAL
-CREATE DATABASE user_service;        -- ✅ OPERATIONAL
-CREATE DATABASE partner_service;     -- ✅ OPERATIONAL
-CREATE DATABASE shipment_service;    -- 🔄 READY
-CREATE DATABASE platform_service;    -- ❌ NOT CREATED
-CREATE DATABASE support_service;     -- ❌ NOT CREATED
+```
+logistics-api-gateway
+logistics-auth-service
+logistics-user-service
+logistics-shipment-service
+logistics-partner-service
+logistics-wallet-service
+logistics-license-service
+logistics-support-service
+logistics-platform-service
+logistics-frontend
+logistics-postgres
+logistics-redis
 ```
 
-**Prisma Schema Pattern**
+## Database Schema Pattern
+
+### Prisma Configuration
 
 ```prisma
+// backend/{service}/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
-  output   = "./generated/client"
 }
 
 datasource db {
@@ -105,325 +204,166 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Type-safe model definitions with relationships
-model User {
+// All IDs must be UUID
+model Entity {
   id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique @db.VarChar(255)
-  role      Role     @default(client)
-  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("users")
-}
-
-// Partner Service - Charge Package Model (NEW - December 2025)
-model ChargePackage {
-  id          String                 @id @default(cuid())
-  partnerId   String
-  name        String
-  type        ChargePackageType // WEIGHT | DISTANCE | GENERIC
-  baseCharge  Decimal                @db.Decimal(10, 2)
-  baseUnit    Decimal? // e.g., first 5 kg or 10 km
-  addonUnit   Decimal? // per 1 kg or 1 km
-  addonCharge Decimal? // charge per addon unit
-  appliesTo   ChargePackageAppliesTo @default(ANY) // ANY | COD | PREPAID
-  calcType    ChargePackageCalcType  @default(FLAT)
-  isActive    Boolean                @default(true)
-
-  @@unique([partnerId, name])
-  @@index([partnerId, type, isActive])
-  @@map("charge_packages")
-}
-
-// Partner Service - Zone Milestone Model (NEW - December 2025)
-model ZoneMilestone {
-  id        String @id @default(uuid()) @db.Uuid
-  zoneId    String @map("zone_id") @db.Uuid
-  minKm     Int    @map("min_km")
-  maxKm     Int    @map("max_km")
-  suffix    String @db.VarChar(5) // A, B, C...
-  sortOrder Int    @map("sort_order")
-
-  @@unique([zoneId, sortOrder])
-  @@map("zone_milestones")
+  @@map("entities")
 }
 ```
 
-### Development Tools
+### Migration Commands
 
-**Code Quality & Formatting**
+```bash
+# Create migration (inside Docker)
+docker exec logistics-auth-service npx prisma migrate dev --name "description"
 
-- **ESLint**: Linting with custom rules for Node.js and React
-- **Prettier**: Code formatting with consistent style across team
-- **Husky**: Git hooks for pre-commit quality checks
-- **lint-staged**: Run linters only on changed files
-- **commitlint**: Conventional commit message enforcement
+# Deploy migrations
+docker exec logistics-auth-service npx prisma migrate deploy
 
-**Development Utilities**
+# Generate client
+docker exec logistics-auth-service npx prisma generate
 
-- **Prisma Studio**: Visual database browser and editor (Port 5555)
-- **Swagger/OpenAPI**: API documentation generation and testing
-- **Winston**: Structured logging with multiple transports
-- **Morgan**: HTTP request logging middleware
+# Reset database (development only!)
+docker exec logistics-auth-service npx prisma migrate reset
+```
 
-## Monorepo Structure
+## External Service Integration
 
-### Package Management
+### Partner Service API
 
-```json
+```javascript
+// HMAC-SHA256 Authentication
+const crypto = require('crypto');
+const timestamp = Date.now().toString();
+const signature = crypto
+  .createHmac('sha256', PARTNER_API_SECRET)
+  .update(`${timestamp}${PARTNER_API_KEY}`)
+  .digest('hex');
+
+// Headers
 {
-  "name": "logistics-portal",
-  "workspaces": ["backend/*", "frontend", "shared"],
-  "packageManager": "pnpm@8.15.1"
+  'X-API-Key': PARTNER_API_KEY,
+  'X-Timestamp': timestamp,
+  'X-Signature': signature
 }
 ```
 
-### Shared Libraries Architecture
+### Wallet Service API
 
 ```javascript
-// /shared/lib/ contains utilities used across all services
-├── auth.js        // JWT utilities, role checking
-├── database.js    // Prisma client configuration
-├── errors.js      // Custom error classes
-├── logger.js      // Winston logger configuration
-├── redis.js       // Redis client and utilities
-├── response.js    // Standardized API responses
-├── validation.js  // Common Joi schemas
-// REMOVED (moved to backup-incorrect-wallet-implementation/):
-// ├── walletMiddleware.js  // INCORRECT: Was shared library client
-// └── walletService.js     // INCORRECT: Was shared library client
+// Similar HMAC authentication
+// Endpoints: balance, credit, debit, transactions, etc.
 ```
 
-### Import Patterns
+## Testing Framework
 
-```javascript
-// Consistent import pattern across all services
-const {
-  database,
-  redis,
-  auth,
-  errors,
-  logger,
-  response,
-} = require("../../shared");
-
-// Service-specific imports
-const prisma = require("./config/database");
-const { verifyToken, authorize } = require("./middleware/auth");
-```
-
-## Environment Configuration
-
-### Development Setup Scripts
+### Backend Testing
 
 ```bash
-# Automated development setup
-pnpm run setup:dev          # Full stack setup
-pnpm run setup:backend      # Backend services only
-pnpm run setup:frontend     # Frontend only
+# Run service tests
+docker exec logistics-auth-service pnpm test
 
-# Development execution
-pnpm run dev                # All services
-pnpm run dev:backend        # Backend services + databases
-pnpm run dev:frontend       # Frontend only
+# Run with coverage
+docker exec logistics-auth-service pnpm run test:coverage
 
-# Database operations
-pnpm run prisma:studio      # Visual database browser
-pnpm run prisma:generate    # Generate Prisma clients
+# Integration tests
+docker exec logistics-auth-service pnpm run test:integration
 ```
 
-### Environment Variables Pattern
+### Frontend Testing
 
 ```bash
-# Service-specific environment files
-backend/auth-service/.env
-backend/user-service/.env
-backend/shipment-service/.env
-frontend/.env.local
-
-# Common environment variables
-DATABASE_URL=postgresql://user:pass@localhost:5432/service_db
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your_jwt_secret_here
-JWT_REFRESH_SECRET=your_refresh_secret_here
+cd frontend
+pnpm test              # Unit tests
+pnpm run test:e2e      # End-to-end tests
 ```
 
-## Security Implementation
+## Code Quality Tools
 
-### Authentication Flow
+### ESLint Configuration
 
 ```javascript
-// JWT Token Generation
-const accessToken = jwt.sign(
-  {
-    userId: user.id,
-    role: user.role,
-    clientId: user.clientId,
-    permissions: user.permissions,
+// .eslintrc.js
+module.exports = {
+  extends: ["next/core-web-vitals"], // Frontend
+  // or
+  extends: ["eslint:recommended"], // Backend
+  rules: {
+    "no-console": "warn",
+    "no-unused-vars": "error",
   },
-  process.env.JWT_SECRET,
-  {
-    expiresIn: "15m",
-    issuer: "logistics-portal",
-    audience: "logistics-api",
-  },
-);
+};
 ```
 
-### Security Middleware Stack
+### Prettier Configuration
 
 ```javascript
-// Applied to all services
-app.use(helmet()); // Security headers
-app.use(cors(corsOptions)); // CORS configuration
-app.use(rateLimiter); // Rate limiting via Redis
-app.use(express.json({ limit: "10mb" })); // Request size limiting
-app.use(requestLogger); // Request/response logging
-```
-
-### Input Validation Strategy
-
-```javascript
-// Joi schemas for consistent validation
-const userSchema = Joi.object({
-  email: Joi.string().email().required().max(255),
-  password: Joi.string()
-    .min(8)
-    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/),
-  role: Joi.string().valid(
-    "admin",
-    "finance",
-    "operations",
-    "client",
-    "support",
-  ),
-  clientId: Joi.string().uuid().optional(),
-});
-```
-
-## Deployment & Infrastructure
-
-### Production Deployment Stack
-
-```yaml
-# VPS deployment configuration
-Server: Ubuntu 20.04 LTS
-Reverse Proxy: Nginx with SSL termination
-Container Runtime: Docker Compose
-Database: Managed PostgreSQL with backups
-Cache: Redis with persistence
-Monitoring: Health checks + structured logging
-```
-
-### SSL & Domain Configuration
-
-```nginx
-# Nginx SSL configuration
-server {
-    listen 443 ssl http2;
-    server_name api.logistics.com;
-
-    ssl_certificate /etc/ssl/certs/logistics.crt;
-    ssl_certificate_key /etc/ssl/private/logistics.key;
-
-    location /api/ {
-        proxy_pass http://api-gateway:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+// .prettierrc
+{
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5"
 }
 ```
 
-## Development Workflows
-
-### Git Workflow
+### Pre-commit Hooks (Husky)
 
 ```bash
-# Feature development workflow
-git checkout -b feature/partner-service-integration
-# Make changes
-git add .
-git commit -m "feat: add external API integration to partner service"
-# Husky runs pre-commit hooks: lint, format, test
-git push origin feature/partner-service-integration
-# Create PR for review
+# .husky/pre-commit
+pnpm run lint:staged
+pnpm run commitlint
 ```
 
-### Testing Strategy
+## Debugging Tips
 
-```javascript
-// Service-level testing
-describe("Auth Service", () => {
-  it("should authenticate valid user credentials", async () => {
-    const response = await request(app)
-      .post("/api/v1/auth/login")
-      .send({ email: "test@example.com", password: "ValidPass123!" })
-      .expect(200);
+### View Service Logs
 
-    expect(response.body.status).toBe("success");
-    expect(response.body.data.accessToken).toBeDefined();
-  });
-});
-
-// Integration testing
-describe("End-to-End Shipment Creation", () => {
-  it("should create shipment with partner charges and wallet payment", async () => {
-    // Multi-service integration test
-  });
-});
+```bash
+docker logs logistics-auth-service --tail=50 -f
+docker-compose logs -f auth-service
 ```
 
-### Performance Monitoring
+### Check Service Health
 
-**Database Performance**
-
-```javascript
-// Prisma query logging
-const prisma = new PrismaClient({
-  log: ["query", "info", "warn", "error"],
-  errorFormat: "pretty",
-});
-
-// Query performance tracking
-prisma.$use(async (params, next) => {
-  const before = Date.now();
-  const result = await next(params);
-  const after = Date.now();
-
-  logger.info(
-    `Query ${params.model}.${params.action} took ${after - before}ms`,
-  );
-  return result;
-});
+```bash
+curl http://localhost:3001/health  # API Gateway
+curl http://localhost:3002/health  # Auth Service
+curl http://localhost:3003/health  # User Service
 ```
 
-**Application Metrics**
+### Database Access
 
-```javascript
-// Health check with service dependencies
-app.get("/health", async (req, res) => {
-  const checks = {
-    database: await testDatabaseConnection(),
-    redis: await testRedisConnection(),
-    externalServices: await testExternalAPIs(),
-    memoryUsage: process.memoryUsage(),
-    uptime: process.uptime(),
-  };
+```bash
+# Prisma Studio (visual browser)
+pnpm run prisma:studio
 
-  const healthy = Object.values(checks).every((check) =>
-    typeof check === "object" ? check.status === "ok" : check === "ok",
-  );
-
-  res.status(healthy ? 200 : 503).json({
-    status: healthy ? "ok" : "error",
-    timestamp: new Date().toISOString(),
-    checks,
-  });
-});
+# Direct psql access
+docker exec -it logistics-postgres psql -U logistics -d logistics_auth
 ```
+
+### Redis Access
+
+```bash
+docker exec -it logistics-redis redis-cli
+> KEYS *
+> GET session:xxx
+```
+
+## Technical Constraints
+
+1. **No Raw SQL**: All database operations via Prisma ORM
+2. **No Inline Handlers**: All route logic in controllers
+3. **UUID Format**: All IDs use `@db.Uuid` annotation
+4. **Audit Required**: All CRUD operations must log
+5. **Validation Required**: All inputs validated with Joi
+6. **Auth Required**: All endpoints authenticated (except public)
 
 ---
 
-This technical context provides the foundation for consistent development practices and ensures all team members understand the technology decisions and architectural patterns used throughout the project.
+**Environment**: Development  
+**Node Version**: 18.x LTS  
+**Package Manager**: PNPM 8.15.1

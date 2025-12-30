@@ -134,12 +134,6 @@ async function getRolePermissionSummary(prisma) {
     "accounts",
     "sales",
     "support",
-    "customer",
-    "customer_account",
-    "customer_sales",
-    "customer_support",
-    "outlet_admin",
-    "outlet_staff",
     "affiliate",
   ];
 

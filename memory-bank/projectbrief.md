@@ -1,113 +1,132 @@
-# Project Brief: Logistics Aggregator Portal
+# Project Brief - Logistics Aggregator Portal
 
-## Executive Summary
+> Foundation document | Last Updated: December 2024
 
-**Project Name**: Logistics Aggregator Portal  
-**Vision**: Comprehensive logistics management solution for e-Commerce, B2B, and B2C enterprises in India  
-**Architecture**: Modern microservices with Prisma ORM  
-**Status**: Shipment Service Final Phase (90% Complete - SHIP-005 Pending)
+## Project Overview
 
-## Core Business Problem
+**Logistics Aggregator Portal** is a comprehensive multi-tenant B2B/B2C logistics management platform designed specifically for the Indian e-commerce market. It provides white-label capabilities and integrations with 75+ courier partners, serving as a complete shipping and logistics solution for businesses of all sizes.
 
-Indian businesses struggle with logistics due to:
+## Vision
 
-- **Fragmented Services**: Multiple courier partners with different interfaces
-- **No Centralized Control**: Difficult to track, manage, and optimize logistics
-- **Manual Processes**: Time-consuming manual shipment creation and tracking
-- **Poor Visibility**: Limited insights into costs, performance, and analytics
-- **Integration Complexity**: Challenging to connect with e-commerce platforms
+To become the leading logistics aggregation platform in India, offering seamless courier integrations, real-time tracking, automated shipping workflows, and comprehensive financial management—all through a single, unified platform.
 
-## Solution Architecture
+## Core Requirements
 
-### Microservices Structure (7 Services)
+### Business Requirements
 
-```
-✅ Auth Service (Port 8001) - JWT, RBAC, 2FA - COMPLETED
-✅ User Service (Port 8002) - Multi-tenant, white-label - COMPLETED
-✅ Partner Service (Port 3005) - Complete courier integration - COMPLETED (75+ endpoints)
-✅ Wallet Service (Port 8006) - Payment processing - COMPLETED (14 endpoints)
-🔄 Shipment Service (Port 8003) - Complete logistics management - 90% COMPLETE (tracking system operational)
-❌ Platform Service (Port 8005) - E-commerce integrations - READY TO START
-❌ Support Service (Port 8004) - Help desk, disputes - NOT STARTED
-✅ API Gateway (Port 8000) - Routing, security - OPERATIONAL
-✅ Frontend (Port 3000) - Next.js with TypeScript - FOUNDATION READY
-```
+1. **Multi-Tenant Architecture**
+   - Support for multiple license holders (clients)
+   - White-label customization capabilities
+   - Tenant isolation for data security
 
-### External Services (Available)
+2. **Courier Integration**
+   - Integration with 75+ Indian courier partners
+   - Unified API for all courier operations
+   - Automated rate calculation and comparison
+   - Real-time serviceability checks by pincode
 
-```
-✅ External Wallet API - https://wapi.websiteduniya.com/api/v1 - HMAC authentication ready
-✅ Partner Micro Service - External API integration completed with HMAC authentication
-```
+3. **Shipment Management**
+   - End-to-end shipment lifecycle management
+   - Bulk order processing (CSV/Excel uploads)
+   - AWB (Air Waybill) generation
+   - Real-time tracking and status updates
+   - NDR (Non-Delivery Report) management
+   - RTO (Return to Origin) handling
 
-## Key Business Value Props
+4. **Financial Operations**
+   - Prepaid wallet system for shipping charges
+   - Transaction history and ledger
+   - COD (Cash on Delivery) remittance tracking
+   - Invoice generation and GST compliance
 
-1. **Unified Platform**: Single interface for all logistics operations
-2. **Multi-Courier**: Intelligent partner selection based on cost/time/zone
-3. **White-Label Ready**: Custom branding for enterprise clients
-4. **India-Focused**: GST compliance, local courier integration
-5. **E-commerce Integration**: Shopify, WooCommerce auto-sync
-6. **Real-time Operations**: Live tracking, notifications, disputes
+5. **Role-Based Access Control (RBAC)**
+   - 11-role hierarchical permission system
+   - Granular permission management
+   - Scope-based data access (own, assigned, all)
+
+### Technical Requirements
+
+1. **Microservices Architecture**
+   - Service isolation for scalability
+   - Database-per-service pattern
+   - Shared library for common utilities
+
+2. **Security**
+   - JWT-based authentication
+   - Redis session management
+   - HMAC-based API authentication for external services
+   - Audit logging for all operations
+
+3. **Performance**
+   - Redis caching for API responses
+   - Optimized database queries with Prisma ORM
+   - Rate limiting and throttling
+
+4. **Scalability**
+   - Docker containerization
+   - Horizontal scaling capability
+   - Load balancing ready
+
+## Target Users
+
+| Role           | Description               | Primary Functions                       |
+| -------------- | ------------------------- | --------------------------------------- |
+| **Superadmin** | System owner              | Full system control, license management |
+| **Admin**      | Platform administrator    | Platform configuration, user management |
+| **Client**     | License holder (business) | Shipment operations, team management    |
+| **Customer**   | End user of client        | Order placement, tracking               |
+| **Affiliate**  | Commission partner        | Referral management, earnings           |
 
 ## Success Metrics
 
-### Immediate (Current Phase)
+- **System Uptime**: 99.9% availability
+- **API Response Time**: < 200ms for standard operations
+- **Order Processing**: Support 10,000+ daily shipments
+- **User Capacity**: 1,000+ concurrent users
 
-- [x] External Partner API integration completed ✅ COMPLETED
-- [x] Comprehensive partner management with zones, packages, charges ✅ COMPLETED
-- [x] Advanced partner analytics and system management ✅ COMPLETED
-- [x] Charge calculation and assignment algorithms ✅ COMPLETED
-- [x] Wallet payment processing operational ✅ COMPLETED
-- [x] Auth and User services production-ready ✅ COMPLETED
-- [x] Complete shipment service foundation with partner/wallet integration ✅ COMPLETED
-- [x] Comprehensive tracking system with public AWB tracking ✅ COMPLETED
-- [x] POD management with signature capture and analytics ✅ COMPLETED
+## Project Scope
 
-### Phase 1 Goals (Original Week 8 equivalent)
+### In Scope
 
-- [ ] All 5 new services operational with Prisma
-- [ ] Shopify integration functional
-- [ ] 100+ test shipments processed
-- [ ] Frontend application complete
+- API Gateway with intelligent routing
+- Authentication and authorization services
+- User and customer management
+- Shipment lifecycle management
+- Partner (courier) integration service
+- Wallet and transaction management
+- License management system
+- Support ticketing system
+- E-commerce platform integrations (Shopify, WooCommerce)
+- Admin dashboard and reporting
 
-### Production Goals (6 months)
+### Out of Scope (Phase 1)
 
-- [ ] 100+ active clients
-- [ ] 10,000+ daily shipments
-- [ ] 99.9% uptime achieved
-- [ ] Revenue targets met
+- Mobile applications
+- AI-powered route optimization
+- International shipping
+- Warehouse management integration
 
-## Technology Foundation
+## Constraints
 
-**Database**: PostgreSQL with Prisma ORM for type-safe operations  
-**Backend**: Node.js + Express.js microservices  
-**Frontend**: Next.js 14 + TypeScript + Tailwind CSS  
-**Authentication**: JWT with Redis sessions and 2FA support  
-**Deployment**: Docker containerization with VPS hosting
+1. **India-Focused**: All features optimized for Indian logistics
+2. **Currency**: INR only
+3. **Compliance**: GST regulations and invoicing requirements
+4. **Infrastructure**: VPS-based deployment initially
 
-## Critical Path Forward
+## Timeline
 
-The project is currently in the **Shipment Service Final Phase** where:
+- **Phase 1** (Weeks 1-8): Core services, authentication, shipment management
+- **Phase 2** (Weeks 9-16): Full courier integration, bulk operations
+- **Phase 3** (Weeks 17-24): Platform integrations, reporting, optimization
 
-1. **Partner Service** ✅ COMPLETED & ARCHIVED - Full external API integration with 75+ endpoints
-2. **Wallet Service** ✅ COMPLETED - Complete independent service with 14 endpoints operational
-3. **Shipment Service** 🔄 90% COMPLETE - Foundation, partner integration, wallet payments, and comprehensive tracking system operational
-4. **SHIP-005** ❌ FINAL PHASE - Bulk operations, NDR management, label generation pending
-5. **Platform Service** ⏳ READY TO START - Shopify OAuth integration planned next
+## Key Stakeholders
 
-## Budget & Timeline
-
-**Development Investment**: ₹45-65 lakhs over 6 months  
-**Team Structure**: 10 people (5 backend, 4 frontend, 1 DevOps/QA)  
-**Current Milestone**: Complete SHIP-005 bulk operations and begin Platform Service within 5 days  
-**Production Launch**: 6 months from start
-
-## Risk Factors
-
-**Technical Risks**: Integration complexity with external services  
-**Business Risks**: Market competition, regulatory changes  
-**Mitigation**: Weekly integration testing, modular compliance framework
+- **Development Team**: Microservices and frontend development
+- **Operations Team**: Logistics and courier partnerships
+- **Finance Team**: Wallet and billing operations
+- **Support Team**: Customer and client assistance
 
 ---
 
-This project represents a significant opportunity to build a market-leading logistics platform that addresses real pain points in the Indian market while leveraging modern technology architecture for scalability and maintainability.
+**Status**: Phase 1 In Progress  
+**Priority**: P0 - Critical Business Launch

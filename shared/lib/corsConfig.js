@@ -18,45 +18,27 @@ const logger = require("./logger");
  * Development CORS Origins
  * Allows all necessary localhost ports for development and testing
  */
-const developmentOrigins = [
-  // Frontend Applications
-  "http://localhost:3000", // Next.js Frontend (primary)
-
-  // API Gateway
-  "http://localhost:3001", // API Gateway (primary proxy)
-
-  // Backend Services (for direct testing in development)
-  "http://localhost:8001", // Auth Service
-  "http://localhost:8002", // User Service
-  "http://localhost:3005", // Partner Service
-  "http://localhost:8006", // Wallet Service
-  "http://localhost:3004", // Shipment Service (port 8003 -> 3004)
-  "http://localhost:8005", // Platform Service
-  "http://localhost:8004", // Support Service
-
-  // Additional Development URLs
-  "http://127.0.0.1:3000", // Alternative localhost
-  "http://127.0.0.1:3001", // Alternative API Gateway
-  "https://logistics.tech-sayan.space",
-];
+const developmentOrigins = (process.env.DEVELOPMENT_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 /**
  * Production CORS Origins
  * SECURITY: Only allows production domains - no wildcards or broad access
  */
-const productionOrigins = [
-  "https://logistics.example.com", // Production Frontend Domain
-  "https://api.logistics.com", // Production API Gateway Domain
-  // Add additional production domains as needed
-];
+const productionOrigins = (process.env.PRODUCTION_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 /**
  * Staging Environment Origins (if needed)
  */
-const stagingOrigins = [
-  "https://staging-logistics.example.com",
-  "https://staging-api.logistics.com",
-];
+const stagingOrigins = (process.env.STAGING_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 /**
  * Get environment-appropriate CORS options

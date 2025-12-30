@@ -189,14 +189,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/shipments/create",
     public: false,
-    roles: [
-      "superadmin",
-      "admin",
-      "client",
-      "customer",
-      "sales",
-      "customer_sales",
-    ],
+    roles: ["superadmin", "admin", "client", "sales"],
     permission: "shipment:create:*",
     title: "Create Shipment",
     description: "Create new shipment",
@@ -305,7 +298,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/remittance",
     public: false,
-    roles: ["superadmin", "admin", "accounts", "customer_account"],
+    roles: ["superadmin", "admin", "accounts"],
     permission: "billing:manage:*",
     title: "Remittance",
     description: "Remittance management",
@@ -321,7 +314,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/charges",
     public: false,
-    roles: ["superadmin", "admin", "accounts", "customer_account"],
+    roles: ["superadmin", "admin", "accounts"],
     permission: "billing:list:*",
     title: "Charges",
     description: "View charges",
@@ -350,37 +343,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     permission: "partner:read:*",
     title: "Zones",
     description: "Service zones",
-  },
-
-  // ==================== OUTLETS ====================
-  {
-    path: "/outlets/add",
-    public: false,
-    roles: ["superadmin", "admin", "client"],
-    permission: "customer:create:parent",
-    title: "Add Outlet",
-    description: "Create new outlet",
-  },
-  {
-    path: "/outlets/:id/edit",
-    public: false,
-    permission: "customer:update:*",
-    title: "Edit Outlet",
-    description: "Modify outlet details",
-  },
-  {
-    path: "/outlets/:id",
-    public: false,
-    permission: "customer:read:*",
-    title: "Outlet Details",
-    description: "View outlet information",
-  },
-  {
-    path: "/outlets",
-    public: false,
-    permission: "customer:list:*",
-    title: "Outlets",
-    description: "Manage outlets",
   },
 
   // ==================== SUPPORT ====================

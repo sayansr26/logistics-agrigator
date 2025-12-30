@@ -13,8 +13,10 @@ const nextConfig = {
     ignoreBuildErrors: true, // Ignore TypeScript errors during build (pre-existing issues)
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_TRACKING_URL: process.env.NEXT_PUBLIC_TRACKING_URL,
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
+    NEXT_PUBLIC_TRACKING_URL:
+      process.env.NEXT_PUBLIC_TRACKING_URL || "http://localhost:3000/tracking",
   },
   images: {
     domains: [

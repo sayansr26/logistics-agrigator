@@ -256,56 +256,7 @@ router.get(
       const { affiliateId } = req.params;
       const { startDate, endDate } = req.query;
 
-      // Build where clause
-      const where = { affiliateId };
-
-      if (startDate || endDate) {
-        where.createdAt = {};
-        if (startDate) where.createdAt.gte = new Date(startDate);
-        if (endDate) where.createdAt.lte = new Date(endDate);
-      }
-
-      // Get performance metrics
-      const [
-        totalCommissions,
-        commissionsByStatus,
-        topCustomers,
-        monthlyTrend,
-      ] = await Promise.all([
-        prisma.commission.count({ where }),
-        prisma.commission.groupBy({
-          by: ["status"],
-          where,
-          _count: { id: true },
-          _sum: { commissionAmount: true },
-        }),
-        prisma.commission.groupBy({
-          by: ["customerId"],
-          where,
-          _count: { id: true },
-          _sum: { commissionAmount: true },
-          orderBy: {
-            _sum: {
-              commissionAmount: "desc",
-            },
-          },
-          take: 10,
-        }),
-        prisma.$queryRaw`
-          SELECT
-            DATE_TRUNC('month', created_at) as month,
-            COUNT(*) as commission_count,
-            SUM(commission_amount) as total_amount
-          FROM commissions
-          WHERE affiliate_id = ${affiliateId}::uuid
-          ${startDate ? prisma.$queryRaw`AND created_at >= ${new Date(startDate)}::timestamp` : prisma.$queryRaw``}
-          ${endDate ? prisma.$queryRaw`AND created_at <= ${new Date(endDate)}::timestamp` : prisma.$queryRaw``}
-          GROUP BY month
-          ORDER BY month DESC
-          LIMIT 12
-        `,
-      ]);
-
+      // Commission tracking is disabled - return empty metrics
       res.json(
         APIResponse.success({
           performance: {
@@ -314,10 +265,11 @@ router.get(
               startDate: startDate || null,
               endDate: endDate || null,
             },
-            totalCommissions,
-            commissionsByStatus,
-            topCustomers,
-            monthlyTrend,
+            totalCommissions: 0,
+            commissionsByStatus: [],
+            topReferrals: [],
+            monthlyTrend: [],
+            message: "Commission tracking is currently disabled",
           },
         }),
       );

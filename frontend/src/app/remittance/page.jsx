@@ -93,12 +93,12 @@ export default function RemittancePage() {
       remittance.refNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       remittance.awbNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       remittance.receiver.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      remittance.outlet.toLowerCase().includes(searchTerm.toLowerCase());
+      remittance.businessName.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesRetailer =
       selectedRetailer === "all"
         ? true
-        : remittance.outlet === selectedRetailer;
+        : remittance.businessName === selectedRetailer;
     const matchesStatus =
       selectedStatus === "all" ? true : remittance.status === selectedStatus;
 
@@ -444,14 +444,14 @@ export default function RemittancePage() {
                           <div className="flex items-center space-x-2">
                             <MapPin className="h-4 w-4 text-gray-400" />
                             <span className="text-sm text-gray-600">
-                              Outlet
+                              Business
                             </span>
                           </div>
                           <span
                             className="text-sm font-medium text-gray-900 truncate max-w-[120px]"
-                            title={remittance.outlet}
+                            title={remittance.businessName}
                           >
-                            {remittance.outlet}
+                            {remittance.businessName}
                           </span>
                         </div>
 

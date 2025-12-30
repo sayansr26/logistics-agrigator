@@ -40,16 +40,6 @@ const updateCommissionSettingsSchema = Joi.object({
 });
 
 /**
- * Link customer to affiliate schema
- */
-const linkCustomerSchema = Joi.object({
-  affiliateId: Joi.string().uuid().required().messages({
-    "string.guid": "affiliateId must be a valid UUID",
-    "any.required": "affiliateId is required",
-  }),
-});
-
-/**
  * List commissions query schema
  */
 const listCommissionsQuerySchema = Joi.object({
@@ -129,9 +119,6 @@ const uuidParamSchema = Joi.object({
   affiliateId: Joi.string().uuid().optional().messages({
     "string.guid": "affiliateId must be a valid UUID",
   }),
-  customerId: Joi.string().uuid().optional().messages({
-    "string.guid": "customerId must be a valid UUID",
-  }),
   payoutId: Joi.string().uuid().optional().messages({
     "string.guid": "payoutId must be a valid UUID",
   }),
@@ -140,7 +127,6 @@ const uuidParamSchema = Joi.object({
 module.exports = {
   registerAffiliateSchema,
   updateCommissionSettingsSchema,
-  linkCustomerSchema,
   listCommissionsQuerySchema,
   requestPayoutSchema,
   approvePayoutSchema,

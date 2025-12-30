@@ -11,14 +11,11 @@ interface User {
   parentClientId?: string;
   parentUserId?: string;
   licenseId?: string;
-  assignedCustomerIds?: string[];
   accessLevel?: string;
   commissionRate?: number;
   commissionType?: string;
   isActive: boolean;
   createdAt?: string;
-  outletId?: string;
-  outletRole?: string;
 }
 
 // Define the auth state interface

@@ -199,34 +199,15 @@ export function useAuth() {
       if (!user?.role) return false;
 
       const accessMap: Record<string, string[]> = {
-        dashboard: ["superadmin", "admin", "client", "customer"],
+        dashboard: ["superadmin", "admin", "client"],
         users: ["superadmin", "admin"],
         clients: ["superadmin", "admin"],
-        billing: ["superadmin", "admin", "accounts", "customer_account"],
-        shipments: ["superadmin", "admin", "client", "customer", "sales"],
+        billing: ["superadmin", "admin", "accounts"],
+        shipments: ["superadmin", "admin", "client", "sales"],
         partners: ["superadmin", "admin"],
-        wallet: [
-          "superadmin",
-          "admin",
-          "client",
-          "accounts",
-          "customer",
-          "customer_account",
-        ],
-        support: [
-          "superadmin",
-          "admin",
-          "support",
-          "customer",
-          "customer_support",
-        ],
-        analytics: [
-          "superadmin",
-          "admin",
-          "client",
-          "accounts",
-          "customer_account",
-        ],
+        wallet: ["superadmin", "admin", "client", "accounts"],
+        support: ["superadmin", "admin", "support"],
+        analytics: ["superadmin", "admin", "client", "accounts"],
         settings: ["superadmin", "admin", "client"],
       };
 
@@ -276,8 +257,7 @@ export function useAuth() {
   const canAccessFinance =
     user?.role === "admin" ||
     user?.role === "superadmin" ||
-    user?.role === "accounts" ||
-    user?.role === "customer_account";
+    user?.role === "accounts";
 
   /**
    * Legacy method support - check if user is specific role

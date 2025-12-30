@@ -414,20 +414,6 @@ const services = {
       "^/api/v1/platforms": "/api/v1/platforms", // API endpoints → /api/v1/platforms/*
     },
   },
-  // Customer Management (in user service) - for admin/client to manage their customers
-  customers: {
-    target: process.env.USER_SERVICE_URL || "http://user-service:3003",
-    pathRewrite: {
-      "^/api/v1/customers": "/api/v1/customers", // Customers → /api/v1/customers/*
-    },
-  },
-  // Outlet Management (in user service) - for admin/client to manage outlets (B2B customers)
-  outlets: {
-    target: process.env.USER_SERVICE_URL || "http://user-service:3003",
-    pathRewrite: {
-      "^/api/v1/outlets": "/api/v1/outlets", // Outlets → /api/v1/outlets/*
-    },
-  },
   // Internal Service Communication (in user service) - for inter-service bootstrap, etc.
   internal: {
     target: process.env.USER_SERVICE_URL || "http://user-service:3003",

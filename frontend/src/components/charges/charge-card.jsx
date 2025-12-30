@@ -100,7 +100,7 @@ export function ChargeCard({ charge, onSelect, onEdit, onDelete, isSelected }) {
             <div>
               <div className="font-medium capitalize">{charge.type}</div>
               <div className="text-sm text-muted-foreground">
-                {charge.customerId} • {charge.chargeType}
+                {charge.clientId} • {charge.chargeType}
               </div>
             </div>
           </div>

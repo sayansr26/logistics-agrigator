@@ -1,11 +1,10 @@
 // Affiliate Controller - Affiliate registration and commission management for RBAC system
-// Handles affiliate registration, commission tracking, and customer linking
+// Note: Commission tracking is currently disabled
 
 const { PrismaClient } = require("@prisma/client");
 const APIResponse = require("../shared/lib/response");
 const logger = require("../shared/lib/logger");
 const { UserServiceError } = require("../middleware/errorHandler");
-const commissionService = require("../services/commissionService");
 
 const prisma = new PrismaClient();
 
@@ -122,14 +121,12 @@ async function getAffiliateProfile(req, res) {
       );
     }
 
-    // Get affiliate statistics
-    const stats = await commissionService.getAffiliateStats(affiliateId);
-
+    // Return basic affiliate profile (commission tracking removed)
     res.json(
       APIResponse.success({
         affiliate: {
           affiliateId,
-          ...stats,
+          message: "Commission tracking is currently disabled",
         },
       }),
     );
@@ -176,8 +173,7 @@ async function updateCommissionSettings(req, res) {
     // Note: Actual update happens in auth-service User model
     // This is just a pass-through validation endpoint
 
-    // Invalidate cache for affiliate commission settings
-    await commissionService.invalidateAffiliateCache(affiliateId);
+    // Commission cache invalidation removed (commission tracking disabled)
 
     // Create audit log
     await prisma.auditLog.create({
@@ -235,65 +231,9 @@ async function updateCommissionSettings(req, res) {
 }
 
 /**
- * Link customer to affiliate for referral tracking
- * Permission: affiliate:manage:assigned or customer:update:assigned
- */
-async function linkCustomer(req, res) {
-  try {
-    const { customerId } = req.params;
-    const { affiliateId } = req.body;
-
-    // Verify customer exists
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-
-    if (!customer) {
-      throw new UserServiceError(
-        `Customer with ID '${customerId}' not found`,
-        "CUSTOMER_NOT_FOUND",
-        404,
-      );
-    }
-
-    // Note: Affiliate linking can be tracked via assignedCustomerIds in auth-service User model
-    // This endpoint creates a commission record for tracking purposes
-
-    // Create initial commission record (pending) for customer signup
-    const commission = await commissionService.trackCustomerSignup(
-      affiliateId,
-      customerId,
-    );
-
-    logger.info("Customer linked to affiliate", {
-      customerId,
-      affiliateId,
-      commissionId: commission.id,
-      linkedBy: req.user.id,
-      service: "user-service",
-    });
-
-    res.status(201).json(
-      APIResponse.success({
-        message: "Customer linked to affiliate successfully",
-        commission,
-      }),
-    );
-  } catch (error) {
-    logger.error("Link customer error", {
-      error: error.message,
-      customerId: req.params.customerId,
-      userId: req.user.id,
-      requestBody: req.body,
-      service: "user-service",
-    });
-    throw error;
-  }
-}
-
-/**
  * Get affiliate dashboard with commission stats
  * Permission: affiliate:read:own
+ * Note: Commission tracking is currently disabled
  */
 async function getAffiliateDashboard(req, res) {
   try {
@@ -308,22 +248,21 @@ async function getAffiliateDashboard(req, res) {
       );
     }
 
-    // Get dashboard statistics
-    const stats = await commissionService.getAffiliateStats(affiliateId);
-    const recentCommissions = await commissionService.getRecentCommissions(
-      affiliateId,
-      10,
-    );
-    const linkedCustomers =
-      await commissionService.getLinkedCustomers(affiliateId);
-
+    // Commission tracking is disabled - return empty dashboard
     res.json(
       APIResponse.success({
         dashboard: {
           affiliateId,
-          stats,
-          recentCommissions,
-          linkedCustomers,
+          stats: {
+            totalCommission: 0,
+            pendingCommission: 0,
+            approvedCommission: 0,
+            paidCommission: 0,
+            totalReferrals: 0,
+          },
+          recentCommissions: [],
+          referrals: [],
+          message: "Commission tracking is currently disabled",
         },
       }),
     );
@@ -340,18 +279,11 @@ async function getAffiliateDashboard(req, res) {
 /**
  * List all commissions for an affiliate
  * Permission: affiliate:read:own or affiliate:read:all (admin)
+ * Note: Commission tracking is currently disabled
  */
 async function listCommissions(req, res) {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-      status,
-      startDate,
-      endDate,
-    } = req.query;
+    const { page = 1, limit = 20, status, startDate, endDate } = req.query;
 
     const affiliateId =
       req.user.role === "affiliate"
@@ -379,59 +311,24 @@ async function listCommissions(req, res) {
       );
     }
 
-    const skip = (page - 1) * limit;
-
-    // Build where clause
-    const where = { affiliateId };
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) where.createdAt.gte = new Date(startDate);
-      if (endDate) where.createdAt.lte = new Date(endDate);
-    }
-
-    const [commissions, total] = await Promise.all([
-      prisma.commission.findMany({
-        where,
-        skip,
-        take: parseInt(limit),
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          customer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      }),
-      prisma.commission.count({ where }),
-    ]);
-
-    const hasMore = skip + commissions.length < total;
-    const totalPages = Math.ceil(total / limit);
-
+    // Commission tracking is disabled - return empty data
     res.json(
       APIResponse.success({
-        commissions,
+        commissions: [],
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
-          total,
-          totalPages,
-          hasMore,
-          hasPrevious: page > 1,
+          total: 0,
+          totalPages: 0,
+          hasMore: false,
+          hasPrevious: false,
         },
         filters: {
           status,
           startDate,
           endDate,
         },
+        message: "Commission tracking is currently disabled",
       }),
     );
   } catch (error) {
@@ -446,10 +343,11 @@ async function listCommissions(req, res) {
 }
 
 /**
- * List customers referred by affiliate
+ * List referrals by affiliate
  * Permission: affiliate:read:own or affiliate:read:assigned (admin)
+ * Note: Referral tracking is currently disabled
  */
-async function listReferredCustomers(req, res) {
+async function listReferrals(req, res) {
   try {
     const affiliateId =
       req.user.role === "affiliate" ? req.user.id : req.params.affiliateId;
@@ -469,22 +367,22 @@ async function listReferredCustomers(req, res) {
       req.user.id !== affiliateId
     ) {
       throw new UserServiceError(
-        "Access denied. You can only view your own referred customers.",
-        "CUSTOMER_ACCESS_DENIED",
+        "Access denied. You can only view your own referrals.",
+        "ACCESS_DENIED",
         403,
       );
     }
 
-    const customers = await commissionService.getLinkedCustomers(affiliateId);
-
+    // Referral tracking is disabled - return empty array
     res.json(
       APIResponse.success({
-        customers,
-        count: customers.length,
+        referrals: [],
+        count: 0,
+        message: "Referral tracking is currently disabled",
       }),
     );
   } catch (error) {
-    logger.error("List referred customers error", {
+    logger.error("List referrals error", {
       error: error.message,
       affiliateId: req.params.affiliateId,
       userId: req.user.id,
@@ -498,8 +396,7 @@ module.exports = {
   registerAffiliate,
   getAffiliateProfile,
   updateCommissionSettings,
-  linkCustomer,
   getAffiliateDashboard,
   listCommissions,
-  listReferredCustomers,
+  listReferrals,
 };

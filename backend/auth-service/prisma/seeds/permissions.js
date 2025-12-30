@@ -1,12 +1,11 @@
 /**
  * Permission Seed Data
  *
- * This file contains comprehensive permission definitions for all 12 modules
+ * This file contains comprehensive permission definitions for all modules
  * in the Logistics Aggregator Portal. Each permission follows the format:
  * module:action:scope
  *
- * Total Permissions: 120+
- * Modules: client, license, customer, shipment, wallet, partner, user, billing, analytics, support, platform, settings
+ * Modules: client, license, shipment, wallet, partner, user, billing, analytics, support, platform, settings
  *
  * @module seeds/permissions
  */
@@ -133,100 +132,6 @@ const permissions = [
   },
 
   // ===========================
-  // CUSTOMER MODULE (15 permissions)
-  // ===========================
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Create new customers under parent client account",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "View all customers under parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "View only assigned customer information",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Modify customer details under parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Update assigned customer information",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Remove customers under parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "List all customers under parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "List only assigned customers",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.EXPORT,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Export customer data for parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Full customer management for parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.ASSIGN,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "Assign customers to team members",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.PARENT,
-    description: "All customer operations for parent client",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "All operations on assigned customers",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "All customer operations across all clients (admin only)",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "View all customers system-wide",
-  },
-
-  // ===========================
   // SHIPMENT MODULE (18 permissions)
   // ===========================
   {
@@ -245,7 +150,7 @@ const permissions = [
     module: PERMISSION_MODULES.SHIPMENT,
     action: PERMISSION_ACTIONS.CREATE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Create shipments for assigned customers",
+    description: "Create shipments for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SHIPMENT,
@@ -263,7 +168,7 @@ const permissions = [
     module: PERMISSION_MODULES.SHIPMENT,
     action: PERMISSION_ACTIONS.READ,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "View shipments for assigned customers",
+    description: "View shipments for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SHIPMENT,
@@ -275,7 +180,7 @@ const permissions = [
     module: PERMISSION_MODULES.SHIPMENT,
     action: PERMISSION_ACTIONS.UPDATE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Update shipments for assigned customers",
+    description: "Update shipments for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SHIPMENT,
@@ -299,7 +204,7 @@ const permissions = [
     module: PERMISSION_MODULES.SHIPMENT,
     action: PERMISSION_ACTIONS.LIST,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "List shipments for assigned customers",
+    description: "List shipments for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SHIPMENT,
@@ -363,7 +268,7 @@ const permissions = [
     module: PERMISSION_MODULES.WALLET,
     action: PERMISSION_ACTIONS.READ,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "View wallet information for assigned customers",
+    description: "View wallet information for assigned entities",
   },
   {
     module: PERMISSION_MODULES.WALLET,
@@ -381,7 +286,7 @@ const permissions = [
     module: PERMISSION_MODULES.WALLET,
     action: PERMISSION_ACTIONS.LIST,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "List wallet transactions for assigned customers",
+    description: "List wallet transactions for assigned entities",
   },
   {
     module: PERMISSION_MODULES.WALLET,
@@ -411,7 +316,7 @@ const permissions = [
     module: PERMISSION_MODULES.WALLET,
     action: PERMISSION_ACTIONS.WILDCARD,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "All wallet operations for assigned customers",
+    description: "All wallet operations for assigned entities",
   },
   {
     module: PERMISSION_MODULES.WALLET,
@@ -615,7 +520,7 @@ const permissions = [
     module: PERMISSION_MODULES.BILLING,
     action: PERMISSION_ACTIONS.CREATE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Create billing entries for assigned customers",
+    description: "Create billing entries for assigned entities",
   },
   {
     module: PERMISSION_MODULES.BILLING,
@@ -633,13 +538,13 @@ const permissions = [
     module: PERMISSION_MODULES.BILLING,
     action: PERMISSION_ACTIONS.READ,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "View billing for assigned customers",
+    description: "View billing for assigned entities",
   },
   {
     module: PERMISSION_MODULES.BILLING,
     action: PERMISSION_ACTIONS.UPDATE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Update billing entries for assigned customers",
+    description: "Update billing entries for assigned entities",
   },
   {
     module: PERMISSION_MODULES.BILLING,
@@ -651,7 +556,7 @@ const permissions = [
     module: PERMISSION_MODULES.BILLING,
     action: PERMISSION_ACTIONS.LIST,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "List billing records for assigned customers",
+    description: "List billing records for assigned entities",
   },
   {
     module: PERMISSION_MODULES.BILLING,
@@ -675,7 +580,7 @@ const permissions = [
     module: PERMISSION_MODULES.BILLING,
     action: PERMISSION_ACTIONS.WILDCARD,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "All billing operations for assigned customers",
+    description: "All billing operations for assigned entities",
   },
   {
     module: PERMISSION_MODULES.BILLING,
@@ -703,7 +608,7 @@ const permissions = [
     module: PERMISSION_MODULES.ANALYTICS,
     action: PERMISSION_ACTIONS.READ,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "View analytics for assigned customers",
+    description: "View analytics for assigned entities",
   },
   {
     module: PERMISSION_MODULES.ANALYTICS,
@@ -721,7 +626,7 @@ const permissions = [
     module: PERMISSION_MODULES.ANALYTICS,
     action: PERMISSION_ACTIONS.LIST,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "List analytics reports for assigned customers",
+    description: "List analytics reports for assigned entities",
   },
   {
     module: PERMISSION_MODULES.ANALYTICS,
@@ -739,7 +644,7 @@ const permissions = [
     module: PERMISSION_MODULES.ANALYTICS,
     action: PERMISSION_ACTIONS.EXPORT,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Export analytics data for assigned customers",
+    description: "Export analytics data for assigned entities",
   },
   {
     module: PERMISSION_MODULES.ANALYTICS,
@@ -773,7 +678,7 @@ const permissions = [
     module: PERMISSION_MODULES.SUPPORT,
     action: PERMISSION_ACTIONS.CREATE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Create support tickets for assigned customers",
+    description: "Create support tickets for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SUPPORT,
@@ -821,7 +726,7 @@ const permissions = [
     module: PERMISSION_MODULES.SUPPORT,
     action: PERMISSION_ACTIONS.MANAGE,
     scope: PERMISSION_SCOPES.ASSIGNED,
-    description: "Full support ticket management for assigned customers",
+    description: "Full support ticket management for assigned entities",
   },
   {
     module: PERMISSION_MODULES.SUPPORT,
@@ -980,322 +885,6 @@ const permissions = [
     action: PERMISSION_ACTIONS.WILDCARD,
     scope: PERMISSION_SCOPES.ALL,
     description: "All settings operations system-wide",
-  },
-
-  // ===========================
-  // OUTLET MODULE (15 permissions)
-  // ===========================
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "Create new outlets in the system",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "View all outlet information",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "Modify outlet details and settings",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "Remove outlets from the system",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "View list of all outlets",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "Full outlet management including CRUD operations",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.ALL,
-    description: "All outlet operations (admin only)",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View own outlet information",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Modify own outlet settings",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full management of own outlet",
-  },
-  {
-    module: PERMISSION_MODULES.OUTLET,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All outlet operations within own outlet",
-  },
-
-  // ===========================
-  // OUTLET-SCOPED PERMISSIONS FOR OTHER MODULES
-  // ===========================
-  // Customer module - outlet scope
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Create customers within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View customers within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Modify customers within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Remove customers within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View list of customers within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full customer management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.CUSTOMER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All customer operations within outlet",
-  },
-  // Shipment module - outlet scope
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Create shipments within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View shipments within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Modify shipments within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Cancel or delete shipments within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View list of shipments within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full shipment management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SHIPMENT,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All shipment operations within outlet",
-  },
-  // Partner module - outlet scope
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Create partners within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View partners within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Modify partners within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Remove partners within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View list of partners within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full partner management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.PARTNER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All partner operations within outlet",
-  },
-  // Wallet module - outlet scope
-  {
-    module: PERMISSION_MODULES.WALLET,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View wallet within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.WALLET,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full wallet management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.WALLET,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All wallet operations within outlet",
-  },
-  // Billing module - outlet scope
-  {
-    module: PERMISSION_MODULES.BILLING,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View billing within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.BILLING,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full billing management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.BILLING,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All billing operations within outlet",
-  },
-  // Analytics module - outlet scope
-  {
-    module: PERMISSION_MODULES.ANALYTICS,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View analytics within outlet",
-  },
-  // Support module - outlet scope
-  {
-    module: PERMISSION_MODULES.SUPPORT,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Create support tickets within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SUPPORT,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View support tickets within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SUPPORT,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full support management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.SUPPORT,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All support operations within outlet",
-  },
-  // User module - outlet scope
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.CREATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Create users within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.READ,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View users within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.UPDATE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Modify users within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.DELETE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Remove users within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.LIST,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "View list of users within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.MANAGE,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "Full user management within outlet",
-  },
-  {
-    module: PERMISSION_MODULES.USER,
-    action: PERMISSION_ACTIONS.WILDCARD,
-    scope: PERMISSION_SCOPES.OUTLET,
-    description: "All user operations within outlet",
   },
 
   // ===========================

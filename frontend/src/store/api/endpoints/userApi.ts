@@ -62,9 +62,6 @@ interface User {
   isLicenseActive?: boolean;
   licenseValidUntil?: string;
   accessLevel?: string;
-  outletId?: string;
-  outletRole?: string;
-  assignedCustomerIds?: string[];
   commissionRate?: number;
   commissionType?: string;
   createdAt: string;
@@ -267,40 +264,6 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
-     * Assign Customer - Assign customer to restricted user
-     */
-    assignCustomer: builder.mutation<
-      UserResponse,
-      { userId: string; customerIds: string[] }
-    >({
-      query: ({ userId, customerIds }) => ({
-        url: `/api/v1/users/${userId}/assign-customers`,
-        method: "POST",
-        body: { customerIds },
-      }),
-      invalidatesTags: (result, error, { userId }) => [
-        { type: "User", id: userId },
-      ],
-    }),
-
-    /**
-     * Remove Customer Assignment - Remove customer from restricted user
-     */
-    removeCustomerAssignment: builder.mutation<
-      UserResponse,
-      { userId: string; customerIds: string[] }
-    >({
-      query: ({ userId, customerIds }) => ({
-        url: `/api/v1/users/${userId}/remove-customers`,
-        method: "POST",
-        body: { customerIds },
-      }),
-      invalidatesTags: (result, error, { userId }) => [
-        { type: "User", id: userId },
-      ],
-    }),
-
-    /**
      * Get User Profile by UserId - Fetch user profile from user-service
      */
     getUserProfileByUserId: builder.query<UserProfileResponse, string>({
@@ -324,8 +287,6 @@ export const {
   useDeleteUserMutation,
   useActivateUserMutation,
   useDeactivateUserMutation,
-  useAssignCustomerMutation,
-  useRemoveCustomerAssignmentMutation,
   useGetUserProfileByUserIdQuery,
 } = userApi;
 

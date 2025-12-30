@@ -26,10 +26,6 @@ const schemas = {
         "accounts",
         "sales",
         "support",
-        "customer",
-        "customer_account",
-        "customer_sales",
-        "customer_support",
         "affiliate",
       )
       .default("client"),
@@ -247,7 +243,7 @@ const schemas = {
     limits: Joi.object({
       maxUsers: Joi.number().integer().min(1).optional(),
       maxShipments: Joi.number().integer().min(1).optional(),
-      maxCustomers: Joi.number().integer().min(1).optional(),
+      maxSubUsers: Joi.number().integer().min(1).optional(),
       maxApiCalls: Joi.number().integer().min(1).optional(),
     }).optional(),
     registry: Joi.string().optional(),

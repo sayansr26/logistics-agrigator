@@ -39,14 +39,6 @@ model UserProfile {
   // Client association for multi-tenancy
   clientId String? @map("client_id") @db.Uuid
 
-  // Customer association for RBAC (for B2C customers)
-  customerId   String? @map("customer_id") @db.Uuid
-  customerRole String? @map("customer_role") @db.VarChar(50)
-
-  // Outlet association for RBAC (for outlet users)
-  outletId   String? @map("outlet_id") @db.Uuid
-  outletRole String? @map("outlet_role") @db.VarChar(50)
-
   // Timestamps
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -54,14 +46,10 @@ model UserProfile {
 
   // Relationships
   client    Client?    @relation(fields: [clientId], references: [id])
-  customer  Customer?  @relation(fields: [customerId], references: [id])
-  outlet    Outlet?    @relation(fields: [outletId], references: [id])
   auditLogs AuditLog[]
 
   @@index([userId])
   @@index([clientId])
-  @@index([customerId])
-  @@index([outletId])
   @@index([isActive])
   @@map("user_profiles")
 }
@@ -112,7 +100,6 @@ model Client {
   userInvitations UserInvitation[]
   auditLogs       AuditLog[]
   clientUsers     ClientUser[]
-  customers       Customer[]
 
   @@index([slug])
   @@index([isActive])
@@ -221,15 +208,15 @@ model AuditLog {
 
 // ClientUser - Links users to clients with specific roles (accounts, sales, support)
 model ClientUser {
-  id                  String   @id @default(uuid()) @db.Uuid
-  clientId            String   @map("client_id") @db.Uuid
-  userId              String   @map("user_id") @db.Uuid // Reference to auth-service User
-  role                String   @db.VarChar(50) // accounts, sales, support
-  accessLevel         String   @default("FULL") @map("access_level") @db.VarChar(20) // FULL or RESTRICTED
-  assignedCustomerIds String[] @map("assigned_customer_ids") @db.Uuid
-  isActive            Boolean  @default(true) @map("is_active")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid // Reference to auth-service User
+  role        String   @db.VarChar(50) // accounts, sales, support
+  accessLevel String   @default("FULL") @map("access_level") @db.VarChar(20) // FULL or RESTRICTED
+  assignedIds String[] @map("assigned_ids") @db.Uuid
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -237,164 +224,6 @@ model ClientUser {
   @@index([clientId])
   @@index([userId])
   @@map("client_users")
-}
-
-// Customer - End customers (B2C = system-level, B2B = belongs to an outlet)
-// CustomerType: B2C (direct/system, no outletId) or B2B (belongs to an outlet, has outletId)
-model Customer {
-  id           String       @id @default(uuid()) @db.Uuid
-  clientId     String?      @map("client_id") @db.Uuid // Optional for direct customers
-  customerType CustomerType @default(B2C) @map("customer_type")
-  name         String       @db.VarChar(200)
-  email        String       @db.VarChar(255)
-  phone        String?      @db.VarChar(20)
-
-  // Outlet association (required for B2B customers)
-  outletId String? @map("outlet_id") @db.Uuid
-
-  // Feature access control
-  monthlyShipmentLimit Int?     @map("monthly_shipment_limit")
-  enabledModules       String[] @map("enabled_modules") // ['shipment', 'billing', 'wallet', 'analytics']
-
-  // Address (for B2B customers address can differ from outlet)
-  address String? @db.VarChar(500)
-  city    String? @db.VarChar(100)
-  state   String? @db.VarChar(100)
-  pincode String? @db.VarChar(10)
-  country String? @default("India") @db.VarChar(100)
-
-  // Business details (for B2B customers)
-  gstNumber   String? @map("gst_number") @db.VarChar(20)
-  panNumber   String? @map("pan_number") @db.VarChar(20)
-  bankDetails Json?   @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
-
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relationships
-  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  outlet        Outlet?        @relation("OutletCustomers", fields: [outletId], references: [id], onDelete: SetNull)
-  userProfiles  UserProfile[]
-  customerUsers CustomerUser[]
-  commissions   Commission[] // Commissions for affiliate who referred this customer
-
-  // Note: Unique constraint for email handled via raw SQL migration
-  // Handles: unique(email) when clientId IS NULL, unique(clientId, email) when clientId IS NOT NULL
-  @@index([clientId])
-  @@index([email])
-  @@index([customerType])
-  @@index([outletId])
-  @@map("customers")
-}
-
-// CustomerUser - Links users to customers with specific roles (customer, customer_account, customer_sales, customer_support)
-model CustomerUser {
-  id             String   @id @default(uuid()) @db.Uuid
-  customerId     String   @map("customer_id") @db.Uuid
-  userId         String   @map("user_id") @db.Uuid // Reference to auth-service User
-  role           String   @db.VarChar(50) // customer, customer_account, customer_sales, customer_support
-  enabledModules String[] @map("enabled_modules") // Sub-access control within customer
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@unique([customerId, userId])
-  @@index([customerId])
-  @@index([userId])
-  @@map("customer_users")
-}
-
-// Outlet - Tenant entity (NOT a customer)
-// Outlets own B2B customers, courier partners, zones, charges, shipments
-model Outlet {
-  id   String @id @default(uuid()) @db.Uuid
-  code String @unique @map("outlet_code") @db.VarChar(50) // Unique outlet code
-
-  // Basic outlet info
-  name          String  @db.VarChar(200)
-  contactPerson String? @map("contact_person") @db.VarChar(100)
-  email         String  @db.VarChar(255)
-  phone         String? @db.VarChar(20)
-
-  // Outlet type and status
-  type   OutletType   @default(RETAIL) @map("outlet_type")
-  status OutletStatus @default(ACTIVE) @map("outlet_status")
-
-  // Address
-  address String? @db.VarChar(500)
-  city    String? @db.VarChar(100)
-  state   String? @db.VarChar(100)
-  pincode String? @db.VarChar(10)
-  country String? @default("India") @db.VarChar(100)
-
-  // Business details
-  gstNumber   String? @map("gst_number") @db.VarChar(20)
-  panNumber   String? @map("pan_number") @db.VarChar(20)
-  bankDetails Json?   @map("bank_details") // {bankName, accountNumber, ifscCode, accountHolderName}
-
-  // Status and timestamps
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relationships
-  outletUsers  OutletUser[]
-  customers    Customer[]   @relation("OutletCustomers")
-  userProfiles UserProfile[]
-
-  @@index([code])
-  @@index([status])
-  @@index([isActive])
-  @@map("outlets")
-}
-
-// OutletUser - Links auth users to outlets with outlet-specific roles
-model OutletUser {
-  id             String   @id @default(uuid()) @db.Uuid
-  outletId       String   @map("outlet_id") @db.Uuid
-  userId         String   @map("user_id") @db.Uuid // Reference to auth-service User
-  role           String   @db.VarChar(50) // outlet_admin, outlet_staff
-  enabledModules String[] @map("enabled_modules") // Sub-access control within outlet
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
-
-  @@unique([outletId, userId])
-  @@index([outletId])
-  @@index([userId])
-  @@map("outlet_users")
-}
-
-// Commission - Affiliate commission tracking for referred customers
-model Commission {
-  id               String           @id @default(uuid()) @db.Uuid
-  affiliateId      String           @map("affiliate_id") @db.Uuid // Reference to auth-service User with affiliate role
-  customerId       String           @map("customer_id") @db.Uuid // Reference to Customer
-  shipmentId       String?          @map("shipment_id") @db.Uuid // Reference to shipment (if per-shipment commission)
-  commissionType   CommissionType   @map("commission_type") // FLAT or PERCENTAGE
-  commissionRate   Float            @map("commission_rate") // Rate applied (percentage or flat amount)
-  baseAmount       Decimal          @map("base_amount") @db.Decimal(15, 2) // Original shipment cost or base amount
-  commissionAmount Decimal          @map("commission_amount") @db.Decimal(15, 2) // Calculated commission
-  status           CommissionStatus @default(PENDING)
-  paidAt           DateTime?        @map("paid_at")
-  payoutId         String?          @map("payout_id") @db.Uuid // Reference to wallet payout transaction
-  metadata         Json? // Additional commission metadata
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([affiliateId])
-  @@index([customerId])
-  @@index([shipmentId])
-  @@index([status])
-  @@index([createdAt])
-  @@map("commissions")
 }
 
 // Enums
@@ -405,12 +234,6 @@ enum Role {
   accounts
   sales
   support
-  customer
-  customer_account
-  customer_sales
-  customer_support
-  outlet_admin
-  outlet_staff
   affiliate
 }
 
@@ -432,37 +255,4 @@ enum LicenseStatus {
   ACTIVE // Currently active
   SUSPENDED // Temporarily suspended
   EXPIRED // License expired
-}
-
-enum CommissionType {
-  FLAT // Fixed amount per customer/shipment
-  PERCENTAGE // Percentage of shipment cost
-}
-
-enum CommissionStatus {
-  PENDING // Commission calculated but not approved
-  APPROVED // Approved for payout
-  PAID // Already paid to affiliate
-  CANCELLED // Cancelled (e.g., customer refunded)
-}
-
-enum CustomerType {
-  B2C    // Direct self-signup customer (system-level, no outlet)
-  B2B    // Customer under an outlet (has outletId)
-  DIRECT // @deprecated - Use B2C instead. Kept for backward compatibility.
-  OUTLET // @deprecated - Use Outlet model instead. Kept for migration.
-}
-
-enum OutletType {
-  RETAIL     // Retail outlet
-  FRANCHISE  // Franchise outlet
-  WAREHOUSE  // Warehouse outlet
-  DIRECT     // Direct outlet
-}
-
-enum OutletStatus {
-  ACTIVE     // Outlet is active and operational
-  INACTIVE   // Outlet is temporarily inactive
-  SUSPENDED  // Outlet is suspended
-  PENDING    // Outlet is pending approval
 }

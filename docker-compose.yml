@@ -62,6 +62,9 @@ services:
       - LICENSE_SERVICE_URL=http://${LICENSE_SERVICE_CONTAINER_NAME:-logistics-license-service}:${LICENSE_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
     volumes:
@@ -99,6 +102,9 @@ services:
       - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "${AUTH_SERVICE_PORT}"
@@ -136,6 +142,9 @@ services:
       # Inter-service communication secret (must match auth-service)
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${USER_SERVICE_PORT}"
@@ -178,6 +187,9 @@ services:
       - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service}:${WALLET_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${SHIPMENT_SERVICE_PORT}"
@@ -223,6 +235,9 @@ services:
       - DTDC_API_URL=${DTDC_API_URL}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${PARTNER_SERVICE_PORT}"
@@ -289,6 +304,9 @@ services:
       - RATE_LIMIT_TRANSACTION_MAX=${RATE_LIMIT_TRANSACTION_MAX:-30}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${WALLET_SERVICE_PORT}"
@@ -329,6 +347,9 @@ services:
       - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${SUPPORT_SERVICE_PORT}"
@@ -372,6 +393,9 @@ services:
       - SHOPIFY_CLIENT_SECRET=${SHOPIFY_CLIENT_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${PLATFORM_SERVICE_PORT}"
@@ -419,6 +443,9 @@ services:
       - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service}:${USER_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
     # Port removed for security - accessible only through API Gateway
     expose:
       - "${LICENSE_SERVICE_PORT}"

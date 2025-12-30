@@ -14,7 +14,7 @@ const { getRedisClient } = require("../config/redis");
  * Format: module:action:scope
  * Examples:
  *   - shipment:create:own
- *   - customer:read:assigned
+ *   - partner:read:all
  *   - wallet:manage:all
  *   - *:*:* (superadmin - all permissions)
  *

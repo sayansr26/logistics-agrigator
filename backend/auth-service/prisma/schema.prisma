@@ -26,8 +26,7 @@ model User {
   parentUserId   String? @map("parent_user_id") @db.Uuid
 
   // Access Control
-  accessLevel         AccessLevel @default(FULL) @map("access_level")
-  assignedCustomerIds String[]    @map("assigned_customer_ids") @db.Uuid
+  accessLevel AccessLevel @default(FULL) @map("access_level")
 
   // License Integration
   licenseId         String?   @map("license_id") @db.Uuid
@@ -144,12 +143,6 @@ enum Role {
   accounts
   sales
   support
-  customer
-  customer_account
-  customer_sales
-  customer_support
-  outlet_admin
-  outlet_staff
   affiliate
 }
 

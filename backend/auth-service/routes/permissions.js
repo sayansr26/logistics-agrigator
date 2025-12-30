@@ -58,7 +58,7 @@ const { authMiddleware: sharedAuthMiddleware } = require("../shared/lib/auth");
  *                       example: user@example.com
  *                     role:
  *                       type: string
- *                       enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *                       enum: [superadmin, admin, client, accounts, sales, support, affiliate]
  *                       example: client
  *                     permissions:
  *                       type: array
@@ -252,7 +252,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, affiliate]
+ *           enum: [superadmin, admin, client, accounts, sales, support, affiliate]
  *         description: Role name
  *         example: client
  *     responses:

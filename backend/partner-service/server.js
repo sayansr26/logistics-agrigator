@@ -145,14 +145,6 @@ app.use("/api/v1/charge-packages", require("./routes/chargePackages"));
 app.all("/api/packages/*", deprecated("/api/v1/charge-packages", "2024-12-26"));
 app.all("/api/packages", deprecated("/api/v1/charge-packages", "2024-12-26"));
 app.all(
-  "/api/customer-charges/*",
-  deprecated("/api/v1/charge-packages", "2024-12-26"),
-);
-app.all(
-  "/api/customer-charges",
-  deprecated("/api/v1/charge-packages", "2024-12-26"),
-);
-app.all(
   "/api/discounts/*",
   deprecated("/api/v1/charge-packages", "2024-12-26"),
 );
@@ -360,7 +352,6 @@ app.get("/", (req, res) => {
       note: "The following endpoints have been deprecated and return 410 Gone",
       deprecated: [
         "/api/packages/* -> Use /api/v1/charge-packages",
-        "/api/customer-charges/* -> Use /api/v1/charge-packages",
         "/api/discounts/* -> Use /api/v1/charge-packages",
         "/api/v1/charge-calculation/* -> Use /api/partners/calculate",
         "/api/v1/partner-assignment/* -> Use /api/partners/serviceability",

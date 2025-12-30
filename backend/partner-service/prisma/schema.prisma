@@ -17,9 +17,6 @@ model Partner {
   displayName String // e.g., "Delhivery", "Blue Dart"
   isActive    Boolean @default(true)
 
-  // Tenant scoping (null = system-level partner available to all, set = outlet-specific)
-  outletId String? @map("outlet_id") @db.Uuid
-
   // API Configuration
   apiUrl     String
   apiToken   String?
@@ -55,8 +52,7 @@ model Partner {
   chargePackages      ChargePackage[]
   pincodeTypes        PincodeType[]
 
-  @@index([outletId, isActive])
-  @@index([outletId])
+  @@index([isActive])
   @@map("partners")
 }
 
@@ -301,9 +297,6 @@ model Zone {
   zoneType    ZoneType @default(GEOLOGICAL) @map("zone_type")
   status      Boolean  @default(true)
 
-  // Tenant scoping (null = system-level zone, set = outlet-specific)
-  outletId String? @map("outlet_id") @db.Uuid
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -317,8 +310,6 @@ model Zone {
   @@unique([partnerId, name])
   @@index([partnerId, status])
   @@index([zoneType])
-  @@index([outletId, status])
-  @@index([outletId])
   @@map("zones")
 }
 
@@ -461,9 +452,6 @@ model ChargePackage {
   name      String            @db.VarChar(100)
   type      ChargePackageType
 
-  // Tenant scoping (null = system-level charge package, set = outlet-specific)
-  outletId String? @map("outlet_id") @db.Uuid
-
   // Base charge configuration
   baseCharge Decimal @map("base_charge") @db.Decimal(10, 2)
 
@@ -490,7 +478,5 @@ model ChargePackage {
   @@unique([partnerId, name])
   @@index([partnerId, isActive])
   @@index([type])
-  @@index([outletId, isActive])
-  @@index([outletId])
   @@map("charge_packages")
 }

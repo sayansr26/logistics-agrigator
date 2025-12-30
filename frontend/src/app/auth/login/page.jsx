@@ -217,8 +217,8 @@ export default function LoginPage() {
               <h4 className="text-sm font-medium mb-2">Demo Credentials:</h4>
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>
-                  <strong>Superadmin:</strong> admin@logistics.com /
-                  Admin@123456
+                  <strong>Superadmin:</strong>{" "}
+                  <span>admin@logistics.com / Admin@123456</span>
                 </p>
                 <p className="text-xs italic mt-2">
                   Note: Other demo accounts will be added soon

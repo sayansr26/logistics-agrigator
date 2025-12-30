@@ -8,73 +8,7 @@ const { ConflictError, errorUtils } = require("../shared/lib/errors");
 const logger = require("../shared/lib/logger");
 
 class AuthController {
-  /**
-   * Fetch user context (outletId, outletRole, customerId, customerRole, clientId) from user-service
-   * Used to enrich JWT tokens with tenant scoping information
-   * @param {string} userId - The auth user ID
-   * @returns {Promise<Object|null>} User context or null if not found
-   *
-   * Returns:
-   * - outletId: For outlet users (outlet_admin/outlet_staff)
-   * - outletRole: outlet_admin or outlet_staff
-   * - customerId: For B2C/B2B customers
-   * - customerRole: customer, customer_account, customer_sales, customer_support
-   * - customerType: B2C or B2B
-   * - customerClientId: Client ID from customer's association
-   * - customerOutletId: For B2B customers, their outlet affiliation
-   */
-  static async fetchUserContext(userId) {
-    try {
-      const userServiceUrl =
-        process.env.USER_SERVICE_URL || "http://user-service:3003";
-      const internalSecret =
-        process.env.INTERNAL_SECRET || "internal-service-secret";
-
-      const response = await fetch(
-        `${userServiceUrl}/api/v1/internal/user-context/${userId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Internal-Request": internalSecret,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        logger.warn("Failed to fetch user context from user-service", {
-          userId,
-          status: response.status,
-        });
-        return null;
-      }
-
-      const data = await response.json();
-      if (data.status === "success" && data.data?.found) {
-        return {
-          // Outlet context (for outlet users)
-          outletId: data.data.outletId || null,
-          outletRole: data.data.outletRole || null,
-          // Customer context (for B2C/B2B customers)
-          customerId: data.data.customerId || null,
-          customerRole: data.data.customerRole || null,
-          customerClientId: data.data.clientId || null,
-          customerType: data.data.customerType || null,
-          // For B2B customers, their outlet affiliation
-          customerOutletId: data.data.customerOutletId || null,
-        };
-      }
-      return null;
-    } catch (error) {
-      logger.error("Error fetching user context", {
-        userId,
-        error: error.message,
-      });
-      return null;
-    }
-  }
-
-  // User registration - Public signup creates DIRECT customers only
+  // User registration
   static async register(req, res) {
     try {
       const {
@@ -97,8 +31,6 @@ class AuthController {
           lastName || nameParts.slice(1).join(" ") || nameParts[0] || "";
       }
 
-      const fullName = name || `${firstName} ${lastName}`.trim();
-
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
         where: { email },
@@ -111,8 +43,8 @@ class AuthController {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 12);
 
-      // Public signup ALWAYS creates role=customer (enforced, ignore any role in request)
-      const role = "customer";
+      // Public signup creates client role by default
+      const role = "client";
 
       // Create user with Prisma
       const user = await prisma.user.create({
@@ -123,7 +55,6 @@ class AuthController {
           phone,
           passwordHash,
           role,
-          // No clientId for direct customers
         },
         select: {
           id: true,
@@ -155,95 +86,16 @@ class AuthController {
         },
       });
 
-      // Bootstrap user-service records (Customer, UserProfile, CustomerUser)
-      try {
-        // Direct service-to-service call within Docker network
-        const userServiceUrl =
-          process.env.USER_SERVICE_URL || "http://user-service:3003";
-        const internalSecret =
-          process.env.INTERNAL_SECRET || "internal-service-secret";
-
-        const bootstrapResponse = await fetch(
-          `${userServiceUrl}/api/v1/internal/bootstrap-customer`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Internal-Request": internalSecret,
-            },
-            body: JSON.stringify({
-              userId: user.id,
-              email: user.email,
-              name: fullName,
-              firstName,
-              lastName,
-              phone,
-            }),
-          },
-        );
-
-        if (!bootstrapResponse.ok) {
-          const errorData = await bootstrapResponse.json().catch(() => ({}));
-          console.error("Bootstrap failed:", errorData);
-
-          // Rollback: delete the auth user we just created
-          await prisma.user.delete({ where: { id: user.id } });
-
-          // Log rollback
-          await prisma.auditLog.create({
-            data: {
-              userId: null,
-              action: "REGISTRATION_ROLLBACK",
-              resource: "user",
-              resourceId: user.id,
-              changes: {
-                email: user.email,
-                reason: "user-service bootstrap failed",
-                bootstrapError: errorData,
-              },
-              ipAddress: req.ip,
-              userAgent: req.get("User-Agent"),
-            },
-          });
-
-          const errorResponse = APIResponse.error(
-            "Registration failed. Please try again.",
-            "REGISTRATION_FAILED",
-          );
-          return res.status(500).json(errorResponse);
-        }
-      } catch (bootstrapError) {
-        console.error("Bootstrap error:", bootstrapError);
-
-        // Rollback: delete the auth user we just created
-        try {
-          await prisma.user.delete({ where: { id: user.id } });
-        } catch (deleteError) {
-          console.error("Failed to rollback user creation:", deleteError);
-        }
-
-        const errorResponse = APIResponse.error(
-          "Registration failed. Please try again.",
-          "REGISTRATION_FAILED",
-        );
-        return res.status(500).json(errorResponse);
-      }
-
-      // For DIRECT customers, customerId equals userId (set during bootstrap)
-      // Generate tokens like login - auto-login after successful registration
+      // Generate tokens - auto-login after successful registration
       const permissions = AuthController.getRolePermissions(user.role);
       const tokenPayload = {
         userId: user.id,
         clientId: user.clientId,
         role: user.role,
         permissions,
-        // For DIRECT customers created via signup, customerId = userId
-        customerId: user.id,
-        customerRole: "customer",
-        customerType: "DIRECT",
         // RBAC fields from auth-service (null for new users)
         accessLevel: null,
-        assignedCustomerIds: [],
+        assignedIds: [],
         parentClientId: null,
         parentUserId: null,
       };
@@ -277,7 +129,6 @@ class AuthController {
         JSON.stringify({
           userId: user.id,
           role: user.role,
-          customerId: user.id,
         }),
       );
 
@@ -292,9 +143,6 @@ class AuthController {
             lastName: user.lastName,
             role: user.role,
             clientId: user.clientId,
-            customerId: user.id, // DIRECT customer: customerId = userId
-            customerRole: "customer",
-            customerType: "DIRECT",
             permissions,
           },
           accessToken,
@@ -397,28 +245,16 @@ class AuthController {
         }
       }
 
-      // Fetch user context from user-service for tenant scoping (customerId, customerRole)
-      const userContext = await AuthController.fetchUserContext(user.id);
-
-      // Generate tokens with enhanced claims including outletId and customerId for tenant scoping
+      // Generate tokens with enhanced claims
       const permissions = AuthController.getRolePermissions(user.role);
       const tokenPayload = {
         userId: user.id,
         clientId: user.clientId,
         role: user.role,
         permissions,
-        // Include outlet context for outlet users (outlet_admin/outlet_staff)
-        outletId: userContext?.outletId || null,
-        outletRole: userContext?.outletRole || null,
-        // Include customer context for B2C/B2B customers
-        customerId: userContext?.customerId || null,
-        customerRole: userContext?.customerRole || null,
-        customerType: userContext?.customerType || null,
-        // For B2B customers, their outlet affiliation
-        customerOutletId: userContext?.customerOutletId || null,
         // Include auth-service RBAC fields
         accessLevel: user.accessLevel || null,
-        assignedCustomerIds: user.assignedCustomerIds || [],
+        assignedIds: user.assignedIds || [],
         parentClientId: user.parentClientId || null,
         parentUserId: user.parentUserId || null,
       };
@@ -444,7 +280,7 @@ class AuthController {
         },
       });
 
-      // Store session in Redis with customer context
+      // Store session in Redis
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
@@ -452,8 +288,6 @@ class AuthController {
         JSON.stringify({
           userId: user.id,
           role: user.role,
-          customerId: userContext?.customerId || null,
-          customerType: userContext?.customerType || null,
         }),
       );
 
@@ -463,10 +297,7 @@ class AuthController {
           userId: user.id,
           action: "LOGIN",
           resource: "session",
-          changes: {
-            customerId: userContext?.customerId || null,
-            customerType: userContext?.customerType || null,
-          },
+          changes: {},
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
         },
@@ -480,13 +311,6 @@ class AuthController {
             email: user.email,
             role: user.role,
             clientId: user.clientId,
-            // Outlet context for outlet users (outlet_admin/outlet_staff)
-            outletId: userContext?.outletId || null,
-            outletRole: userContext?.outletRole || null,
-            // Customer context for B2C/B2B customers
-            customerId: userContext?.customerId || null,
-            customerRole: userContext?.customerRole || null,
-            customerType: userContext?.customerType || null,
             permissions,
           },
           accessToken,
@@ -550,9 +374,6 @@ class AuthController {
 
       const user = session.user;
 
-      // Fetch user context from user-service for tenant scoping (customerId, customerRole)
-      const userContext = await AuthController.fetchUserContext(user.id);
-
       // Generate new access token with enhanced claims
       const permissions = AuthController.getRolePermissions(user.role);
       const tokenPayload = {
@@ -560,18 +381,9 @@ class AuthController {
         clientId: user.clientId,
         role: user.role,
         permissions,
-        // Include outlet context for outlet users (outlet_admin/outlet_staff)
-        outletId: userContext?.outletId || null,
-        outletRole: userContext?.outletRole || null,
-        // Include customer context for B2C/B2B customers
-        customerId: userContext?.customerId || null,
-        customerRole: userContext?.customerRole || null,
-        customerType: userContext?.customerType || null,
-        // For B2B customers, their outlet affiliation
-        customerOutletId: userContext?.customerOutletId || null,
         // Include auth-service RBAC fields
         accessLevel: user.accessLevel || null,
-        assignedCustomerIds: user.assignedCustomerIds || [],
+        assignedIds: user.assignedIds || [],
         parentClientId: user.parentClientId || null,
         parentUserId: user.parentUserId || null,
       };
@@ -598,7 +410,7 @@ class AuthController {
         },
       });
 
-      // Update session in Redis with customer context
+      // Update session in Redis
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
@@ -606,8 +418,6 @@ class AuthController {
         JSON.stringify({
           userId: user.id,
           role: user.role,
-          customerId: userContext?.customerId || null,
-          customerType: userContext?.customerType || null,
         }),
       );
 
@@ -912,7 +722,7 @@ class AuthController {
           action: "GET_USER_INFO",
           resource: "User",
           resourceId: req.user.userId,
-          metadata: {
+          changes: {
             source: "auth-service",
             endpoint: "/auth/me",
             requestingRole: req.user.role,
@@ -963,7 +773,7 @@ class AuthController {
           action: "GET_USER_PROFILE",
           resource: "User",
           resourceId: req.user.userId,
-          metadata: {
+          changes: {
             source: "auth-service",
             endpoint: "/auth/profile",
             requestingRole: req.user.role,
@@ -1226,7 +1036,7 @@ class AuthController {
         parentUserId,
         licenseId,
         accessLevel,
-        assignedCustomerIds,
+        assignedIds,
         commissionRate,
         commissionType,
         isActive = true,
@@ -1278,8 +1088,7 @@ class AuthController {
       if (parentUserId) userData.parentUserId = parentUserId;
       if (licenseId) userData.licenseId = licenseId;
       if (accessLevel) userData.accessLevel = accessLevel;
-      if (assignedCustomerIds)
-        userData.assignedCustomerIds = assignedCustomerIds;
+      if (assignedIds) userData.assignedIds = assignedIds;
       if (commissionRate !== undefined)
         userData.commissionRate = commissionRate;
       if (commissionType) userData.commissionType = commissionType;

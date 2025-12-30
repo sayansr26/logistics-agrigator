@@ -426,12 +426,11 @@ class ZoneService {
 
   /**
    * List zones with filtering and pagination
-   * Supports filtering by status, search by name, customerId (tenant), and pagination
+   * Supports filtering by status, search by name, and pagination
    * @param {string} partnerId - Partner ID
    * @param {Object} [filters={}] - Filter options
    * @param {boolean} [filters.status] - Filter by status (true/false)
    * @param {string} [filters.search] - Search in zone name (case-insensitive)
-   * @param {string} [filters.customerId] - Filter by customerId (tenant scoping for outlets)
    * @param {number} [filters.page=1] - Page number (1-based)
    * @param {number} [filters.limit=20] - Items per page (max 100)
    * @param {string} [filters.sortBy='createdAt'] - Sort field (name, createdAt, updatedAt)
@@ -442,10 +441,9 @@ class ZoneService {
    */
   async listZones(partnerId, filters = {}) {
     try {
-      logger.info("Listing zones", { 
-        partnerId: partnerId || "ALL", 
-        customerId: filters.customerId || "ALL",
-        filters 
+      logger.info("Listing zones", {
+        partnerId: partnerId || "ALL",
+        filters,
       });
 
       // Parse and validate pagination parameters
@@ -459,15 +457,6 @@ class ZoneService {
       // Only filter by partnerId if provided (non-admin users)
       if (partnerId) {
         where.partnerId = partnerId;
-      }
-
-      // Filter by customerId for outlet tenant scoping
-      // This filters zones that belong to outlet-specific partners OR global zones (customerId=null)
-      if (filters.customerId) {
-        where.OR = [
-          { customerId: filters.customerId },
-          { customerId: null }, // Include global zones
-        ];
       }
 
       // Filter by status if provided

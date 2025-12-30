@@ -1,5 +1,5 @@
 // Affiliate Routes - Affiliate and commission management endpoints
-// Handles affiliate dashboard, commissions, and customer linking
+// Handles affiliate dashboard and commissions
 
 const express = require("express");
 const affiliateController = require("../controllers/affiliateController");
@@ -7,7 +7,6 @@ const { validate } = require("../middleware/validate");
 const { authenticate } = require("../middleware/auth");
 const { authMiddleware } = require("../shared/lib/auth");
 const {
-  linkCustomerSchema,
   listCommissionsQuerySchema,
   uuidParamSchema,
 } = require("../validation/affiliateSchemas");
@@ -62,13 +61,11 @@ const router = express.Router();
  *                               type: number
  *                             totalEarnings:
  *                               type: number
- *                             linkedCustomers:
- *                               type: number
  *                         recentCommissions:
  *                           type: array
  *                           items:
  *                             type: object
- *                         linkedCustomers:
+ *                         referrals:
  *                           type: array
  *                           items:
  *                             type: object
@@ -146,15 +143,15 @@ router.get(
 
 /**
  * @swagger
- * /api/v1/affiliate/customers:
+ * /api/v1/affiliate/referrals:
  *   get:
- *     summary: List customers referred by the authenticated affiliate
+ *     summary: List referrals by the authenticated affiliate (currently disabled)
  *     tags: [Affiliate]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Referred customers retrieved successfully
+ *         description: Referrals retrieved (feature disabled)
  *         content:
  *           application/json:
  *             schema:
@@ -165,7 +162,7 @@ router.get(
  *                 data:
  *                   type: object
  *                   properties:
- *                     customers:
+ *                     referrals:
  *                       type: array
  *                       items:
  *                         type: object
@@ -173,10 +170,10 @@ router.get(
  *                       type: number
  */
 router.get(
-  "/customers",
+  "/referrals",
   authenticate,
   authMiddleware.requirePermission("affiliate", "read", "own"),
-  affiliateController.listReferredCustomers,
+  affiliateController.listReferrals,
 );
 
 /**
@@ -207,50 +204,6 @@ router.get(
   authenticate,
   validate(uuidParamSchema, "params"),
   affiliateController.getAffiliateProfile,
-);
-
-/**
- * @swagger
- * /api/v1/affiliate/customers/{customerId}/link:
- *   post:
- *     summary: Link customer to affiliate for referral tracking
- *     tags: [Affiliate]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: customerId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - affiliateId
- *             properties:
- *               affiliateId:
- *                 type: string
- *                 format: uuid
- *     responses:
- *       201:
- *         description: Customer linked to affiliate successfully
- *       400:
- *         description: Invalid request
- *       404:
- *         description: Customer not found
- */
-router.post(
-  "/customers/:customerId/link",
-  authenticate,
-  authMiddleware.requirePermission("customer", "update", "assigned"),
-  validate(uuidParamSchema, "params"),
-  validate(linkCustomerSchema),
-  affiliateController.linkCustomer,
 );
 
 /**

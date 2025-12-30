@@ -1,5 +1,5 @@
 // Bootstrap Controller - Internal endpoint for signup orchestration
-// Creates Customer (DIRECT), UserProfile, and CustomerUser records for new signups
+// Creates UserProfile records for new signups
 // Called by auth-service after creating the auth user
 
 const { PrismaClient } = require("@prisma/client");
@@ -10,16 +10,14 @@ const { UserServiceError } = require("../middleware/errorHandler");
 const prisma = new PrismaClient();
 
 /**
- * Bootstrap a new direct customer from signup
+ * Bootstrap a new user profile from signup
  * This internal endpoint creates:
- * 1. Customer (customerType=DIRECT, id = userId from auth-service)
- * 2. UserProfile linked to the customer
- * 3. CustomerUser linking customer and user with role=customer
+ * 1. UserProfile linked to the auth user
  *
  * Called by auth-service after successful user creation
  * Requires X-Internal-Request header for security
  */
-async function bootstrapDirectCustomer(req, res) {
+async function bootstrapUser(req, res) {
   try {
     const {
       userId,
@@ -56,62 +54,28 @@ async function bootstrapDirectCustomer(req, res) {
         parsedLastName || nameParts.slice(1).join(" ") || nameParts[0] || "";
     }
 
-    const customerName = name || `${parsedFirstName} ${parsedLastName}`.trim();
-
-    // Check if customer/user already exists
-    const existingCustomer = await prisma.customer.findUnique({
-      where: { id: userId },
+    // Check if user profile already exists
+    const existingProfile = await prisma.userProfile.findUnique({
+      where: { userId },
     });
 
-    if (existingCustomer) {
+    if (existingProfile) {
       throw new UserServiceError(
-        "Customer already exists for this user",
-        "CUSTOMER_ALREADY_EXISTS",
+        "User profile already exists",
+        "PROFILE_ALREADY_EXISTS",
         409,
       );
     }
 
-    // Check for email uniqueness (for direct customers without clientId)
-    const existingEmail = await prisma.customer.findFirst({
-      where: {
-        email,
-        clientId: null,
-      },
-    });
-
-    if (existingEmail) {
-      throw new UserServiceError(
-        `Direct customer with email '${email}' already exists`,
-        "CUSTOMER_EMAIL_EXISTS",
-        409,
-      );
-    }
-
-    // Create all records in a transaction
+    // Create UserProfile in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Customer with DIRECT type and same ID as auth user
-      const customer = await tx.customer.create({
-        data: {
-          id: userId, // Use same ID as auth-service user for easy correlation
-          clientId,
-          customerType: "DIRECT",
-          name: customerName,
-          email,
-          phone,
-          enabledModules: ["shipment", "billing", "wallet", "analytics"],
-          isActive: true,
-        },
-      });
-
-      // 2. Create UserProfile
+      // Create UserProfile
       const userProfile = await tx.userProfile.create({
         data: {
           userId,
           firstName: parsedFirstName || "",
           lastName: parsedLastName || "",
           phoneNumber: phone,
-          customerId: customer.id,
-          customerRole: "customer",
           clientId,
           isActive: true,
           isVerified: false,
@@ -119,45 +83,25 @@ async function bootstrapDirectCustomer(req, res) {
         },
       });
 
-      // 3. Create CustomerUser link
-      const customerUser = await tx.customerUser.create({
-        data: {
-          customerId: customer.id,
-          userId,
-          role: "customer",
-          enabledModules: ["shipment", "billing", "wallet", "analytics"],
-          isActive: true,
-        },
-      });
-
-      // 4. Create audit log
+      // Create audit log
       await tx.auditLog.create({
         data: {
           userId,
           clientId,
-          action: "BOOTSTRAP_DIRECT_CUSTOMER",
-          resource: "Customer",
-          resourceId: customer.id,
+          action: "BOOTSTRAP_USER_PROFILE",
+          resource: "UserProfile",
+          resourceId: userProfile.id,
           changes: {
             created: {
-              customer: {
-                id: customer.id,
-                email: customer.email,
-                customerType: "DIRECT",
-              },
               userProfile: {
                 id: userProfile.id,
                 userId: userProfile.userId,
-              },
-              customerUser: {
-                id: customerUser.id,
-                role: customerUser.role,
               },
             },
           },
           metadata: {
             source: "user-service",
-            endpoint: "/api/v1/internal/bootstrap-customer",
+            endpoint: "/api/v1/internal/bootstrap-user",
             action: "signup",
           },
           ipAddress: req.ip,
@@ -166,29 +110,25 @@ async function bootstrapDirectCustomer(req, res) {
       });
 
       return {
-        customer,
         userProfile,
-        customerUser,
       };
     });
 
-    logger.info("Direct customer bootstrapped successfully", {
+    logger.info("User profile bootstrapped successfully", {
       userId,
-      customerId: result.customer.id,
+      profileId: result.userProfile.id,
       email,
       service: "user-service",
     });
 
     res.status(201).json(
       APIResponse.success({
-        customer: result.customer,
         userProfile: result.userProfile,
-        customerUser: result.customerUser,
-        message: "Direct customer bootstrapped successfully",
+        message: "User profile bootstrapped successfully",
       }),
     );
   } catch (error) {
-    logger.error("Bootstrap direct customer error", {
+    logger.error("Bootstrap user profile error", {
       error: error.message,
       requestBody: { ...req.body, password: undefined },
       service: "user-service",
@@ -198,7 +138,7 @@ async function bootstrapDirectCustomer(req, res) {
 }
 
 /**
- * Delete bootstrapped customer records
+ * Delete bootstrapped user profile records
  * Called by auth-service if user creation needs to be rolled back
  * Requires X-Internal-Request header for security
  */
@@ -216,29 +156,19 @@ async function rollbackBootstrap(req, res) {
 
     // Delete all related records in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Get the customer first
-      const customer = await tx.customer.findUnique({
-        where: { id: userId },
-      });
-
-      if (!customer) {
-        // Nothing to rollback
-        return { deleted: false, message: "No customer found to rollback" };
-      }
-
-      // Delete CustomerUser records
-      const deletedCustomerUsers = await tx.customerUser.deleteMany({
-        where: { customerId: userId },
-      });
-
-      // Delete UserProfile records
-      const deletedUserProfiles = await tx.userProfile.deleteMany({
+      // Get the user profile first
+      const userProfile = await tx.userProfile.findUnique({
         where: { userId },
       });
 
-      // Delete Customer
-      await tx.customer.delete({
-        where: { id: userId },
+      if (!userProfile) {
+        // Nothing to rollback
+        return { deleted: false, message: "No user profile found to rollback" };
+      }
+
+      // Delete UserProfile records
+      await tx.userProfile.delete({
+        where: { userId },
       });
 
       // Create audit log for rollback
@@ -246,18 +176,17 @@ async function rollbackBootstrap(req, res) {
         data: {
           userId,
           action: "ROLLBACK_BOOTSTRAP",
-          resource: "Customer",
+          resource: "UserProfile",
           resourceId: userId,
           changes: {
             deleted: {
-              customerId: userId,
-              customerUsersDeleted: deletedCustomerUsers.count,
-              userProfilesDeleted: deletedUserProfiles.count,
+              userId,
+              userProfileId: userProfile.id,
             },
           },
           metadata: {
             source: "user-service",
-            endpoint: `/api/v1/internal/bootstrap-customer/${userId}`,
+            endpoint: `/api/v1/internal/bootstrap-user/${userId}`,
             action: "rollback",
           },
           ipAddress: req.ip,
@@ -267,8 +196,7 @@ async function rollbackBootstrap(req, res) {
 
       return {
         deleted: true,
-        customerUsersDeleted: deletedCustomerUsers.count,
-        userProfilesDeleted: deletedUserProfiles.count,
+        userProfileDeleted: 1,
       };
     });
 
@@ -312,36 +240,16 @@ async function checkBootstrapStatus(req, res) {
       );
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: userId },
-      include: {
-        _count: {
-          select: {
-            userProfiles: true,
-            customerUsers: true,
-          },
-        },
-      },
-    });
-
     const userProfile = await prisma.userProfile.findUnique({
       where: { userId },
     });
 
-    const bootstrapped = !!(customer && userProfile);
+    const bootstrapped = !!userProfile;
 
     res.json(
       APIResponse.success({
         userId,
         bootstrapped,
-        customer: customer
-          ? {
-              id: customer.id,
-              customerType: customer.customerType,
-              email: customer.email,
-              isActive: customer.isActive,
-            }
-          : null,
         userProfile: userProfile
           ? {
               id: userProfile.id,
@@ -364,13 +272,8 @@ async function checkBootstrapStatus(req, res) {
 
 /**
  * Get user context for authentication enrichment
- * Returns outletId, outletRole, customerId, customerRole, clientId for JWT token enrichment
- * Called by auth-service during login to include outlet/customer scoping in token
- * 
- * User types:
- * - Outlet users: have outletId + outletRole (outlet_admin/outlet_staff)
- * - B2C customers: have customerId + customerRole (no outlet)
- * - B2B customers: would have customerId + outletId (customer belongs to outlet)
+ * Returns clientId for JWT token enrichment
+ * Called by auth-service during login
  */
 async function getUserContext(req, res) {
   try {
@@ -384,31 +287,9 @@ async function getUserContext(req, res) {
       );
     }
 
-    // Find user profile with outlet and customer associations
+    // Find user profile
     const userProfile = await prisma.userProfile.findUnique({
       where: { userId },
-      include: {
-        outlet: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            status: true,
-            isActive: true,
-          },
-        },
-        customer: {
-          select: {
-            id: true,
-            customerType: true,
-            name: true,
-            email: true,
-            clientId: true,
-            isActive: true,
-            outletId: true,
-          },
-        },
-      },
     });
 
     if (!userProfile) {
@@ -417,103 +298,22 @@ async function getUserContext(req, res) {
       return res.json(
         APIResponse.success({
           userId,
-          outletId: null,
-          outletRole: null,
-          customerId: null,
-          customerRole: null,
-          customerType: null,
           clientId: null,
           found: false,
         }),
       );
     }
 
-    // Check for outlet user association (new Outlet model)
-    let outletId = userProfile.outletId || null;
-    let outletRole = userProfile.outletRole || null;
-
-    // If not directly on profile, check OutletUser table
-    if (!outletId) {
-      const outletUser = await prisma.outletUser.findFirst({
-        where: {
-          userId,
-          isActive: true,
-        },
-        include: {
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              status: true,
-              isActive: true,
-            },
-          },
-        },
-      });
-
-      if (outletUser) {
-        outletId = outletUser.outletId;
-        outletRole = outletUser.role;
-      }
-    }
-
-    // Check CustomerUser for customer associations (B2C/B2B customers)
-    const customerUser = await prisma.customerUser.findFirst({
-      where: {
-        userId,
-        isActive: true,
-      },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            customerType: true,
-            name: true,
-            clientId: true,
-            isActive: true,
-            outletId: true,
-          },
-        },
-      },
-    });
-
-    // Get customer context
-    const customerId = userProfile.customerId || customerUser?.customerId || null;
-    const customerRole = userProfile.customerRole || customerUser?.role || null;
-    const clientId = userProfile.clientId || customerUser?.customer?.clientId || null;
-    const customerType = userProfile.customer?.customerType || customerUser?.customer?.customerType || null;
-
-    // If customer is B2B and has an outletId, include that too
-    const customerOutletId = userProfile.customer?.outletId || customerUser?.customer?.outletId || null;
-
     logger.info("User context retrieved", {
       userId,
-      outletId,
-      outletRole,
-      customerId,
-      customerRole,
-      clientId,
-      customerType,
-      customerOutletId,
+      clientId: userProfile.clientId,
       service: "user-service",
     });
 
     res.json(
       APIResponse.success({
         userId,
-        // Outlet context (for outlet users)
-        outletId,
-        outletRole,
-        outlet: userProfile.outlet || null,
-        // Customer context (for B2C/B2B customers)
-        customerId,
-        customerRole,
-        customerType,
-        clientId,
-        customer: userProfile.customer || customerUser?.customer || null,
-        // For B2B customers, their outlet affiliation
-        customerOutletId,
+        clientId: userProfile.clientId,
         found: true,
       }),
     );
@@ -528,7 +328,7 @@ async function getUserContext(req, res) {
 }
 
 module.exports = {
-  bootstrapDirectCustomer,
+  bootstrapUser,
   rollbackBootstrap,
   checkBootstrapStatus,
   getUserContext,

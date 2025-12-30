@@ -124,7 +124,7 @@ export default function PlatformsPage() {
     name: "",
     type: "",
     accessToken: "",
-    outlet: "",
+    storeId: "",
     status: "enable",
     apiKey: "",
     webhookUrl: "",
@@ -179,7 +179,7 @@ export default function PlatformsPage() {
       !newPlatform.name ||
       !newPlatform.type ||
       !newPlatform.accessToken ||
-      !newPlatform.outlet
+      !newPlatform.storeId
     )
       return;
 
@@ -192,7 +192,7 @@ export default function PlatformsPage() {
       ordersCount: 0,
       revenue: 0,
       accessToken: newPlatform.accessToken,
-      outlet: newPlatform.outlet,
+      storeId: newPlatform.storeId,
       apiKey: newPlatform.apiKey || undefined,
       webhookUrl: newPlatform.webhookUrl || undefined,
       settings: {
@@ -210,7 +210,7 @@ export default function PlatformsPage() {
       name: "",
       type: "",
       accessToken: "",
-      outlet: "",
+      storeId: "",
       status: "enable",
       apiKey: "",
       webhookUrl: "",
@@ -271,7 +271,7 @@ export default function PlatformsPage() {
       name: "",
       type: "",
       accessToken: "",
-      outlet: "",
+      storeId: "",
       status: "enable",
       apiKey: "",
       webhookUrl: "",
@@ -495,15 +495,15 @@ export default function PlatformsPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="outlet">Outlet *</Label>
+                    <Label htmlFor="storeId">Store ID *</Label>
                     <Input
-                      id="outlet"
-                      placeholder="Enter outlet/store identifier"
-                      value={newPlatform.outlet}
+                      id="storeId"
+                      placeholder="Enter store identifier"
+                      value={newPlatform.storeId}
                       onChange={(e) =>
                         setNewPlatform((prev) => ({
                           ...prev,
-                          outlet: e.target.value,
+                          storeId: e.target.value,
                         }))
                       }
                       required
@@ -606,7 +606,7 @@ export default function PlatformsPage() {
                     !newPlatform.name ||
                     !newPlatform.type ||
                     !newPlatform.accessToken ||
-                    !newPlatform.outlet
+                    !newPlatform.storeId
                   }
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -1041,9 +1041,9 @@ export default function PlatformsPage() {
                     </div>
 
                     <div>
-                      <Label className="text-sm font-medium">Outlet</Label>
+                      <Label className="text-sm font-medium">Store ID</Label>
                       <p className="text-sm mt-1 font-medium">
-                        {selectedPlatform.outlet}
+                        {selectedPlatform.storeId}
                       </p>
                     </div>
 

@@ -23,12 +23,6 @@ const listUsersSchema = Joi.object({
       "accounts",
       "sales",
       "support",
-      "customer",
-      "customer_account",
-      "customer_sales",
-      "customer_support",
-      "outlet_admin",
-      "outlet_staff",
       "affiliate",
     )
     .optional(),
@@ -81,7 +75,7 @@ const listUsersSchema = Joi.object({
  *               field: email
  */
 
-// Validation schemas for public registration (direct customer signup)
+// Validation schemas for public registration
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string()
@@ -100,7 +94,6 @@ const registerSchema = Joi.object({
     .pattern(/^\+?[1-9]\d{1,14}$/)
     .optional()
     .allow(null, ""),
-  // Note: role is ignored for public signup - always enforced as 'customer'
 }).or("name", "firstName"); // Require at least name OR firstName;
 
 const loginSchema = Joi.object({
@@ -610,7 +603,7 @@ router.get(
  *         name: role
  *         schema:
  *           type: string
- *           enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, outlet_admin, outlet_staff, affiliate]
+ *           enum: [superadmin, admin, client, accounts, sales, support, affiliate]
  *         description: Filter by role
  *       - in: query
  *         name: isActive
@@ -936,7 +929,7 @@ router.get(
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [superadmin, admin, client, accounts, sales, support, customer, customer_account, customer_sales, customer_support, outlet_admin, outlet_staff, affiliate]
+ *                 enum: [superadmin, admin, client, accounts, sales, support, affiliate]
  *               clientId:
  *                 type: string
  *                 format: uuid
@@ -951,11 +944,6 @@ router.get(
  *               accessLevel:
  *                 type: string
  *                 enum: [FULL, RESTRICTED]
- *               assignedCustomerIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: uuid
  *               commissionRate:
  *                 type: number
  *               commissionType:
@@ -1198,7 +1186,7 @@ router.delete(
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [outlet_admin, outlet_staff, customer]
+ *                 enum: [superadmin, admin, client, accounts, sales, support, affiliate]
  *               isActive:
  *                 type: boolean
  *                 default: true

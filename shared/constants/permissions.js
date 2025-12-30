@@ -8,7 +8,6 @@
  *
  * Examples:
  * - 'shipment:create:own' - Create shipments for own account
- * - 'customer:read:assigned' - Read assigned customers only
  * - 'wallet:manage:parent' - Full wallet management for parent client's data
  * - '*:*:*' - System-wide access (superadmin only)
  *
@@ -16,7 +15,7 @@
  */
 
 /**
- * System Roles (11-Role RBAC System)
+ * System Roles (7-Role RBAC System)
  * Defines all available roles in the platform
  */
 const ROLES = {
@@ -30,16 +29,6 @@ const ROLES = {
   SALES: "sales", // Sales team
   SUPPORT: "support", // Support team
 
-  // Customer Level (End Users)
-  CUSTOMER: "customer", // End customer
-  CUSTOMER_ACCOUNT: "customer_account", // Customer finance
-  CUSTOMER_SALES: "customer_sales", // Customer sales
-  CUSTOMER_SUPPORT: "customer_support", // Customer support
-
-  // Outlet Level (Tenant Users)
-  OUTLET_ADMIN: "outlet_admin", // Outlet administrator (full outlet access)
-  OUTLET_STAFF: "outlet_staff", // Outlet staff (limited outlet access)
-
   // Partner Level
   AFFILIATE: "affiliate", // Commission partner
 };
@@ -51,8 +40,6 @@ const ROLES = {
 const PERMISSION_MODULES = {
   CLIENT: "client", // Client management (license-based customers)
   LICENSE: "license", // License generation and management
-  CUSTOMER: "customer", // End customers (client's customers)
-  OUTLET: "outlet", // Outlet management (tenant entities)
   SHIPMENT: "shipment", // Shipment operations
   WALLET: "wallet", // Wallet and payment operations
   PARTNER: "partner", // Partner/courier management
@@ -78,7 +65,7 @@ const PERMISSION_ACTIONS = {
   EXPORT: "export", // Export resource data
   MANAGE: "manage", // Full CRUD operations
   APPROVE: "approve", // Approve/reject operations (e.g., disputes)
-  ASSIGN: "assign", // Assign resource to users/customers
+  ASSIGN: "assign", // Assign resource to users
   WILDCARD: "*", // All actions (superadmin only)
 };
 
@@ -89,9 +76,8 @@ const PERMISSION_ACTIONS = {
 const PERMISSION_SCOPES = {
   OWN: "own", // User's own data only
   PARENT: "parent", // Parent client's data (for client role and sub-users)
-  ASSIGNED: "assigned", // Assigned customers/entities only
+  ASSIGNED: "assigned", // Assigned entities only
   ALL: "all", // All data within tenant/client scope
-  OUTLET: "outlet", // Outlet-scoped data (for outlet roles)
   WILDCARD: "*", // System-wide access (superadmin only)
 };
 
@@ -114,7 +100,6 @@ const DEFAULT_ROLE_PERMISSIONS = {
 
   client: [
     // License holder
-    "customer:*:parent",
     "user:create:parent",
     "user:read:parent",
     "user:update:parent",
@@ -130,13 +115,11 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "wallet:*:assigned",
     "billing:*:assigned",
     "shipment:read:assigned",
-    "customer:read:assigned",
     "analytics:read:assigned",
   ],
 
   sales: [
     // Client's sales team
-    "customer:*:assigned",
     "shipment:create:assigned",
     "shipment:read:assigned",
     "wallet:read:assigned",
@@ -148,85 +131,12 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "support:*:assigned",
     "shipment:read:assigned",
     "shipment:update:assigned",
-    "customer:read:assigned",
     "analytics:read:assigned",
-  ],
-
-  customer: [
-    // End customer
-    "shipment:*:own",
-    "wallet:read:own",
-    "support:create:own",
-    "support:read:own",
-    "analytics:read:own",
-    "settings:read:own",
-    "settings:update:own",
-  ],
-
-  customer_account: [
-    // Customer's finance access
-    "wallet:read:parent",
-    "billing:read:parent",
-    "shipment:read:parent",
-    "analytics:read:parent",
-  ],
-
-  customer_sales: [
-    // Customer's sales access
-    "shipment:create:parent",
-    "shipment:read:parent",
-    "wallet:read:parent",
-    "analytics:read:parent",
-  ],
-
-  customer_support: [
-    // Customer's support access
-    "support:*:parent",
-    "shipment:read:parent",
-    "analytics:read:parent",
   ],
 
   affiliate: [
     // Referral partner
-    "customer:read:assigned",
     "analytics:read:assigned",
-  ],
-
-  outlet_admin: [
-    // Outlet administrator - full outlet-scoped access
-    "outlet:*:outlet",
-    "customer:*:outlet",
-    "shipment:*:outlet",
-    "partner:*:outlet",
-    "wallet:*:outlet",
-    "billing:*:outlet",
-    "analytics:read:outlet",
-    "support:*:outlet",
-    "settings:*:own",
-    "user:create:outlet",
-    "user:read:outlet",
-    "user:update:outlet",
-    // Additional permissions for outlet user management routes (require :assigned/:parent scope)
-    "customer:read:assigned",
-    "customer:create:parent",
-    "customer:update:assigned",
-    "customer:delete:assigned",
-  ],
-
-  outlet_staff: [
-    // Outlet staff - limited outlet-scoped access
-    "customer:read:outlet",
-    "customer:create:outlet",
-    "shipment:read:outlet",
-    "shipment:create:outlet",
-    "partner:read:outlet",
-    "wallet:read:outlet",
-    "analytics:read:outlet",
-    "support:create:outlet",
-    "support:read:outlet",
-    "settings:read:own",
-    // Additional permissions for viewing outlet data via routes that require :assigned scope
-    "customer:read:assigned",
   ],
 };
 
@@ -241,14 +151,10 @@ const PERMISSION_DESCRIPTIONS = {
   "client:update:all": "Modify client details and settings",
   "client:delete:all": "Remove clients from the system",
 
-  "customer:create:parent": "Create new customers under your client account",
-  "customer:read:assigned": "View assigned customer information",
-  "customer:manage:parent": "Full customer management for your client",
-
   "shipment:create:own": "Create shipments for your own account",
-  "shipment:create:assigned": "Create shipments for assigned customers",
+  "shipment:create:assigned": "Create shipments for assigned entities",
   "shipment:read:parent": "View all shipments under your client",
-  "shipment:update:assigned": "Modify shipments for assigned customers",
+  "shipment:update:assigned": "Modify shipments for assigned entities",
 
   "wallet:read:own": "View your wallet balance and transactions",
   "wallet:manage:parent": "Full wallet management for your client",
@@ -261,39 +167,10 @@ const PERMISSION_DESCRIPTIONS = {
   "analytics:export:all": "Export analytics data and reports",
 
   "support:create:own": "Create support tickets for your issues",
-  "support:manage:assigned": "Manage support tickets for assigned customers",
+  "support:manage:assigned": "Manage support tickets for assigned entities",
 
   "settings:update:own": "Modify your personal settings",
   "settings:manage:all": "Manage system-wide settings",
-
-  // Outlet-scoped permissions
-  "outlet:create:all": "Create new outlets in the system",
-  "outlet:read:all": "View all outlet information",
-  "outlet:update:all": "Modify outlet details and settings",
-  "outlet:delete:all": "Remove outlets from the system",
-  "outlet:manage:outlet": "Full outlet management within your outlet",
-
-  "customer:create:outlet": "Create customers within your outlet",
-  "customer:read:outlet": "View customers within your outlet",
-  "customer:update:outlet": "Modify customers within your outlet",
-  "customer:manage:outlet": "Full customer management within your outlet",
-
-  "shipment:create:outlet": "Create shipments within your outlet",
-  "shipment:read:outlet": "View shipments within your outlet",
-  "shipment:update:outlet": "Modify shipments within your outlet",
-  "shipment:manage:outlet": "Full shipment management within your outlet",
-
-  "partner:read:outlet": "View partners within your outlet",
-  "partner:manage:outlet": "Full partner management within your outlet",
-
-  "wallet:read:outlet": "View wallet within your outlet",
-  "wallet:manage:outlet": "Full wallet management within your outlet",
-
-  "analytics:read:outlet": "View analytics for your outlet",
-
-  "support:create:outlet": "Create support tickets within your outlet",
-  "support:read:outlet": "View support tickets within your outlet",
-  "support:manage:outlet": "Full support management within your outlet",
 };
 
 /**

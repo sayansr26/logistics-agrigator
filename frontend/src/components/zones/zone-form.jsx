@@ -35,7 +35,9 @@ import {
   Trash2,
   Route,
   Map,
+  Search,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { geographicalApiService, partnersApiService } from "@/services";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -113,6 +115,10 @@ export function ZoneForm({
 
   // City filtering state
   const [cityFilter, setCityFilter] = useState("all"); // "all", "metro", "non-metro"
+
+  // Partner search state for chips UI
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
 
   // Loading states
   const [loadingStates, setLoadingStates] = useState(false);
@@ -765,10 +771,17 @@ export function ZoneForm({
 
   // Distance slab management functions
   const addDistanceSlab = () => {
+    // Calculate the starting distance based on the previous slab's ending distance + 1
+    const lastSlab = formData.distanceSlabs[formData.distanceSlabs.length - 1];
+    const newDistanceFrom =
+      lastSlab && lastSlab.distanceTo
+        ? String(Number(lastSlab.distanceTo) + 1)
+        : "";
+
     const newSlab = {
       id: Date.now(),
       name: "",
-      distanceFrom: "",
+      distanceFrom: newDistanceFrom,
       distanceTo: "",
     };
     updateFormData({
@@ -976,6 +989,46 @@ export function ZoneForm({
     }
   };
 
+  // Partner chips UI helper functions
+  const getPartnerDisplayName = (partnerId) => {
+    const partner = partners.find((p) => p.id === partnerId);
+    return partner ? partner.displayName || partner.name : partnerId;
+  };
+
+  const handlePartnerSelect = (partnerId) => {
+    const currentIds = formData.selectedPartnerIds || [];
+    if (!currentIds.includes(partnerId)) {
+      updateFormData({
+        selectedPartnerIds: [...currentIds, partnerId],
+      });
+    }
+    setPartnerSearch("");
+    setShowPartnerDropdown(false);
+  };
+
+  const handlePartnerRemove = (partnerId) => {
+    const currentIds = formData.selectedPartnerIds || [];
+    updateFormData({
+      selectedPartnerIds: currentIds.filter((id) => id !== partnerId),
+    });
+  };
+
+  // Filter partners by search and exclude already selected
+  const getFilteredPartners = () => {
+    const selectedIds = formData.selectedPartnerIds || [];
+    return partners.filter((partner) => {
+      const isNotSelected = !selectedIds.includes(partner.id);
+      const matchesSearch =
+        !partnerSearch ||
+        partner.name?.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+        partner.displayName
+          ?.toLowerCase()
+          .includes(partnerSearch.toLowerCase()) ||
+        partner.code?.toLowerCase().includes(partnerSearch.toLowerCase());
+      return isNotSelected && matchesSearch;
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -1021,7 +1074,7 @@ export function ZoneForm({
             <div className="text-sm font-medium">Basic Information</div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="name">Zone Name *</Label>
                 <Input
                   id="name"
@@ -1035,7 +1088,7 @@ export function ZoneForm({
                 )}
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="partnerId">
                   Courier Partner
                   {formData.zoneType === "distance-wise" ? "s" : ""} *
@@ -1106,85 +1159,113 @@ export function ZoneForm({
                   </>
                 )}
 
-                {/* Multi-select for Distance zones */}
+                {/* Multi-select for Distance zones - Chips UI */}
                 {formData.zoneType === "distance-wise" && (
-                  <>
-                    <div
-                      className={`border rounded-md p-3 max-h-48 overflow-y-auto ${errors.selectedPartnerIds ? "border-red-500" : "border-border"}`}
-                    >
-                      {loadingPartners ? (
-                        <div className="flex items-center justify-center py-4">
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          <span className="text-sm text-muted-foreground">
-                            Loading partners...
-                          </span>
-                        </div>
-                      ) : partners.length === 0 ? (
-                        <div className="flex items-center justify-center py-4">
-                          <span className="text-sm text-muted-foreground">
-                            No partners available
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {partners.map((partner) => (
-                            <label
-                              key={partner.id}
-                              className="flex items-center space-x-3 p-2 rounded hover:bg-accent cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={
-                                  formData.selectedPartnerIds?.includes(
-                                    partner.id,
-                                  ) || false
-                                }
-                                onChange={(e) => {
-                                  const currentIds =
-                                    formData.selectedPartnerIds || [];
-                                  if (e.target.checked) {
-                                    updateFormData({
-                                      selectedPartnerIds: [
-                                        ...currentIds,
-                                        partner.id,
-                                      ],
-                                    });
-                                  } else {
-                                    updateFormData({
-                                      selectedPartnerIds: currentIds.filter(
-                                        (id) => id !== partner.id,
-                                      ),
-                                    });
-                                  }
-                                }}
-                                className="h-4 w-4 rounded border-gray-300"
-                              />
-                              <Truck className="h-4 w-4 text-blue-600" />
-                              <span className="text-sm">{partner.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                ({partner.code})
-                              </span>
-                            </label>
-                          ))}
+                  <div className="space-y-2">
+                    {/* Partner Search Input */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search and select courier partners..."
+                        value={partnerSearch}
+                        onChange={(e) => {
+                          setPartnerSearch(e.target.value);
+                          setShowPartnerDropdown(true);
+                        }}
+                        onFocus={() => setShowPartnerDropdown(true)}
+                        onBlur={() => {
+                          // Delay hiding to allow click on dropdown items
+                          setTimeout(() => setShowPartnerDropdown(false), 200);
+                        }}
+                        className={`pl-10 ${errors.selectedPartnerIds ? "border-red-500" : ""}`}
+                      />
+                      {loadingPartners && (
+                        <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+
+                      {/* Partner Dropdown */}
+                      {showPartnerDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {loadingPartners ? (
+                            <div className="p-3 text-center text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                              Loading partners...
+                            </div>
+                          ) : getFilteredPartners().length === 0 ? (
+                            <div className="p-3 text-center text-sm text-muted-foreground">
+                              {partnerSearch
+                                ? "No matching partners found"
+                                : formData.selectedPartnerIds?.length ===
+                                    partners.length
+                                  ? "All partners selected"
+                                  : "No partners available"}
+                            </div>
+                          ) : (
+                            getFilteredPartners().map((partner) => (
+                              <button
+                                key={partner.id}
+                                type="button"
+                                onClick={() => handlePartnerSelect(partner.id)}
+                                className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <Truck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                  <span className="font-medium">
+                                    {partner.displayName || partner.name}
+                                  </span>
+                                  {partner.code && (
+                                    <span className="text-muted-foreground text-xs">
+                                      ({partner.code})
+                                    </span>
+                                  )}
+                                </div>
+                                <Plus className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              </button>
+                            ))
+                          )}
                         </div>
                       )}
                     </div>
+
+                    {/* Selected Partners Chips */}
                     {formData.selectedPartnerIds?.length > 0 && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {formData.selectedPartnerIds.length} partner(s) selected
-                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.selectedPartnerIds.map((partnerId) => (
+                          <Badge
+                            key={partnerId}
+                            variant="secondary"
+                            className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 cursor-pointer hover:bg-purple-200 dark:hover:bg-purple-900/50 pr-1"
+                          >
+                            <Truck className="h-3 w-3 mr-1" />
+                            {getPartnerDisplayName(partnerId)}
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerRemove(partnerId)}
+                              className="ml-1 p-0.5 rounded-full hover:bg-purple-300 dark:hover:bg-purple-700"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
                     )}
+
+                    <p className="text-xs text-muted-foreground">
+                      {formData.selectedPartnerIds?.length > 0
+                        ? `${formData.selectedPartnerIds.length} partner(s) selected`
+                        : "Select one or more courier partners for this zone"}
+                    </p>
                     {errors.selectedPartnerIds && (
                       <p className="text-sm text-red-500 mt-1">
                         {errors.selectedPartnerIds}
                       </p>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="description">Zone Description *</Label>
               <textarea
                 id="description"
@@ -1207,7 +1288,7 @@ export function ZoneForm({
 
             {/* Legacy Zone Code field - hidden by default */}
             {formData.code && (
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="code">Zone Code</Label>
                 <Input
                   id="code"
@@ -1332,7 +1413,7 @@ export function ZoneForm({
                 </Select>
               </div> */}
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status ? "active" : "inactive"}
@@ -1376,7 +1457,7 @@ export function ZoneForm({
             {formData.zoneType === "zone-wise" && (
               <>
                 {/* State Selection */}
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="state">States *</Label>
                   <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {loadingStates ? (
@@ -1438,8 +1519,8 @@ export function ZoneForm({
                 </div>
 
                 {/* City Selection */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <Label htmlFor="city">Cities *</Label>
                     {cities.length > 0 && (
                       <div className="flex items-center space-x-2">
@@ -1597,7 +1678,7 @@ export function ZoneForm({
                 </div>
 
                 {/* Area Selection */}
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="area">Areas (Optional)</Label>
                   <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {!formData.selectedCities.length ? (
@@ -1654,7 +1735,7 @@ export function ZoneForm({
                 </div>
 
                 {/* Pincode Selection */}
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="pincode">Pincodes *</Label>
                   <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
                     {!formData.selectedAreas.length ? (
@@ -1726,7 +1807,7 @@ export function ZoneForm({
                 </div>
 
                 {/* Manual Pincode Input */}
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="manualPincode">
                     Add Pincodes Manually (Optional)
                   </Label>
@@ -1861,9 +1942,6 @@ export function ZoneForm({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900">
-                      Distance Slabs
-                    </h3>
                     <p className="text-sm text-gray-500">
                       Define zones based on distance ranges
                     </p>
@@ -1908,7 +1986,7 @@ export function ZoneForm({
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor={`slab-name-${slab.id}`}>
                             Zone Name *
                           </Label>
@@ -1936,7 +2014,7 @@ export function ZoneForm({
                           )}
                         </div>
 
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor={`slab-distance-from-${slab.id}`}>
                             Distance From (km) *
                             {index === 0 && (
@@ -1975,7 +2053,7 @@ export function ZoneForm({
                           )}
                         </div>
 
-                        <div>
+                        <div className="space-y-2">
                           <Label htmlFor={`slab-distance-to-${slab.id}`}>
                             Distance To (km) *
                           </Label>

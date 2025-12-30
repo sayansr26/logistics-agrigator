@@ -163,7 +163,6 @@ interface RoleGroupGuardProps {
   group:
     | "system"
     | "client_level"
-    | "customer_level"
     | "finance"
     | "sales_team"
     | "support_team"
@@ -246,7 +245,6 @@ export function RoleGroupGuard({
   const groupDisplayNames: Record<typeof group, string> = {
     system: "System Administrators",
     client_level: "Client Team Members",
-    customer_level: "Customer Team Members",
     finance: "Finance Team",
     sales_team: "Sales Team",
     support_team: "Support Team",

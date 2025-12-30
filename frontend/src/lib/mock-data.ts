@@ -552,12 +552,8 @@ export function getRoleColor(role: string): string {
       return "bg-green-100 text-green-800";
     case "support":
       return "bg-yellow-100 text-yellow-800";
-    case "customer":
-      return "bg-cyan-100 text-cyan-800";
-    case "outlet_admin":
-      return "bg-indigo-100 text-indigo-800";
-    case "outlet_staff":
-      return "bg-teal-100 text-teal-800";
+    case "affiliate":
+      return "bg-pink-100 text-pink-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -2581,7 +2577,7 @@ export const RATING_OPTIONS = [
 // Remittance interfaces
 export interface Remittance {
   id: string;
-  outlet: string;
+  businessName: string;
   refNo: string;
   awbNumber: string;
   receiver: string;
@@ -2608,7 +2604,7 @@ export interface RemittanceFilter {
 export const mockRemittances: Remittance[] = [
   {
     id: "1",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2506300237101587",
     awbNumber: "25095210204035",
     receiver: "Pradeep",
@@ -2622,7 +2618,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "2",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2507171219282397",
     awbNumber: "25095210209576",
     receiver: "Raneeta chatterjee",
@@ -2636,7 +2632,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "3",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2507180312024924",
     awbNumber: "25095210210980",
     receiver: "v vijaya lakshmi",
@@ -2650,7 +2646,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "4",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2507251145157710",
     awbNumber: "25095210212612",
     receiver: "Pydisri kanuri",
@@ -2664,7 +2660,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "5",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2508021255184695",
     awbNumber: "25095210213824",
     receiver: "Bhavya sri",
@@ -2678,7 +2674,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "6",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2508020117189573",
     awbNumber: "25095210213780",
     receiver: "Dr mohd akram Quresh",
@@ -2692,7 +2688,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "7",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2508030923451234",
     awbNumber: "25095210214567",
     receiver: "Priya Sharma",
@@ -2707,7 +2703,7 @@ export const mockRemittances: Remittance[] = [
   },
   {
     id: "8",
-    outlet: "RG ENTERPRISES",
+    businessName: "RG ENTERPRISES",
     refNo: "2508041430228765",
     awbNumber: "25095210215678",
     receiver: "Rajesh Kumar",
@@ -2752,382 +2748,6 @@ export function formatWeight(weight: number): string {
 export function formatAmount(amount: number): string {
   return `₹ ${amount.toFixed(2)}`;
 }
-
-// Outlet interfaces
-export interface Outlet {
-  id: string;
-  outletCode: string;
-  outletName: string;
-  retailerName: string;
-  contactPerson: string;
-  phone: string;
-  email: string;
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
-  status: "active" | "inactive" | "suspended" | "pending";
-  type: "retail" | "wholesale" | "ecommerce" | "franchise";
-  businessHours: string;
-  gstNumber?: string;
-  panNumber?: string;
-  bankDetails?: {
-    accountNumber: string;
-    ifscCode: string;
-    bankName: string;
-  };
-  performance: {
-    totalShipments: number;
-    monthlyRevenue: number;
-    successRate: number;
-    avgDeliveryTime: number;
-  };
-  createdAt: string;
-  lastUpdated: string;
-  assignedCouriers: string[];
-  serviceAreas: string[];
-}
-
-export interface OutletShipment {
-  id: string;
-  outletId: string;
-  outletName: string;
-  trackingNumber: string;
-  referenceNumber: string;
-  customerName: string;
-  destination: string;
-  status: "pending" | "in_transit" | "delivered" | "cancelled" | "delayed";
-  weight: number;
-  value: number;
-  courierPartner: string;
-  createdAt: string;
-  estimatedDelivery: string;
-  actualDelivery?: string;
-}
-
-// Mock outlet data
-export const mockOutlets: Outlet[] = [
-  {
-    id: "outlet-1",
-    outletCode: "OUT001",
-    outletName: "RG ENTERPRISES - Main Branch",
-    retailerName: "RG ENTERPRISES",
-    contactPerson: "Rajesh Gupta",
-    phone: "+91 98765 43210",
-    email: "rajesh@rgenterprises.com",
-    address: "123 Main Street, Sector 15",
-    city: "Mumbai",
-    state: "Maharashtra",
-    pincode: "400001",
-    status: "active",
-    type: "retail",
-    businessHours: "9:00 AM - 8:00 PM",
-    gstNumber: "27AABFR1234M1Z5",
-    panNumber: "AABFR1234M",
-    bankDetails: {
-      accountNumber: "1234567890",
-      ifscCode: "SBIN0001234",
-      bankName: "State Bank of India",
-    },
-    performance: {
-      totalShipments: 1247,
-      monthlyRevenue: 45780,
-      successRate: 94.2,
-      avgDeliveryTime: 2.3,
-    },
-    createdAt: "2024-01-15T10:30:00Z",
-    lastUpdated: "2024-08-21T14:20:00Z",
-    assignedCouriers: ["Delhivery", "Blue Dart", "DTDC"],
-    serviceAreas: ["Mumbai", "Thane", "Navi Mumbai"],
-  },
-  {
-    id: "outlet-2",
-    outletCode: "OUT002",
-    outletName: "RG ENTERPRISES - Andheri",
-    retailerName: "RG ENTERPRISES",
-    contactPerson: "Priya Sharma",
-    phone: "+91 98765 43211",
-    email: "priya@rgenterprises.com",
-    address: "456 Andheri West, Near Station",
-    city: "Mumbai",
-    state: "Maharashtra",
-    pincode: "400058",
-    status: "active",
-    type: "retail",
-    businessHours: "8:30 AM - 7:30 PM",
-    gstNumber: "27AABFR1234M1Z6",
-    panNumber: "AABFR1234N",
-    bankDetails: {
-      accountNumber: "0987654321",
-      ifscCode: "HDFC0001234",
-      bankName: "HDFC Bank",
-    },
-    performance: {
-      totalShipments: 892,
-      monthlyRevenue: 32150,
-      successRate: 96.8,
-      avgDeliveryTime: 2.1,
-    },
-    createdAt: "2024-02-20T11:15:00Z",
-    lastUpdated: "2024-08-21T13:45:00Z",
-    assignedCouriers: ["Delhivery", "FedEx", "Aramex"],
-    serviceAreas: ["Andheri", "Bandra", "Juhu"],
-  },
-  {
-    id: "outlet-3",
-    outletCode: "OUT003",
-    outletName: "ABC TRADERS - Central",
-    retailerName: "ABC TRADERS",
-    contactPerson: "Amit Patel",
-    phone: "+91 98765 43212",
-    email: "amit@abctraders.com",
-    address: "789 Central Plaza, MG Road",
-    city: "Delhi",
-    state: "Delhi",
-    pincode: "110001",
-    status: "active",
-    type: "wholesale",
-    businessHours: "8:00 AM - 9:00 PM",
-    gstNumber: "07AABCA1234M1Z7",
-    panNumber: "AABCA1234P",
-    performance: {
-      totalShipments: 1567,
-      monthlyRevenue: 67890,
-      successRate: 92.5,
-      avgDeliveryTime: 2.8,
-    },
-    createdAt: "2024-01-10T09:45:00Z",
-    lastUpdated: "2024-08-21T12:30:00Z",
-    assignedCouriers: ["Blue Dart", "DTDC", "UPS"],
-    serviceAreas: ["Delhi", "Noida", "Gurgaon"],
-  },
-  {
-    id: "outlet-4",
-    outletCode: "OUT004",
-    outletName: "XYZ COMMERCE - Online Hub",
-    retailerName: "XYZ COMMERCE",
-    contactPerson: "Sneha Reddy",
-    phone: "+91 98765 43213",
-    email: "sneha@xyzcommerce.com",
-    address: "321 Tech Park, Electronic City",
-    city: "Bangalore",
-    state: "Karnataka",
-    pincode: "560100",
-    status: "active",
-    type: "ecommerce",
-    businessHours: "24/7",
-    gstNumber: "29AABXY1234M1Z8",
-    panNumber: "AABXY1234R",
-    performance: {
-      totalShipments: 2341,
-      monthlyRevenue: 89250,
-      successRate: 97.1,
-      avgDeliveryTime: 1.9,
-    },
-    createdAt: "2024-03-05T14:20:00Z",
-    lastUpdated: "2024-08-21T15:10:00Z",
-    assignedCouriers: ["Delhivery", "Blue Dart", "FedEx", "DHL"],
-    serviceAreas: ["Bangalore", "Mysore", "Mangalore"],
-  },
-  {
-    id: "outlet-5",
-    outletCode: "OUT005",
-    outletName: "PQR STORES - Franchise",
-    retailerName: "PQR STORES",
-    contactPerson: "Kumar Singh",
-    phone: "+91 98765 43214",
-    email: "kumar@pqrstores.com",
-    address: "654 Mall Road, Sector 22",
-    city: "Chandigarh",
-    state: "Punjab",
-    pincode: "160022",
-    status: "pending",
-    type: "franchise",
-    businessHours: "10:00 AM - 6:00 PM",
-    gstNumber: "04AABPQ1234M1Z9",
-    panNumber: "AABPQ1234S",
-    performance: {
-      totalShipments: 0,
-      monthlyRevenue: 0,
-      successRate: 0,
-      avgDeliveryTime: 0,
-    },
-    createdAt: "2024-08-15T16:30:00Z",
-    lastUpdated: "2024-08-21T10:45:00Z",
-    assignedCouriers: ["Blue Dart", "DTDC"],
-    serviceAreas: ["Chandigarh", "Mohali", "Panchkula"],
-  },
-  {
-    id: "outlet-6",
-    outletCode: "OUT006",
-    outletName: "LMN BUSINESS - Warehouse",
-    retailerName: "LMN BUSINESS",
-    contactPerson: "Lakshmi Devi",
-    phone: "+91 98765 43215",
-    email: "lakshmi@lmnbusiness.com",
-    address: "987 Industrial Area, Phase 2",
-    city: "Chennai",
-    state: "Tamil Nadu",
-    pincode: "600032",
-    status: "inactive",
-    type: "wholesale",
-    businessHours: "6:00 AM - 4:00 PM",
-    gstNumber: "33AABLM1234M1Z0",
-    panNumber: "AABLM1234D",
-    performance: {
-      totalShipments: 445,
-      monthlyRevenue: 15670,
-      successRate: 89.3,
-      avgDeliveryTime: 3.2,
-    },
-    createdAt: "2024-04-12T08:15:00Z",
-    lastUpdated: "2024-08-20T17:20:00Z",
-    assignedCouriers: ["DTDC", "Aramex"],
-    serviceAreas: ["Chennai", "Vellore", "Salem"],
-  },
-];
-
-// Mock outlet shipments data
-export const mockOutletShipments: OutletShipment[] = [
-  {
-    id: "os-1",
-    outletId: "outlet-1",
-    outletName: "RG ENTERPRISES - Main Branch",
-    trackingNumber: "LOG2024001",
-    referenceNumber: "REF001234",
-    customerName: "John Smith",
-    destination: "New York, USA",
-    status: "in_transit",
-    weight: 2.5,
-    value: 1200,
-    courierPartner: "DHL Express",
-    createdAt: "2024-08-15T10:30:00Z",
-    estimatedDelivery: "2024-08-20T15:00:00Z",
-  },
-  {
-    id: "os-2",
-    outletId: "outlet-1",
-    outletName: "RG ENTERPRISES - Main Branch",
-    trackingNumber: "LOG2024002",
-    referenceNumber: "REF001235",
-    customerName: "Sarah Johnson",
-    destination: "London, UK",
-    status: "delivered",
-    weight: 1.2,
-    value: 450,
-    courierPartner: "FedEx",
-    createdAt: "2024-08-14T14:20:00Z",
-    estimatedDelivery: "2024-08-18T12:00:00Z",
-    actualDelivery: "2024-08-18T11:30:00Z",
-  },
-  {
-    id: "os-3",
-    outletId: "outlet-2",
-    outletName: "RG ENTERPRISES - Andheri",
-    trackingNumber: "LOG2024003",
-    referenceNumber: "REF001236",
-    customerName: "Mike Chen",
-    destination: "Toronto, Canada",
-    status: "pending",
-    weight: 5.8,
-    value: 2800,
-    courierPartner: "UPS",
-    createdAt: "2024-08-16T09:15:00Z",
-    estimatedDelivery: "2024-08-22T10:30:00Z",
-  },
-  {
-    id: "os-4",
-    outletId: "outlet-3",
-    outletName: "ABC TRADERS - Central",
-    trackingNumber: "LOG2024004",
-    referenceNumber: "REF001237",
-    customerName: "Emma Wilson",
-    destination: "Sydney, Australia",
-    status: "delayed",
-    weight: 0.8,
-    value: 85,
-    courierPartner: "Aramex",
-    createdAt: "2024-08-13T16:45:00Z",
-    estimatedDelivery: "2024-08-19T14:20:00Z",
-  },
-  {
-    id: "os-5",
-    outletId: "outlet-4",
-    outletName: "XYZ COMMERCE - Online Hub",
-    trackingNumber: "LOG2024005",
-    referenceNumber: "REF001238",
-    customerName: "David Brown",
-    destination: "Berlin, Germany",
-    status: "cancelled",
-    weight: 3.2,
-    value: 1850,
-    courierPartner: "DHL Express",
-    createdAt: "2024-08-12T11:30:00Z",
-    estimatedDelivery: "2024-08-17T09:00:00Z",
-  },
-];
-
-// Outlet utility functions
-export function getOutletStatusColor(status: Outlet["status"]): string {
-  switch (status) {
-    case "active":
-      return "bg-green-100 text-green-800";
-    case "inactive":
-      return "bg-gray-100 text-gray-800";
-    case "suspended":
-      return "bg-red-100 text-red-800";
-    case "pending":
-      return "bg-yellow-100 text-yellow-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-}
-
-export function getOutletTypeColor(type: Outlet["type"]): string {
-  switch (type) {
-    case "retail":
-      return "bg-blue-100 text-blue-800";
-    case "wholesale":
-      return "bg-green-100 text-green-800";
-    case "ecommerce":
-      return "bg-purple-100 text-purple-800";
-    case "franchise":
-      return "bg-orange-100 text-orange-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-}
-
-export function getOutletTypeIcon(type: Outlet["type"]) {
-  switch (type) {
-    case "retail":
-      return "Store";
-    case "wholesale":
-      return "Warehouse";
-    case "ecommerce":
-      return "ShoppingCart";
-    case "franchise":
-      return "Building2";
-    default:
-      return "Store";
-  }
-}
-
-// Outlet constants
-export const OUTLET_TYPES = [
-  { value: "retail", label: "Retail Store" },
-  { value: "wholesale", label: "Wholesale" },
-  { value: "ecommerce", label: "E-commerce" },
-  { value: "franchise", label: "Franchise" },
-];
-
-export const OUTLET_STATUSES = [
-  { value: "pending", label: "Pending" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-  { value: "suspended", label: "Suspended" },
-];
-
 export const COURIER_OPTIONS = [
   "Delhivery",
   "Blue Dart",

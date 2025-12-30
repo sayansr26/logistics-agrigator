@@ -54,7 +54,7 @@ const otherChargeTypes = [
 
 export function ChargeForm({ charge, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
-    customerId: "",
+    clientId: "",
     type: "",
     chargeType: "percentage",
     value: "",
@@ -71,7 +71,7 @@ export function ChargeForm({ charge, onSubmit, onCancel }) {
   useEffect(() => {
     if (charge) {
       setFormData({
-        customerId: charge.customerId || "",
+        clientId: charge.clientId || "",
         type: charge.type || "",
         chargeType: charge.chargeType || "percentage",
         value: charge.value || "",
@@ -88,8 +88,8 @@ export function ChargeForm({ charge, onSubmit, onCancel }) {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.customerId.trim()) {
-      newErrors.customerId = "Customer ID is required";
+    if (!formData.clientId.trim()) {
+      newErrors.clientId = "Client ID is required";
     }
 
     if (!formData.type) {
@@ -168,20 +168,18 @@ export function ChargeForm({ charge, onSubmit, onCancel }) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Customer ID */}
+            {/* Client ID */}
             <div className="space-y-2">
-              <Label htmlFor="customerId">Customer ID *</Label>
+              <Label htmlFor="clientId">Client ID *</Label>
               <Input
-                id="customerId"
-                value={formData.customerId}
-                onChange={(e) =>
-                  handleInputChange("customerId", e.target.value)
-                }
-                placeholder="Enter customer ID"
-                className={`h-10 ${errors.customerId ? "border-red-500" : ""}`}
+                id="clientId"
+                value={formData.clientId}
+                onChange={(e) => handleInputChange("clientId", e.target.value)}
+                placeholder="Enter client ID"
+                className={`h-10 ${errors.clientId ? "border-red-500" : ""}`}
               />
-              {errors.customerId && (
-                <p className="text-sm text-red-500">{errors.customerId}</p>
+              {errors.clientId && (
+                <p className="text-sm text-red-500">{errors.clientId}</p>
               )}
             </div>
 

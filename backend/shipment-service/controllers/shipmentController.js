@@ -34,7 +34,6 @@ async function createShipment(req, res) {
   try {
     const userId = req.user.userId || req.user.id;
     const clientId = req.user.clientId;
-    const customerId = req.user.customerId || null; // Tenant key for outlet/customer scoping
     const {
       orderId,
       pickupAddress,
@@ -50,7 +49,6 @@ async function createShipment(req, res) {
       service: "shipment-service",
       userId,
       clientId,
-      customerId,
       orderId,
       paymentType,
       serviceType,
@@ -178,7 +176,6 @@ async function createShipment(req, res) {
         orderId,
         clientId,
         userId,
-        customerId, // Tenant key for outlet/customer scoping
         status: "CREATED",
         paymentType,
         paymentStatus:
@@ -301,7 +298,6 @@ async function createShipment(req, res) {
       shipmentId: shipment.id,
       userId,
       clientId,
-      customerId,
       orderId,
       totalCost,
     });

@@ -12,7 +12,6 @@ import { baseApi } from "../baseApi";
 
 interface CreateShipmentRequest {
   clientId: string;
-  customerId?: string;
   originPincode: string;
   destinationPincode: string;
   weight: number;
@@ -66,7 +65,6 @@ interface Shipment {
   id: string;
   awbNumber: string;
   clientId: string;
-  customerId?: string;
   partnerId: string;
   status: string;
   originPincode: string;
@@ -175,7 +173,6 @@ interface GetShipmentsParams {
   status?: string;
   partnerId?: string;
   clientId?: string;
-  customerId?: string;
   startDate?: string;
   endDate?: string;
   search?: string;

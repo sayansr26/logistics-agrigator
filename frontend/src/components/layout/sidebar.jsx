@@ -19,26 +19,18 @@ import {
   CreditCard,
   Globe,
   AlertTriangle,
-  Store,
   LucideIcon,
   IndianRupee,
   Briefcase,
   Map,
-  UserCheck,
 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
 
 // Navigation structure with role-based filtering
 const getNavigationSections = () => {
-  const { user } = useAuth();
   const { hasPermission, canAccessResource } = usePermission();
   const { hasRole, isSystemAdmin } = useRole();
-
-  // Check if user is an outlet user
-  const isOutletUser = hasRole(["outlet_admin", "outlet_staff"]);
-  const outletId = user?.outletId;
 
   // Filter function to check if user can see menu item
   const canSeeMenuItem = (item) => {
@@ -57,76 +49,7 @@ const getNavigationSections = () => {
     return true;
   };
 
-  // Check if outlet admin (can manage team)
-  const isOutletAdmin = hasRole(["outlet_admin"]);
-
-  // Special navigation for outlet users
-  if (isOutletUser) {
-    const outletSections = [
-      {
-        title: "Core Operations",
-        items: [
-          {
-            title: "Dashboard",
-            href: "/dashboard",
-            icon: Home,
-            disabled: false,
-          },
-          // {
-          //   title: "Shipments",
-          //   href: "/shipments",
-          //   icon: Package,
-          //   disabled: false,
-          // },
-        ],
-      },
-      {
-        title: "Pricing & Services",
-        items: [
-          {
-            title: "Zone Management",
-            href: "/zones",
-            icon: Globe,
-            disabled: false,
-          },
-          {
-            title: "Charge Packages",
-            href: "/charges",
-            icon: IndianRupee,
-            disabled: false,
-          },
-        ],
-      },
-      {
-        title: "Management",
-        items: [
-          {
-            title: "Customers",
-            href: outletId ? `/outlets/${outletId}/customers` : "/customers",
-            icon: UserCheck,
-            disabled: false,
-          },
-          {
-            title: "Courier Partners",
-            href: "/partners",
-            icon: Truck,
-            disabled: false,
-          },
-          // Team management - only for outlet_admin
-          ...(isOutletAdmin && outletId ? [{
-            title: "Team Management",
-            href: `/outlet/team`,
-            icon: Users,
-            disabled: false,
-          }] : []),
-        ],
-      },
-    ];
-
-    return outletSections.filter((section) => section.items.length > 0);
-  }
-
-  // Filter sections and items based on permissions for non-outlet users
+  // Filter sections and items based on permissions
   const sections = [
     {
       title: "Core Operations",
@@ -166,14 +89,14 @@ const getNavigationSections = () => {
           permission: "partner:read:own",
           disabled: false, // Zone management is now implemented
         },
-        {
-          title: "Charge Packages",
-          href: "/charges",
-          icon: IndianRupee,
-          permission: "chargePackage:manage:all",
-          roles: ["superadmin", "admin", "operations"],
-          disabled: false, // Implemented with new package creation flow
-        },
+        // {
+        //   title: "Charge Packages",
+        //   href: "/charges",
+        //   icon: IndianRupee,
+        //   permission: "chargePackage:manage:all",
+        //   roles: ["superadmin", "admin", "operations"],
+        //   disabled: false, // Implemented with new package creation flow
+        // },
       ].filter(canSeeMenuItem),
     },
     // {
@@ -192,7 +115,7 @@ const getNavigationSections = () => {
     //       href: "/remittance",
     //       icon: CreditCard,
     //       permission: "billing:manage:own",
-    //       roles: ["superadmin", "admin", "accounts", "customer_account"],
+    //       roles: ["superadmin", "admin", "accounts"],
     //       disabled: true, // Not implemented
     //       tooltip: "Coming Soon",
     //     },
@@ -210,37 +133,12 @@ const getNavigationSections = () => {
           disabled: false, // Working and completed
         },
         {
-          title: "Customer Management",
-          href: "/customers",
-          icon: UserCheck,
-          permission: "customer:list:all",
-          roles: ["superadmin", "admin", "client"],
-          disabled: false, // Working - DIRECT and OUTLET customers
-        },
-        {
-          title: "Outlets",
-          href: "/outlets",
-          icon: Store,
-          roles: ["superadmin", "admin", "client"],
-          permission: "customer:list:own",
-          disabled: false, // Outlet management for B2B customers
-        },
-        {
           title: "Geography",
           href: "/geography",
           icon: Map,
           roles: ["superadmin"],
           disabled: false, // Working and completed
         },
-        // {
-        //   title: "Client Management",
-        //   href: "/clients",
-        //   icon: Briefcase,
-        //   permission: "client:list:all",
-        //   roles: ["superadmin"],
-        //   disabled: true, // Not implemented
-        //   tooltip: "Coming Soon",
-        // },
         {
           title: "Courier Partners",
           href: "/partners",
