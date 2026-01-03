@@ -361,9 +361,65 @@ docker exec -it logistics-redis redis-cli
 4. **Audit Required**: All CRUD operations must log
 5. **Validation Required**: All inputs validated with Joi
 6. **Auth Required**: All endpoints authenticated (except public)
+7. **Confirmation Dialogs**: All destructive actions require user confirmation
+
+## Frontend Patterns (Updated January 2026)
+
+### RTK Query Endpoint Pattern
+
+```typescript
+// store/api/endpoints/outletApi.ts
+export const outletApi = baseApi.injectEndpoints({
+  endpoints: (builder) => ({
+    listOutlets: builder.query<OutletsResponse, Params>({
+      query: (params) => ({ url: `/api/v1/outlets`, params }),
+      providesTags: [{ type: "User", id: "LIST" }],
+    }),
+    createOutlet: builder.mutation<Response, Request>({
+      query: (data) => ({ url: `/api/v1/outlets`, method: "POST", body: data }),
+      invalidatesTags: [{ type: "User", id: "LIST" }],
+    }),
+  }),
+});
+
+export const { useListOutletsQuery, useCreateOutletMutation } = outletApi;
+```
+
+### Geo-Autocomplete Pattern
+
+```typescript
+// Uses existing geoApi endpoints
+import { useGetStatesQuery, useGetCitiesQuery, useGetPincodeDetailsQuery } from "@/store/api/endpoints/geoApi";
+
+// Pincode entry auto-fills city and state
+const { data: pincodeDetails } = useGetPincodeDetailsQuery(pincode, {
+  skip: pincode.length !== 6,
+});
+
+useEffect(() => {
+  if (pincodeDetails?.data?.hierarchy) {
+    setForm({ city: hierarchy.city.name, state: hierarchy.state.name });
+  }
+}, [pincodeDetails]);
+```
+
+### Modal-Based CRUD Pattern
+
+```typescript
+// State for modals
+const [showViewDialog, setShowViewDialog] = useState(false);
+const [showEditDialog, setShowEditDialog] = useState(false);
+const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+// Handlers open modals, don't navigate
+const handleView = (id) => { setSelectedId(id); setShowViewDialog(true); };
+const handleEdit = (id) => { setSelectedId(id); setShowEditDialog(true); };
+const handleDelete = (item) => { setItemToDelete(item); setShowDeleteDialog(true); };
+```
 
 ---
 
 **Environment**: Development  
 **Node Version**: 18.x LTS  
-**Package Manager**: PNPM 8.15.1
+**Package Manager**: PNPM 8.15.1  
+**Last Updated**: January 2026

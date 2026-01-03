@@ -1252,15 +1252,24 @@ class AuthController {
       const totalPages = Math.ceil(total / limit);
 
       // Log audit entry for this admin action
+      // Check if user exists before creating audit log (to avoid FK constraint violation)
+      const userExists = req.user?.userId
+        ? await prisma.user.findUnique({
+            where: { id: req.user.userId },
+            select: { id: true },
+          })
+        : null;
+
       await prisma.auditLog.create({
         data: {
-          userId: req.user.userId,
+          userId: userExists ? req.user.userId : null, // Only set userId if user exists
           action: "LIST_USERS",
           resource: "User",
           changes: {
             filters: { role, isActive, search },
             pagination: { page, limit },
             resultCount: users.length,
+            requestUserId: req.user?.userId, // Store original userId in changes for tracking
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),

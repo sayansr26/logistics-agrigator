@@ -1,8 +1,21 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: December 2024
+> Current work focus and priorities | Last Updated: January 2026
 
 ## Current Sprint Focus
+
+### 🏪 Outlet Module Implementation (P0 - Completed)
+
+The Outlet/Customer Portal module has been successfully implemented, allowing clients to manage their outlet users who can log in and manage their own shipments and addresses.
+
+**Completed Features:**
+- ✅ Outlet CRUD operations (create, read, update, delete)
+- ✅ Outlet address management with geo-autocomplete
+- ✅ New `outlet` role in RBAC system
+- ✅ Password generation and reset functionality
+- ✅ Activate/Deactivate outlet status
+- ✅ Frontend management UI with modals
+- ✅ RTK Query integration
 
 ### 🔒 API Gateway Security & 11-Role RBAC Implementation (P0 - Critical)
 
@@ -14,34 +27,34 @@ The primary focus is implementing a robust security layer and role-based access 
 
 | Phase   | Description                       | Status         |
 | ------- | --------------------------------- | -------------- |
-| Phase 1 | Service isolation via API Gateway | 🔄 In Progress |
-| Phase 2 | Granular permission system        | 📋 Planned     |
-| Phase 3 | Frontend Redux/RTK migration      | 📋 Planned     |
+| Phase 1 | Service isolation via API Gateway | ✅ Complete    |
+| Phase 2 | Granular permission system        | ✅ Complete    |
+| Phase 3 | Frontend Redux/RTK migration      | 🔄 In Progress |
 | Phase 4 | 100% Swagger documentation        | 📋 Planned     |
 
 ## Service Status Overview
 
 | Service              | Port | Status        | Completion | Current Focus       |
 | -------------------- | ---- | ------------- | ---------- | ------------------- |
-| **API Gateway**      | 3001 | 🔄 Upgrading  | 60%        | RBAC integration    |
+| **API Gateway**      | 3001 | ✅ Complete   | 90%        | Outlet routes added |
 | **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard  |
-| **User Service**     | 3003 | ✅ Production | 100%       | Stable              |
+| **User Service**     | 3003 | ✅ Production | 100%       | Outlet module added |
 | **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations     |
 | **Partner Service**  | 3005 | ✅ Complete   | 100%       | Stable              |
 | **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable              |
 | **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending |
 | **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started         |
 | **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next        |
-| **Frontend**         | 3000 | 🔄 Migrating  | 40%        | Redux/RTK Query     |
+| **Frontend**         | 3000 | 🔄 Migrating  | 60%        | Redux/RTK Query     |
 
 ## Immediate Priorities
 
 ### P0 - Critical (This Week)
 
-1. **Complete API Gateway RBAC Integration**
-   - Implement permission middleware
-   - Add Redis caching for permissions
-   - Test with all 11 roles
+1. **✅ Outlet Module - COMPLETED**
+   - Backend: routes, controller, schema
+   - Frontend: management page with modals
+   - RBAC: new outlet role with permissions
 
 2. **License Service Integration**
    - Connect license validation to auth flow
@@ -50,15 +63,15 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ### P1 - High Priority (Next Week)
 
-1. **Shipment Service Bulk Operations**
+1. **Shipment Bulk Operations**
    - CSV upload and parsing
    - Bulk AWB generation
    - Error handling and reporting
 
-2. **Frontend State Migration**
-   - Migrate Zustand stores to Redux
-   - Implement RTK Query for API calls
-   - Update components for new state
+2. **Outlet Portal Pages**
+   - `/my-shipments` - Outlet's own shipments
+   - `/my-addresses` - Outlet's address management
+   - Dashboard view for outlet users
 
 ### P2 - Medium Priority (Following Weeks)
 
@@ -81,6 +94,14 @@ The primary focus is implementing a robust security layer and role-based access 
 3. **Controller Pattern**: No inline route handlers
 4. **UUID for IDs**: All models use `@db.Uuid`
 
+### Outlet Module Decisions
+
+1. **Optional clientId**: Outlets can be standalone or linked to clients
+2. **Globally unique email/phone**: Across all outlets
+3. **Address types**: HOME, WORK, OTHER (not PICKUP/RETURN)
+4. **Single default address**: Instead of separate pickup/return defaults
+5. **Geo-autocomplete**: Pincode lookup auto-fills city and state
+
 ### Technical Decisions
 
 1. **Prisma ORM Only**: No raw SQL queries
@@ -94,28 +115,38 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Recent Changes
 
+### January 2026
+
+- ✅ **Outlet Module Complete**
+  - New `outlet` role in RBAC (permissions.js)
+  - `Outlet` and `OutletAddress` models in user-service
+  - Full CRUD API endpoints via API Gateway
+  - Frontend management page with modals
+  - Geo-autocomplete for address entry
+  - Action confirmations (delete, activate/deactivate, reset password)
+
 ### December 2024
 
 - ✅ Auth service production-ready
 - ✅ User service production-ready
 - ✅ Partner service complete
 - ✅ Wallet service complete
-- 🔄 API Gateway RBAC implementation started
+- ✅ API Gateway RBAC implementation complete
 - 🔄 License service development in progress
 
 ## Development Focus Areas
 
 ### Backend Team
 
-- API Gateway security enhancement
+- Outlet portal API endpoints (/my-shipments, /my-addresses)
 - License service completion
 - Shipment service bulk operations
 
 ### Frontend Team
 
+- Outlet portal pages
 - Redux/RTK Query migration
 - Dashboard component updates
-- Form validation improvements
 
 ## Working Patterns
 
@@ -136,26 +167,31 @@ The primary focus is implementing a robust security layer and role-based access 
 - [ ] UUID format with @db.Uuid
 - [ ] Error handling implemented
 - [ ] Docker tested successfully
+- [ ] Confirmation dialogs for destructive actions
 
 ## Key Reference Files
 
-| Purpose             | Location                          |
-| ------------------- | --------------------------------- |
-| Auth patterns       | `backend/auth-service/`           |
-| RBAC permissions    | `shared/constants/permissions.js` |
-| API response format | `shared/lib/response.js`          |
-| Error classes       | `shared/lib/errors.js`            |
-| Current PRD         | `docs/PRD_API_GATEWAY_RBAC.md`    |
+| Purpose               | Location                                   |
+| --------------------- | ------------------------------------------ |
+| Auth patterns         | `backend/auth-service/`                    |
+| RBAC permissions      | `shared/constants/permissions.js`          |
+| Outlet routes         | `backend/user-service/routes/outlets.js`   |
+| Outlet controller     | `backend/user-service/controllers/outletController.js` |
+| Outlet frontend       | `frontend/src/app/outlets/page.tsx`        |
+| Outlet API (RTK)      | `frontend/src/store/api/endpoints/outletApi.ts` |
+| API response format   | `shared/lib/response.js`                   |
+| Error classes         | `shared/lib/errors.js`                     |
 
 ## Next Steps
 
-1. Complete Phase 1 of API Gateway RBAC
-2. Finish License service integration
-3. Begin Shipment bulk operations
-4. Start Frontend Redux migration
+1. ~~Complete Outlet Module~~ ✅ DONE
+2. Build Outlet Portal pages (my-shipments, my-addresses)
+3. Finish License service integration
+4. Begin Shipment bulk operations
+5. Continue Frontend Redux migration
 
 ---
 
-**Sprint**: API Gateway Security  
+**Sprint**: Outlet Module + API Gateway Security  
 **Week**: Active Development  
 **Next Review**: Weekly

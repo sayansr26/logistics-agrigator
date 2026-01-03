@@ -76,6 +76,35 @@ wait_for_postgres() {
     return 1
 }
 
+# Function to check if migrations exist
+check_migrations_exist() {
+    local service=$1
+    
+    # Check if migrations directory has any migration folders (not just migration_lock.toml)
+    local migration_count=$(docker-compose exec -T $service sh -c 'ls -1 prisma/migrations/ 2>/dev/null | grep -v "migration_lock.toml" | wc -l' 2>/dev/null || echo "0")
+    
+    if [ "$migration_count" -gt 0 ]; then
+        return 0  # Migrations exist
+    else
+        return 1  # No migrations
+    fi
+}
+
+# Function to create initial migration
+create_initial_migration() {
+    local service=$1
+    
+    print_status "Creating initial migration for $service..."
+    
+    if docker-compose exec -T $service npx prisma migrate dev --name init --create-only > /dev/null 2>&1; then
+        print_success "✅ Initial migration created for $service"
+        return 0
+    else
+        print_warning "⚠️  Failed to create migration for $service (may not have schema.prisma)"
+        return 1
+    fi
+}
+
 # Function to deploy migrations for a service
 deploy_migrations() {
     local service=$1
@@ -84,11 +113,20 @@ deploy_migrations() {
     print_status "Deploying migrations for $service..."
 
     if docker-compose ps | grep -q "$service.*Up"; then
-        if docker-compose exec -T $service pnpm run migrate:deploy > /dev/null 2>&1; then
+        # Check if migrations exist, if not create them
+        if ! check_migrations_exist "$service"; then
+            print_warning "⚠️  No migrations found for $service, creating initial migration..."
+            if ! create_initial_migration "$service"; then
+                return 1
+            fi
+        fi
+        
+        # Deploy migrations
+        if docker-compose exec -T $service npx prisma migrate deploy > /dev/null 2>&1; then
             print_success "✅ Migrations deployed for $service"
             return 0
         else
-            print_warning "⚠️  Migration deployment failed for $service (service may not have migrations yet)"
+            print_warning "⚠️  Migration deployment failed for $service"
             return 1
         fi
     else
@@ -104,8 +142,12 @@ run_seeds() {
     print_status "Running seeds for $service..."
 
     if docker-compose ps | grep -q "$service.*Up"; then
+        # Try pnpm run db:seed first, then fallback to direct seed script execution
         if docker-compose exec -T $service pnpm run db:seed > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service"
+            return 0
+        elif docker-compose exec -T $service sh -c 'test -f prisma/seed.js && node prisma/seed.js' > /dev/null 2>&1; then
+            print_success "✅ Seeds executed for $service (direct execution)"
             return 0
         else
             print_warning "⚠️  Seed execution failed for $service (service may not have seed file)"

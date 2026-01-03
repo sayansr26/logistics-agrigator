@@ -191,6 +191,10 @@ const authUtils = {
    * @param {Object} req - Express request object with authenticated user
    * @param {Object} baseWhere - Base Prisma where clause
    * @param {Object} options - Options for filtering
+   * @param {string} options.userIdField - Field name for user ID (default: 'userId')
+   * @param {string} options.clientIdField - Field name for client ID (default: 'clientId')
+   * @param {string} options.createdByField - Field name for creator ID (optional)
+   * @param {string} options.parentClientIdField - Field name for parent client ID (optional)
    * @returns {Object} Modified where clause with scope filters applied
    */
   applyScopeFilter: (req, baseWhere = {}, options = {}) => {
@@ -203,6 +207,14 @@ const authUtils = {
     // Normalize user ID (some tokens use userId, some use id)
     const userId = user.id || user.userId;
 
+    // Extract field mappings from options with defaults
+    const {
+      userIdField = "userId",
+      clientIdField = "clientId",
+      createdByField = null,
+      parentClientIdField = null,
+    } = options;
+
     // Superadmin has access to all data
     if (user.role === "superadmin") {
       return baseWhere;
@@ -213,32 +225,72 @@ const authUtils = {
       return baseWhere;
     }
 
-    // Client role - access to all data within their client scope
-    if (user.role === "client") {
+    // Outlet role - access to own data only (strict isolation)
+    if (user.role === "outlet") {
       return {
         ...baseWhere,
-        OR: [
-          { clientId: userId },
-          { parentClientId: userId },
-          { createdBy: userId },
-        ],
+        [userIdField]: userId,
+      };
+    }
+
+    // Client role - access to all data within their client scope
+    if (user.role === "client") {
+      const orConditions = [];
+
+      // User's own client data
+      if (user.clientId) {
+        orConditions.push({ [clientIdField]: user.clientId });
+      }
+
+      // Parent client relationship (if field exists)
+      if (parentClientIdField && user.clientId) {
+        orConditions.push({ [parentClientIdField]: user.clientId });
+      }
+
+      // Created by user (if field exists)
+      if (createdByField) {
+        orConditions.push({ [createdByField]: userId });
+      }
+
+      // Fallback: user's own data
+      if (orConditions.length === 0) {
+        orConditions.push({ [userIdField]: userId });
+      }
+
+      return {
+        ...baseWhere,
+        OR: orConditions,
       };
     }
 
     // Client sub-users (accounts, sales, support) - access based on accessLevel
     if (["accounts", "sales", "support"].includes(user.role)) {
       if (user.accessLevel === "FULL") {
+        const orConditions = [];
+
+        // Parent client's data
+        if (user.parentClientId) {
+          orConditions.push({ [clientIdField]: user.parentClientId });
+        }
+
+        // Parent client relationship (if field exists)
+        if (parentClientIdField && user.parentClientId) {
+          orConditions.push({ [parentClientIdField]: user.parentClientId });
+        }
+
+        // Fallback: own data
+        if (orConditions.length === 0) {
+          orConditions.push({ [userIdField]: userId });
+        }
+
         return {
           ...baseWhere,
-          OR: [
-            { clientId: user.parentClientId },
-            { parentClientId: user.parentClientId },
-          ],
+          OR: orConditions,
         };
       } else if (user.accessLevel === "RESTRICTED" && user.assignedIds) {
         return {
           ...baseWhere,
-          OR: [{ id: { in: user.assignedIds } }, { userId: userId }],
+          OR: [{ id: { in: user.assignedIds } }, { [userIdField]: userId }],
         };
       }
     }
@@ -252,9 +304,14 @@ const authUtils = {
     }
 
     // Default: own data only
+    const orConditions = [{ [userIdField]: userId }];
+    if (createdByField) {
+      orConditions.push({ [createdByField]: userId });
+    }
+
     return {
       ...baseWhere,
-      OR: [{ userId: userId }, { createdBy: userId }],
+      OR: orConditions,
     };
   },
 };

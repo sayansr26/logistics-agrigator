@@ -143,6 +143,7 @@ enum Role {
   accounts
   sales
   support
+  outlet
   affiliate
 }
 

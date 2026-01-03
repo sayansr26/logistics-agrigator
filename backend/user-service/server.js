@@ -27,6 +27,7 @@ const APIResponse = require("./shared/lib/response");
 // Import routes
 const userRoutes = require("./routes/users");
 const clientRoutes = require("./routes/clients");
+const outletRoutes = require("./routes/outlets");
 const internalRoutes = require("./routes/internal");
 const dashboardRoutes = require("./routes/dashboard");
 const affiliateRoutes = require("./routes/affiliate");
@@ -584,6 +585,7 @@ app.get("/api/test/pagination", validatePaginationQuery, (req, res) => {
 // API Routes
 app.use("/api", userRoutes);
 app.use("/api", clientRoutes);
+app.use("/api", outletRoutes);
 app.use("/api/v1/internal", internalRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);

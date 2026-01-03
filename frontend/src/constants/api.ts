@@ -24,6 +24,17 @@ export const API_ENDPOINTS = {
     PROFILE: "/api/v1/users/profiles",
     SETTINGS: "/api/v1/users/settings",
   },
+  OUTLETS: {
+    BASE: "/api/v1/outlets",
+    CREATE: "/api/v1/outlets",
+    LIST: "/api/v1/outlets",
+    ME: "/api/v1/outlets/me",
+    GET_BY_ID: "/api/v1/outlets",
+    UPDATE: "/api/v1/outlets",
+    ADDRESSES: "/api/v1/outlets/me/addresses",
+    MY_ADDRESSES: "/api/v1/outlets/me/addresses",
+    OUTLET_ADDRESSES: "/api/v1/outlets",
+  },
   CLIENTS: {
     BASE: "/api/v1/clients",
     CREATE: "/api/v1/clients",

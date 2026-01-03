@@ -421,7 +421,7 @@ router.post(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "cancel", "assigned"),
+  authMiddleware.requirePermission("shipment", "delete", "own"),
   cancelShipment,
 );
 

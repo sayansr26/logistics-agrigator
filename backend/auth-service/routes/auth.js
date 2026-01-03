@@ -23,6 +23,7 @@ const listUsersSchema = Joi.object({
       "accounts",
       "sales",
       "support",
+      "outlet",
       "affiliate",
     )
     .optional(),
@@ -603,7 +604,7 @@ router.get(
  *         name: role
  *         schema:
  *           type: string
- *           enum: [superadmin, admin, client, accounts, sales, support, affiliate]
+ *           enum: [superadmin, admin, client, accounts, sales, support, outlet, affiliate]
  *         description: Filter by role
  *       - in: query
  *         name: isActive
@@ -929,7 +930,7 @@ router.get(
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [superadmin, admin, client, accounts, sales, support, affiliate]
+ *                 enum: [superadmin, admin, client, accounts, sales, support, outlet, affiliate]
  *               clientId:
  *                 type: string
  *                 format: uuid
@@ -1186,7 +1187,7 @@ router.delete(
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [superadmin, admin, client, accounts, sales, support, affiliate]
+ *                 enum: [superadmin, admin, client, accounts, sales, support, outlet, affiliate]
  *               isActive:
  *                 type: boolean
  *                 default: true

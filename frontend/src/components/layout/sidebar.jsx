@@ -23,6 +23,8 @@ import {
   IndianRupee,
   Briefcase,
   Map,
+  MapPin,
+  Store,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -34,15 +36,19 @@ const getNavigationSections = () => {
 
   // Filter function to check if user can see menu item
   const canSeeMenuItem = (item) => {
+    // If roles are specified, check roles FIRST (strict role requirement)
+    // This ensures outlet-only items don't show for superadmin
+    if (item.roles && item.roles.length > 0) {
+      const roleMatch = hasRole(item.roles);
+      if (!roleMatch) {
+        return false;
+      }
+    }
+
     // Check permission if specified
     if (item.permission) {
       const [module, action, scope] = item.permission.split(":");
       return canAccessResource(module, action, scope || "own");
-    }
-
-    // Check roles if specified
-    if (item.roles) {
-      return hasRole(item.roles);
     }
 
     // Default to true if no restrictions
@@ -69,6 +75,27 @@ const getNavigationSections = () => {
         //   permission: "shipment:list:own",
         //   disabled: false,
         // },
+      ].filter(canSeeMenuItem),
+    },
+    {
+      title: "Outlet Portal",
+      items: [
+        {
+          title: "My Shipments",
+          href: "/shipments",
+          icon: Package,
+          permission: "shipment:list:own",
+          roles: ["outlet"],
+          disabled: false,
+        },
+        {
+          title: "My Addresses",
+          href: "/addresses",
+          icon: MapPin,
+          permission: "user:read:own",
+          roles: ["outlet"],
+          disabled: false,
+        },
       ].filter(canSeeMenuItem),
     },
     {
@@ -131,6 +158,14 @@ const getNavigationSections = () => {
           permission: "user:list:all",
           roles: ["superadmin", "admin"],
           disabled: false, // Working and completed
+        },
+        {
+          title: "Outlet Management",
+          href: "/outlets",
+          icon: Store,
+          permission: "user:read:parent",
+          roles: ["superadmin", "admin", "client"],
+          disabled: false, // Outlet management implemented
         },
         {
           title: "Geography",

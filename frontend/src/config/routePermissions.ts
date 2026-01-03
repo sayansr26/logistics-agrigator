@@ -189,7 +189,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/shipments/create",
     public: false,
-    roles: ["superadmin", "admin", "client", "sales"],
+    roles: ["superadmin", "admin", "client", "sales", "outlet"],
     permission: "shipment:create:*",
     title: "Create Shipment",
     description: "Create new shipment",
@@ -237,6 +237,58 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     permission: "shipment:list:*",
     title: "Shipments",
     description: "Manage shipments",
+  },
+
+  // ==================== OUTLET ADDRESS MANAGEMENT ====================
+  {
+    path: "/addresses/create",
+    public: false,
+    roles: ["outlet"],
+    permission: "user:create:own",
+    title: "Add Address",
+    description: "Add new address",
+  },
+  {
+    path: "/addresses/:id/edit",
+    public: false,
+    roles: ["outlet"],
+    permission: "user:update:own",
+    title: "Edit Address",
+    description: "Edit address details",
+  },
+  {
+    path: "/addresses",
+    public: false,
+    roles: ["outlet"],
+    permission: "user:read:own",
+    title: "My Addresses",
+    description: "Manage outlet addresses",
+  },
+
+  // ==================== OUTLET MANAGEMENT (CLIENT/ADMIN) ====================
+  {
+    path: "/outlets/create",
+    public: false,
+    roles: ["superadmin", "admin", "client"],
+    permission: "user:create:parent",
+    title: "Create Outlet",
+    description: "Create new outlet user",
+  },
+  {
+    path: "/outlets/:id",
+    public: false,
+    roles: ["superadmin", "admin", "client"],
+    permission: "user:read:parent",
+    title: "Outlet Details",
+    description: "View outlet details",
+  },
+  {
+    path: "/outlets",
+    public: false,
+    roles: ["superadmin", "admin", "client"],
+    permission: "user:read:parent",
+    title: "Outlets",
+    description: "Manage outlets",
   },
 
   // ==================== PARTNER MANAGEMENT ====================

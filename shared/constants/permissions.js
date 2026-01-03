@@ -15,7 +15,7 @@
  */
 
 /**
- * System Roles (7-Role RBAC System)
+ * System Roles (8-Role RBAC System)
  * Defines all available roles in the platform
  */
 const ROLES = {
@@ -28,6 +28,9 @@ const ROLES = {
   ACCOUNTS: "accounts", // Finance team
   SALES: "sales", // Sales team
   SUPPORT: "support", // Support team
+
+  // Customer/Outlet Level
+  OUTLET: "outlet", // Outlet/customer portal user
 
   // Partner Level
   AFFILIATE: "affiliate", // Commission partner
@@ -132,6 +135,17 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "shipment:read:assigned",
     "shipment:update:assigned",
     "analytics:read:assigned",
+  ],
+
+  outlet: [
+    // Outlet/customer portal user
+    "shipment:create:own",
+    "shipment:read:own",
+    "shipment:update:own",
+    "shipment:delete:own",
+    "shipment:list:own",
+    "user:read:own",
+    "user:update:own",
   ],
 
   affiliate: [

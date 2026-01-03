@@ -296,6 +296,12 @@ const services = {
       "^/api/v1/users": "/auth/users", // API endpoints → /auth/users/* (auth-service manages users table)
     },
   },
+  outlets: {
+    target: process.env.USER_SERVICE_URL || "http://user-service:3003",
+    pathRewrite: {
+      "^/api/v1/outlets": "/api/outlets", // Outlet endpoints → /api/outlets/* (user-service outlet management)
+    },
+  },
   shipments: {
     target: process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
     pathRewrite: {

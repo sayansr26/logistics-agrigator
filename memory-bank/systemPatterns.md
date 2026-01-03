@@ -193,7 +193,7 @@ await prisma.auditLog.create({
                 └─────────────────────────────────┘
 ```
 
-### 7. 11-Role RBAC System
+### 7. 12-Role RBAC System
 
 **Role Hierarchy:**
 
@@ -203,7 +203,8 @@ superadmin (all permissions)
 ├── client (license holder)
 │   ├── accounts (finance team)
 │   ├── sales (sales team)
-│   └── support (support team)
+│   ├── support (support team)
+│   └── outlet (customer portal user) ← NEW
 ├── customer (end user)
 │   ├── customer_account
 │   ├── customer_sales
@@ -217,7 +218,24 @@ superadmin (all permissions)
 "shipment:create:own"; // Own shipments only
 "customer:read:assigned"; // Assigned customers
 "wallet:manage:all"; // All in tenant
+"user:address:manage:own"; // Own addresses (outlet)
 "*:*:*"; // Superadmin only
+```
+
+**Outlet Role Permissions:**
+```javascript
+outlet: [
+  "shipment:create:own",
+  "shipment:read:own",
+  "shipment:update:own",
+  "shipment:cancel:own",
+  "user:address:create:own",
+  "user:address:read:own",
+  "user:address:update:own",
+  "user:address:delete:own",
+  "user:profile:read:own",
+  "user:profile:update:own",
+]
 ```
 
 ### 8. Prisma Schema Pattern
@@ -304,6 +322,84 @@ app.use((error, req, res, next) => {
 });
 ```
 
+### 11. Outlet Module Pattern (NEW)
+
+**Database Schema (user-service):**
+
+```prisma
+model Outlet {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @unique @db.Uuid  // Auth user reference
+  createdByUserId String          @db.Uuid
+  clientId        String?         @db.Uuid  // Optional client linkage
+  name            String
+  email           String          @unique
+  phone           String          @unique
+  companyName     String?
+  category        String?
+  tanPan          String?
+  gst             String?
+  companyAddress  Json?
+  isActive        Boolean         @default(true)
+  addresses       OutletAddress[]
+  @@map("outlets")
+}
+
+model OutletAddress {
+  id              String   @id @default(uuid()) @db.Uuid
+  outletId        String   @db.Uuid
+  label           String   // "Main Office", "Warehouse"
+  addressType     String   @default("HOME")  // HOME, WORK, OTHER
+  name            String   // Contact name
+  phone           String
+  addressLine1    String
+  city            String
+  state           String
+  pincode         String
+  isDefaultPickup Boolean  @default(false)  // Single default
+  @@map("outlet_addresses")
+}
+```
+
+**API Routes:**
+
+| Method | Endpoint                              | Description              |
+| ------ | ------------------------------------- | ------------------------ |
+| POST   | /api/outlets                          | Create outlet            |
+| GET    | /api/outlets                          | List outlets             |
+| GET    | /api/outlets/:id                      | Get outlet by ID         |
+| PUT    | /api/outlets/:id                      | Update outlet            |
+| DELETE | /api/outlets/:id                      | Delete (soft) outlet     |
+| PATCH  | /api/outlets/:id/status               | Toggle active status     |
+| POST   | /api/outlets/:id/reset-password       | Reset password           |
+| GET    | /api/outlets/:id/addresses            | Get outlet addresses     |
+| POST   | /api/outlets/:id/addresses            | Create address           |
+| PUT    | /api/outlets/:id/addresses/:addressId | Update address           |
+| DELETE | /api/outlets/:id/addresses/:addressId | Delete address           |
+
+**Geo-Autocomplete Pattern:**
+
+```typescript
+// Frontend hooks usage
+const { data: statesData } = useGetStatesQuery();
+const { data: citiesData } = useGetCitiesQuery({ stateId }, { skip: !stateId });
+const { data: pincodeDetails } = useGetPincodeDetailsQuery(pincode, {
+  skip: pincode.length !== 6,
+});
+
+// Auto-fill on pincode entry
+useEffect(() => {
+  if (pincodeDetails?.data) {
+    const { hierarchy } = pincodeDetails.data;
+    setFormData((prev) => ({
+      ...prev,
+      state: hierarchy?.state?.name,
+      city: hierarchy?.city?.name,
+    }));
+  }
+}, [pincodeDetails]);
+```
+
 ## Component Relationships
 
 ### Inter-Service Communication
@@ -343,4 +439,5 @@ Redis Cache Structure:
 ---
 
 **Architecture Status**: Stable  
-**Last Pattern Review**: December 2024
+**Last Pattern Review**: January 2026  
+**Recent Addition**: Outlet Module Pattern
