@@ -1,61 +1,42 @@
 import { baseApi } from "../baseApi";
 
 // Types for Pincode Types
-export interface PartnerInfo {
-  id: string;
-  name: string;
-  displayName: string;
-}
-
 export interface PincodeType {
   id: string; // UUID
-  partnerId: string; // Partner ID (CUID format)
   name: string; // e.g., "Metro", "ODA", "Hill"
-  charge: string; // Decimal as string (e.g., "25.00")
   description?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  partner?: PartnerInfo;
+  assignedPincodeCount?: number;
 }
 
-export interface PincodeTypeWithStats extends PincodeType {
-  assignedPincodeCount?: number;
-  _count?: {
-    assignments: number;
-  };
-}
+export interface PincodeTypeWithStats extends PincodeType {}
 
 export interface GetPincodeTypesParams {
   page?: number;
   limit?: number;
   search?: string;
   isActive?: boolean;
-  partnerId?: string; // Filter by partner
 }
 
-// Create input requires partnerIds and pincodeCodes
+// Create input requires pincodeCodes
 export interface CreatePincodeTypeInput {
   name: string;
-  charge: string;
   description?: string;
   isActive?: boolean;
-  partnerIds: string[]; // Required: at least one partner
   pincodeCodes: string[]; // Required: at least one pincode
 }
 
-// Create response structure (multiple types created per partner)
+// Create response structure
 export interface CreatePincodeTypeResult {
-  createdTypes: Array<{
-    id: string;
-    partnerId: string;
-    partnerName: string;
-    name: string;
-    charge: string;
-    assignedCount: number;
-  }>;
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  assignedCount: number;
   summary: {
-    totalTypesCreated: number;
     totalPincodesRequested: number;
     validPincodes: number;
     missingPincodes: string[];
@@ -64,7 +45,6 @@ export interface CreatePincodeTypeResult {
 
 export interface UpdatePincodeTypeInput {
   name?: string;
-  charge?: string;
   description?: string;
   isActive?: boolean;
 }

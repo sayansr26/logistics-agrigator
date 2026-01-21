@@ -10,6 +10,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ========================================
+// PARTNER CHANNEL MANAGEMENT
+// ========================================
+
+enum ChannelMode {
+  SINGLE
+  MULTI
+}
+
 model Partner {
   id          String  @id @default(cuid())
   name        String  @unique
@@ -17,7 +26,10 @@ model Partner {
   displayName String // e.g., "Delhivery", "Blue Dart"
   isActive    Boolean @default(true)
 
-  // API Configuration
+  // Channel Mode (Single/Multi API endpoints)
+  channelMode ChannelMode @default(SINGLE) @map("channel_mode")
+
+  // API Configuration (kept for backward compatibility)
   apiUrl     String
   apiToken   String?
   apiVersion String?
@@ -46,14 +58,39 @@ model Partner {
   updatedAt DateTime @updatedAt
 
   // Relations
-  shipments           PartnerShipment[]
-  rates               PartnerRate[]
-  serviceabilityCache ServiceabilityCache[]
-  chargePackages      ChargePackage[]
-  pincodeTypes        PincodeType[]
+  shipments                 PartnerShipment[]
+  rates                     PartnerRate[]
+  serviceabilityCache       ServiceabilityCache[]
+  chargePackages            ChargePackage[]
+  pincodeTypeServiceCharges PincodeTypeServiceCharge[]
+  channelConfigs            PartnerChannelConfig[]
 
   @@index([isActive])
   @@map("partners")
+}
+
+model PartnerChannelConfig {
+  id        String  @id @default(uuid()) @db.Uuid
+  partnerId String  @map("partner_id") // CUID to match Partner.id type
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Channel Configuration
+  channelName String @map("channel_name") @db.VarChar(100) // e.g., "production", "staging"
+  apiUrl      String @map("api_url") @db.VarChar(500)
+  apiKey      String @map("api_key") @db.VarChar(500)
+
+  // Channel Settings
+  isActive  Boolean @default(true) @map("is_active")
+  isPrimary Boolean @default(false) @map("is_primary")
+  priority  Int     @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([partnerId, channelName])
+  @@index([partnerId, isActive])
+  @@index([partnerId, isPrimary])
+  @@map("partner_channel_configs")
 }
 
 model PartnerRate {
@@ -401,26 +438,21 @@ model ZoneMilestone {
 }
 
 // ========================================
-// PINCODE TYPE MANAGEMENT (Partner-specific)
+// PINCODE TYPE MANAGEMENT
 // ========================================
 
 model PincodeType {
   id          String   @id @default(uuid()) @db.Uuid
-  partnerId   String   @map("partner_id") // Reference to Partner model (CUID format)
-  name        String   @db.VarChar(50)
-  charge      Decimal  @db.Decimal(10, 2)
+  name        String   @unique @db.VarChar(50)
   description String?  @db.VarChar(255)
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  partner     Partner                 @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  assignments PincodeTypeAssignment[]
+  assignments    PincodeTypeAssignment[]
+  serviceCharges PincodeTypeServiceCharge[]
 
-  @@unique([partnerId, name])
-  @@index([partnerId, isActive])
-  @@index([partnerId, name])
   @@index([isActive])
   @@map("pincode_types")
 }
@@ -440,6 +472,30 @@ model PincodeTypeAssignment {
   @@index([pincodeId])
   @@index([typeId])
   @@map("pincode_type_assignments")
+}
+
+// ========================================
+// PINCODE TYPE SERVICE CHARGE MANAGEMENT
+// ========================================
+
+model PincodeTypeServiceCharge {
+  id            String   @id @default(uuid()) @db.Uuid
+  pincodeTypeId String   @map("pincode_type_id") @db.Uuid
+  partnerId     String   @map("partner_id")
+  baseCharge    Decimal  @map("base_charge") @db.Decimal(10, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  pincodeType PincodeType @relation(fields: [pincodeTypeId], references: [id], onDelete: Cascade)
+  partner     Partner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([pincodeTypeId, partnerId])
+  @@index([pincodeTypeId])
+  @@index([partnerId])
+  @@index([isActive])
+  @@map("pincode_type_service_charges")
 }
 
 // ========================================

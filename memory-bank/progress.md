@@ -50,6 +50,25 @@ Overall Project Progress          [███████████████
 - ✅ Zone mapping
 - ✅ Partner configuration
 - ✅ HMAC authentication
+- ✅ **Partner Channel Management** (NEW - January 15, 2026)
+  - ✅ Single/Multi-channel API configuration support
+  - ✅ Channel mode toggle (SINGLE/MULTI)
+  - ✅ Multiple API endpoints per partner with priority
+  - ✅ Channel CRUD operations (create, update, delete)
+  - ✅ Active channel retrieval for API calls
+  - ✅ Channel mode switching with migration
+  - ✅ Audit logging for all channel operations
+  - ✅ Frontend: Channel mode toggle in partner creation
+  - ✅ Frontend: Dynamic multi-channel form
+  - ✅ Frontend: RTK Query API endpoints
+- ✅ **Pincode Type Service Charges** (NEW - January 2026)
+  - ✅ Many-to-many relationship between pincode types and partners
+  - ✅ Service charge CRUD operations
+  - ✅ Bulk charge creation (multiple types × multiple partners)
+  - ✅ Frontend management page at `/pincode-type-service-charges`
+  - ✅ Multi-select dialogs for pincode types and partners
+  - ✅ Edit functionality with type/partner/charge/status updates
+  - ✅ Statistics dashboard (total, active, inactive, total value)
 
 #### Wallet Service (100% Complete)
 
@@ -192,6 +211,30 @@ Overall Project Progress          [███████████████
 
 ### Completed This Month (January 2026)
 
+- ✅ **Pincode Type Service Charges Module** (NEW - January 15, 2026)
+  - Backend: `PincodeTypeServiceCharge` Prisma model (many-to-many with PincodeType & Partner)
+  - Backend: Validation schemas, controller, service layer, routes
+  - Backend: 7 API endpoints (list, get by ID, create, update, delete, by type, by partner)
+  - Backend: Bulk creation support (multiple pincode types × multiple partners)
+  - Backend: Redis caching with 1-hour TTL
+  - Backend: Complete audit logging
+  - API Gateway: Proxy configuration for `/api/v1/pincode-type-service-charges`
+  - Frontend: RTK Query API endpoints with proper TypeScript types
+  - Frontend: Management page at `/pincode-type-service-charges`
+  - Frontend: Statistics cards (total, active, inactive, total value)
+  - Frontend: Create dialog with multi-select for pincode types and partners
+  - Frontend: Edit dialog with pincode type/partner/charge/status updates
+  - Frontend: Delete confirmation dialogs
+  - Frontend: Search and filter functionality
+  - Frontend: Sidebar navigation link added
+
+- ✅ **Pincode Types Edit Wizard Fix**
+  - Backend: Added area and city hierarchy to `getPincodesByType` API
+  - Backend: Updated Prisma query to include `area` and `area.city` relationships
+  - Frontend: Fixed edit wizard to show pre-selected states, cities, areas
+  - Frontend: Removed unnecessary geo API call (use data directly from `getPincodesByType`)
+  - Frontend: Added `isInitialized` state tracking to prevent race conditions
+
 - ✅ Outlet model and schema in user-service
 - ✅ OutletAddress model with HOME/WORK/OTHER types
 - ✅ New `outlet` role in RBAC system
@@ -204,24 +247,87 @@ Overall Project Progress          [███████████████
 
 ### Open Issues
 
-| ID  | Service     | Issue                      | Priority | Status      |
-| --- | ----------- | -------------------------- | -------- | ----------- |
-| #1  | Shipment    | Bulk operations pending    | P1       | Planned     |
-| #2  | Frontend    | Complete outlet portal     | P1       | Next Sprint |
-| #3  | License     | Integration incomplete     | P1       | In Progress |
+| ID  | Service  | Issue                   | Priority | Status      |
+| --- | -------- | ----------------------- | -------- | ----------- |
+| #1  | Shipment | Bulk operations pending | P1       | Planned     |
+| #2  | Frontend | Complete outlet portal  | P1       | Next Sprint |
+| #3  | License  | Integration incomplete  | P1       | In Progress |
 
 ### Recently Fixed
 
-| ID  | Service       | Issue                         | Fixed Date |
-| --- | ------------- | ----------------------------- | ---------- |
-| #4  | User Service  | Outlet module implementation  | Jan 2026   |
-| #5  | API Gateway   | Outlet routes added           | Jan 2026   |
-| #6  | Frontend      | Outlet management UI          | Jan 2026   |
-| #7  | Auth          | Outlet role in RBAC           | Jan 2026   |
+| ID  | Service      | Issue                        | Fixed Date |
+| --- | ------------ | ---------------------------- | ---------- |
+| #4  | User Service | Outlet module implementation | Jan 2026   |
+| #5  | API Gateway  | Outlet routes added          | Jan 2026   |
+| #6  | Frontend     | Outlet management UI         | Jan 2026   |
+| #7  | Auth         | Outlet role in RBAC          | Jan 2026   |
 
 ## Changelog
 
 ### January 2026
+
+```
+[2026-01-15] Partner Channel Management Module - COMPLETE
+  Backend:
+  - Added ChannelMode enum (SINGLE/MULTI) to Prisma schema
+  - Created PartnerChannelConfig model with UUID format
+  - Created validation schemas (partnerChannelSchemas.js)
+  - Created service layer with 6 methods:
+    - getActiveChannel() - Get active channel for API calls
+    - listChannels() - List all channels for a partner
+    - createChannels() - Create multiple channels
+    - updateChannel() - Update channel configuration
+    - deleteChannel() - Delete a channel
+    - switchChannelMode() - Switch between SINGLE/MULTI modes
+  - Created controller with proper error handling
+  - Created routes with RBAC (Admin + Operations)
+  - Updated partner-service server.js to register routes
+  - Complete audit logging for all operations
+
+  Frontend:
+  - Created RTK Query API endpoints (partnerChannelApi.ts)
+  - Updated partner creation form with channel mode toggle
+  - Added dynamic multi-channel form with add/remove
+  - Added channel validation logic
+  - Added review step for channel configuration
+  - Updated baseApi.ts with PartnerChannel tag type
+
+  Infrastructure:
+  - Ran database migration via prisma db push
+  - Generated Prisma client successfully
+  - Restarted partner-service container
+  - Built frontend successfully
+  - Restarted frontend container
+
+[2026-01-15] Pincode Type Service Charges Module - COMPLETE
+  Backend:
+  - Added PincodeTypeServiceCharge model (UUID-based, many-to-many)
+  - Created validation schemas (pincodeTypeServiceChargeSchemas.js)
+  - Created controller with 7 endpoints (CRUD + filtered queries)
+  - Created service layer with Redis caching and transactions
+  - Created routes file with auth middleware
+  - Updated partner-service server.js to register routes
+  - Updated API Gateway proxy configuration
+  - Created shared DTO (pincodeTypeServiceChargeDto.js)
+
+  Frontend:
+  - Created RTK Query API endpoints (pincodeTypeServiceChargeApi.ts)
+  - Created management page at /pincode-type-service-charges
+  - Implemented statistics dashboard
+  - Multi-select create dialog for types and partners
+  - Edit dialog with type/partner/charge/status updates
+  - Delete confirmation dialogs
+  - Search and filter functionality
+  - Added sidebar navigation link
+  - Fixed partner data access (partnersData.data.partners)
+
+  Infrastructure:
+  - Ran database migration via prisma db push
+  - Generated Prisma client
+  - Restarted partner-service and api-gateway containers
+  - Built frontend successfully
+  - Restarted frontend container
+```
 
 ```
 [2026-01-03] Outlet module fully implemented
@@ -287,6 +393,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: January 3, 2026  
-**Next Update**: Weekly or after major changes  
+**Last Updated**: January 15, 2026
+**Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

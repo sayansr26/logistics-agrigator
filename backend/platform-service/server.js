@@ -184,6 +184,10 @@ app.get("/api/integrations", (req, res) => {
   res.json({ message: "Platform Service - User integrations endpoint ready" });
 });
 
+// Admin logs routes
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
+
 // 404 handler
 app.use("*", (req, res) => {
   res.status(404).json({

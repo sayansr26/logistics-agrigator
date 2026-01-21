@@ -31,6 +31,8 @@ import {
   Save,
   Code,
   TrendingUp,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { useCreatePartnerMutation } from "@/store/api/endpoints/partnersApi";
 import { usePermission } from "@/hooks/usePermission";
@@ -46,7 +48,7 @@ const STEPS = [
     id: 2,
     title: "API Configuration",
     icon: Globe,
-    description: "Integration settings",
+    description: "Integration settings (optional)",
   },
   {
     id: 3,
@@ -56,6 +58,15 @@ const STEPS = [
   },
 ];
 
+interface ChannelConfig {
+  channelName: string;
+  apiUrl: string;
+  apiKey: string;
+  isActive: boolean;
+  isPrimary: boolean;
+  priority: number;
+}
+
 interface PartnerFormData {
   // Basic Info
   name: string;
@@ -64,9 +75,11 @@ interface PartnerFormData {
   isActive: boolean;
 
   // API Config
+  channelMode: "SINGLE" | "MULTI";
   apiUrl: string;
   apiToken: string;
   apiVersion: string;
+  channelConfigs: ChannelConfig[];
 }
 
 export default function AddPartnerPage() {
@@ -83,9 +96,11 @@ export default function AddPartnerPage() {
     displayName: "",
     code: "",
     isActive: true,
+    channelMode: "SINGLE",
     apiUrl: "",
     apiToken: "",
     apiVersion: "",
+    channelConfigs: [],
   });
 
   const customBreadcrumbs = [
@@ -112,6 +127,51 @@ export default function AddPartnerPage() {
     }
   };
 
+  // Channel management handlers
+  const addChannel = () => {
+    setFormData((prev) => ({
+      ...prev,
+      channelConfigs: [
+        ...prev.channelConfigs,
+        {
+          channelName: `channel-${prev.channelConfigs.length + 1}`,
+          apiUrl: "",
+          apiKey: "",
+          isActive: true,
+          isPrimary: prev.channelConfigs.length === 0,
+          priority: prev.channelConfigs.length + 1,
+        },
+      ],
+    }));
+  };
+
+  const removeChannel = (index: number) => {
+    setFormData((prev) => {
+      const newConfigs = prev.channelConfigs.filter((_, i) => i !== index);
+      // If we removed the primary channel, make the first remaining channel primary
+      if (prev.channelConfigs[index]?.isPrimary && newConfigs.length > 0) {
+        newConfigs[0].isPrimary = true;
+      }
+      return { ...prev, channelConfigs: newConfigs };
+    });
+  };
+
+  const updateChannel = (index: number, field: string, value: any) => {
+    setFormData((prev) => {
+      const newConfigs = [...prev.channelConfigs];
+      newConfigs[index] = { ...newConfigs[index], [field]: value };
+
+      // If setting isPrimary to true, set all others to false
+      if (field === "isPrimary" && value === true) {
+        newConfigs.forEach((c, i) => {
+          if (i !== index) c.isPrimary = false;
+        });
+      }
+
+      return { ...prev, channelConfigs: newConfigs };
+    });
+  };
+
   // Validate current step
   const validateStep = () => {
     const newErrors: Record<string, string> = {};
@@ -124,7 +184,24 @@ export default function AddPartnerPage() {
         if (!formData.code) newErrors.code = "Partner code is required";
         break;
       case 2:
-        if (!formData.apiUrl) newErrors.apiUrl = "API URL is required";
+        // For SINGLE mode, validate apiUrl
+        // For MULTI mode, validate channelConfigs
+        if (formData.channelMode === "SINGLE") {
+          if (!formData.apiUrl) newErrors.apiUrl = "API URL is required";
+        } else {
+          if (formData.channelConfigs.length === 0) {
+            newErrors.channelConfigs = "At least one channel is required";
+          } else {
+            formData.channelConfigs.forEach((channel, index) => {
+              if (!channel.channelName) {
+                newErrors[`channelName-${index}`] = "Channel name is required";
+              }
+              if (!channel.apiUrl) {
+                newErrors[`channelUrl-${index}`] = "API URL is required";
+              }
+            });
+          }
+        }
         break;
     }
 
@@ -154,15 +231,29 @@ export default function AddPartnerPage() {
   // Handle form submission
   const handleSubmit = async () => {
     try {
-      const payload = {
+      const payload: any = {
         name: formData.name,
         displayName: formData.displayName,
         code: formData.code,
         isActive: formData.isActive,
-        apiUrl: formData.apiUrl,
-        apiToken: formData.apiToken || undefined,
-        apiVersion: formData.apiVersion || undefined,
+        channelMode: formData.channelMode,
       };
+
+      // Add channel-specific data
+      if (formData.channelMode === "SINGLE") {
+        payload.apiUrl = formData.apiUrl;
+        payload.apiToken = formData.apiToken || undefined;
+        payload.apiVersion = formData.apiVersion || undefined;
+      } else {
+        payload.channelConfigs = formData.channelConfigs.map((c) => ({
+          channelName: c.channelName,
+          apiUrl: c.apiUrl,
+          apiKey: c.apiKey || undefined,
+          isActive: c.isActive,
+          isPrimary: c.isPrimary,
+          priority: c.priority,
+        }));
+      }
 
       await createPartner(payload).unwrap();
       router.push("/partners?success=partner-created");
@@ -425,67 +516,228 @@ export default function AddPartnerPage() {
                 <span>API Configuration</span>
               </CardTitle>
               <CardDescription>
-                Integration endpoint and authentication settings
+                Integration endpoint and authentication settings (optional)
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="apiUrl">API Endpoint URL *</Label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="apiUrl"
-                    type="url"
-                    value={formData.apiUrl}
-                    onChange={(e) =>
-                      handleInputChange("apiUrl", e.target.value)
-                    }
-                    placeholder="https://api.partner.com"
-                    className={`pl-10 ${errors.apiUrl ? "border-red-500" : ""}`}
-                  />
-                </div>
-                {errors.apiUrl && (
-                  <p className="text-sm text-red-500 flex items-center space-x-1">
-                    <AlertCircle className="h-3 w-3" />
-                    <span>{errors.apiUrl}</span>
+            <CardContent className="space-y-6">
+              {/* Channel Mode Toggle */}
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                <div>
+                  <h3 className="font-medium">Channel Mode</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {formData.channelMode === "SINGLE"
+                      ? "Single API endpoint configuration"
+                      : "Multiple API endpoints with load balancing"}
                   </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="apiToken">API Token/Key (Optional)</Label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="apiToken"
-                      type="password"
-                      value={formData.apiToken}
-                      onChange={(e) =>
-                        handleInputChange("apiToken", e.target.value)
-                      }
-                      placeholder="Enter API authentication token"
-                      className="pl-10"
-                    />
-                  </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="apiVersion">API Version (Optional)</Label>
-                  <div className="relative">
-                    <Settings className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="apiVersion"
-                      value={formData.apiVersion}
-                      onChange={(e) =>
-                        handleInputChange("apiVersion", e.target.value)
-                      }
-                      placeholder="e.g., v2.0"
-                      className="pl-10"
-                    />
-                  </div>
+                <div className="flex items-center space-x-2 bg-background p-1 rounded-lg border">
+                  <Button
+                    variant={
+                      formData.channelMode === "SINGLE" ? "default" : "ghost"
+                    }
+                    size="sm"
+                    onClick={() => handleInputChange("channelMode", "SINGLE")}
+                  >
+                    Single
+                  </Button>
+                  <Button
+                    variant={
+                      formData.channelMode === "MULTI" ? "default" : "ghost"
+                    }
+                    size="sm"
+                    onClick={() => handleInputChange("channelMode", "MULTI")}
+                  >
+                    Multi
+                  </Button>
                 </div>
               </div>
+
+              {/* Single Channel Form */}
+              {formData.channelMode === "SINGLE" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="apiUrl">API Endpoint URL *</Label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="apiUrl"
+                        type="url"
+                        value={formData.apiUrl}
+                        onChange={(e) =>
+                          handleInputChange("apiUrl", e.target.value)
+                        }
+                        placeholder="https://api.partner.com"
+                        className={`pl-10 ${errors.apiUrl ? "border-red-500" : ""}`}
+                      />
+                    </div>
+                    {errors.apiUrl && (
+                      <p className="text-sm text-red-500 flex items-center space-x-1">
+                        <AlertCircle className="h-3 w-3" />
+                        <span>{errors.apiUrl}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="apiToken">API Key (Optional)</Label>
+                      <div className="relative">
+                        <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="apiToken"
+                          type="password"
+                          value={formData.apiToken}
+                          onChange={(e) =>
+                            handleInputChange("apiToken", e.target.value)
+                          }
+                          placeholder="Enter API authentication key"
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="apiVersion">API Version (Optional)</Label>
+                      <div className="relative">
+                        <Settings className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="apiVersion"
+                          value={formData.apiVersion}
+                          onChange={(e) =>
+                            handleInputChange("apiVersion", e.target.value)
+                          }
+                          placeholder="e.g., v2.0"
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Multi Channel Form */}
+              {formData.channelMode === "MULTI" && (
+                <div className="space-y-4">
+                  {errors.channelConfigs && (
+                    <p className="text-sm text-red-500 flex items-center space-x-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{errors.channelConfigs}</span>
+                    </p>
+                  )}
+
+                  {formData.channelConfigs.map((channel, index) => (
+                    <div
+                      key={index}
+                      className="p-4 border rounded-lg space-y-3 bg-muted/30"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium">Channel {index + 1}</h4>
+                        {formData.channelConfigs.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeChannel(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Channel Name *</Label>
+                          <Input
+                            value={channel.channelName}
+                            onChange={(e) =>
+                              updateChannel(
+                                index,
+                                "channelName",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="e.g., production"
+                            className={
+                              errors[`channelName-${index}`]
+                                ? "border-red-500"
+                                : ""
+                            }
+                          />
+                          {errors[`channelName-${index}`] && (
+                            <p className="text-sm text-red-500">
+                              {errors[`channelName-${index}`]}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>API URL *</Label>
+                          <Input
+                            type="url"
+                            value={channel.apiUrl}
+                            onChange={(e) =>
+                              updateChannel(index, "apiUrl", e.target.value)
+                            }
+                            placeholder="https://api.partner.com"
+                            className={
+                              errors[`channelUrl-${index}`]
+                                ? "border-red-500"
+                                : ""
+                            }
+                          />
+                          {errors[`channelUrl-${index}`] && (
+                            <p className="text-sm text-red-500">
+                              {errors[`channelUrl-${index}`]}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="col-span-2 space-y-2">
+                          <Label>API Key (Optional)</Label>
+                          <Input
+                            type="password"
+                            value={channel.apiKey}
+                            onChange={(e) =>
+                              updateChannel(index, "apiKey", e.target.value)
+                            }
+                            placeholder="Enter API key"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-4">
+                        <Checkbox
+                          checked={channel.isPrimary}
+                          onCheckedChange={(checked) =>
+                            updateChannel(index, "isPrimary", checked)
+                          }
+                          id={`primary-${index}`}
+                        />
+                        <Label
+                          htmlFor={`primary-${index}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          Primary Channel
+                        </Label>
+                        {channel.isPrimary && (
+                          <Badge variant="default" className="text-xs">
+                            Primary
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    variant="outline"
+                    onClick={addChannel}
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Channel
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -541,18 +793,72 @@ export default function AddPartnerPage() {
                     <Globe className="h-4 w-4" />
                     <span>API Configuration</span>
                   </h3>
-                  <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <dt className="text-muted-foreground">API URL:</dt>
-                    <dd className="font-medium break-all">{formData.apiUrl}</dd>
-                    <dt className="text-muted-foreground">API Token:</dt>
-                    <dd className="font-medium">
-                      {formData.apiToken ? "Configured" : "Not set"}
-                    </dd>
-                    <dt className="text-muted-foreground">API Version:</dt>
-                    <dd className="font-medium">
-                      {formData.apiVersion || "Not specified"}
-                    </dd>
-                  </dl>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="outline">
+                        {formData.channelMode} Channel
+                      </Badge>
+                    </div>
+
+                    {formData.channelMode === "SINGLE" ? (
+                      <dl className="grid grid-cols-2 gap-3 text-sm">
+                        <dt className="text-muted-foreground">API URL:</dt>
+                        <dd className="font-medium break-all">
+                          {formData.apiUrl || "Not set"}
+                        </dd>
+                        <dt className="text-muted-foreground">API Key:</dt>
+                        <dd className="font-medium">
+                          {formData.apiToken ? "Configured" : "Not set"}
+                        </dd>
+                        <dt className="text-muted-foreground">API Version:</dt>
+                        <dd className="font-medium">
+                          {formData.apiVersion || "Not specified"}
+                        </dd>
+                      </dl>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">
+                          {formData.channelConfigs.length} channel(s) configured
+                        </p>
+                        {formData.channelConfigs.map((channel, index) => (
+                          <div
+                            key={index}
+                            className="p-3 border rounded bg-muted/30"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-sm">
+                                {channel.channelName}
+                              </span>
+                              <div className="flex items-center space-x-2">
+                                {channel.isPrimary && (
+                                  <Badge variant="default" className="text-xs">
+                                    Primary
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant={
+                                    channel.isActive ? "default" : "secondary"
+                                  }
+                                  className="text-xs"
+                                >
+                                  {channel.isActive ? "Active" : "Inactive"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              <div className="grid grid-cols-2 gap-2">
+                                <span>URL: {channel.apiUrl}</span>
+                                <span>
+                                  Key:{" "}
+                                  {channel.apiKey ? "Configured" : "Not set"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>

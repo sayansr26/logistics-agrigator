@@ -15,9 +15,6 @@ const Joi = require("joi");
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// CUID validation pattern (for Partner IDs)
-const cuidPattern = /^c[a-z0-9]{24,}$/i;
-
 // Pincode validation pattern (6 digits)
 const pincodePattern = /^\d{6}$/;
 
@@ -30,15 +27,6 @@ const schemas = {
 
   uuidOptional: Joi.string().pattern(uuidPattern).optional().messages({
     "string.pattern.base": "Invalid UUID format",
-  }),
-
-  cuid: Joi.string().pattern(cuidPattern).required().messages({
-    "string.pattern.base": "Invalid CUID format",
-    "any.required": "Partner ID is required",
-  }),
-
-  cuidOptional: Joi.string().pattern(cuidPattern).optional().messages({
-    "string.pattern.base": "Invalid CUID format",
   }),
 
   pincode: Joi.string().pattern(pincodePattern).required().messages({
@@ -57,7 +45,6 @@ const schemas = {
 
 /**
  * POST /api/v1/pincode-types - Create Pincode Type
- * Now requires partnerIds and pincodeCodes for partner-specific assignment
  */
 const createPincodeTypeSchema = {
   body: Joi.object({
@@ -74,19 +61,6 @@ const createPincodeTypeSchema = {
         "any.required": "Name is required",
       }),
 
-    charge: Joi.number()
-      .min(0)
-      .max(9999999.99)
-      .precision(2)
-      .required()
-      .messages({
-        "number.base": "Charge must be a number",
-        "number.min": "Charge cannot be negative",
-        "number.max": "Charge cannot exceed 9,999,999.99",
-        "number.precision": "Charge can have at most 2 decimal places",
-        "any.required": "Charge is required",
-      }),
-
     description: Joi.string().max(255).optional().allow(null, "").messages({
       "string.max": "Description cannot exceed 255 characters",
     }),
@@ -94,18 +68,6 @@ const createPincodeTypeSchema = {
     isActive: Joi.boolean().optional().default(true).messages({
       "boolean.base": "isActive must be a boolean",
     }),
-
-    // Required: At least one partner must be selected
-    partnerIds: Joi.array()
-      .items(schemas.cuid)
-      .min(1)
-      .max(50)
-      .required()
-      .messages({
-        "array.min": "At least one partner is required",
-        "array.max": "Cannot assign more than 50 partners at once",
-        "any.required": "partnerIds array is required",
-      }),
 
     // Required: At least one pincode must be assigned
     pincodeCodes: Joi.array()
@@ -141,14 +103,12 @@ const listPincodeTypesSchema = {
     isActive: Joi.boolean().optional().messages({
       "boolean.base": "isActive must be a boolean",
     }),
-    // Optional: Filter by partner ID (CUID format)
-    partnerId: schemas.cuidOptional,
     sortBy: Joi.string()
-      .valid("name", "charge", "createdAt", "updatedAt")
+      .valid("name", "createdAt", "updatedAt")
       .optional()
       .default("createdAt")
       .messages({
-        "any.only": "sortBy must be one of: name, charge, createdAt, updatedAt",
+        "any.only": "sortBy must be one of: name, createdAt, updatedAt",
       }),
     sortOrder: Joi.string()
       .valid("asc", "desc")
@@ -187,18 +147,6 @@ const updatePincodeTypeSchema = {
         "string.max": "Name cannot exceed 50 characters",
         "string.pattern.base":
           "Name can only contain letters, numbers, underscores, and hyphens",
-      }),
-
-    charge: Joi.number()
-      .min(0)
-      .max(9999999.99)
-      .precision(2)
-      .optional()
-      .messages({
-        "number.base": "Charge must be a number",
-        "number.min": "Charge cannot be negative",
-        "number.max": "Charge cannot exceed 9,999,999.99",
-        "number.precision": "Charge can have at most 2 decimal places",
       }),
 
     description: Joi.string().max(255).optional().allow(null, "").messages({
@@ -295,16 +243,12 @@ const getAssignedPincodesSchema = {
 
 /**
  * GET /api/v1/pincodes/:code/types - Get Types for a Pincode
- * Optionally filter by partnerId for partner-specific charges
  */
 const getTypesByPincodeSchema = {
   params: Joi.object({
     code: schemas.pincode,
   }),
-  query: Joi.object({
-    // Optional: Filter by partner ID for partner-specific pincode types
-    partnerId: schemas.cuidOptional,
-  }),
+  query: Joi.object({}),
 };
 
 module.exports = {

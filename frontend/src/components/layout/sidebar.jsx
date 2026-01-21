@@ -25,6 +25,7 @@ import {
   Map,
   MapPin,
   Store,
+  ScrollText,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -102,11 +103,19 @@ const getNavigationSections = () => {
       title: "Pricing & Services",
       items: [
         {
-          title: "Pincode Types",
+          title: "Pincode Type Services",
           href: "/pincode-types",
           icon: Settings,
           permission: "partner:read:own",
           roles: ["superadmin", "admin"],
+          disabled: false, // Active and working
+        },
+        {
+          title: "Pincode Type Service Charges",
+          href: "/pincode-type-service-charges",
+          icon: IndianRupee,
+          permission: "partner:read:own",
+          roles: ["superadmin", "admin", "operations"],
           disabled: false, // Active and working
         },
         {
@@ -165,7 +174,14 @@ const getNavigationSections = () => {
           icon: Store,
           permission: "user:read:parent",
           roles: ["superadmin", "admin", "client"],
-          disabled: false, // Outlet management implemented
+          disabled: false,
+        },
+        {
+          title: "Audit Logs",
+          href: "/audit-logs",
+          icon: ScrollText,
+          roles: ["superadmin", "admin", "client"],
+          disabled: false, // Audit logs viewer
         },
         {
           title: "Geography",

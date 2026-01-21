@@ -213,6 +213,8 @@ app.use("/api/v1/subscriptions", subscriptionRoutes);
 app.use("/api/v1/activate", activationRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/metrics", metricsRoutes);
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin/logs", adminLogsRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -590,6 +590,8 @@ app.use("/api/v1/internal", internalRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);
 app.use("/api/v1/admin/affiliates", adminAffiliateRoutes);
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
 
 // 404 handler
 app.use("*", notFoundHandler);

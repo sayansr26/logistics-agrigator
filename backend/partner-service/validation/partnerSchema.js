@@ -7,12 +7,44 @@ const partnerSchema = {
     displayName: Joi.string().required().trim().max(100),
     isActive: Joi.boolean().default(true),
 
+    // Channel Mode (Single/Multi API endpoints)
+    channelMode: Joi.string().valid("SINGLE", "MULTI").default("SINGLE"),
+
     // API Configuration - Support both field names
-    apiUrl: Joi.string().required().uri(),
+    apiUrl: Joi.string().uri().when("channelMode", {
+      is: "SINGLE",
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
     apiEndpoint: Joi.string().uri(), // Alias for apiUrl (frontend compatibility)
     apiToken: Joi.string().trim().allow("", null),
     apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
     apiVersion: Joi.string().trim().allow("", null),
+
+    // Multi-channel configuration (only for MULTI mode)
+    channelConfigs: Joi.when("channelMode", {
+      is: "MULTI",
+      then: Joi.array()
+        .items(
+          Joi.object({
+            channelName: Joi.string().trim().min(1).max(100).required(),
+            apiUrl: Joi.string().uri().required(),
+            apiKey: Joi.string()
+              .trim()
+              .min(1)
+              .max(500)
+              .allow("", null)
+              .optional(),
+            isActive: Joi.boolean().default(true),
+            isPrimary: Joi.boolean().default(false),
+            priority: Joi.number().integer().min(1).max(100).default(1),
+          }),
+        )
+        .min(1)
+        .max(20)
+        .required(),
+      otherwise: Joi.array().max(0).optional(),
+    }),
 
     // Service Configuration
     supportsCOD: Joi.boolean().default(false),
@@ -43,12 +75,37 @@ const partnerSchema = {
     displayName: Joi.string().trim().max(100),
     isActive: Joi.boolean(),
 
+    // Channel Mode (Single/Multi API endpoints)
+    channelMode: Joi.string().valid("SINGLE", "MULTI"),
+
     // API Configuration - Support both field names
     apiUrl: Joi.string().uri(),
     apiEndpoint: Joi.string().uri(), // Alias for apiUrl
     apiToken: Joi.string().trim().allow("", null),
     apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
     apiVersion: Joi.string().trim().allow("", null),
+
+    // Multi-channel configuration (only for MULTI mode)
+    channelConfigs: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.string().uuid().optional(),
+          channelName: Joi.string().trim().min(1).max(100).required(),
+          apiUrl: Joi.string().uri().required(),
+          apiKey: Joi.string()
+            .trim()
+            .min(1)
+            .max(500)
+            .allow("", null)
+            .optional(),
+          isActive: Joi.boolean().default(true),
+          isPrimary: Joi.boolean().default(false),
+          priority: Joi.number().integer().min(1).max(100).default(1),
+        }),
+      )
+      .min(1)
+      .max(20)
+      .optional(),
 
     // Service Configuration
     supportsCOD: Joi.boolean(),

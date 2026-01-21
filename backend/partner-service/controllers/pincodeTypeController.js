@@ -29,23 +29,18 @@ const { prisma } = require("../config/database");
  */
 async function createPincodeType(req, res) {
   try {
-    const { name, charge, description, isActive, partnerIds, pincodeCodes } =
-      req.body;
+    const { name, description, isActive, pincodeCodes } = req.body;
 
-    logger.info("Creating pincode types for partners", {
+    logger.info("Creating pincode type", {
       name,
-      charge,
-      partnerCount: partnerIds?.length,
       pincodeCount: pincodeCodes?.length,
       userId: req.user?.id,
     });
 
     const result = await pincodeTypeService.createPincodeType({
       name,
-      charge,
       description,
       isActive,
-      partnerIds,
       pincodeCodes,
       assignedBy: req.user?.id,
     });
@@ -55,36 +50,34 @@ async function createPincodeType(req, res) {
       data: {
         action: "PINCODE_TYPE_CREATED",
         resourceType: "PINCODE_TYPE",
-        resourceId: result.createdTypes.map((t) => t.id).join(","),
+        resourceId: result.id,
         userId: req.user?.id,
         ipAddress: req.ip,
         userAgent: req.get("User-Agent"),
         requestData: {
           name,
-          charge,
           description,
           isActive,
-          partnerIds,
           pincodeCount: pincodeCodes?.length,
           sampleCodes: pincodeCodes?.slice(0, 10),
         },
         responseData: {
-          typesCreated: result.createdTypes.length,
-          summary: result.summary,
+          id: result.id,
+          assignedCount: result.assignedCount,
           success: true,
         },
       },
     });
 
-    logger.info("Pincode types created successfully", {
-      typesCreated: result.createdTypes.length,
-      summary: result.summary,
+    logger.info("Pincode type created successfully", {
+      id: result.id,
+      assignedCount: result.assignedCount,
       userId: req.user?.id,
     });
 
     res
       .status(201)
-      .json(APIResponse.success(result, "Pincode types created successfully"));
+      .json(APIResponse.success(result, "Pincode type created successfully"));
   } catch (error) {
     logger.error("Failed to create pincode type", {
       error: error.message,
@@ -126,7 +119,6 @@ async function listPincodeTypes(req, res) {
         req.query.isActive !== undefined
           ? req.query.isActive === "true"
           : undefined,
-      partnerId: req.query.partnerId || undefined,
       sortBy: req.query.sortBy || "createdAt",
       sortOrder: req.query.sortOrder || "desc",
     };
@@ -141,7 +133,6 @@ async function listPincodeTypes(req, res) {
     logger.info("Pincode types listed successfully", {
       count: result.pincodeTypes.length,
       total: result.pagination.total,
-      partnerId: filters.partnerId,
       userId: req.user?.id,
     });
 
@@ -535,19 +526,16 @@ async function getAssignedPincodes(req, res) {
 async function getTypesByPincode(req, res) {
   try {
     const { code } = req.params;
-    const { partnerId } = req.query;
 
     logger.info("Getting types for pincode", {
       code,
-      partnerId,
       userId: req.user?.id,
     });
 
-    const result = await pincodeTypeService.getTypesByPincode(code, partnerId);
+    const result = await pincodeTypeService.getTypesByPincode(code);
 
     logger.info("Types by pincode retrieved successfully", {
       code,
-      partnerId,
       typeCount: result.types.length,
       userId: req.user?.id,
     });
@@ -558,7 +546,6 @@ async function getTypesByPincode(req, res) {
       error: error.message,
       stack: error.stack,
       code: req.params.code,
-      partnerId: req.query.partnerId,
       userId: req.user?.id,
     });
 

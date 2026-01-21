@@ -171,6 +171,10 @@ app.get("/api/knowledge-base", (req, res) => {
   });
 });
 
+// Admin logs routes
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
+
 // 404 handler
 app.use("*", (req, res) => {
   res.status(404).json({

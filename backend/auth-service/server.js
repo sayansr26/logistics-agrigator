@@ -119,8 +119,10 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 const permissionsRoutes = require("./routes/permissions");
+const adminLogsRoutes = require("./routes/adminLogs");
 app.use("/auth", authRoutes);
 app.use("/api/v1/permissions", permissionsRoutes);
+app.use("/api/v1/admin", adminLogsRoutes);
 
 /**
  * @swagger

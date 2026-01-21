@@ -123,6 +123,8 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/v1/shipments", shipmentRoutes);
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
 
 /**
  * @swagger

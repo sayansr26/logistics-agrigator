@@ -125,6 +125,8 @@ app.get("/openapi.json", (req, res) => {
 // Routes
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/payout", payoutRoutes);
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
 
 /**
  * @swagger

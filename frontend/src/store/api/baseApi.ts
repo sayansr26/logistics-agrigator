@@ -51,6 +51,7 @@ export const baseApi = createApi({
     "Outlet",
     "Shipment",
     "Partner",
+    "PartnerChannel",
     "Wallet",
     "Zone",
     "Geo",
@@ -58,10 +59,13 @@ export const baseApi = createApi({
     "License",
     "Permission",
     "PincodeType",
+    "PincodeTypeServiceCharge",
     "ChargePackage",
     "ServiceHealth",
     "ServiceStatistics",
     "ServiceConfiguration",
+    "AuditLog",
+    "RuntimeLog",
   ],
 
   // Define endpoints in separate API slices

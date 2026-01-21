@@ -135,6 +135,15 @@ app.use("/api/v1/zones", require("./routes/zones"));
 // Pincode Type Management Routes (Zone System v2)
 app.use("/api/v1/pincode-types", require("./routes/pincodeTypes"));
 
+// Pincode Type Service Charge Management Routes (NEW)
+app.use(
+  "/api/v1/pincode-type-service-charges",
+  require("./routes/pincodeTypeServiceCharges"),
+);
+
+// Partner Channel Management Routes (NEW - Single/Multi API Configuration)
+app.use("/api/v1", require("./routes/partnerChannels"));
+
 // Charge Package Management Routes (NEW - replaces legacy packages)
 app.use("/api/v1/charge-packages", require("./routes/chargePackages"));
 
@@ -172,6 +181,10 @@ app.use("/api", require("./routes/partnerData"));
 // Performance & System Management - Still active
 app.use("/api/v1", require("./routes/partnerPerformance"));
 app.use("/api/v1", require("./routes/systemManagement"));
+
+// Admin logs routes
+const adminLogsRoutes = require("./routes/adminLogs");
+app.use("/api/v1/admin", adminLogsRoutes);
 
 /**
  * @swagger
@@ -337,6 +350,13 @@ app.get("/", (req, res) => {
       zoneCoverage: "/api/v1/zones/coverage",
       pincodeTypes: "/api/v1/pincode-types",
 
+      // Pincode Type Service Charges (NEW)
+      pincodeTypeServiceCharges: "/api/v1/pincode-type-service-charges",
+
+      // Partner Channel Management (NEW - Single/Multi API Configuration)
+      partnerChannels: "/api/v1/partners/:partnerId/channels",
+      channelMode: "/api/v1/partners/:partnerId/channel-mode",
+
       // Charge Packages (NEW - replaces legacy packages/charges)
       chargePackages: "/api/v1/charge-packages",
 
@@ -363,6 +383,8 @@ app.get("/", (req, res) => {
       "Charge Package Management (Weight, Distance, Generic)",
       "Quote Engine with Charge Breakdown",
       "Pincode Type Management",
+      "Pincode Type Service Charge Management",
+      "Partner Channel Management (Single/Multi API Endpoints)",
       "Zone Coverage Validation",
       "Distance-based Rate Calculation",
       "Weight-based Rate Calculation",

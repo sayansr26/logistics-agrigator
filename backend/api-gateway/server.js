@@ -258,6 +258,13 @@ if (
   logger.info("📚 Swagger aggregation enabled at /swagger");
 }
 
+// Logs aggregation routes
+const logsRoutes = require("./routes/logs");
+app.use("/api/v1", logsRoutes);
+logger.info(
+  "📊 Logs aggregation enabled at /api/v1/audit-logs and /api/v1/admin/audit-logs",
+);
+
 // Service routing configuration using environment variables
 logger.info("🔗 API Gateway Service Configuration:", {
   AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
@@ -335,6 +342,14 @@ const services = {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
       "^/api/v1/pincode-types": "/api/v1/pincode-types", // Pincode types → /api/v1/pincode-types/*
+    },
+  },
+  // Pincode Type Service Charge Management (admin/operations only)
+  "pincode-type-service-charges": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/pincode-type-service-charges":
+        "/api/v1/pincode-type-service-charges", // Pincode type service charges → /api/v1/pincode-type-service-charges/*
     },
   },
   // Charge Package Management (Zone System v2 - partner charge packages)
@@ -888,6 +903,47 @@ Object.keys(services).forEach((service) => {
     }),
   );
 });
+
+// Manual proxy for Partner Channel Management endpoints
+// These must be registered BEFORE the catch-all but AFTER the general partners proxy
+// Routes: /api/v1/partners/:partnerId/channels/* and /api/v1/channels/*
+logger.info("Adding manual proxy for partner channel management endpoints");
+app.use(
+  [
+    "/api/v1/partners/:partnerId/channels",
+    "/api/v1/partners/:partnerId/channel-mode",
+    "/api/v1/channels",
+  ],
+  createProxyMiddleware({
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    changeOrigin: true,
+    pathRewrite: (path) => {
+      // Keep the full path, no rewriting
+      logger.info(`Proxying channel request: ${path}`);
+      return path;
+    },
+    parseReqBody: false,
+    onError: (err, req, res) => {
+      logger.error(`Proxy error for partner channels:`, {
+        error: err.message,
+        path: req.path,
+      });
+      res.status(503).json({
+        status: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Partner service is currently unavailable",
+        },
+      });
+    },
+    onProxyReq: (proxyReq, req, _res) => {
+      const internalSecret = process.env.INTERNAL_SECRET;
+      if (internalSecret) {
+        proxyReq.setHeader("X-Internal-Request", internalSecret);
+      }
+    },
+  }),
+);
 
 // Catch all for undefined routes
 app.use("*", (req, res) => {

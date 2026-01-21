@@ -30,57 +30,27 @@ class PincodeTypeService {
   // ==========================================
 
   /**
-   * Create pincode types for one or more partners with mandatory pincode assignment
+   * Create pincode type with mandatory pincode assignment
    * @param {Object} data - Pincode type data
-   * @param {string} data.name - Type name (unique per partner)
-   * @param {number} data.charge - Associated charge amount
-   * @param {string[]} data.partnerIds - Array of partner IDs (CUID format, min 1)
+   * @param {string} data.name - Type name (globally unique)
    * @param {string[]} data.pincodeCodes - Array of pincode codes (6-digit, min 1)
    * @param {string} [data.description] - Optional description
    * @param {boolean} [data.isActive=true] - Active status
    * @param {string} [data.assignedBy] - User UUID who is creating
-   * @returns {Promise<Object>} Result with created types and assignment stats
+   * @returns {Promise<Object>} Result with created type and assignment stats
    */
   async createPincodeType(data) {
     try {
-      const {
-        partnerIds,
-        pincodeCodes,
-        name,
-        charge,
-        description,
-        isActive,
-        assignedBy,
-      } = data;
+      const { pincodeCodes, name, description, isActive, assignedBy } = data;
 
-      logger.info("Creating pincode types for partners", {
+      logger.info("Creating pincode type", {
         name,
-        partnerCount: partnerIds.length,
         pincodeCount: pincodeCodes.length,
       });
 
       // Use transaction for atomic operation
       const result = await prisma.$transaction(async (tx) => {
-        // 1. Validate all partners exist
-        const partners = await tx.partner.findMany({
-          where: { id: { in: partnerIds } },
-          select: { id: true, name: true, displayName: true },
-        });
-
-        const foundPartnerIds = partners.map((p) => p.id);
-        const missingPartnerIds = partnerIds.filter(
-          (id) => !foundPartnerIds.includes(id),
-        );
-
-        if (missingPartnerIds.length > 0) {
-          const error = new Error(
-            `Partners not found: ${missingPartnerIds.join(", ")}`,
-          );
-          error.statusCode = 400;
-          throw error;
-        }
-
-        // 2. Validate all pincodes exist
+        // 1. Validate all pincodes exist
         const pincodes = await tx.pincode.findMany({
           where: { code: { in: pincodeCodes } },
           select: { id: true, code: true },
@@ -99,66 +69,47 @@ class PincodeTypeService {
           throw error;
         }
 
-        // 3. Check for existing types with same name for each partner
-        const existingTypes = await tx.pincodeType.findMany({
-          where: {
-            partnerId: { in: partnerIds },
-            name: name,
-          },
-          select: { partnerId: true },
+        // 2. Check for existing type with same name
+        const existingType = await tx.pincodeType.findFirst({
+          where: { name },
+          select: { id: true },
         });
 
-        if (existingTypes.length > 0) {
-          const conflictingPartnerIds = existingTypes.map((t) => t.partnerId);
-          const conflictingPartners = partners.filter((p) =>
-            conflictingPartnerIds.includes(p.id),
-          );
-          const error = new Error(
-            `Pincode type '${name}' already exists for partners: ${conflictingPartners.map((p) => p.displayName).join(", ")}`,
-          );
+        if (existingType) {
+          const error = new Error(`Pincode type '${name}' already exists`);
           error.statusCode = 409;
           throw error;
         }
 
-        // 4. Create pincode type for each partner
-        const createdTypes = [];
-        for (const partner of partners) {
-          const pincodeType = await tx.pincodeType.create({
-            data: {
-              partnerId: partner.id,
-              name: name,
-              charge: charge,
-              description: description || null,
-              isActive: isActive !== undefined ? isActive : true,
-            },
-          });
+        // 3. Create pincode type
+        const pincodeType = await tx.pincodeType.create({
+          data: {
+            name: name,
+            description: description || null,
+            isActive: isActive !== undefined ? isActive : true,
+          },
+        });
 
-          // 5. Create assignments for this type
-          const assignments = pincodes.map((pincode) => ({
-            pincodeId: pincode.id,
-            typeId: pincodeType.id,
-            assignedBy: assignedBy || null,
-          }));
+        // 4. Create assignments for this type
+        const assignments = pincodes.map((pincode) => ({
+          pincodeId: pincode.id,
+          typeId: pincodeType.id,
+          assignedBy: assignedBy || null,
+        }));
 
-          const assignmentResult = await tx.pincodeTypeAssignment.createMany({
-            data: assignments,
-            skipDuplicates: true,
-          });
-
-          createdTypes.push({
-            id: pincodeType.id,
-            partnerId: partner.id,
-            partnerName: partner.displayName,
-            name: pincodeType.name,
-            charge: pincodeType.charge,
-            assignedCount: assignmentResult.count,
-          });
-        }
+        const assignmentResult = await tx.pincodeTypeAssignment.createMany({
+          data: assignments,
+          skipDuplicates: true,
+        });
 
         return {
-          createdTypes,
+          id: pincodeType.id,
+          name: pincodeType.name,
+          description: pincodeType.description,
+          isActive: pincodeType.isActive,
+          createdAt: pincodeType.createdAt,
+          assignedCount: assignmentResult.count,
           summary: {
-            totalTypesCreated: createdTypes.length,
             totalPincodesRequested: pincodeCodes.length,
             validPincodes: foundCodes.length,
             missingPincodes: missingCodes,
@@ -166,23 +117,17 @@ class PincodeTypeService {
         };
       });
 
-      // Invalidate cache for all affected partners
-      for (const partnerId of partnerIds) {
-        await this._invalidateCache(null, partnerId);
-      }
       // Invalidate cache for affected pincodes
-      for (const code of result.summary.missingPincodes.length <
-      pincodeCodes.length
-        ? pincodeCodes.filter(
-            (c) => !result.summary.missingPincodes.includes(c),
-          )
-        : []) {
+      const validCodes = pincodeCodes.filter(
+        (c) => !result.summary.missingPincodes.includes(c),
+      );
+      for (const code of validCodes) {
         await this._invalidatePincodeCache(code);
       }
 
-      logger.info("Pincode types created successfully", {
-        typesCreated: result.createdTypes.length,
-        summary: result.summary,
+      logger.info("Pincode type created successfully", {
+        id: result.id,
+        assignedCount: result.assignedCount,
       });
 
       return result;
@@ -202,10 +147,9 @@ class PincodeTypeService {
    * @param {number} [filters.limit=20] - Items per page
    * @param {string} [filters.search] - Search by name
    * @param {boolean} [filters.isActive] - Filter by active status
-   * @param {string} [filters.partnerId] - Filter by partner ID
    * @param {string} [filters.sortBy='createdAt'] - Sort field
    * @param {string} [filters.sortOrder='desc'] - Sort order
-   * @returns {Promise<Object>} Paginated list of pincode types with partner info
+   * @returns {Promise<Object>} Paginated list of pincode types
    */
   async getPincodeTypes(filters = {}) {
     try {
@@ -214,7 +158,6 @@ class PincodeTypeService {
         limit = 20,
         search,
         isActive,
-        partnerId,
         sortBy = "createdAt",
         sortOrder = "desc",
       } = filters;
@@ -233,11 +176,6 @@ class PincodeTypeService {
         where.isActive = isActive;
       }
 
-      // Filter by partner if provided
-      if (partnerId) {
-        where.partnerId = partnerId;
-      }
-
       // Calculate pagination
       const skip = (page - 1) * limit;
 
@@ -249,13 +187,6 @@ class PincodeTypeService {
           skip,
           take: limit,
           include: {
-            partner: {
-              select: {
-                id: true,
-                name: true,
-                displayName: true,
-              },
-            },
             _count: {
               select: { assignments: true },
             },
@@ -270,7 +201,6 @@ class PincodeTypeService {
         count: pincodeTypes.length,
         total,
         page,
-        partnerId,
       });
 
       return {
@@ -298,9 +228,9 @@ class PincodeTypeService {
   }
 
   /**
-   * Get pincode type by ID with statistics and partner info
+   * Get pincode type by ID with statistics
    * @param {string} id - Pincode type UUID
-   * @returns {Promise<Object>} Pincode type with stats and partner info
+   * @returns {Promise<Object>} Pincode type with stats
    */
   async getPincodeTypeById(id) {
     try {
@@ -318,13 +248,6 @@ class PincodeTypeService {
       const pincodeType = await prisma.pincodeType.findUnique({
         where: { id },
         include: {
-          partner: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-            },
-          },
           _count: {
             select: { assignments: true },
           },
@@ -349,7 +272,6 @@ class PincodeTypeService {
       logger.info("Retrieved pincode type by ID", {
         id,
         name: pincodeType.name,
-        partnerId: pincodeType.partnerId,
       });
 
       return result;
@@ -366,7 +288,7 @@ class PincodeTypeService {
    * Update an existing pincode type
    * @param {string} id - Pincode type UUID
    * @param {Object} data - Update data
-   * @returns {Promise<Object>} Updated pincode type with partner info
+   * @returns {Promise<Object>} Updated pincode type
    */
   async updatePincodeType(id, data) {
     try {
@@ -383,20 +305,17 @@ class PincodeTypeService {
         throw error;
       }
 
-      // Check for name conflict if updating name (within the same partner)
+      // Check for name conflict if updating name
       if (data.name && data.name !== existing.name) {
         const nameConflict = await prisma.pincodeType.findFirst({
           where: {
-            partnerId: existing.partnerId,
             name: data.name,
             id: { not: id },
           },
         });
 
         if (nameConflict) {
-          const error = new Error(
-            `Pincode type '${data.name}' already exists for this partner`,
-          );
+          const error = new Error(`Pincode type '${data.name}' already exists`);
           error.statusCode = 409;
           throw error;
         }
@@ -405,7 +324,6 @@ class PincodeTypeService {
       // Prepare update data
       const updateData = {};
       if (data.name !== undefined) updateData.name = data.name;
-      if (data.charge !== undefined) updateData.charge = data.charge;
       if (data.description !== undefined)
         updateData.description = data.description || null;
       if (data.isActive !== undefined) updateData.isActive = data.isActive;
@@ -415,13 +333,6 @@ class PincodeTypeService {
         where: { id },
         data: updateData,
         include: {
-          partner: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-            },
-          },
           _count: {
             select: { assignments: true },
           },
@@ -429,12 +340,11 @@ class PincodeTypeService {
       });
 
       // Invalidate cache
-      await this._invalidateCache(id, pincodeType.partnerId);
+      await this._invalidateCache(id);
 
       logger.info("Pincode type updated successfully", {
         id,
         name: pincodeType.name,
-        partnerId: pincodeType.partnerId,
       });
 
       return {
@@ -455,7 +365,7 @@ class PincodeTypeService {
   /**
    * Soft delete pincode type (set isActive = false)
    * @param {string} id - Pincode type UUID
-   * @returns {Promise<Object>} Deleted pincode type with partner info
+   * @returns {Promise<Object>} Deleted pincode type
    */
   async deletePincodeType(id) {
     try {
@@ -476,24 +386,14 @@ class PincodeTypeService {
       const pincodeType = await prisma.pincodeType.update({
         where: { id },
         data: { isActive: false },
-        include: {
-          partner: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-            },
-          },
-        },
       });
 
       // Invalidate cache
-      await this._invalidateCache(id, pincodeType.partnerId);
+      await this._invalidateCache(id);
 
       logger.info("Pincode type soft deleted successfully", {
         id,
         name: pincodeType.name,
-        partnerId: pincodeType.partnerId,
       });
 
       return pincodeType;
@@ -729,6 +629,22 @@ class PincodeTypeService {
                 areaName: true,
                 district: true,
                 status: true,
+                area: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    cityId: true,
+                    city: {
+                      select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        stateId: true,
+                      },
+                    },
+                  },
+                },
                 state: {
                   select: { id: true, name: true, code: true },
                 },
@@ -755,7 +671,6 @@ class PincodeTypeService {
         pincodeType: {
           id: pincodeType.id,
           name: pincodeType.name,
-          charge: pincodeType.charge,
         },
         pincodes: filteredAssignments.map((a) => ({
           ...a.pincode,
@@ -781,24 +696,20 @@ class PincodeTypeService {
   }
 
   /**
-   * Get all types assigned to a specific pincode, optionally filtered by partner
+   * Get all types assigned to a specific pincode
    * @param {string} pincodeCode - 6-digit pincode code
-   * @param {string} [partnerId] - Optional partner ID to filter by
    * @returns {Promise<Object>} Pincode with its assigned types
    */
-  async getTypesByPincode(pincodeCode, partnerId = null) {
+  async getTypesByPincode(pincodeCode) {
     try {
-      // Try cache first (partner-aware key)
-      const cacheKey = partnerId
-        ? `${this.cachePrefix}:partner:${partnerId}:pincode:${pincodeCode}`
-        : `${this.cachePrefix}:pincode:${pincodeCode}`;
+      // Try cache first
+      const cacheKey = `${this.cachePrefix}:pincode:${pincodeCode}`;
       const redis = getRedisClient();
       const cached = await redis.get(cacheKey);
 
       if (cached) {
         logger.debug("Types by pincode retrieved from cache", {
           code: pincodeCode,
-          partnerId,
         });
         return JSON.parse(cached);
       }
@@ -824,54 +735,31 @@ class PincodeTypeService {
         throw error;
       }
 
-      // Build the where clause for assignments
-      const assignmentWhere = { pincodeId: pincode.id };
-
-      // Build the pincodeType filter for partner
-      const pincodeTypeFilter = partnerId ? { partnerId } : undefined;
-
       // Get all type assignments for this pincode
       const assignments = await prisma.pincodeTypeAssignment.findMany({
-        where: assignmentWhere,
+        where: { pincodeId: pincode.id },
         include: {
           pincodeType: {
             select: {
               id: true,
-              partnerId: true,
               name: true,
-              charge: true,
               description: true,
               isActive: true,
-              partner: {
-                select: {
-                  id: true,
-                  name: true,
-                  displayName: true,
-                },
-              },
             },
-            where: pincodeTypeFilter,
           },
         },
         orderBy: { assignedAt: "desc" },
       });
 
-      // Filter out null pincodeTypes (when partner filter didn't match)
-      const filteredAssignments = assignments.filter((a) => a.pincodeType);
-
       const result = {
         pincode,
-        partnerId: partnerId || null,
-        types: filteredAssignments.map((a) => ({
+        types: assignments.map((a) => ({
           ...a.pincodeType,
           assignedAt: a.assignedAt,
         })),
-        activeTypes: filteredAssignments
+        activeTypes: assignments
           .filter((a) => a.pincodeType.isActive)
           .map((a) => a.pincodeType),
-        totalCharge: filteredAssignments
-          .filter((a) => a.pincodeType.isActive)
-          .reduce((sum, a) => sum + parseFloat(a.pincodeType.charge), 0),
       };
 
       // Cache the result
@@ -879,7 +767,6 @@ class PincodeTypeService {
 
       logger.info("Retrieved types by pincode", {
         code: pincodeCode,
-        partnerId,
         typeCount: result.types.length,
       });
 
@@ -888,7 +775,6 @@ class PincodeTypeService {
       logger.error("Error retrieving types by pincode", {
         error: error.message,
         pincodeCode,
-        partnerId,
       });
       throw error;
     }
@@ -899,12 +785,11 @@ class PincodeTypeService {
   // ==========================================
 
   /**
-   * Invalidate cache for pincode types (partner-aware)
+   * Invalidate cache for pincode types
    * @private
    * @param {string} [typeId] - Specific type ID to invalidate
-   * @param {string} [partnerId] - Partner ID for partner-specific cache invalidation
    */
-  async _invalidateCache(typeId = null, partnerId = null) {
+  async _invalidateCache(typeId = null) {
     try {
       const redis = getRedisClient();
 
@@ -919,28 +804,17 @@ class PincodeTypeService {
         await redis.del(...keys);
       }
 
-      // Invalidate partner-specific caches
-      if (partnerId) {
-        const partnerKeys = await redis.keys(
-          `${this.cachePrefix}:partner:${partnerId}:*`,
-        );
-        if (partnerKeys.length > 0) {
-          await redis.del(...partnerKeys);
-        }
-      }
-
-      logger.debug("Pincode type cache invalidated", { typeId, partnerId });
+      logger.debug("Pincode type cache invalidated", { typeId });
     } catch (error) {
       logger.warn("Failed to invalidate pincode type cache", {
         error: error.message,
         typeId,
-        partnerId,
       });
     }
   }
 
   /**
-   * Invalidate cache for a specific pincode's types (all partners and global)
+   * Invalidate cache for a specific pincode's types
    * @private
    * @param {string} pincodeCode - Pincode code
    */
@@ -948,16 +822,8 @@ class PincodeTypeService {
     try {
       const redis = getRedisClient();
 
-      // Invalidate global pincode cache
+      // Invalidate pincode cache
       await redis.del(`${this.cachePrefix}:pincode:${pincodeCode}`);
-
-      // Invalidate all partner-specific pincode caches
-      const partnerKeys = await redis.keys(
-        `${this.cachePrefix}:partner:*:pincode:${pincodeCode}`,
-      );
-      if (partnerKeys.length > 0) {
-        await redis.del(...partnerKeys);
-      }
 
       logger.debug("Pincode types cache invalidated", { pincodeCode });
     } catch (error) {
