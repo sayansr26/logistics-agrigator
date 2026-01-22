@@ -1,0 +1,39 @@
+# =============== PRODUCTION DOCKERFILE ===============
+FROM node:18-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+RUN npm install -g pnpm@8.15.1
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY shared ./shared
+COPY backend/platform-service/package.json ./backend/platform-service/
+
+RUN cd backend/platform-service && pnpm install --prod --frozen-lockfile --ignore-scripts
+
+COPY backend/platform-service ./backend/platform-service
+
+# Copy shared into service directory for relative imports
+RUN cp -r /app/shared /app/backend/platform-service/
+RUN cd backend/platform-service && npx prisma generate
+
+# Copy production entrypoint script for automated migrations
+COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
+RUN chmod +x /app/production-entrypoint.sh
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p /app/logs/platform-service && chown -R nodejs:nodejs /app/logs
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+WORKDIR /app
+
+EXPOSE 3008
+
+ENV NODE_ENV=production
+ENV PORT=3008
+ENV SERVICE_NAME=platform-service
+
+ENTRYPOINT ["/app/production-entrypoint.sh"]
+CMD ["node", "backend/platform-service/server.js"]

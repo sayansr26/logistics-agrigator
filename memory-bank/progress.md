@@ -146,6 +146,10 @@ Overall Project Progress          [███████████████
 - ✅ Shared library structure
 - ✅ Environment configuration
 - ✅ Health check endpoints
+- ✅ **Production Deployment Scripts** (NEW - January 2026)
+  - ✅ Pincode import scripts for dev/production
+  - ✅ Docker network configuration
+  - ✅ Frontend proxy configuration fix (api-gateway DNS)
 
 ## What's Left to Build 📋
 
@@ -203,6 +207,20 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Frontend Docker Proxy Connection Fix** (January 2026)
+  - Fixed `ECONNREFUSED ::1:3001` error in production
+  - Updated `next.config.js` to use `http://api-gateway:3001` instead of `localhost:3001`
+  - Rebuilt frontend container with correct configuration
+  - Verified login works through frontend proxy
+  - Container: `logistics-frontend-prod` on `logistics-agrigator_logistics-network`
+
+- ✅ **Pincode Import Scripts** (January 2026)
+  - Added `import:pincodes` script for dev environment
+  - Added `import:pincodes:prod` script for production environment
+  - Added `load:pincodes` and `load:pincodes:prod` scripts
+  - Added `seed:geo` and `seed:geo:prod` scripts
+  - Commands: `pnpm run import:pincodes` or `pnpm run import:pincodes:prod`
 
 - ✅ Outlet module backend complete
 - ✅ Outlet module frontend complete
@@ -265,6 +283,30 @@ Overall Project Progress          [███████████████
 ## Changelog
 
 ### January 2026
+
+```
+[2026-01-22] Frontend Docker Proxy Connection Fix - COMPLETE
+  Infrastructure:
+  - Fixed ECONNREFUSED ::1:3001 error in production frontend
+  - Updated frontend/next.config.js rewrites destination
+  - Changed from http://localhost:3001 to http://api-gateway:3001
+  - Built new production image: logistics-frontend-prod:new
+  - Deployed container on logistics-agrigator_logistics-network
+  - Verified: Login works through frontend proxy (port 3000)
+  - Verified: API calls route correctly to api-gateway container
+
+[2026-01-22] Pincode Import Scripts Added - COMPLETE
+  Root Package Scripts:
+  - import:pincodes - Run import in dev environment
+  - import:pincodes:prod - Run import in production
+  - load:pincodes - Run load script in dev
+  - load:pincodes:prod - Run load script in production
+  - seed:geo - Seed geographical data (dev)
+  - seed:geo:prod - Seed geographical data (production)
+
+  Usage: pnpm run import:pincodes:prod
+  Command: docker-compose -f docker-compose.production.yml exec partner-service node scripts/import-pincode-data.js
+```
 
 ```
 [2026-01-15] Partner Channel Management Module - COMPLETE
@@ -393,6 +435,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: January 15, 2026
+**Last Updated**: January 22, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

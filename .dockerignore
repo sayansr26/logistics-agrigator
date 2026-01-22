@@ -41,6 +41,8 @@ pnpm-debug.log*
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+# Exception: root pnpm-lock.yaml needed for production frontend build
+!/pnpm-lock.yaml
 
 # Environment and Configuration
 .env
@@ -82,6 +84,7 @@ temp/
 .husky/
 scripts/*
 !scripts/entrypoint.sh
+!scripts/production-entrypoint.sh
 .eslintcache
 .prettierrc*
 .editorconfig

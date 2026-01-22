@@ -603,9 +603,7 @@ app.use(errorHandler);
 corsConfig.logCorsConfiguration();
 
 app.listen(PORT, "0.0.0.0", () => {
-  logger.info(
-    `🚀 User Service running on port ${PORT} (LIVE RELOAD ENABLED ✨)`,
-  );
+  logger.info(`🚀 User Service running on port ${PORT} (Production)`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   logger.info(`🔗 Health check: http://localhost:${PORT}/health`);
   logger.info(

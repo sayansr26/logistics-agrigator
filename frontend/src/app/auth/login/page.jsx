@@ -212,20 +212,6 @@ export default function LoginPage() {
               </form>
             </Form>
 
-            {/* Demo Credentials */}
-            <div className="mt-6 p-4 bg-muted rounded-lg">
-              <h4 className="text-sm font-medium mb-2">Demo Credentials:</h4>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p>
-                  <strong>Superadmin:</strong>{" "}
-                  <span>admin@logistics.com / Admin@123456</span>
-                </p>
-                <p className="text-xs italic mt-2">
-                  Note: Other demo accounts will be added soon
-                </p>
-              </div>
-            </div>
-
             {/* Sign Up Link */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">

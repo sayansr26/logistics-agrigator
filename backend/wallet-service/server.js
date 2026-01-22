@@ -349,9 +349,7 @@ async function startServer() {
     corsConfig.logCorsConfiguration();
 
     app.listen(PORT, () => {
-      logger.info(
-        `🚀 Wallet Service running on port ${PORT} (LIVE RELOAD ENABLED)`,
-      );
+      logger.info(`🚀 Wallet Service running on port ${PORT} (Production)`);
       logger.info(`Health check: http://localhost:3006/health`);
       logger.info(
         `Swagger docs: http://localhost:3001/swagger/wallet-service (via API Gateway)`,

@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: January 2026
+> Current work focus and priorities | Last Updated: January 22, 2026
 
 ## Current Sprint Focus
 
@@ -9,6 +9,7 @@
 The Outlet/Customer Portal module has been successfully implemented, allowing clients to manage their outlet users who can log in and manage their own shipments and addresses.
 
 **Completed Features:**
+
 - ✅ Outlet CRUD operations (create, read, update, delete)
 - ✅ Outlet address management with geo-autocomplete
 - ✅ New `outlet` role in RBAC system
@@ -40,12 +41,12 @@ The primary focus is implementing a robust security layer and role-based access 
 | **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard  |
 | **User Service**     | 3003 | ✅ Production | 100%       | Outlet module added |
 | **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations     |
-| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Stable              |
+| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Pincode imports     |
 | **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable              |
 | **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending |
 | **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started         |
 | **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next        |
-| **Frontend**         | 3000 | 🔄 Migrating  | 60%        | Redux/RTK Query     |
+| **Frontend**         | 3000 | ✅ Production | 65%        | Redux/RTK Query     |
 
 ## Immediate Priorities
 
@@ -115,6 +116,22 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Recent Changes
 
+### January 22, 2026
+
+- ✅ **Frontend Docker Proxy Connection Fixed**
+  - Issue: `ECONNREFUSED ::1:3001` when frontend tried to reach API Gateway
+  - Root cause: `localhost` in Docker refers to the container itself, not the api-gateway service
+  - Fix: Updated `next.config.js` rewrites to use `http://api-gateway:3001`
+  - Built new image: `logistics-frontend-prod:new`
+  - Container deployed on `logistics-agrigator_logistics-network`
+  - Login now works through frontend proxy at `http://localhost:3000`
+
+- ✅ **Pincode Import Scripts Added**
+  - Added npm scripts to root `package.json` for easy pincode data import
+  - Scripts work for both dev and production environments
+  - `pnpm run import:pincodes` - Dev environment
+  - `pnpm run import:pincodes:prod` - Production environment
+
 ### January 2026
 
 - ✅ **Outlet Module Complete**
@@ -171,16 +188,16 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Key Reference Files
 
-| Purpose               | Location                                   |
-| --------------------- | ------------------------------------------ |
-| Auth patterns         | `backend/auth-service/`                    |
-| RBAC permissions      | `shared/constants/permissions.js`          |
-| Outlet routes         | `backend/user-service/routes/outlets.js`   |
-| Outlet controller     | `backend/user-service/controllers/outletController.js` |
-| Outlet frontend       | `frontend/src/app/outlets/page.tsx`        |
-| Outlet API (RTK)      | `frontend/src/store/api/endpoints/outletApi.ts` |
-| API response format   | `shared/lib/response.js`                   |
-| Error classes         | `shared/lib/errors.js`                     |
+| Purpose             | Location                                               |
+| ------------------- | ------------------------------------------------------ |
+| Auth patterns       | `backend/auth-service/`                                |
+| RBAC permissions    | `shared/constants/permissions.js`                      |
+| Outlet routes       | `backend/user-service/routes/outlets.js`               |
+| Outlet controller   | `backend/user-service/controllers/outletController.js` |
+| Outlet frontend     | `frontend/src/app/outlets/page.tsx`                    |
+| Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`        |
+| API response format | `shared/lib/response.js`                               |
+| Error classes       | `shared/lib/errors.js`                                 |
 
 ## Next Steps
 
@@ -192,6 +209,6 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ---
 
-**Sprint**: Outlet Module + API Gateway Security  
-**Week**: Active Development  
+**Sprint**: Infrastructure Fixes + License Service Integration
+**Week**: Active Development
 **Next Review**: Weekly

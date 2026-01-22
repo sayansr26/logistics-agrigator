@@ -1,0 +1,59 @@
+# =============== PRODUCTION DOCKERFILE ===============
+# Single-stage, optimized for production
+# Includes automated Prisma migrations on startup
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install runtime dependencies only (not build tools)
+RUN apk add --no-cache openssl
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
+
+# Copy workspace files
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY shared ./shared
+
+# Copy service package.json
+COPY backend/auth-service/package.json ./backend/auth-service/
+
+# Install dependencies (production only + Prisma CLI for migrations)
+RUN cd backend/auth-service && pnpm install --prod --frozen-lockfile --ignore-scripts
+
+# Copy service source (includes prisma directory)
+COPY backend/auth-service ./backend/auth-service
+
+# Copy shared into service directory for relative imports
+RUN cp -r /app/shared /app/backend/auth-service/
+
+# Generate Prisma client (needed at build time)
+RUN cd backend/auth-service && npx prisma generate
+
+# Copy production entrypoint script for automated migrations
+COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
+RUN chmod +x /app/production-entrypoint.sh
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Create logs directory
+RUN mkdir -p /app/logs/auth-service && chown -R nodejs:nodejs /app/logs
+
+# Set ownership (read-only for code)
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+
+WORKDIR /app
+
+EXPOSE 3002
+
+ENV NODE_ENV=production
+ENV PORT=3002
+ENV SERVICE_NAME=auth-service
+
+# Run production entrypoint (handles migrations) then start server
+ENTRYPOINT ["/app/production-entrypoint.sh"]
+CMD ["node", "backend/auth-service/server.js"]

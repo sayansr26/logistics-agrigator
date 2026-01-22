@@ -366,9 +366,7 @@ async function startServer() {
     corsConfig.logCorsConfiguration();
 
     app.listen(PORT, () => {
-      logger.info(
-        `🚀 Shipment Service running on port ${PORT} (LIVE RELOAD ENABLED)`,
-      );
+      logger.info(`🚀 Shipment Service running on port ${PORT} (Production)`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
       logger.info(
         `Swagger docs: http://localhost:3001/swagger/shipment-service (via API Gateway)`,

@@ -1,0 +1,449 @@
+# ============================================================================
+# PRODUCTION DOCKER COMPOSE CONFIGURATION
+# ============================================================================
+# This file is for PRODUCTION deployments only.
+# Usage:
+#   cp .env.production.example .env.production
+#   # Edit .env.production with your actual values
+#   docker-compose -f docker-compose.production.yml --env-file .env.production build
+#   docker-compose -f docker-compose.production.yml --env-file .env.production up -d
+# ============================================================================
+
+services:
+  # ============================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    expose:
+      - "${DB_PORT}"
+    networks:
+      - logistics-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${REDIS_CONTAINER_NAME:-logistics-redis-prod}
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    expose:
+      - "${REDIS_PORT}"
+    networks:
+      - logistics-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: always
+
+  # ============================================================
+  # API GATEWAY (External Port 3001)
+  # ============================================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./backend/api-gateway/Dockerfile.prod
+    container_name: ${API_GATEWAY_CONTAINER_NAME:-logistics-api-gateway-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${API_GATEWAY_PORT}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=${CROSS_ORIGIN}
+      - SERVICE_NAME=${SERVICE_NAME}
+      # Service URLs
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service-prod}:${SHIPMENT_SERVICE_PORT}
+      - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service-prod}:${PARTNER_SERVICE_PORT}
+      - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service-prod}:${WALLET_SERVICE_PORT}
+      - SUPPORT_SERVICE_URL=http://${SUPPORT_SERVICE_CONTAINER_NAME:-logistics-support-service-prod}:${SUPPORT_SERVICE_PORT}
+      - PLATFORM_SERVICE_URL=http://${PLATFORM_SERVICE_CONTAINER_NAME:-logistics-platform-service-prod}:${PLATFORM_SERVICE_PORT}
+      - LICENSE_SERVICE_URL=http://${LICENSE_SERVICE_CONTAINER_NAME:-logistics-license-service-prod}:${LICENSE_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    ports:
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # AUTH SERVICE (Internal)
+  # ============================================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./backend/auth-service/Dockerfile.prod
+    container_name: ${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${AUTH_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${AUTH_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # USER SERVICE (Internal)
+  # ============================================================
+  user-service:
+    build:
+      context: .
+      dockerfile: ./backend/user-service/Dockerfile.prod
+    container_name: ${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${USER_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${USER_DATABASE_NAME:-logistics_users}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${USER_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # SHIPMENT SERVICE (Internal)
+  # ============================================================
+  shipment-service:
+    build:
+      context: .
+      dockerfile: backend/shipment-service/Dockerfile.prod
+    container_name: ${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${SHIPMENT_SERVICE_PORT}
+      - SERVICE_NAME=${SHIPMENT_SERVICE_NAME:-shipment-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${SHIPMENT_DATABASE_NAME:-logistics_shipments}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service-prod}:${WALLET_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${SHIPMENT_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # PARTNER SERVICE (Internal)
+  # ============================================================
+  partner-service:
+    build:
+      context: .
+      dockerfile: backend/partner-service/Dockerfile.prod
+    container_name: ${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${PARTNER_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${PARTNER_DATABASE_NAME:-logistics_partners}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://user-service:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://shipment-service:${SHIPMENT_SERVICE_PORT}
+      - DELHIVERY_API_URL=${DELHIVERY_API_URL}
+      - BLUEDART_API_URL=${BLUEDART_API_URL}
+      - DTDC_API_URL=${DTDC_API_URL}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${PARTNER_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # WALLET SERVICE (Internal)
+  # ============================================================
+  wallet-service:
+    build:
+      context: .
+      dockerfile: backend/wallet-service/Dockerfile.prod
+    container_name: ${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${WALLET_SERVICE_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${WALLET_DATABASE_NAME:-logistics_wallet}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service-prod}:${PARTNER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service-prod}:${SHIPMENT_SERVICE_PORT}
+      - EXTERNAL_WALLET_API_URL=${EXTERNAL_WALLET_API_URL}
+      - EXTERNAL_WALLET_SECRET_KEY=${EXTERNAL_WALLET_SECRET_KEY}
+      - EXTERNAL_WALLET_USER_ID=${EXTERNAL_WALLET_USER_ID:-wallet-service}
+      - EXTERNAL_WALLET_JWT_TOKEN=${EXTERNAL_WALLET_JWT_TOKEN}
+      - JWT_EXPIRES_IN=${WALLET_JWT_EXPIRES_IN:-8h}
+      - JWT_REFRESH_EXPIRES_IN=${WALLET_JWT_REFRESH_EXPIRES_IN:-2592000}
+      - DEFAULT_CLIENT_CODE=${WALLET_DEFAULT_CLIENT_CODE:-DEFAULT}
+      - CACHE_WALLET_TTL=${CACHE_WALLET_TTL:-600}
+      - CACHE_BALANCE_TTL=${CACHE_BALANCE_TTL:-300}
+      - CACHE_TRANSACTIONS_TTL=${CACHE_TRANSACTIONS_TTL:-60}
+      - CIRCUIT_BREAKER_TIMEOUT=${CIRCUIT_BREAKER_TIMEOUT:-30000}
+      - CIRCUIT_BREAKER_ERROR_THRESHOLD=${CIRCUIT_BREAKER_ERROR_THRESHOLD:-50}
+      - CIRCUIT_BREAKER_RESET_TIMEOUT=${CIRCUIT_BREAKER_RESET_TIMEOUT:-60000}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-1000}
+      - RATE_LIMIT_STRICT_MAX=${RATE_LIMIT_STRICT_MAX:-50}
+      - RATE_LIMIT_BALANCE_MAX=${RATE_LIMIT_BALANCE_MAX:-100}
+      - RATE_LIMIT_TRANSACTION_MAX=${RATE_LIMIT_TRANSACTION_MAX:-30}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${WALLET_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # SUPPORT SERVICE (Internal)
+  # ============================================================
+  support-service:
+    build:
+      context: .
+      dockerfile: backend/support-service/Dockerfile.prod
+    container_name: ${SUPPORT_SERVICE_CONTAINER_NAME:-logistics-support-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${SUPPORT_SERVICE_PORT}
+      - SERVICE_NAME=${SUPPORT_SERVICE_NAME:-support-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${SUPPORT_DATABASE_NAME:-logistics_support}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${SUPPORT_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # PLATFORM SERVICE (Internal)
+  # ============================================================
+  platform-service:
+    build:
+      context: .
+      dockerfile: backend/platform-service/Dockerfile.prod
+    container_name: ${PLATFORM_SERVICE_CONTAINER_NAME:-logistics-platform-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${PLATFORM_SERVICE_PORT}
+      - SERVICE_NAME=${PLATFORM_SERVICE_NAME:-platform-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${PLATFORM_DATABASE_NAME:-logistics_platforms}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - SHIPMENT_SERVICE_URL=http://${SHIPMENT_SERVICE_CONTAINER_NAME:-logistics-shipment-service-prod}:${SHIPMENT_SERVICE_PORT}
+      - SHOPIFY_CLIENT_ID=${SHOPIFY_CLIENT_ID}
+      - SHOPIFY_CLIENT_SECRET=${SHOPIFY_CLIENT_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${PLATFORM_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # LICENSE SERVICE (Internal)
+  # ============================================================
+  license-service:
+    build:
+      context: .
+      dockerfile: backend/license-service/Dockerfile.prod
+    container_name: ${LICENSE_SERVICE_CONTAINER_NAME:-logistics-license-service-prod}
+    environment:
+      - NODE_ENV=production
+      - PORT=${LICENSE_SERVICE_PORT}
+      - SERVICE_NAME=${LICENSE_SERVICE_NAME:-license-service}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${LICENSE_DATABASE_NAME:-logistics_license}
+      - AUTH_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME:-logistics-postgres-prod}:${DB_PORT}/${AUTH_DATABASE_NAME:-logistics_auth}
+      - REDIS_URL=redis://${REDIS_CONTAINER_NAME:-logistics-redis-prod}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${LICENSE_JWT_EXPIRES_IN:-8h}
+      - JWT_REFRESH_EXPIRES_IN=${LICENSE_JWT_REFRESH_EXPIRES_IN:-604800}
+      - LICENSE_SECRET_KEY=${LICENSE_SECRET_KEY}
+      - LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY}
+      - AUTH_SERVICE_URL=http://${AUTH_SERVICE_CONTAINER_NAME:-logistics-auth-service-prod}:${AUTH_SERVICE_PORT}
+      - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
+      - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
+      - STAGING_ORIGINS=${STAGING_ORIGINS}
+    expose:
+      - "${LICENSE_SERVICE_PORT}"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: always
+
+  # ============================================================
+  # FRONTEND (External Port 3000)
+  # ============================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile.prod
+    container_name: ${FRONTEND_CONTAINER_NAME:-logistics-frontend-prod}
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-production}
+      # Server-side internal API URL for Next.js rewrites (not exposed to browser)
+      # Uses Docker service name for internal network communication
+      - API_URL_INTERNAL=http://api-gateway:3001
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - logistics-network
+    restart: always
+
+# ============================================================
+# VOLUMES
+# ============================================================
+volumes:
+  postgres_data:
+  redis_data:
+
+# ============================================================
+# NETWORKS
+# ============================================================
+networks:
+  logistics-network:
+    driver: bridge

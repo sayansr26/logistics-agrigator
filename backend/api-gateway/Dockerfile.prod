@@ -1,0 +1,32 @@
+# =============== PRODUCTION DOCKERFILE ===============
+FROM node:18-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+RUN npm install -g pnpm@8.15.1
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY shared ./shared
+COPY backend/api-gateway/package.json ./backend/api-gateway/
+
+RUN cd backend/api-gateway && pnpm install --prod --frozen-lockfile --ignore-scripts
+
+COPY backend/api-gateway ./backend/api-gateway
+
+# Copy shared into service directory for relative imports
+RUN cp -r /app/shared /app/backend/api-gateway/
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p /app/logs/api-gateway && chown -R nodejs:nodejs /app/logs
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+WORKDIR /app
+
+EXPOSE 3001
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+CMD ["node", "backend/api-gateway/server.js"]

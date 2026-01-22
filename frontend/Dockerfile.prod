@@ -1,0 +1,60 @@
+# =============== FRONTEND PRODUCTION DOCKERFILE ===============
+# Context: Root of project (has access to workspace files)
+# Usage: docker build -f frontend/Dockerfile.prod .
+
+FROM node:18-alpine
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Copy workspace files (needed for pnpm to resolve dependencies)
+COPY --chown=nodejs:nodejs pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY --chown=nodejs:nodejs shared ./shared
+COPY --chown=nodejs:nodejs frontend/package.json ./frontend/
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy frontend source
+COPY --chown=nodejs:nodejs frontend ./frontend
+
+# Build frontend
+USER nodejs
+RUN cd /app/frontend && pnpm build
+
+# =============== PRODUCTION RUNTIME SETUP ===============
+# Fix static assets 404 issue
+# Next.js standalone structure:
+#   .next/standalone/frontend/server.js
+#   .next/static/ (static assets remain here after build)
+# The server expects .next/static/ alongside server.js
+USER root
+
+# CRITICAL: Copy static assets to the standalone structure
+# Standalone server expects .next/static/ relative to server.js
+RUN mkdir -p /app/frontend/.next/standalone/frontend/.next && \
+    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/frontend/.next/
+
+# Copy public assets (if exists - some projects don't have public folder)
+RUN mkdir -p /app/frontend/.next/standalone/frontend && \
+    if [ -d "/app/frontend/public" ]; then \
+        cp -r /app/frontend/public /app/frontend/.next/standalone/frontend/; \
+    fi
+
+# Set ownership
+RUN chown -R nodejs:nodejs /app
+
+# Run from standalone directory, execute frontend/server.js
+USER nodejs
+WORKDIR /app/frontend/.next/standalone
+
+EXPOSE 3000
+
+ENV PORT 3000
+ENV NODE_ENV production
+
+CMD ["node", "frontend/server.js"]

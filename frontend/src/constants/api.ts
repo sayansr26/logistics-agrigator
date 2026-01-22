@@ -1,8 +1,10 @@
 // API Configuration Constants
-// All requests now route through API Gateway (port 3001)
+// All requests route through Next.js rewrites (server-side proxy)
+// This avoids CORS issues - requests go: Browser → Next.js → API Gateway
 export const API_CONFIG = {
-  // API Gateway URL (default: http://localhost:3001)
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
+  // Use empty string for Next.js rewrites (relative paths)
+  // Next.js will proxy /api/v1/* requests to the API Gateway
+  BASE_URL: "", // Relative path - Next.js rewrite handles proxying
   API_VERSION: "/api/v1",
   TIMEOUT: 36000, // 30 seconds
   RETRY_ATTRIES: 3,

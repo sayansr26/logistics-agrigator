@@ -272,9 +272,7 @@ async function startServer() {
     corsConfig.logCorsConfiguration();
 
     app.listen(PORT, () => {
-      logger.info(
-        `🚀 Auth Service running on port ${PORT} (LIVE RELOAD ENABLED)`,
-      );
+      logger.info(`🚀 Auth Service running on port ${PORT} (Production)`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
       logger.info(
         `Swagger docs: http://localhost:3001/swagger/auth (via API Gateway)`,

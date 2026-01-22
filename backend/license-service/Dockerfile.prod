@@ -1,0 +1,39 @@
+# =============== PRODUCTION DOCKERFILE ===============
+FROM node:18-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+RUN npm install -g pnpm@8.15.1
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY shared ./shared
+COPY backend/license-service/package.json ./backend/license-service/
+
+RUN cd backend/license-service && pnpm install --prod --frozen-lockfile --ignore-scripts
+
+COPY backend/license-service ./backend/license-service
+
+# Copy shared into service directory for relative imports
+RUN cp -r /app/shared /app/backend/license-service/
+RUN cd backend/license-service && npx prisma generate
+
+# Copy production entrypoint script for automated migrations
+COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
+RUN chmod +x /app/production-entrypoint.sh
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p /app/logs/license-service && chown -R nodejs:nodejs /app/logs
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+WORKDIR /app
+
+EXPOSE 3009
+
+ENV NODE_ENV=production
+ENV PORT=3009
+ENV SERVICE_NAME=license-service
+
+ENTRYPOINT ["/app/production-entrypoint.sh"]
+CMD ["node", "backend/license-service/server.js"]
