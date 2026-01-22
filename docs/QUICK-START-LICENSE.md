@@ -99,10 +99,14 @@ Then proceed to Step 2 and 3 above.
 The license service `/api/v1/licenses/generate` endpoint requires admin authentication.
 
 ```json
-{"status":"error","error":{"code":"INTERNAL_ERROR","message":"Invalid token"}}
+{
+  "status": "error",
+  "error": { "code": "INTERNAL_ERROR", "message": "Invalid token" }
+}
 ```
 
 This happens because:
+
 1. You need a valid JWT token with `role: 'admin'`
 2. The token comes from the auth-service
 3. You need an admin user in the database first
@@ -234,17 +238,18 @@ curl -X POST http://localhost:3011/api/v1/licenses/validate \
 
 ## Error Messages Explained
 
-| Error | Meaning | Solution |
-|-------|---------|----------|
-| `"Invalid token"` | No token or invalid JWT | Login to get fresh token |
-| `"Token expired"` | JWT token too old | Login again |
-| `"Admin access required"` | Token doesn't have admin role | Use admin account |
-| `"Invalid email or password"` | Wrong credentials | Check admin user exists |
-| `"Too many requests"` | Rate limit hit | Wait and retry |
+| Error                         | Meaning                       | Solution                 |
+| ----------------------------- | ----------------------------- | ------------------------ |
+| `"Invalid token"`             | No token or invalid JWT       | Login to get fresh token |
+| `"Token expired"`             | JWT token too old             | Login again              |
+| `"Admin access required"`     | Token doesn't have admin role | Use admin account        |
+| `"Invalid email or password"` | Wrong credentials             | Check admin user exists  |
+| `"Too many requests"`         | Rate limit hit                | Wait and retry           |
 
 ## Next Steps
 
 Once you have a license key:
+
 1. Save it securely
 2. Use it with the secure-docker-builder
 3. Distribute to clients

@@ -36,7 +36,10 @@
       "Bash(builtin docker-compose restart:*)",
       "Bash(npx eslint:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(builtin pnpm run production:build)",
+      "Bash(docker-compose:*)",
+      "Bash(docker run:*)"
     ]
   },
   "sandbox": {

@@ -49,6 +49,7 @@ The **Logistics Secure Docker Builder** is a zero-source-code distribution syste
 ### Step 1: Generate License
 
 #### Option A: Using Test Script (Easiest)
+
 ```bash
 # Run the automated test script
 cd backend/license-service
@@ -86,6 +87,7 @@ curl -X POST http://localhost:3011/api/v1/licenses/generate \
 ```
 
 **Note**: If you don't have an admin user, create one first:
+
 ```bash
 curl -X POST http://localhost:3002/auth/register \
   -H "Content-Type: application/json" \
@@ -100,6 +102,7 @@ curl -X POST http://localhost:3002/auth/register \
 ### Step 2: Build Secure Docker Image
 
 #### Interactive Mode (Recommended)
+
 ```bash
 # Run the secure build CLI
 pnpm run secure:generate-config
@@ -117,6 +120,7 @@ pnpm run secure:build --config build-config.json
 ```
 
 #### Programmatic Mode
+
 ```bash
 # Create configuration file
 cat > client-config.json << EOF
@@ -152,6 +156,7 @@ pnpm run secure:push logistics/secure-abc:v1 \
 ### Step 4: Provide to Client
 
 Share with the client:
+
 1. The Docker image name: `registry.logistics.io/logistics/secure-abc:v1`
 2. The license key generated in Step 1
 3. The deployment instructions (see Client Guide below)
@@ -266,11 +271,13 @@ docker volume rm logistics-data
 ### Troubleshooting
 
 #### License Issues
+
 - Ensure license key is valid and not expired
 - Check internet connectivity to license server
 - Verify system time is correct
 
 #### Port Conflicts
+
 ```bash
 # Check if ports are available
 netstat -tuln | grep 300
@@ -282,6 +289,7 @@ docker run -it \
 ```
 
 #### Docker Issues
+
 ```bash
 # Check Docker version
 docker --version
@@ -296,11 +304,13 @@ ls -la /var/run/docker.sock
 ## Security Features
 
 ### 1. Binary Compilation
+
 - JavaScript code compiled to binary using `pkg`
 - Platform-specific binaries (linux-x64, linux-arm64)
 - No source code visible even with container inspection
 
 ### 2. JavaScript Obfuscation
+
 ```javascript
 // Before obfuscation
 const validateLicense = (key) => {
@@ -315,6 +325,7 @@ _0x2d8f05['push'](_0x2d8f05['shift']());}};_0x529e49(++_0x4a3b12);
 ```
 
 ### 3. Hardware Binding
+
 - Machine fingerprint includes:
   - MAC address
   - CPU model and count
@@ -323,6 +334,7 @@ _0x2d8f05['push'](_0x2d8f05['shift']());}};_0x529e49(++_0x4a3b12);
 - Activation locked to specific hardware
 
 ### 4. Heartbeat Monitoring
+
 - Every 5 minutes, validates license status
 - Auto-shutdown if:
   - License expired
@@ -331,6 +343,7 @@ _0x2d8f05['push'](_0x2d8f05['shift']());}};_0x529e49(++_0x4a3b12);
   - Network connectivity lost (after 3 failures)
 
 ### 5. Encrypted Configuration
+
 - Secure passwords generated at runtime
 - Environment variables encrypted in memory
 - Configuration files with restrictive permissions (0600)
@@ -429,6 +442,7 @@ tools/secure-docker-builder/
 ## API Integration
 
 ### License Validation Endpoint
+
 ```
 POST /api/v1/activate
 Headers:
@@ -451,6 +465,7 @@ Response:
 ```
 
 ### Heartbeat Endpoint
+
 ```
 POST /api/v1/heartbeat
 Headers:
@@ -466,6 +481,7 @@ Body:
 ## Monitoring & Analytics
 
 ### Admin Dashboard Views
+
 - Active licenses
 - Activation history
 - Usage metrics
@@ -473,6 +489,7 @@ Body:
 - Expiry alerts
 
 ### Client Metrics
+
 - Service uptime
 - API call counts
 - Resource usage
