@@ -412,6 +412,48 @@ class LogsAggregationController {
       });
     }
   }
+
+  /**
+   * GET /audit-log-actions
+   * Returns all available audit log action types for filtering
+   * Provides categorized action lists for frontend dropdowns
+   */
+  static async getAvailableActions(req, res) {
+    try {
+      const auditActions = require("../shared/constants/auditActions");
+
+      // Get all unique action values
+      const allActions = auditActions.getAllActions();
+
+      // Get categorized actions
+      const categories = auditActions.ACTION_CATEGORIES;
+
+      res.json({
+        status: "success",
+        data: {
+          actions: categories,
+          allActions,
+          meta: {
+            totalActions: allActions.length,
+            totalCategories: Object.keys(categories).length,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error("Error getting available audit actions:", error);
+      res.status(500).json({
+        status: "error",
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to retrieve available audit actions",
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+  }
 }
 
 module.exports = LogsAggregationController;

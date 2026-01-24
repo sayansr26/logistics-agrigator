@@ -48,7 +48,7 @@ async function createCharge(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_SERVICE_CHARGE_CREATED",
+        action: "CREATE_PINCODE_TYPE_SERVICE_CHARGE",
         resourceType: "PINCODE_TYPE_SERVICE_CHARGE",
         resourceId: result.charges?.[0]?.id || null,
         userId: req.user?.id,
@@ -231,7 +231,7 @@ async function updateCharge(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_SERVICE_CHARGE_UPDATED",
+        action: "UPDATE_PINCODE_TYPE_SERVICE_CHARGE",
         resourceType: "PINCODE_TYPE_SERVICE_CHARGE",
         resourceId: charge.id,
         userId: req.user?.id,
@@ -297,7 +297,7 @@ async function deleteCharge(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_SERVICE_CHARGE_DELETED",
+        action: "DELETE_PINCODE_TYPE_SERVICE_CHARGE",
         resourceType: "PINCODE_TYPE_SERVICE_CHARGE",
         resourceId: charge.id,
         userId: req.user?.id,

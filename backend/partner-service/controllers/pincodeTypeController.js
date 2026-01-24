@@ -48,7 +48,7 @@ async function createPincodeType(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_CREATED",
+        action: "CREATE_PINCODE_TYPE",
         resourceType: "PINCODE_TYPE",
         resourceId: result.id,
         userId: req.user?.id,
@@ -222,7 +222,7 @@ async function updatePincodeType(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_UPDATED",
+        action: "UPDATE_PINCODE_TYPE",
         resourceType: "PINCODE_TYPE",
         resourceId: pincodeType.id,
         userId: req.user?.id,
@@ -288,7 +288,7 @@ async function deletePincodeType(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_DELETED",
+        action: "DELETE_PINCODE_TYPE",
         resourceType: "PINCODE_TYPE",
         resourceId: pincodeType.id,
         userId: req.user?.id,
@@ -355,7 +355,7 @@ async function assignPincodes(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_ASSIGNED",
+        action: "ASSIGN_PINCODE_TYPE",
         resourceType: "PINCODE_TYPE",
         resourceId: id,
         userId: req.user?.id,
@@ -427,7 +427,7 @@ async function unassignPincodes(req, res) {
     // Audit log
     await prisma.auditLog.create({
       data: {
-        action: "PINCODE_TYPE_UNASSIGNED",
+        action: "UNASSIGN_PINCODE_TYPE",
         resourceType: "PINCODE_TYPE",
         resourceId: id,
         userId: req.user?.id,

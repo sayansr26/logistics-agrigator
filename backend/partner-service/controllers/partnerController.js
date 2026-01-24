@@ -139,7 +139,7 @@ async function createPartner(data, req = {}) {
   // Log partner creation
   await prisma.auditLog.create({
     data: {
-      action: "PARTNER_CREATED",
+      action: "CREATE_PARTNER",
       resourceType: "PARTNER",
       resourceId: partner.id,
       userId: req.user?.id,
@@ -210,7 +210,7 @@ async function updatePartner(id, data, req = {}) {
   // Log partner update
   await prisma.auditLog.create({
     data: {
-      action: "PARTNER_UPDATED",
+      action: "UPDATE_PARTNER",
       resourceType: "PARTNER",
       resourceId: id,
       userId: req.user?.id,
@@ -260,7 +260,7 @@ async function deletePartner(id, req = {}) {
   // Log partner deletion
   await prisma.auditLog.create({
     data: {
-      action: "PARTNER_DELETED",
+      action: "DELETE_PARTNER",
       resourceType: "PARTNER",
       resourceId: id,
       userId: req.user?.id,

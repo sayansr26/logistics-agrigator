@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: January 22, 2026
+> Current work focus and priorities | Last Updated: January 24, 2026
 
 ## Current Sprint Focus
 
@@ -116,6 +116,17 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Recent Changes
 
+### January 24, 2026
+
+- ✅ **Audit Logging Enhancement Complete**
+  - Standardized all backend audit action names to `UPPERCASE_WITH_UNDERSCORES` format
+  - Created `shared/constants/auditActions.js` with 70+ actions across 18 categories
+  - Added `GET /api/v1/audit-log-actions` API endpoint for dynamic filtering
+  - Updated frontend audit-logs page with category-based filtering
+  - Expanded resource filter from 6 to 22 resource types
+  - Fixed services: user-service, partner-service, bootstrap controller
+  - Container updates: Copied files to API Gateway container for immediate availability
+
 ### January 22, 2026
 
 - ✅ **Frontend Docker Proxy Connection Fixed**
@@ -209,6 +220,6 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ---
 
-**Sprint**: Infrastructure Fixes + License Service Integration
+**Sprint**: Audit Logging Enhancement + License Service Integration
 **Week**: Active Development
 **Next Review**: Weekly

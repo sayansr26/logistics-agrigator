@@ -72,6 +72,19 @@ export interface LogsQueryParams {
   level?: string;
 }
 
+export interface AuditActionsResponse {
+  status: string;
+  data: {
+    actions: Record<string, string[]>;
+    allActions: string[];
+    meta: {
+      totalActions: number;
+      totalCategories: number;
+      timestamp: string;
+    };
+  };
+}
+
 // ===========================
 // RTK Query API Definition
 // ===========================
@@ -124,6 +137,16 @@ export const logsApi = baseApi.injectEndpoints({
         { type: "AuditLog" as const, id: `client-${arg.clientId}` },
       ],
     }),
+
+    /**
+     * Get Available Audit Actions - Returns all action types for filtering
+     */
+    getAvailableAuditActions: builder.query<AuditActionsResponse, void>({
+      query: () => ({
+        url: "/api/v1/audit-log-actions",
+      }),
+      providesTags: ["AuditLogActions"],
+    }),
   }),
 });
 
@@ -135,4 +158,5 @@ export const {
   useGetAdminAuditLogsQuery,
   useGetAdminRuntimeLogsQuery,
   useGetClientAuditLogsQuery,
+  useGetAvailableAuditActionsQuery,
 } = logsApi;

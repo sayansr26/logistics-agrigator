@@ -1,6 +1,6 @@
 # System Patterns - Logistics Aggregator Portal
 
-> Architecture and design patterns | Last Updated: December 2024
+> Architecture and design patterns | Last Updated: January 24, 2026
 
 ## Architecture Overview
 
@@ -161,7 +161,7 @@ All endpoints use standardized response format:
 await prisma.auditLog.create({
   data: {
     userId: req.user.id,
-    action: "CREATE", // CREATE, UPDATE, DELETE, READ
+    action: "CREATE", // CREATE, UPDATE, DELETE, VIEW, LIST, etc.
     resource: "shipment", // Table/entity name
     resourceId: newEntity.id, // ID of affected record
     changes: diffData, // What changed (JSON)
@@ -170,6 +170,55 @@ await prisma.auditLog.create({
   },
 });
 ```
+
+**Action Naming Standard (UPPERCASE_WITH_UNDERSCORES):**
+
+All audit actions must follow the `UPPERCASE_WITH_UNDERSCORES` format and use centralized constants:
+
+```javascript
+// ✅ CORRECT - Use constants from shared/constants/auditActions.js
+const {
+  CREATE,
+  UPDATE,
+  DELETE,
+  VIEW_PROFILE,
+  VERIFY_PROFILE,
+} = require("../../shared/constants/auditActions");
+
+await prisma.auditLog.create({
+  data: {
+    action: CREATE_PROFILE, // "CREATE_PROFILE"
+    resource: "UserProfile",
+    // ...
+  },
+});
+
+// ❌ WRONG - Do not use lowercase or past tense
+await prisma.auditLog.create({
+  data: {
+    action: "create_profile", // ❌ Lowercase
+    action: "PROFILE_CREATED", // ❌ Past tense
+    // ...
+  },
+});
+```
+
+**Available Action Categories:**
+
+| Category | Example Actions                                             |
+| -------- | ----------------------------------------------------------- |
+| CRUD     | CREATE, UPDATE, DELETE, VIEW, LIST, GET                     |
+| AUTH     | LOGIN, LOGOUT, TOKEN_REFRESH, LOGOUT_ALL_DEVICES            |
+| USER     | CREATE_USER, UPDATE_USER, DELETE_USER, ACTIVATE_USER        |
+| PROFILE  | CREATE_PROFILE, UPDATE_PROFILE, VERIFY_PROFILE, GET_PROFILE |
+| CLIENT   | CREATE_CLIENT, UPDATE_CLIENT, GET_CLIENT_STATS              |
+| OUTLET   | CREATE_OUTLET, UPDATE_OUTLET, RESET_OUTLET_PASSWORD         |
+| SHIPMENT | CREATE, CANCEL, TRACK, CALCULATE_RATES, SCHEDULE_PICKUP     |
+| PARTNER  | CREATE_PARTNER, UPDATE_PARTNER, DELETE_PARTNER              |
+| WALLET   | DEBIT_WALLET, CREDIT_WALLET, REQUEST_PAYOUT                 |
+| LICENSE  | GENERATE_LICENSE, REVOKE_LICENSE, VALIDATE_LICENSE          |
+
+**Full Reference:** `shared/constants/auditActions.js`
 
 ### 6. Authentication Flow
 
@@ -223,6 +272,7 @@ superadmin (all permissions)
 ```
 
 **Outlet Role Permissions:**
+
 ```javascript
 outlet: [
   "shipment:create:own",
@@ -235,7 +285,7 @@ outlet: [
   "user:address:delete:own",
   "user:profile:read:own",
   "user:profile:update:own",
-]
+];
 ```
 
 ### 8. Prisma Schema Pattern
@@ -329,9 +379,9 @@ app.use((error, req, res, next) => {
 ```prisma
 model Outlet {
   id              String          @id @default(uuid()) @db.Uuid
-  userId          String          @unique @db.Uuid  // Auth user reference
+  userId          String          @unique @db.Uuid // Auth user reference
   createdByUserId String          @db.Uuid
-  clientId        String?         @db.Uuid  // Optional client linkage
+  clientId        String?         @db.Uuid // Optional client linkage
   name            String
   email           String          @unique
   phone           String          @unique
@@ -342,40 +392,43 @@ model Outlet {
   companyAddress  Json?
   isActive        Boolean         @default(true)
   addresses       OutletAddress[]
+
   @@map("outlets")
 }
 
 model OutletAddress {
-  id              String   @id @default(uuid()) @db.Uuid
-  outletId        String   @db.Uuid
-  label           String   // "Main Office", "Warehouse"
-  addressType     String   @default("HOME")  // HOME, WORK, OTHER
-  name            String   // Contact name
+  id              String  @id @default(uuid()) @db.Uuid
+  outletId        String  @db.Uuid
+  label           String // "Main Office", "Warehouse"
+  addressType     String  @default("HOME") // HOME, WORK, OTHER
+  name            String // Contact name
   phone           String
   addressLine1    String
   city            String
   state           String
   pincode         String
-  isDefaultPickup Boolean  @default(false)  // Single default
+  isDefaultPickup Boolean @default(false) // Single default
+  Outlet          Outlet  @relation(fields: [outletId], references: [id])
+
   @@map("outlet_addresses")
 }
 ```
 
 **API Routes:**
 
-| Method | Endpoint                              | Description              |
-| ------ | ------------------------------------- | ------------------------ |
-| POST   | /api/outlets                          | Create outlet            |
-| GET    | /api/outlets                          | List outlets             |
-| GET    | /api/outlets/:id                      | Get outlet by ID         |
-| PUT    | /api/outlets/:id                      | Update outlet            |
-| DELETE | /api/outlets/:id                      | Delete (soft) outlet     |
-| PATCH  | /api/outlets/:id/status               | Toggle active status     |
-| POST   | /api/outlets/:id/reset-password       | Reset password           |
-| GET    | /api/outlets/:id/addresses            | Get outlet addresses     |
-| POST   | /api/outlets/:id/addresses            | Create address           |
-| PUT    | /api/outlets/:id/addresses/:addressId | Update address           |
-| DELETE | /api/outlets/:id/addresses/:addressId | Delete address           |
+| Method | Endpoint                              | Description          |
+| ------ | ------------------------------------- | -------------------- |
+| POST   | /api/outlets                          | Create outlet        |
+| GET    | /api/outlets                          | List outlets         |
+| GET    | /api/outlets/:id                      | Get outlet by ID     |
+| PUT    | /api/outlets/:id                      | Update outlet        |
+| DELETE | /api/outlets/:id                      | Delete (soft) outlet |
+| PATCH  | /api/outlets/:id/status               | Toggle active status |
+| POST   | /api/outlets/:id/reset-password       | Reset password       |
+| GET    | /api/outlets/:id/addresses            | Get outlet addresses |
+| POST   | /api/outlets/:id/addresses            | Create address       |
+| PUT    | /api/outlets/:id/addresses/:addressId | Update address       |
+| DELETE | /api/outlets/:id/addresses/:addressId | Delete address       |
 
 **Geo-Autocomplete Pattern:**
 
@@ -438,6 +491,6 @@ Redis Cache Structure:
 
 ---
 
-**Architecture Status**: Stable  
-**Last Pattern Review**: January 2026  
-**Recent Addition**: Outlet Module Pattern
+**Architecture Status**: Stable
+**Last Pattern Review**: January 24, 2026
+**Recent Additions**: Outlet Module Pattern, Audit Action Standardization

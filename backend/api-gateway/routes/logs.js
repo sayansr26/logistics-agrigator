@@ -223,4 +223,56 @@ router.get(
   LogsAggregationController.getClientAuditLogs,
 );
 
+/**
+ * @swagger
+ * /api/v1/audit-log-actions:
+ *   get:
+ *     tags: [Logs]
+ *     summary: Get available audit log action types
+ *     description: Returns all action types that can be used for filtering audit logs, organized by functional category
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved available actions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     actions:
+ *                       type: object
+ *                       description: Actions organized by category
+ *                       example:
+ *                         CRUD: ["CREATE", "UPDATE", "DELETE", "VIEW", "LIST"]
+ *                         AUTH: ["LOGIN", "LOGOUT", "TOKEN_REFRESH"]
+ *                         SHIPMENT: ["CREATE", "CANCEL", "TRACK"]
+ *                     allActions:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       description: All unique action values
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/audit-log-actions",
+  requireRole([
+    "superadmin",
+    "admin",
+    "client",
+    "accounts",
+    "sales",
+    "support",
+  ]),
+  LogsAggregationController.getAvailableActions,
+);
+
 module.exports = router;

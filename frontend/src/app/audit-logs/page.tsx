@@ -40,6 +40,7 @@ import {
   useGetAdminAuditLogsQuery,
   useGetAdminRuntimeLogsQuery,
   useGetClientAuditLogsQuery,
+  useGetAvailableAuditActionsQuery,
   type AuditEvent,
   type RuntimeLogLine,
 } from "@/store/api/endpoints/logsApi";
@@ -107,6 +108,7 @@ export default function AuditLogsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedService, setSelectedService] = useState<string>("");
   const [selectedAction, setSelectedAction] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedLevel, setSelectedLevel] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
@@ -152,6 +154,15 @@ export default function AuditLogsPage() {
   } = useGetClientAuditLogsQuery(queryParams, {
     skip: !isRoleDetermined || actuallyIsSuperadmin || activeTab !== "audit",
   });
+
+  // Get available audit actions for dynamic filtering
+  const { data: availableActionsData, isLoading: isLoadingActions } =
+    useGetAvailableAuditActionsQuery(undefined, {
+      skip: activeTab !== "audit",
+    });
+
+  const availableActions = availableActionsData?.data?.actions || {};
+  const allActionList = availableActionsData?.data?.allActions || [];
 
   const {
     data: runtimeData,
@@ -308,26 +319,102 @@ export default function AuditLogsPage() {
 
                 {activeTab === "audit" && (
                   <>
+                    {/* Action Category Filter */}
+                    <Select
+                      value={selectedCategory || "all"}
+                      onValueChange={(v) => {
+                        setSelectedCategory(v === "all" ? "all" : v);
+                        setSelectedAction(""); // Reset action when category changes
+                        handleFilterChange();
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        <SelectItem value="CRUD">CRUD Operations</SelectItem>
+                        <SelectItem value="AUTH">Authentication</SelectItem>
+                        <SelectItem value="USER">User Management</SelectItem>
+                        <SelectItem value="PROFILE">
+                          Profile Management
+                        </SelectItem>
+                        <SelectItem value="CLIENT">
+                          Client Management
+                        </SelectItem>
+                        <SelectItem value="OUTLET">
+                          Outlet Management
+                        </SelectItem>
+                        <SelectItem value="ADDRESS">
+                          Address Management
+                        </SelectItem>
+                        <SelectItem value="INVITATION">Invitations</SelectItem>
+                        <SelectItem value="SHIPMENT">Shipments</SelectItem>
+                        <SelectItem value="NDR">NDR Management</SelectItem>
+                        <SelectItem value="LABEL_MANIFEST">
+                          Labels & Manifests
+                        </SelectItem>
+                        <SelectItem value="PICKUP">
+                          Pickup Scheduling
+                        </SelectItem>
+                        <SelectItem value="PARTNER">
+                          Partner/Courier Management
+                        </SelectItem>
+                        <SelectItem value="PINCODE">
+                          Pincode Management
+                        </SelectItem>
+                        <SelectItem value="WALLET">
+                          Wallet & Payments
+                        </SelectItem>
+                        <SelectItem value="LICENSE">Licensing</SelectItem>
+                        <SelectItem value="SUPPORT">Support Tickets</SelectItem>
+                        <SelectItem value="SYSTEM">
+                          System Operations
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* Action Filter - Dynamic based on category */}
                     <Select
                       value={selectedAction || "all"}
                       onValueChange={(v) => {
                         setSelectedAction(v === "all" ? "" : v);
                         handleFilterChange();
                       }}
+                      disabled={isLoadingActions}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Action" />
+                        <SelectValue
+                          placeholder={
+                            isLoadingActions ? "Loading..." : "Action"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Actions</SelectItem>
-                        <SelectItem value="CREATE">Create</SelectItem>
-                        <SelectItem value="UPDATE">Update</SelectItem>
-                        <SelectItem value="DELETE">Delete</SelectItem>
-                        <SelectItem value="LOGIN">Login</SelectItem>
-                        <SelectItem value="LOGOUT">Logout</SelectItem>
+                        {selectedCategory === "all"
+                          ? allActionList.map((action) => (
+                              <SelectItem key={action} value={action}>
+                                {action
+                                  .replace(/_/g, " ")
+                                  .toLowerCase()
+                                  .replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </SelectItem>
+                            ))
+                          : availableActions[selectedCategory]?.map(
+                              (action: string) => (
+                                <SelectItem key={action} value={action}>
+                                  {action
+                                    .replace(/_/g, " ")
+                                    .toLowerCase()
+                                    .replace(/\b\w/g, (c) => c.toUpperCase())}
+                                </SelectItem>
+                              ),
+                            )}
                       </SelectContent>
                     </Select>
 
+                    {/* Expanded Resource Filter */}
                     <Select
                       value={selectedResource || "all"}
                       onValueChange={(v) => {
@@ -342,9 +429,47 @@ export default function AuditLogsPage() {
                         <SelectItem value="all">All Resources</SelectItem>
                         <SelectItem value="User">Users</SelectItem>
                         <SelectItem value="Client">Clients</SelectItem>
+                        <SelectItem value="Outlet">Outlets</SelectItem>
+                        <SelectItem value="UserProfile">
+                          User Profiles
+                        </SelectItem>
+                        <SelectItem value="Address">Addresses</SelectItem>
+                        <SelectItem value="UserInvitation">
+                          User Invitations
+                        </SelectItem>
                         <SelectItem value="Shipment">Shipments</SelectItem>
                         <SelectItem value="Partner">Partners</SelectItem>
+                        <SelectItem value="PartnerChannel">
+                          Partner Channels
+                        </SelectItem>
+                        <SelectItem value="PincodeType">
+                          Pincode Types
+                        </SelectItem>
+                        <SelectItem value="PincodeTypeServiceCharge">
+                          Pincode Service Charges
+                        </SelectItem>
                         <SelectItem value="Wallet">Wallet</SelectItem>
+                        <SelectItem value="WalletTransaction">
+                          Wallet Transactions
+                        </SelectItem>
+                        <SelectItem value="PayoutRequest">
+                          Payout Requests
+                        </SelectItem>
+                        <SelectItem value="License">Licenses</SelectItem>
+                        <SelectItem value="LicenseActivation">
+                          License Activations
+                        </SelectItem>
+                        <SelectItem value="SupportTicket">
+                          Support Tickets
+                        </SelectItem>
+                        <SelectItem value="NDRCase">NDR Cases</SelectItem>
+                        <SelectItem value="PickupSchedule">
+                          Pickup Schedules
+                        </SelectItem>
+                        <SelectItem value="ShippingLabel">
+                          Shipping Labels
+                        </SelectItem>
+                        <SelectItem value="Manifest">Manifests</SelectItem>
                       </SelectContent>
                     </Select>
                   </>

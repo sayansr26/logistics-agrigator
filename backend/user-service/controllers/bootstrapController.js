@@ -102,7 +102,7 @@ async function bootstrapUser(req, res) {
           metadata: {
             source: "user-service",
             endpoint: "/api/v1/internal/bootstrap-user",
-            action: "signup",
+            action: "SIGNUP",
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
@@ -187,7 +187,7 @@ async function rollbackBootstrap(req, res) {
           metadata: {
             source: "user-service",
             endpoint: `/api/v1/internal/bootstrap-user/${userId}`,
-            action: "rollback",
+            action: "ROLLBACK_BOOTSTRAP",
           },
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),

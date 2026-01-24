@@ -208,6 +208,15 @@ Overall Project Progress          [███████████████
 
 ### This Week's Progress
 
+- ✅ **Audit Logging Enhancement** (January 24, 2026)
+  - Standardized all audit action names to UPPERCASE_WITH_UNDERSCORES format
+  - Created centralized audit actions constants (70+ actions)
+  - Added GET /api/v1/audit-log-actions endpoint for dynamic filtering
+  - Updated frontend with category-based action filtering (18 categories)
+  - Expanded resource filter from 6 to 22 resource types
+  - Fixed services: user-service, partner-service, bootstrap controller
+  - Frontend: Dynamic action options based on selected category
+
 - ✅ **Frontend Docker Proxy Connection Fix** (January 2026)
   - Fixed `ECONNREFUSED ::1:3001` error in production
   - Updated `next.config.js` to use `http://api-gateway:3001` instead of `localhost:3001`
@@ -285,6 +294,57 @@ Overall Project Progress          [███████████████
 ### January 2026
 
 ```
+[2026-01-24] Audit Logging Enhancement - COMPLETE
+  Backend Standardization:
+  - Fixed user-service: lowercase actions → UPPERCASE_WITH_UNDERSCORES
+    - create_profile → CREATE_PROFILE
+    - update_profile → UPDATE_PROFILE
+    - delete_profile → DELETE_PROFILE
+    - get_profile → GET_PROFILE_BY_USER_ID
+    - get_my_profile → GET_MY_PROFILE
+    - verify_profile → VERIFY_PROFILE
+    - toggle_profile_activation → ACTIVATE_PROFILE/DEACTIVATE_PROFILE
+    - profile_stats → GET_PROFILE_STATS
+  - Fixed partner-service: past tense → present tense
+    - PARTNER_CREATED → CREATE_PARTNER
+    - PARTNER_UPDATED → UPDATE_PARTNER
+    - PARTNER_DELETED → DELETE_PARTNER
+    - PINCODE_TYPE_CREATED → CREATE_PINCODE_TYPE
+    - PINCODE_TYPE_UPDATED → UPDATE_PINCODE_TYPE
+    - PINCODE_TYPE_DELETED → DELETE_PINCODE_TYPE
+  - Fixed bootstrap controller:
+    - signup → SIGNUP
+    - rollback → ROLLBACK_BOOTSTRAP
+
+  Shared Constants:
+  - Created shared/constants/auditActions.js with 70+ actions
+  - Organized into 18 categories: CRUD, AUTH, USER, PROFILE, CLIENT, OUTLET,
+    ADDRESS, INVITATION, SHIPMENT, NDR, LABEL_MANIFEST, PICKUP, PARTNER,
+    PINCODE, WALLET, LICENSE, SUPPORT, SYSTEM
+  - Helper functions: getAllActions(), getActionsByCategory(), isActionInCategory()
+
+  API Gateway:
+  - Added GET /api/v1/audit-log-actions endpoint
+  - LogsAggregationController.getAvailableActions() method
+  - RBAC: includes superadmin, admin, client, accounts, sales, support roles
+  - Returns categorized action lists for frontend dropdowns
+
+  Frontend:
+  - Added getAvailableAuditActions RTK Query endpoint (logsApi.ts)
+  - Updated audit-logs page with category-based filtering
+  - Category selector: All Categories, CRUD Operations, Authentication, etc.
+  - Dynamic action filter: shows actions based on selected category
+  - Expanded resource filter: 6 → 22 resource types
+  - New resources: UserProfile, Outlet, Address, UserInvitation, PartnerChannel,
+    PincodeType, PincodeTypeServiceCharge, WalletTransaction, PayoutRequest,
+    LicenseActivation, SupportTicket, NDRCase, PickupSchedule, ShippingLabel, Manifest
+
+  Infrastructure:
+  - Updated .env PRODUCTION_ORIGINS to include localhost:3000 and localhost:3001
+  - Rebuilt and restarted API Gateway
+  - Restarted user-service and partner-service
+  - Copied auditActions.js and updated controller to container
+
 [2026-01-22] Frontend Docker Proxy Connection Fix - COMPLETE
   Infrastructure:
   - Fixed ECONNREFUSED ::1:3001 error in production frontend
@@ -435,6 +495,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: January 22, 2026
+**Last Updated**: January 24, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

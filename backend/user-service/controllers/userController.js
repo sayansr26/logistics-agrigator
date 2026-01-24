@@ -277,7 +277,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "create_profile",
+            action: "CREATE_PROFILE",
           },
         ),
       );
@@ -380,7 +380,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "get_profile",
+            action: "VIEW_PROFILE",
           },
         ),
       );
@@ -429,7 +429,7 @@ class UserController {
             { profile: null, hasProfile: false },
             {
               service: "user-service",
-              action: "get_profile_by_user_id",
+              action: "GET_PROFILE_BY_USER_ID",
             },
           ),
         );
@@ -457,7 +457,7 @@ class UserController {
           userId: requestingUserId,
           userProfileId: profile.id,
           clientId: profile.clientId,
-          action: "VIEW_PROFILE_BY_USER_ID",
+          action: "GET_PROFILE_BY_USER_ID",
           resource: "UserProfile",
           resourceId: profile.id,
           metadata: {
@@ -506,7 +506,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "get_profile_by_user_id",
+            action: "GET_PROFILE_BY_USER_ID",
           },
         ),
       );
@@ -551,7 +551,7 @@ class UserController {
             },
             {
               service: "user-service",
-              action: "get_my_profile",
+              action: "GET_MY_PROFILE",
             },
           ),
         );
@@ -593,7 +593,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "get_my_profile",
+            action: "GET_MY_PROFILE",
           },
         ),
       );
@@ -758,7 +758,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "update_profile",
+            action: "UPDATE_PROFILE",
           },
         ),
       );
@@ -855,7 +855,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "delete_profile",
+            action: "DELETE_PROFILE",
           },
         ),
       );
@@ -1098,7 +1098,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "verify_profile",
+            action: "VERIFY_PROFILE",
           },
         ),
       );
@@ -1205,7 +1205,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "toggle_profile_activation",
+            action: newActiveStatus ? "ACTIVATE_PROFILE" : "DEACTIVATE_PROFILE",
           },
         ),
       );
@@ -1296,7 +1296,7 @@ class UserController {
           },
           {
             service: "user-service",
-            action: "profile_stats",
+            action: "GET_PROFILE_STATS",
           },
         ),
       );

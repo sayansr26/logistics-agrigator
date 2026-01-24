@@ -39,7 +39,8 @@
       "Bash(git commit:*)",
       "Bash(builtin pnpm run production:build)",
       "Bash(docker-compose:*)",
-      "Bash(docker run:*)"
+      "Bash(docker run:*)",
+      "Bash(builtin:*)"
     ]
   },
   "sandbox": {
