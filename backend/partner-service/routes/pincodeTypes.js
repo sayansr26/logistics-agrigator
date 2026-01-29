@@ -1,10 +1,8 @@
 /**
  * Pincode Type Management Routes
  *
- * API routes for global/admin-managed pincode type configuration:
- * - CRUD operations for pincode types
- * - Bulk pincode assignment/unassignment
- * - Query pincodes by type and types by pincode
+ * API routes for global/admin-managed pincode type configuration.
+ * Simplified: CRUD operations only (no assignments or service charges).
  *
  * Authentication: Required (JWT)
  * Authorization: Admin + Operations roles only
@@ -23,10 +21,6 @@ const {
   getPincodeTypeByIdSchema,
   updatePincodeTypeSchema,
   deletePincodeTypeSchema,
-  assignPincodesSchema,
-  unassignPincodesSchema,
-  getAssignedPincodesSchema,
-  getTypesByPincodeSchema,
 } = require("../validation/pincodeTypeSchemas");
 
 // Apply authentication to all pincode type routes
@@ -48,7 +42,7 @@ router.use(pincodeTypeManagementLimiter);
  *   post:
  *     tags: [PincodeTypes]
  *     summary: Create a new pincode type
- *     description: Creates a new pincode type with name, charge, and optional description
+ *     description: Creates a new pincode type with name and type (yes_no or number)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -56,20 +50,27 @@ router.use(pincodeTypeManagementLimiter);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreatePincodeTypeRequest'
+ *             type: object
+ *             required:
+ *               - name
+ *               - type
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: COD
+ *                 description: Unique name for the pincode type
+ *               type:
+ *                 type: string
+ *                 enum: [yes_no, number]
+ *                 example: yes_no
+ *                 description: Type of pincode type (yes_no for boolean, number for numeric)
+ *               isActive:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Whether the type is active
  *     responses:
  *       201:
  *         description: Pincode type created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 data:
- *                   $ref: '#/components/schemas/PincodeType'
  *       409:
  *         description: Pincode type with same name already exists
  *       401:
@@ -89,7 +90,7 @@ router.post(
  *   get:
  *     tags: [PincodeTypes]
  *     summary: List pincode types with pagination
- *     description: Retrieves a paginated list of pincode types with optional filtering
+ *     description: Retrieves a paginated list of pincode types
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -98,29 +99,25 @@ router.post(
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Page number
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 20
  *           maximum: 100
- *         description: Items per page
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by name or description
  *       - in: query
  *         name: isActive
  *         schema:
  *           type: boolean
- *         description: Filter by active status
  *       - in: query
  *         name: sortBy
  *         schema:
  *           type: string
- *           enum: [name, charge, createdAt, updatedAt]
+ *           enum: [name, type, createdAt, updatedAt]
  *           default: createdAt
  *       - in: query
  *         name: sortOrder
@@ -131,36 +128,6 @@ router.post(
  *     responses:
  *       200:
  *         description: List of pincode types
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 data:
- *                   type: object
- *                   properties:
- *                     pincodeTypes:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/PincodeType'
- *                     pagination:
- *                       type: object
- *                       properties:
- *                         page:
- *                           type: integer
- *                         limit:
- *                           type: integer
- *                         total:
- *                           type: integer
- *                         totalPages:
- *                           type: integer
- *                         hasNext:
- *                           type: boolean
- *                         hasPrev:
- *                           type: boolean
  */
 router.get(
   "/",
@@ -223,7 +190,6 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Pincode type UUID
  *     requestBody:
  *       required: true
  *       content:
@@ -233,10 +199,9 @@ router.get(
  *             properties:
  *               name:
  *                 type: string
- *               charge:
- *                 type: number
- *               description:
+ *               type:
  *                 type: string
+ *                 enum: [yes_no, number]
  *               isActive:
  *                 type: boolean
  *     responses:
@@ -280,137 +245,6 @@ router.delete(
   "/:id",
   validate(deletePincodeTypeSchema),
   pincodeTypeController.deletePincodeType,
-);
-
-// ==========================================
-// PINCODE ASSIGNMENT ROUTES
-// ==========================================
-
-/**
- * @swagger
- * /api/v1/pincode-types/{id}/assign:
- *   post:
- *     tags: [PincodeTypes]
- *     summary: Bulk assign pincodes to type
- *     description: Assigns multiple pincodes to a pincode type in a single operation
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Pincode type UUID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/BulkAssignPincodesRequest'
- *     responses:
- *       200:
- *         description: Pincodes assigned successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: success
- *                 data:
- *                   $ref: '#/components/schemas/BulkAssignmentResult'
- *       404:
- *         description: Pincode type not found
- *       400:
- *         description: Invalid pincodes or type is inactive
- */
-router.post(
-  "/:id/assign",
-  validate(assignPincodesSchema),
-  pincodeTypeController.assignPincodes,
-);
-
-/**
- * @swagger
- * /api/v1/pincode-types/{id}/unassign:
- *   delete:
- *     tags: [PincodeTypes]
- *     summary: Bulk unassign pincodes from type
- *     description: Removes multiple pincodes from a pincode type in a single operation
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Pincode type UUID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/BulkAssignPincodesRequest'
- *     responses:
- *       200:
- *         description: Pincodes unassigned successfully
- *       404:
- *         description: Pincode type not found
- */
-router.delete(
-  "/:id/unassign",
-  validate(unassignPincodesSchema),
-  pincodeTypeController.unassignPincodes,
-);
-
-/**
- * @swagger
- * /api/v1/pincode-types/{id}/pincodes:
- *   get:
- *     tags: [PincodeTypes]
- *     summary: Get pincodes assigned to type
- *     description: Retrieves all pincodes assigned to a specific pincode type with pagination
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Pincode type UUID
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 100
- *           maximum: 1000
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search by pincode code
- *     responses:
- *       200:
- *         description: List of assigned pincodes
- *       404:
- *         description: Pincode type not found
- */
-router.get(
-  "/:id/pincodes",
-  validate(getAssignedPincodesSchema),
-  pincodeTypeController.getAssignedPincodes,
 );
 
 module.exports = router;

@@ -445,9 +445,6 @@ export default function AuditLogsPage() {
                         <SelectItem value="PincodeType">
                           Pincode Types
                         </SelectItem>
-                        <SelectItem value="PincodeTypeServiceCharge">
-                          Pincode Service Charges
-                        </SelectItem>
                         <SelectItem value="Wallet">Wallet</SelectItem>
                         <SelectItem value="WalletTransaction">
                           Wallet Transactions

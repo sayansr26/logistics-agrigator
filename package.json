@@ -47,12 +47,12 @@
     "prisma:license": "docker-compose exec license-service npx prisma migrate dev",
     "prisma:license:deploy": "docker-compose exec license-service npx prisma migrate deploy",
     "prisma:license:studio": "docker-compose exec license-service npx prisma studio",
-    "import:pincodes": "docker-compose exec partner-service node backend/partner-service/scripts/import-pincode-data.js",
-    "import:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/scripts/import-pincode-data.js",
-    "load:pincodes": "docker-compose exec partner-service node backend/partner-service/scripts/load-pincode-data.js",
-    "load:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/scripts/load-pincode-data.js",
-    "seed:geo": "docker-compose exec partner-service node backend/partner-service/prisma/seed-geographical-data.js",
-    "seed:geo:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/prisma/seed-geographical-data.js"
+    "import:pincodes": "docker-compose exec partner-service node scripts/import-pincode-data.js",
+    "import:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node scripts/import-pincode-data.js",
+    "load:pincodes": "docker-compose exec partner-service node scripts/load-pincode-data.js",
+    "load:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node scripts/load-pincode-data.js",
+    "seed:geo": "docker-compose exec partner-service node prisma/seed-geographical-data.js",
+    "seed:geo:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node prisma/seed-geographical-data.js"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

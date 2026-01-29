@@ -58,12 +58,11 @@ model Partner {
   updatedAt DateTime @updatedAt
 
   // Relations
-  shipments                 PartnerShipment[]
-  rates                     PartnerRate[]
-  serviceabilityCache       ServiceabilityCache[]
-  chargePackages            ChargePackage[]
-  pincodeTypeServiceCharges PincodeTypeServiceCharge[]
-  channelConfigs            PartnerChannelConfig[]
+  shipments           PartnerShipment[]
+  rates               PartnerRate[]
+  serviceabilityCache ServiceabilityCache[]
+  chargePackages      ChargePackage[]
+  channelConfigs      PartnerChannelConfig[]
 
   @@index([isActive])
   @@map("partners")
@@ -282,10 +281,9 @@ model Pincode {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  area            Area?                   @relation(fields: [areaId], references: [id], onDelete: SetNull)
-  state           State                   @relation(fields: [stateId], references: [id], onDelete: Cascade)
-  zonePincodes    ZonePincode[]
-  typeAssignments PincodeTypeAssignment[]
+  area         Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  state        State         @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  zonePincodes ZonePincode[]
 
   @@index([code, status])
   @@index([areaId, status])
@@ -439,63 +437,19 @@ model ZoneMilestone {
 
 // ========================================
 // PINCODE TYPE MANAGEMENT
+// Simplified: Only type definitions, no assignments or service charges
 // ========================================
 
 model PincodeType {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(50)
-  description String?  @db.VarChar(255)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(50)
+  type      String   @db.VarChar(20) // "yes_no" or "number"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relations
-  assignments    PincodeTypeAssignment[]
-  serviceCharges PincodeTypeServiceCharge[]
-
-  @@index([isActive])
+  @@index([isActive, type])
   @@map("pincode_types")
-}
-
-model PincodeTypeAssignment {
-  id         String   @id @default(uuid()) @db.Uuid
-  pincodeId  String   @map("pincode_id") @db.Uuid
-  typeId     String   @map("type_id") @db.Uuid
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  assignedBy String?  @map("assigned_by") @db.Uuid
-
-  // Relations
-  pincode     Pincode     @relation(fields: [pincodeId], references: [id], onDelete: Cascade)
-  pincodeType PincodeType @relation(fields: [typeId], references: [id], onDelete: Cascade)
-
-  @@unique([pincodeId, typeId])
-  @@index([pincodeId])
-  @@index([typeId])
-  @@map("pincode_type_assignments")
-}
-
-// ========================================
-// PINCODE TYPE SERVICE CHARGE MANAGEMENT
-// ========================================
-
-model PincodeTypeServiceCharge {
-  id            String   @id @default(uuid()) @db.Uuid
-  pincodeTypeId String   @map("pincode_type_id") @db.Uuid
-  partnerId     String   @map("partner_id")
-  baseCharge    Decimal  @map("base_charge") @db.Decimal(10, 2)
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  pincodeType PincodeType @relation(fields: [pincodeTypeId], references: [id], onDelete: Cascade)
-  partner     Partner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  @@unique([pincodeTypeId, partnerId])
-  @@index([pincodeTypeId])
-  @@index([partnerId])
-  @@index([isActive])
-  @@map("pincode_type_service_charges")
 }
 
 // ========================================

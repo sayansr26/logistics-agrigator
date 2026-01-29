@@ -40,7 +40,14 @@
       "Bash(builtin pnpm run production:build)",
       "Bash(docker-compose:*)",
       "Bash(docker run:*)",
-      "Bash(builtin:*)"
+      "Bash(builtin:*)",
+      "Bash(docker:*)",
+      "Bash(xargs:*)",
+      "Bash(claude:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(ls:*)",
+      "Bash(DATABASE_URL=\"postgresql://logistics:logistics@localhost:5432/logistics_partners?schema=public\" npx prisma generate:*)",
+      "mcp__MCP_DOCKER__read_multiple_files"
     ]
   },
   "sandbox": {

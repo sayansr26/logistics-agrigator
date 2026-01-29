@@ -1,5 +1,5 @@
 /**
- * Pincode Type Controller
+ * Pincode Type Controller (Simplified)
  *
  * Purpose: Handle HTTP requests for pincode type management
  * Following auth-service patterns with function-based exports
@@ -12,9 +12,6 @@
  * 3. GET    /api/v1/pincode-types/:id       - Get pincode type by ID
  * 4. PUT    /api/v1/pincode-types/:id       - Update pincode type
  * 5. DELETE /api/v1/pincode-types/:id       - Soft delete pincode type
- * 6. POST   /api/v1/pincode-types/:id/assign   - Bulk assign pincodes
- * 7. DELETE /api/v1/pincode-types/:id/unassign - Bulk unassign pincodes
- * 8. GET    /api/v1/pincode-types/:id/pincodes - Get assigned pincodes
  */
 
 const logger = require("../shared/lib/logger");
@@ -23,26 +20,25 @@ const pincodeTypeService = require("../services/pincodeTypeService");
 const { prisma } = require("../config/database");
 
 /**
- * 1. Create pincode types for one or more partners with mandatory pincode assignment
+ * 1. Create pincode type
  * @route POST /api/v1/pincode-types
  * @access Admin, Operations
  */
 async function createPincodeType(req, res) {
   try {
-    const { name, description, isActive, pincodeCodes } = req.body;
+    const { name, type, isActive } = req.body;
 
     logger.info("Creating pincode type", {
       name,
-      pincodeCount: pincodeCodes?.length,
+      type,
       userId: req.user?.id,
     });
 
     const result = await pincodeTypeService.createPincodeType({
       name,
-      description,
+      type,
       isActive,
-      pincodeCodes,
-      assignedBy: req.user?.id,
+      createdBy: req.user?.id,
     });
 
     // Audit log
@@ -56,14 +52,11 @@ async function createPincodeType(req, res) {
         userAgent: req.get("User-Agent"),
         requestData: {
           name,
-          description,
+          type,
           isActive,
-          pincodeCount: pincodeCodes?.length,
-          sampleCodes: pincodeCodes?.slice(0, 10),
         },
         responseData: {
           id: result.id,
-          assignedCount: result.assignedCount,
           success: true,
         },
       },
@@ -71,7 +64,6 @@ async function createPincodeType(req, res) {
 
     logger.info("Pincode type created successfully", {
       id: result.id,
-      assignedCount: result.assignedCount,
       userId: req.user?.id,
     });
 
@@ -330,247 +322,10 @@ async function deletePincodeType(req, res) {
   }
 }
 
-/**
- * 6. Bulk assign pincodes to type
- * @route POST /api/v1/pincode-types/:id/assign
- * @access Admin, Operations
- */
-async function assignPincodes(req, res) {
-  try {
-    const { id } = req.params;
-    const { pincodeCodes } = req.body;
-
-    logger.info("Assigning pincodes to type", {
-      typeId: id,
-      pincodeCount: pincodeCodes.length,
-      userId: req.user?.id,
-    });
-
-    const result = await pincodeTypeService.assignPincodesToType(
-      id,
-      pincodeCodes,
-      req.user?.id,
-    );
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        action: "ASSIGN_PINCODE_TYPE",
-        resourceType: "PINCODE_TYPE",
-        resourceId: id,
-        userId: req.user?.id,
-        ipAddress: req.ip,
-        userAgent: req.get("User-Agent"),
-        requestData: {
-          pincodeCount: pincodeCodes.length,
-          sampleCodes: pincodeCodes.slice(0, 10),
-        },
-        responseData: result,
-      },
-    });
-
-    logger.info("Pincodes assigned to type successfully", {
-      typeId: id,
-      result,
-      userId: req.user?.id,
-    });
-
-    res.json(APIResponse.success(result, "Pincodes assigned successfully"));
-  } catch (error) {
-    logger.error("Failed to assign pincodes to type", {
-      error: error.message,
-      stack: error.stack,
-      typeId: req.params.id,
-      pincodeCount: req.body.pincodeCodes?.length,
-      userId: req.user?.id,
-    });
-
-    if (error.statusCode === 404) {
-      return res
-        .status(404)
-        .json(APIResponse.error(error.message, "NOT_FOUND"));
-    }
-
-    if (error.statusCode === 400) {
-      return res
-        .status(400)
-        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
-    }
-
-    res
-      .status(500)
-      .json(APIResponse.error("Failed to assign pincodes", "INTERNAL_ERROR"));
-  }
-}
-
-/**
- * 7. Bulk unassign pincodes from type
- * @route DELETE /api/v1/pincode-types/:id/unassign
- * @access Admin, Operations
- */
-async function unassignPincodes(req, res) {
-  try {
-    const { id } = req.params;
-    const { pincodeCodes } = req.body;
-
-    logger.info("Unassigning pincodes from type", {
-      typeId: id,
-      pincodeCount: pincodeCodes.length,
-      userId: req.user?.id,
-    });
-
-    const result = await pincodeTypeService.unassignPincodesFromType(
-      id,
-      pincodeCodes,
-    );
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        action: "UNASSIGN_PINCODE_TYPE",
-        resourceType: "PINCODE_TYPE",
-        resourceId: id,
-        userId: req.user?.id,
-        ipAddress: req.ip,
-        userAgent: req.get("User-Agent"),
-        requestData: {
-          pincodeCount: pincodeCodes.length,
-          sampleCodes: pincodeCodes.slice(0, 10),
-        },
-        responseData: result,
-      },
-    });
-
-    logger.info("Pincodes unassigned from type successfully", {
-      typeId: id,
-      result,
-      userId: req.user?.id,
-    });
-
-    res.json(APIResponse.success(result, "Pincodes unassigned successfully"));
-  } catch (error) {
-    logger.error("Failed to unassign pincodes from type", {
-      error: error.message,
-      stack: error.stack,
-      typeId: req.params.id,
-      pincodeCount: req.body.pincodeCodes?.length,
-      userId: req.user?.id,
-    });
-
-    if (error.statusCode === 404) {
-      return res
-        .status(404)
-        .json(APIResponse.error(error.message, "NOT_FOUND"));
-    }
-
-    res
-      .status(500)
-      .json(APIResponse.error("Failed to unassign pincodes", "INTERNAL_ERROR"));
-  }
-}
-
-/**
- * 8. Get pincodes assigned to a type
- * @route GET /api/v1/pincode-types/:id/pincodes
- * @access Admin, Operations
- */
-async function getAssignedPincodes(req, res) {
-  try {
-    const { id } = req.params;
-    const filters = {
-      page: req.query.page ? parseInt(req.query.page) : 1,
-      limit: req.query.limit ? parseInt(req.query.limit) : 100,
-      search: req.query.search,
-    };
-
-    logger.info("Getting pincodes assigned to type", {
-      typeId: id,
-      filters,
-      userId: req.user?.id,
-    });
-
-    const result = await pincodeTypeService.getPincodesByType(id, filters);
-
-    logger.info("Pincodes by type retrieved successfully", {
-      typeId: id,
-      count: result.pincodes.length,
-      userId: req.user?.id,
-    });
-
-    res.json(APIResponse.success(result));
-  } catch (error) {
-    logger.error("Failed to get pincodes by type", {
-      error: error.message,
-      stack: error.stack,
-      typeId: req.params.id,
-      userId: req.user?.id,
-    });
-
-    if (error.statusCode === 404) {
-      return res
-        .status(404)
-        .json(APIResponse.error(error.message, "NOT_FOUND"));
-    }
-
-    res
-      .status(500)
-      .json(APIResponse.error("Failed to retrieve pincodes", "INTERNAL_ERROR"));
-  }
-}
-
-/**
- * 9. Get types assigned to a pincode (optionally filtered by partner)
- * @route GET /api/v1/pincodes/:code/types
- * @access Admin, Operations
- */
-async function getTypesByPincode(req, res) {
-  try {
-    const { code } = req.params;
-
-    logger.info("Getting types for pincode", {
-      code,
-      userId: req.user?.id,
-    });
-
-    const result = await pincodeTypeService.getTypesByPincode(code);
-
-    logger.info("Types by pincode retrieved successfully", {
-      code,
-      typeCount: result.types.length,
-      userId: req.user?.id,
-    });
-
-    res.json(APIResponse.success(result));
-  } catch (error) {
-    logger.error("Failed to get types by pincode", {
-      error: error.message,
-      stack: error.stack,
-      code: req.params.code,
-      userId: req.user?.id,
-    });
-
-    if (error.statusCode === 404) {
-      return res
-        .status(404)
-        .json(APIResponse.error(error.message, "NOT_FOUND"));
-    }
-
-    res
-      .status(500)
-      .json(
-        APIResponse.error("Failed to retrieve pincode types", "INTERNAL_ERROR"),
-      );
-  }
-}
-
 module.exports = {
   createPincodeType,
   listPincodeTypes,
   getPincodeTypeById,
   updatePincodeType,
   deletePincodeType,
-  assignPincodes,
-  unassignPincodes,
-  getAssignedPincodes,
-  getTypesByPincode,
 };

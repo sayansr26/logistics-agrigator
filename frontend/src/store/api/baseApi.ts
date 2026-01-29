@@ -59,7 +59,6 @@ export const baseApi = createApi({
     "License",
     "Permission",
     "PincodeType",
-    "PincodeTypeServiceCharge",
     "ChargePackage",
     "ServiceHealth",
     "ServiceStatistics",

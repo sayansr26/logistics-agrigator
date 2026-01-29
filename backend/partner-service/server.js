@@ -132,14 +132,8 @@ app.use("/api/v1/geography/distance", require("./routes/geographicalDistance"));
 app.use("/api/v1/zones/coverage", require("./routes/zoneCoverage"));
 app.use("/api/v1/zones", require("./routes/zones"));
 
-// Pincode Type Management Routes (Zone System v2)
+// Pincode Type Management Routes (Simplified - No service charges)
 app.use("/api/v1/pincode-types", require("./routes/pincodeTypes"));
-
-// Pincode Type Service Charge Management Routes (NEW)
-app.use(
-  "/api/v1/pincode-type-service-charges",
-  require("./routes/pincodeTypeServiceCharges"),
-);
 
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));

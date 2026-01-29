@@ -103,17 +103,9 @@ const getNavigationSections = () => {
       title: "Pricing & Services",
       items: [
         {
-          title: "Pincode Type Services",
+          title: "Pincode Types",
           href: "/pincode-types",
           icon: Settings,
-          permission: "partner:read:own",
-          roles: ["superadmin", "admin"],
-          disabled: false, // Active and working
-        },
-        {
-          title: "Pincode Type Service Charges",
-          href: "/pincode-type-service-charges",
-          icon: IndianRupee,
           permission: "partner:read:own",
           roles: ["superadmin", "admin", "operations"],
           disabled: false, // Active and working

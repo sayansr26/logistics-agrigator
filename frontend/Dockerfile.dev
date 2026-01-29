@@ -1,0 +1,31 @@
+# =============== DEVELOPMENT DOCKERFILE ===============
+# For hot-reload development with mounted volumes
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.1
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Copy package files for dependency installation
+COPY --chown=nodejs:nodejs package.json ./
+
+# Install dependencies (will be overridden by volume mount in development)
+RUN pnpm install || true
+
+# Create node_modules directory for volume mount
+RUN mkdir -p /app/node_modules && chown -R nodejs:nodejs /app/node_modules
+
+USER nodejs
+
+EXPOSE 3000
+
+ENV NODE_ENV development
+ENV NEXT_PUBLIC_API_URL http://localhost:3001
+ENV NEXT_PUBLIC_APP_ENV development
+
+# Start development server with hot reload
+CMD ["pnpm", "run", "dev"]

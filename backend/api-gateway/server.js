@@ -337,19 +337,11 @@ const services = {
       "^/api/v1/zones": "/api/v1/zones", // Zones endpoints → /api/v1/zones/*
     },
   },
-  // Pincode Type Management (Zone System v2 - admin/operations only)
+  // Pincode Type Management (Simplified - admin/operations only)
   "pincode-types": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
       "^/api/v1/pincode-types": "/api/v1/pincode-types", // Pincode types → /api/v1/pincode-types/*
-    },
-  },
-  // Pincode Type Service Charge Management (admin/operations only)
-  "pincode-type-service-charges": {
-    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
-    pathRewrite: {
-      "^/api/v1/pincode-type-service-charges":
-        "/api/v1/pincode-type-service-charges", // Pincode type service charges → /api/v1/pincode-type-service-charges/*
     },
   },
   // Charge Package Management (Zone System v2 - partner charge packages)
