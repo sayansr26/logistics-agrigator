@@ -82,9 +82,8 @@ temp/
 
 # Development and tooling
 .husky/
-scripts/*
-!scripts/entrypoint.sh
-!scripts/production-entrypoint.sh
+# Keep production-entrypoint.sh for Docker builds
+# scripts/* exclusion removed - entrypoint scripts needed in containers
 .eslintcache
 .prettierrc*
 .editorconfig
