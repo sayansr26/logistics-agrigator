@@ -7,7 +7,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install runtime dependencies only (not build tools)
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl bash
 
 # Install pnpm
 RUN npm install -g pnpm@8.15.1

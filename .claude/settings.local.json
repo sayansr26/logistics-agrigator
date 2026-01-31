@@ -48,7 +48,8 @@
       "Bash(ls:*)",
       "Bash(DATABASE_URL=\"postgresql://logistics:logistics@localhost:5432/logistics_partners?schema=public\" npx prisma generate:*)",
       "mcp__MCP_DOCKER__read_multiple_files",
-      "Bash(pnpm prisma migrate:*)"
+      "Bash(pnpm prisma migrate:*)",
+      "Bash(grep:*)"
     ]
   },
   "sandbox": {
