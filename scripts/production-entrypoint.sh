@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ###############################################################################
 # PRODUCTION ENTROYPOINT SCRIPT
 # Runs Prisma migrations and seeds before starting the service
