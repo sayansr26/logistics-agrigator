@@ -63,6 +63,7 @@ model Partner {
   serviceabilityCache ServiceabilityCache[]
   chargePackages      ChargePackage[]
   channelConfigs      PartnerChannelConfig[]
+  chargesTypes        ChargesType[]
 
   @@index([isActive])
   @@map("partners")
@@ -450,6 +451,25 @@ model PincodeType {
 
   @@index([isActive, type])
   @@map("pincode_types")
+}
+
+// ========================================
+// CHARGES TYPE MANAGEMENT
+// Partner-specific charge types (e.g., COD, Freight, RTO)
+// ========================================
+
+model ChargesType {
+  id        String   @id @default(uuid()) @db.Uuid
+  partnerId String   @map("partner_id") // CUID to match Partner.id
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([partnerId, name]) // Each partner can't have duplicate charge type names
+  @@index([partnerId, isActive])
+  @@map("charges_types")
 }
 
 // ========================================

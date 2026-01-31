@@ -111,6 +111,14 @@ const getNavigationSections = () => {
           disabled: false, // Active and working
         },
         {
+          title: "Charges Types",
+          href: "/charges-types",
+          icon: IndianRupee,
+          permission: "partner:read:own",
+          roles: ["superadmin", "admin", "operations"],
+          disabled: false, // Active and working
+        },
+        {
           title: "Zone Management",
           href: "/zones",
           icon: Globe,

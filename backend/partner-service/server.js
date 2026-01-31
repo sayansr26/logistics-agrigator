@@ -135,6 +135,9 @@ app.use("/api/v1/zones", require("./routes/zones"));
 // Pincode Type Management Routes (Simplified - No service charges)
 app.use("/api/v1/pincode-types", require("./routes/pincodeTypes"));
 
+// Charges Type Management Routes (NEW - Partner-specific charge types)
+app.use("/api/v1/charges-types", require("./routes/chargesTypes"));
+
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));
 
@@ -343,6 +346,7 @@ app.get("/", (req, res) => {
       zones: "/api/v1/zones",
       zoneCoverage: "/api/v1/zones/coverage",
       pincodeTypes: "/api/v1/pincode-types",
+      chargesTypes: "/api/v1/charges-types",
 
       // Pincode Type Service Charges (NEW)
       pincodeTypeServiceCharges: "/api/v1/pincode-type-service-charges",
@@ -377,6 +381,7 @@ app.get("/", (req, res) => {
       "Charge Package Management (Weight, Distance, Generic)",
       "Quote Engine with Charge Breakdown",
       "Pincode Type Management",
+      "Charges Type Management (Partner-specific)",
       "Pincode Type Service Charge Management",
       "Partner Channel Management (Single/Multi API Endpoints)",
       "Zone Coverage Validation",

@@ -344,6 +344,13 @@ const services = {
       "^/api/v1/pincode-types": "/api/v1/pincode-types", // Pincode types → /api/v1/pincode-types/*
     },
   },
+  // Charges Type Management (Partner-specific charge types - admin/operations only)
+  "charges-types": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/charges-types": "/api/v1/charges-types", // Charges types → /api/v1/charges-types/*
+    },
+  },
   // Charge Package Management (Zone System v2 - partner charge packages)
   "charge-packages": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
