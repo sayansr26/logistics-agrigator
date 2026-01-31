@@ -31,12 +31,12 @@ RUN cp -r /app/shared /app/backend/auth-service/
 # Generate Prisma client (needed at build time)
 RUN cd backend/auth-service && npx prisma generate
 
+# Create non-root user first
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
 # Copy production entrypoint script for automated migrations
 COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
 RUN chmod +x /app/production-entrypoint.sh
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Create logs directory
 RUN mkdir -p /app/logs/auth-service && chown -R nodejs:nodejs /app/logs

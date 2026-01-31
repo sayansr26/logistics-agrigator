@@ -18,11 +18,12 @@ COPY backend/partner-service ./backend/partner-service
 RUN cp -r /app/shared /app/backend/partner-service/
 RUN cd backend/partner-service && npx prisma generate
 
+# Create non-root user first
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
 # Copy production entrypoint script for automated migrations
 COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
 RUN chmod +x /app/production-entrypoint.sh
-
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 RUN mkdir -p /app/logs/partner-service && chown -R nodejs:nodejs /app/logs
 RUN chown -R nodejs:nodejs /app
 
