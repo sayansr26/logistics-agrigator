@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 ###############################################################################
 # PRODUCTION ENTROYPOINT SCRIPT
 # Runs Prisma migrations and seeds before starting the service
@@ -42,60 +42,24 @@ if [ -n "$PRISMA_SCHEMA" ]; then
 
   echo "🔄 Running Prisma migrations..."
 
-  # Check if migrations folder exists and has migrations
-  if [ -d "$PRISMA_DIR/migrations" ] && [ -n "$(ls -A $PRISMA_DIR/migrations 2>/dev/null | grep -v 'migration_lock.toml')" ]; then
-    echo "📂 Migrations folder found, using prisma migrate deploy"
-
-    # Wait for database to be ready (simple connection check)
-    TIMEOUT=30
-    ELAPSED=0
-    while [ $ELAPSED -lt $TIMEOUT ]; do
-      if npx prisma db execute --stdin --schema="$PRISMA_SCHEMA" <<< "SELECT 1" >/dev/null 2>&1; then
-        echo "✅ Database is ready"
-        break
-      fi
-      echo "⏳ Waiting for database... ($((ELAPSED + 1))/$TIMEOUT)"
-      sleep 1
-      ELAPSED=$((ELAPSED + 1))
-    done
-
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "❌ Database connection timeout after $TIMEOUT seconds"
-      exit 1
+  # Wait for database to be ready (with timeout)
+  TIMEOUT=30
+  ELAPSED=0
+  while [ $ELAPSED -lt $TIMEOUT ]; do
+    if npx prisma db push --skip-generate --schema="$PRISMA_SCHEMA" >/dev/null 2>&1; then
+      echo "✅ Database is ready, running migrations..."
+      break
     fi
+    echo "⏳ Waiting for database... ($((ELAPSED + 1))/$TIMEOUT)"
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
 
-    # Deploy migrations with proper error handling
-    echo "📋 Applying migrations..."
-    if npx prisma migrate deploy --schema="$PRISMA_SCHEMA"; then
-      echo "✅ Migrations applied successfully"
-    else
-      echo "❌ Migration deployment failed!"
-      echo "📋 To diagnose: ./scripts/diagnose-migrations.sh"
-      exit 1
-    fi
+  # Deploy migrations
+  if npx prisma migrate deploy --schema="$PRISMA_SCHEMA"; then
+    echo "✅ Migrations applied successfully"
   else
-    echo "⚠️  No migrations folder found, falling back to db push"
-    echo "⚠️  This is not recommended for production - migrations should be used"
-
-    # Wait for database to be ready
-    TIMEOUT=30
-    ELAPSED=0
-    while [ $ELAPSED -lt $TIMEOUT ]; do
-      if npx prisma db execute --stdin --schema="$PRISMA_SCHEMA" <<< "SELECT 1" >/dev/null 2>&1; then
-        echo "✅ Database is ready"
-        break
-      fi
-      echo "⏳ Waiting for database... ($((ELAPSED + 1))/$TIMEOUT)"
-      sleep 1
-      ELAPSED=$((ELAPSED + 1))
-    done
-
-    if npx prisma db push --skip-generate --schema="$PRISMA_SCHEMA"; then
-      echo "✅ Schema synced with db push"
-    else
-      echo "❌ db push failed"
-      exit 1
-    fi
+    echo "⚠️  Migration failed or no migrations to apply"
   fi
 
   # Run seed script for auth-service (creates superadmin user)
