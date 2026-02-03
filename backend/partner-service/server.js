@@ -144,6 +144,9 @@ app.use("/api/v1", require("./routes/partnerChannels"));
 // Charge Package Management Routes (NEW - replaces legacy packages)
 app.use("/api/v1/charge-packages", require("./routes/chargePackages"));
 
+// Partner Pincode Assignment Routes (NEW - Pincode assignment with type values)
+app.use("/api/v1", require("./routes/partnerPincodes"));
+
 // ============================================================================
 // DEPRECATED ENDPOINTS - Return 410 Gone responses
 // These endpoints have been replaced by the new Zone System v2 and Charge Packages

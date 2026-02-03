@@ -59,104 +59,74 @@ const getNavigationSections = () => {
   // Filter sections and items based on permissions
   const sections = [
     {
-      title: "Core Operations",
+      title: "Operations",
       items: [
         {
           title: "Dashboard",
           href: "/dashboard",
           icon: Home,
-          disabled: false, // Dashboard not implemented yet
+          disabled: false,
           // Everyone can see dashboard
         },
-        // {
-        //   title: "Shipments",
-        //   href: "/shipments",
-        //   icon: Package,
-        //   // badge: "89",
-        //   permission: "shipment:list:own",
-        //   disabled: false,
-        // },
-      ].filter(canSeeMenuItem),
-    },
-    {
-      title: "Outlet Portal",
-      items: [
         {
-          title: "My Shipments",
+          title: "Shipments",
           href: "/shipments",
           icon: Package,
           permission: "shipment:list:own",
           roles: ["outlet"],
           disabled: false,
         },
-        {
-          title: "My Addresses",
-          href: "/addresses",
-          icon: MapPin,
-          permission: "user:read:own",
-          roles: ["outlet"],
-          disabled: false,
-        },
       ].filter(canSeeMenuItem),
     },
     {
-      title: "Pricing & Services",
+      title: "Partner Management",
       items: [
         {
-          title: "Pincode Types",
-          href: "/pincode-types",
-          icon: Settings,
-          permission: "partner:read:own",
-          roles: ["superadmin", "admin", "operations"],
-          disabled: false, // Active and working
-        },
-        {
-          title: "Charges Types",
-          href: "/charges-types",
-          icon: IndianRupee,
-          permission: "partner:read:own",
-          roles: ["superadmin", "admin", "operations"],
-          disabled: false, // Active and working
+          title: "Courier Partners",
+          href: "/partners",
+          icon: Truck,
+          permission: "partner:list:all",
+          roles: ["superadmin", "admin", "client"],
+          disabled: false,
         },
         {
           title: "Zone Management",
           href: "/zones",
           icon: Globe,
           permission: "partner:read:own",
-          disabled: false, // Zone management is now implemented
+          roles: ["superadmin", "admin", "operations"],
+          disabled: false,
         },
-        // {
-        //   title: "Charge Packages",
-        //   href: "/charges",
-        //   icon: IndianRupee,
-        //   permission: "chargePackage:manage:all",
-        //   roles: ["superadmin", "admin", "operations"],
-        //   disabled: false, // Implemented with new package creation flow
-        // },
       ].filter(canSeeMenuItem),
     },
-    // {
-    //   title: "Finance & Billing",
-    //   items: [
-    //     {
-    //       title: "Wallet & Billing",
-    //       href: "/wallet",
-    //       icon: CreditCard,
-    //       permission: "wallet:read:own",
-    //       disabled: true, // Not implemented
-    //       tooltip: "Coming Soon",
-    //     },
-    //     {
-    //       title: "Remittance",
-    //       href: "/remittance",
-    //       icon: CreditCard,
-    //       permission: "billing:manage:own",
-    //       roles: ["superadmin", "admin", "accounts"],
-    //       disabled: true, // Not implemented
-    //       tooltip: "Coming Soon",
-    //     },
-    //   ].filter(canSeeMenuItem),
-    // },
+    {
+      title: "Configuration",
+      items: [
+        {
+          title: "Charges Types",
+          href: "/charges-types",
+          icon: IndianRupee,
+          permission: "partner:read:own",
+          roles: ["superadmin", "admin", "operations"],
+          disabled: false,
+        },
+        {
+          title: "Pincode Types",
+          href: "/pincode-types",
+          icon: MapPin,
+          permission: "partner:read:own",
+          roles: ["superadmin", "admin", "operations"],
+          disabled: false,
+        },
+        {
+          title: "Geography",
+          href: "/geography",
+          icon: Map,
+          roles: ["superadmin"],
+          disabled: false,
+        },
+      ].filter(canSeeMenuItem),
+    },
     {
       title: "Administration",
       items: [
@@ -166,7 +136,7 @@ const getNavigationSections = () => {
           icon: Users,
           permission: "user:list:all",
           roles: ["superadmin", "admin"],
-          disabled: false, // Working and completed
+          disabled: false,
         },
         {
           title: "Outlet Management",
@@ -181,60 +151,23 @@ const getNavigationSections = () => {
           href: "/audit-logs",
           icon: ScrollText,
           roles: ["superadmin", "admin", "client"],
-          disabled: false, // Audit logs viewer
-        },
-        {
-          title: "Geography",
-          href: "/geography",
-          icon: Map,
-          roles: ["superadmin"],
-          disabled: false, // Working and completed
-        },
-        {
-          title: "Courier Partners",
-          href: "/partners",
-          icon: Truck,
-          permission: "partner:list:all",
-          roles: ["superadmin", "admin", "client"],
-          disabled: false, // Working and completed
+          disabled: false,
         },
       ].filter(canSeeMenuItem),
     },
-    // {
-    //   title: "Reports & Analytics",
-    //   items: [
-    //     {
-    //       title: "Analytics & Reports",
-    //       href: "/reports",
-    //       icon: BarChart3,
-    //       permission: "analytics:read:own",
-    //       disabled: true, // Not implemented
-    //       tooltip: "Coming Soon",
-    //     },
-    //   ].filter(canSeeMenuItem),
-    // },
-    // {
-    //   title: "Integration & Support",
-    //   items: [
-    //     {
-    //       title: "Platform Integration",
-    //       href: "/platforms",
-    //       icon: Globe,
-    //       permission: "platform:read:own",
-    //       disabled: true, // Not implemented
-    //       tooltip: "Coming Soon",
-    //     },
-    //     {
-    //       title: "Disputes & Support",
-    //       href: "/support",
-    //       icon: AlertTriangle,
-    //       badge: "3",
-    //       permission: "support:list:own",
-    //       disabled: true, // Not implemented
-    //       tooltip: "Coming Soon",
-    //     },
-    //   ].filter(canSeeMenuItem),
-    // },
+    {
+      title: "My Account",
+      items: [
+        {
+          title: "My Addresses",
+          href: "/addresses",
+          icon: MapPin,
+          permission: "user:read:own",
+          roles: ["outlet"],
+          disabled: false,
+        },
+      ].filter(canSeeMenuItem),
+    },
   ];
 
   // Filter out empty sections

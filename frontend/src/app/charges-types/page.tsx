@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  PageHeader,
+  PageContainer,
+  StatsCard,
+  StatsGrid,
+} from "@/components/shared";
+import {
   useGetChargesTypesQuery,
   useCreateChargesTypeMutation,
   useUpdateChargesTypeMutation,
@@ -41,13 +48,14 @@ import {
   type Partner,
 } from "@/store/api/endpoints/partnersApi";
 import {
-  DollarSign,
+  IndianRupee,
   Plus,
   Search,
   Edit,
   Trash2,
   CheckCircle,
   XCircle,
+  Loader2,
 } from "lucide-react";
 
 export default function ChargesTypesPage() {
@@ -64,12 +72,11 @@ export default function ChargesTypesPage() {
     isActive: true,
   });
 
-  // Fetch charges types with optional partner filter
+  // Fetch charges types
   const {
     data: chargesTypesData,
     isLoading,
     error,
-    refetch,
   } = useGetChargesTypesQuery({
     search: searchTerm || undefined,
     partnerId: partnerFilter === "all" ? undefined : partnerFilter,
@@ -81,9 +88,17 @@ export default function ChargesTypesPage() {
     limit: 100,
   });
 
-  const [createChargesType] = useCreateChargesTypeMutation();
-  const [updateChargesType] = useUpdateChargesTypeMutation();
-  const [deleteChargesType] = useDeleteChargesTypeMutation();
+  const [createChargesType, { isLoading: isCreating }] =
+    useCreateChargesTypeMutation();
+  const [updateChargesType, { isLoading: isUpdating }] =
+    useUpdateChargesTypeMutation();
+  const [deleteChargesType, { isLoading: isDeleting }] =
+    useDeleteChargesTypeMutation();
+
+  const chargesTypes = chargesTypesData?.data || [];
+  const partners = partnersData?.data?.partners || [];
+  const activeCount = chargesTypes.filter((c) => c.isActive).length;
+  const inactiveCount = chargesTypes.filter((c) => !c.isActive).length;
 
   const handleCreate = async () => {
     try {
@@ -143,147 +158,181 @@ export default function ChargesTypesPage() {
   };
 
   const resetForm = () => {
-    setFormData({
-      partnerId: "",
-      name: "",
-      isActive: true,
-    });
+    setFormData({ partnerId: "", name: "", isActive: true });
     setSelectedChargesType(null);
   };
 
   const getPartnerName = (partnerId: string) => {
-    const partner = partnersData?.data?.partners?.find(
-      (p) => p.id === partnerId,
-    );
-    return partner?.displayName || partner?.name || "Unknown Partner";
+    const partner = partners.find((p) => p.id === partnerId);
+    return partner?.displayName || partner?.name || "Unknown";
   };
 
   return (
-    <DashboardLayout
-      breadcrumbs={[{ title: "Home", href: "/" }, { title: "Charges Types" }]}
-    >
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Charges Types</h1>
-            <p className="text-muted-foreground">
-              Manage partner-specific charge types (e.g., Generic expect
-              geological )
-            </p>
-          </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Charges Type
-          </Button>
-        </div>
+    <DashboardLayout>
+      <PageContainer>
+        {/* Page Header */}
+        <PageHeader
+          title="Charges Types"
+          description="Manage partner-specific charge types (e.g., Freight, COD, Handling)"
+          primaryAction={{
+            label: "Create Charges Type",
+            onClick: () => setShowCreateDialog(true),
+          }}
+        />
+
+        {/* Statistics Cards */}
+        <StatsGrid columns={3}>
+          <StatsCard
+            title="Total Charges Types"
+            value={chargesTypes.length}
+            icon={IndianRupee}
+            iconColor="text-blue-600"
+            isLoading={isLoading}
+          />
+          <StatsCard
+            title="Active"
+            value={activeCount}
+            icon={CheckCircle}
+            iconColor="text-green-600"
+            isLoading={isLoading}
+          />
+          <StatsCard
+            title="Inactive"
+            value={inactiveCount}
+            icon={XCircle}
+            iconColor="text-gray-600"
+            isLoading={isLoading}
+          />
+        </StatsGrid>
 
         {/* Filters */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center space-x-2 flex-1">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search charges types..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
-          <Select value={partnerFilter} onValueChange={setPartnerFilter}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filter by Partner" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Partners</SelectItem>
-              {partnersData?.data?.partners?.map((partner) => (
-                <SelectItem key={partner.id} value={partner.id}>
-                  {partner.displayName || partner.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search charges types..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={partnerFilter} onValueChange={setPartnerFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by Partner" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Partners</SelectItem>
+                  {partners.map((partner) => (
+                    <SelectItem key={partner.id} value={partner.id}>
+                      {partner.displayName || partner.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Table */}
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Partner</TableHead>
-                <TableHead>Charge Type Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">
-                    Loading...
-                  </TableCell>
+                  <TableHead>Partner</TableHead>
+                  <TableHead>Charge Type Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="text-center text-destructive"
-                  >
-                    Error loading charges types
-                  </TableCell>
-                </TableRow>
-              ) : !chargesTypesData?.data ||
-                chargesTypesData.data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center">
-                    No charges types found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                chargesTypesData.data.map((chargesType) => (
-                  <TableRow key={chargesType.id}>
-                    <TableCell className="font-medium">
-                      {chargesType.partner?.displayName ||
-                        chargesType.partner?.name ||
-                        getPartnerName(chargesType.partnerId)}
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        <DollarSign className="h-3 w-3 mr-1" />
-                        {chargesType.name}
-                      </Badge>
+                  </TableRow>
+                ) : error ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-destructive py-8"
+                    >
+                      Error loading charges types
                     </TableCell>
-                    <TableCell>
-                      {chargesType.isActive ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(chargesType.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
+                  </TableRow>
+                ) : chargesTypes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <IndianRupee className="h-12 w-12 mx-auto mb-2 text-muted-foreground opacity-50" />
+                      <p className="text-muted-foreground">
+                        No charges types found
+                      </p>
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(chargesType)}
+                        className="mt-4"
+                        onClick={() => setShowCreateDialog(true)}
                       >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(chargesType)}
-                      >
-                        <Trash2 className="h-4 w-4" />
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create First Charges Type
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : (
+                  chargesTypes.map((chargesType) => (
+                    <TableRow key={chargesType.id}>
+                      <TableCell className="font-medium">
+                        {chargesType.partner?.displayName ||
+                          chargesType.partner?.name ||
+                          getPartnerName(chargesType.partnerId)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          <IndianRupee className="h-3 w-3 mr-1" />
+                          {chargesType.name}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {chargesType.isActive ? (
+                          <Badge className="bg-green-100 text-green-800">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-100 text-red-800">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Inactive
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(chargesType.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(chargesType)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(chargesType)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
         {/* Create Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -307,7 +356,7 @@ export default function ChargesTypesPage() {
                     <SelectValue placeholder="Select a partner" />
                   </SelectTrigger>
                   <SelectContent>
-                    {partnersData?.data?.partners?.map((partner) => (
+                    {partners.map((partner) => (
                       <SelectItem key={partner.id} value={partner.id}>
                         {partner.displayName || partner.name} ({partner.code})
                       </SelectItem>
@@ -323,7 +372,7 @@ export default function ChargesTypesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  placeholder="e.g., Freight Charge expect geological"
+                  placeholder="e.g., Freight, COD, Handling"
                 />
               </div>
               <div className="flex items-center space-x-2">
@@ -348,7 +397,12 @@ export default function ChargesTypesPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleCreate}>Create</Button>
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Create
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -379,7 +433,7 @@ export default function ChargesTypesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  placeholder="e.g., Freight Charge expect geological"
+                  placeholder="e.g., Freight, COD, Handling"
                 />
               </div>
               <div className="flex items-center space-x-2">
@@ -404,7 +458,12 @@ export default function ChargesTypesPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleUpdate}>Update</Button>
+              <Button onClick={handleUpdate} disabled={isUpdating}>
+                {isUpdating && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Update
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -432,13 +491,20 @@ export default function ChargesTypesPage() {
               >
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={confirmDelete}>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Delete
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageContainer>
     </DashboardLayout>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,22 +29,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Star,
+  PageContainer,
+  DetailHeader,
+  DetailSection,
+  DetailItem,
+  DetailGrid,
+  StatsCard,
+  StatsGrid,
+} from "@/components/shared";
+import {
   MapPin,
-  Clock,
   DollarSign,
-  Phone,
-  Mail,
   Globe,
   Package,
-  TrendingUp,
-  Users,
+  Truck,
   Calendar,
   Edit,
-  ExternalLink,
-  Truck,
-  Award,
-  Activity,
   Loader2,
   AlertCircle,
   Power,
@@ -51,11 +52,11 @@ import {
   MoreVertical,
   Info,
   Settings,
-  BarChart,
-  Shield,
   Building,
   CheckCircle,
   XCircle,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 import {
   useGetPartnerByIdQuery,
@@ -64,12 +65,6 @@ import {
 } from "@/store/api/endpoints/partnersApi";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDate } from "@/lib/mock-data";
-
-interface PartnerDetailPageProps {
-  params: {
-    id: string;
-  };
-}
 
 export default function PartnerDetailPage() {
   const router = useRouter();
@@ -93,21 +88,16 @@ export default function PartnerDetailPage() {
     error,
     refetch,
   } = useGetPartnerByIdQuery(partnerId);
-
   const [updatePartner, { isLoading: isUpdating }] = useUpdatePartnerMutation();
   const [deletePartner, { isLoading: isDeleting }] = useDeletePartnerMutation();
 
   const partner = partnerData?.data?.partner;
 
-  const handleEdit = () => {
-    router.push(`/partners/${partnerId}/edit`);
-  };
-
   const handleDeactivate = async () => {
     try {
       await updatePartner({
-        id: partnerId,
-        data: { isActive: false },
+        partnerId,
+        partnerData: { isActive: false },
       }).unwrap();
       setShowDeactivateDialog(false);
       refetch();
@@ -119,8 +109,8 @@ export default function PartnerDetailPage() {
   const handleActivate = async () => {
     try {
       await updatePartner({
-        id: partnerId,
-        data: { isActive: true },
+        partnerId,
+        partnerData: { isActive: true },
       }).unwrap();
       setShowActivateDialog(false);
       refetch();
@@ -139,38 +129,7 @@ export default function PartnerDetailPage() {
     }
   };
 
-  // Statistics calculations - only partner-specific stats
-  const stats = [
-    {
-      title: "Total Shipments",
-      value: partner?._count?.shipments || 0,
-      icon: Package,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-    },
-    {
-      title: "Min Weight",
-      value: partner?.minWeight ? `${partner.minWeight}kg` : "Not set",
-      icon: Package,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
-      title: "Max Weight",
-      value: partner?.maxWeight ? `${partner.maxWeight}kg` : "No limit",
-      icon: Package,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
-      title: "API Status",
-      value: partner?.apiToken ? "Connected" : "Not Connected",
-      icon: Globe,
-      color: partner?.apiToken ? "text-green-600" : "text-orange-600",
-      bgColor: partner?.apiToken ? "bg-green-50" : "bg-orange-50",
-    },
-  ];
-
+  // Loading state
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -181,183 +140,157 @@ export default function PartnerDetailPage() {
     );
   }
 
+  // Error state
   if (error || !partner) {
     return (
       <DashboardLayout>
-        <div className="max-w-4xl mx-auto">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-12">
-                <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {error ? "Error Loading Partner" : "Partner Not Found"}
-                </h3>
-                <p className="text-gray-500">
-                  {error
-                    ? "Failed to load partner details"
-                    : "The partner you're looking for doesn't exist."}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center h-96">
+            <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2">
+              {error ? "Error Loading Partner" : "Partner Not Found"}
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {error
+                ? "Failed to load partner details"
+                : "The partner doesn't exist."}
+            </p>
+            <Button onClick={() => router.push("/partners")} variant="outline">
+              Back to Partners
+            </Button>
+          </CardContent>
+        </Card>
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <PageContainer>
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {partner.displayName}
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Partner details and configuration
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {canManage && (
-              <>
-                {partner.isActive ? (
-                  <Button
-                    onClick={() => setShowDeactivateDialog(true)}
-                    disabled={isUpdating}
-                    variant="outline"
-                    className="border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <PowerOff className="h-4 w-4 mr-2" />
-                    Deactivate
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => setShowActivateDialog(true)}
-                    disabled={isUpdating}
-                    variant="outline"
-                    className="border-green-200 text-green-600 hover:bg-green-50"
-                  >
-                    <Power className="h-4 w-4 mr-2" />
-                    Activate
-                  </Button>
-                )}
-              </>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreVertical className="h-4 w-4" />
+        <DetailHeader
+          title={partner.displayName}
+          description="Partner details and configuration"
+          backHref="/partners"
+          badges={[
+            partner.isActive ? (
+              <Badge key="status" className="bg-green-100 text-green-800">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Active
+              </Badge>
+            ) : (
+              <Badge key="status" variant="secondary">
+                <XCircle className="h-3 w-3 mr-1" />
+                Inactive
+              </Badge>
+            ),
+            <Badge key="code" variant="outline">
+              <Truck className="h-3 w-3 mr-1" />
+              {partner.code}
+            </Badge>,
+          ]}
+          actions={
+            <div className="flex items-center gap-2">
+              {canManage && partner.isActive ? (
+                <Button
+                  onClick={() => setShowDeactivateDialog(true)}
+                  disabled={isUpdating}
+                  variant="outline"
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  <PowerOff className="h-4 w-4 mr-2" />
+                  Deactivate
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {canEdit && (
-                  <DropdownMenuItem onClick={handleEdit}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit Partner
+              ) : canManage && !partner.isActive ? (
+                <Button
+                  onClick={() => setShowActivateDialog(true)}
+                  disabled={isUpdating}
+                  variant="outline"
+                  className="border-green-200 text-green-600 hover:bg-green-50"
+                >
+                  <Power className="h-4 w-4 mr-2" />
+                  Activate
+                </Button>
+              ) : null}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(`/partners/${partnerId}/pincodes`)
+                    }
+                  >
+                    <MapPin className="h-4 w-4 mr-2" />
+                    Assign Pincodes
                   </DropdownMenuItem>
-                )}
-                {canDelete && (
-                  <>
-                    <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(`/partners/${partnerId}/charges`)
+                    }
+                  >
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    Charges Types
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {canEdit && (
                     <DropdownMenuItem
-                      onClick={() => setShowDeleteDialog(true)}
-                      className="text-red-600 hover:text-red-700"
+                      onClick={() => router.push(`/partners/${partnerId}/edit`)}
                     >
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Delete Partner
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Partner
                     </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Hero Section */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-2xl font-bold">
-                    {partner.displayName
-                      ?.split(" ")
-                      .map((n: string) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-3">
-                    <h2 className="text-2xl font-bold">
-                      {partner.displayName}
-                    </h2>
-                    <Badge variant={partner.isActive ? "default" : "secondary"}>
-                      {partner.isActive ? (
-                        <>
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Active
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Inactive
-                        </>
-                      )}
-                    </Badge>
-                    <Badge variant="outline">
-                      <Truck className="h-3 w-3 mr-1" />
-                      {partner.code}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <span className="flex items-center">
-                      <Building className="h-4 w-4 mr-1" />
-                      {partner.name}
-                    </span>
-                    <span className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      Since {new Date(partner.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                {partner.supportsCOD && (
-                  <Badge className="bg-green-100 text-green-800 border-green-200">
-                    COD Enabled
-                  </Badge>
-                )}
-                {partner.supportsReverse && (
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-                    Reverse Pickup
-                  </Badge>
-                )}
-              </div>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setShowDeleteDialog(true)}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Partner
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </CardContent>
-        </Card>
+          }
+        />
 
-        {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {stats.map((stat) => (
-            <Card key={stat.title}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500">{stat.title}</p>
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Stats */}
+        <StatsGrid columns={4}>
+          <StatsCard
+            title="Assigned Pincodes"
+            value={partner._count?.pincodeAssigns || 0}
+            icon={MapPin}
+            iconColor="text-blue-600"
+          />
+          <StatsCard
+            title="Charges Types"
+            value={partner._count?.chargesTypes || 0}
+            icon={DollarSign}
+            iconColor="text-green-600"
+          />
+          <StatsCard
+            title="Channel Configs"
+            value={partner._count?.channelConfigs || 0}
+            icon={Globe}
+            iconColor="text-purple-600"
+          />
+          <StatsCard
+            title="Total Shipments"
+            value={partner._count?.shipments || 0}
+            icon={Package}
+            iconColor="text-orange-600"
+          />
+        </StatsGrid>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -373,110 +306,115 @@ export default function PartnerDetailPage() {
           </TabsList>
 
           <div className="mt-6">
-            <TabsContent value="overview" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Basic Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Partner Name</p>
-                      <p className="font-medium">{partner.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Display Name</p>
-                      <p className="font-medium">{partner.displayName}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Partner Code</p>
-                      <p className="font-medium font-mono">{partner.code}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Status</p>
+            <TabsContent value="overview" className="space-y-6">
+              <DetailGrid columns={2}>
+                <DetailSection title="Basic Information">
+                  <DetailItem label="Partner Name" value={partner.name} />
+                  <DetailItem
+                    label="Display Name"
+                    value={partner.displayName}
+                  />
+                  <DetailItem label="Partner Code" value={partner.code} mono />
+                  <DetailItem
+                    label="Status"
+                    value={
                       <Badge
                         variant={partner.isActive ? "default" : "secondary"}
                       >
                         {partner.isActive ? "Active" : "Inactive"}
                       </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
+                    }
+                  />
+                </DetailSection>
 
-                {/* Contact Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Timeline</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Created On</p>
-                      <p className="font-medium">
-                        {formatDate(partner.createdAt)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Last Updated</p>
-                      <p className="font-medium">
-                        {formatDate(partner.updatedAt)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Total Shipments</p>
-                      <p className="font-medium">
-                        {partner._count?.shipments || 0}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">
-                        Integration Status
-                      </p>
+                <DetailSection title="Timeline">
+                  <DetailItem
+                    label="Created On"
+                    value={formatDate(partner.createdAt)}
+                  />
+                  <DetailItem
+                    label="Last Updated"
+                    value={formatDate(partner.updatedAt)}
+                  />
+                  <DetailItem
+                    label="Total Shipments"
+                    value={partner._count?.shipments || 0}
+                  />
+                  <DetailItem
+                    label="Integration Status"
+                    value={
                       <Badge
                         variant={partner.apiToken ? "default" : "secondary"}
                       >
                         {partner.apiToken ? "Connected" : "Not Connected"}
                       </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                    }
+                  />
+                </DetailSection>
+
+                <DetailSection title="Channel Configuration">
+                  <DetailItem
+                    label="Channel Mode"
+                    value={
+                      <Badge variant="outline">
+                        {partner.channelMode || "SINGLE"}
+                      </Badge>
+                    }
+                  />
+                  <DetailItem
+                    label="Channel Configs"
+                    value={`${partner._count?.channelConfigs || 0} configured`}
+                  />
+                  <DetailItem
+                    label="Charges Types"
+                    value={`${partner._count?.chargesTypes || 0} types`}
+                  />
+                </DetailSection>
+              </DetailGrid>
             </TabsContent>
 
-            <TabsContent value="api" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>API Configuration</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500">API Endpoint</p>
-                    <p className="font-medium font-mono break-all">
-                      {partner.apiUrl || "Not configured"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">API Version</p>
-                    <p className="font-medium">
-                      {partner.apiVersion || "Not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">API Token</p>
-                    <p className="font-medium">
-                      {partner.apiToken ? "••••••••••••••••" : "Not configured"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Authentication Status
-                    </p>
+            <TabsContent value="api" className="space-y-6">
+              <DetailSection title="API Configuration">
+                <DetailItem
+                  label="Channel Mode"
+                  value={
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">
+                        {partner.channelMode || "SINGLE"}
+                      </Badge>
+                      {partner.channelMode === "MULTI" && (
+                        <span className="text-sm text-muted-foreground">
+                          ({partner._count?.channelConfigs || 0} channels)
+                        </span>
+                      )}
+                    </div>
+                  }
+                />
+                <Separator />
+                <DetailItem
+                  label="API Endpoint"
+                  value={partner.apiUrl || "Not configured"}
+                  mono
+                />
+                <DetailItem
+                  label="API Version"
+                  value={partner.apiVersion || "Not specified"}
+                />
+                <DetailItem
+                  label="API Token"
+                  value={
+                    partner.apiToken ? "••••••••••••••••" : "Not configured"
+                  }
+                />
+                <DetailItem
+                  label="Authentication Status"
+                  value={
                     <Badge variant={partner.apiToken ? "default" : "secondary"}>
                       {partner.apiToken ? "Configured" : "Not Configured"}
                     </Badge>
-                  </div>
-                </CardContent>
-              </Card>
+                  }
+                />
+              </DetailSection>
             </TabsContent>
           </div>
         </Tabs>
@@ -490,8 +428,7 @@ export default function PartnerDetailPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Deactivate Partner?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will temporarily disable the partner. Active shipments will
-                continue to be processed, but new shipments cannot be created
+                This will disable the partner. New shipments cannot be created
                 with this partner.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -543,8 +480,8 @@ export default function PartnerDetailPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Partner?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the
-                partner and all associated data including rate configurations.
+                This will permanently delete the partner and all associated
+                data.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -563,7 +500,7 @@ export default function PartnerDetailPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
+      </PageContainer>
     </DashboardLayout>
   );
 }

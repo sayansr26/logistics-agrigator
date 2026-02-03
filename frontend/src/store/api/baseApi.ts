@@ -40,6 +40,16 @@ export const baseApi = createApi({
 
     // Timeout configuration
     timeout: API_CONFIG.TIMEOUT,
+
+    // Extract data field from response (all our APIs return { status, data, meta })
+    transformResponse: (response: any) => {
+      // Handle blob responses (for file downloads)
+      if (response instanceof Blob) {
+        return response;
+      }
+      // Extract data field from { status, data, meta } format
+      return response?.data || response;
+    },
   }),
 
   // Tag types for cache invalidation
@@ -52,6 +62,8 @@ export const baseApi = createApi({
     "Shipment",
     "Partner",
     "PartnerChannel",
+    "PartnerPincode",
+    "Pincode",
     "Wallet",
     "Zone",
     "Geo",

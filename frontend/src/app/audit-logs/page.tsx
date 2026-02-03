@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageContainer, PageHeader } from "@/components/shared";
 import {
   useGetAdminAuditLogsQuery,
   useGetAdminRuntimeLogsQuery,
@@ -45,7 +46,6 @@ import {
   type RuntimeLogLine,
 } from "@/store/api/endpoints/logsApi";
 import { useAppSelector } from "@/store/hooks";
-import { useRole } from "@/hooks/useRole";
 import {
   FileText,
   ScrollText,
@@ -57,53 +57,26 @@ import {
   Code,
   Server,
   Calendar,
-  Filter,
-  X,
 } from "lucide-react";
 
 export default function AuditLogsPage() {
-  const customBreadcrumbs = [
-    { title: "Home", href: "/" },
-    { title: "Audit Logs" },
-  ];
+  const { user, token } = useAppSelector((state) => state.auth);
 
-  const { user, token, isAuthenticated } = useAppSelector(
-    (state) => state.auth,
-  );
-
-  // Check role from JWT token first (most reliable source)
   const getRoleFromToken = (token: string | null) => {
     if (!token) return null;
     try {
       const payload = token.split(".")[1];
-      const decoded = JSON.parse(atob(payload));
-      return decoded.role || null;
+      return JSON.parse(atob(payload)).role || null;
     } catch {
       return null;
     }
   };
 
   const tokenRole = getRoleFromToken(token);
-  const isSuperadminFromToken = tokenRole === "superadmin";
+  const isSuperadmin =
+    tokenRole === "superadmin" || user?.role === "superadmin";
+  const isRoleDetermined = token !== null && tokenRole !== null;
 
-  // Also check from user object as backup
-  const isSuperadminFromUser = user?.role === "superadmin";
-
-  // Use token role as primary source (always available after login)
-  const actuallyIsSuperadmin = isSuperadminFromToken || isSuperadminFromUser;
-
-  console.log("[AuditLogsPage] Role check:", {
-    tokenRole,
-    isSuperadminFromToken,
-    userRole: user?.role,
-    isSuperadminFromUser,
-    actuallyIsSuperadmin,
-    hasUser: !!user,
-    hasToken: !!token,
-    isAuthenticated,
-  });
-
-  // State for filters
   const [activeTab, setActiveTab] = useState<"audit" | "runtime">("audit");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedService, setSelectedService] = useState<string>("");
@@ -115,12 +88,9 @@ export default function AuditLogsPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [prevCursors, setPrevCursors] = useState<string[]>([]);
-
-  // State for log details dialog
   const [selectedLog, setSelectedLog] = useState<AuditEvent | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Build query params
   const queryParams = {
     limit: 50,
     cursor: nextCursor || undefined,
@@ -133,55 +103,43 @@ export default function AuditLogsPage() {
     endDate: endDate || undefined,
   };
 
-  // Don't make any API calls until we know the user's role from token
-  // This prevents both client and admin queries from running on initial render
-  const isRoleDetermined = token !== null && tokenRole !== null;
-
-  // RTK Query hooks - only run after role is determined
   const {
     data: adminAuditData,
     isLoading: isLoadingAdminAudit,
     isError: isAuditError,
     refetch: refetchAdminAudit,
   } = useGetAdminAuditLogsQuery(queryParams, {
-    skip: !isRoleDetermined || !actuallyIsSuperadmin || activeTab !== "audit",
+    skip: !isRoleDetermined || !isSuperadmin || activeTab !== "audit",
   });
-
   const {
     data: clientAuditData,
     isLoading: isLoadingClientAudit,
     refetch: refetchClientAudit,
   } = useGetClientAuditLogsQuery(queryParams, {
-    skip: !isRoleDetermined || actuallyIsSuperadmin || activeTab !== "audit",
+    skip: !isRoleDetermined || isSuperadmin || activeTab !== "audit",
   });
-
-  // Get available audit actions for dynamic filtering
   const { data: availableActionsData, isLoading: isLoadingActions } =
     useGetAvailableAuditActionsQuery(undefined, {
       skip: activeTab !== "audit",
     });
-
-  const availableActions = availableActionsData?.data?.actions || {};
-  const allActionList = availableActionsData?.data?.allActions || [];
-
   const {
     data: runtimeData,
     isLoading: isLoadingRuntime,
     isError: isRuntimeError,
     refetch: refetchRuntime,
   } = useGetAdminRuntimeLogsQuery(queryParams, {
-    skip: !isRoleDetermined || !actuallyIsSuperadmin || activeTab !== "runtime",
+    skip: !isRoleDetermined || !isSuperadmin || activeTab !== "runtime",
   });
 
-  // Get appropriate data based on user role and tab
-  const auditData = actuallyIsSuperadmin ? adminAuditData : clientAuditData;
+  const availableActions = availableActionsData?.data?.actions || {};
+  const allActionList = availableActionsData?.data?.allActions || [];
+  const auditData = isSuperadmin ? adminAuditData : clientAuditData;
   const auditLogs = auditData?.data || [];
   const auditPagination = auditData?.pagination;
   const runtimeLogs = runtimeData?.data || [];
 
-  // Format date/time
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString("en-IN", {
+  const formatDateTime = (dateString: string) =>
+    new Date(dateString).toLocaleString("en-IN", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -189,9 +147,7 @@ export default function AuditLogsPage() {
       minute: "2-digit",
       second: "2-digit",
     });
-  };
 
-  // Handle next page
   const handleNextPage = () => {
     if (auditPagination?.nextCursor) {
       setPrevCursors([...prevCursors, nextCursor || ""]);
@@ -199,58 +155,87 @@ export default function AuditLogsPage() {
     }
   };
 
-  // Handle previous page
   const handlePrevPage = () => {
     if (prevCursors.length > 0) {
       const newPrevCursors = [...prevCursors];
-      const previousCursor = newPrevCursors.pop();
+      setNextCursor(newPrevCursors.pop() || null);
       setPrevCursors(newPrevCursors);
-      setNextCursor(previousCursor || null);
     }
   };
 
-  // Reset pagination when filters change
   const handleFilterChange = () => {
     setNextCursor(null);
     setPrevCursors([]);
   };
 
-  // Handle viewing log details
-  const handleViewDetails = (log: AuditEvent) => {
-    setSelectedLog(log);
-    setIsDialogOpen(true);
-  };
-
-  // Handle closing dialog
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setSelectedLog(null);
-  };
+  const categories = [
+    "CRUD",
+    "AUTH",
+    "USER",
+    "PROFILE",
+    "CLIENT",
+    "OUTLET",
+    "ADDRESS",
+    "INVITATION",
+    "SHIPMENT",
+    "NDR",
+    "LABEL_MANIFEST",
+    "PICKUP",
+    "PARTNER",
+    "PINCODE",
+    "WALLET",
+    "LICENSE",
+    "SUPPORT",
+    "SYSTEM",
+  ];
+  const resources = [
+    "User",
+    "Client",
+    "Outlet",
+    "UserProfile",
+    "Address",
+    "UserInvitation",
+    "Shipment",
+    "Partner",
+    "PartnerChannel",
+    "PincodeType",
+    "Wallet",
+    "WalletTransaction",
+    "PayoutRequest",
+    "License",
+    "LicenseActivation",
+    "SupportTicket",
+    "NDRCase",
+    "PickupSchedule",
+    "ShippingLabel",
+    "Manifest",
+  ];
+  const services = [
+    "auth-service",
+    "user-service",
+    "shipment-service",
+    "partner-service",
+    "wallet-service",
+    "license-service",
+  ];
 
   return (
-    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <FileText className="h-6 w-6 text-primary" />
-              Audit Logs
-            </h1>
-            <p className="text-muted-foreground">
-              {actuallyIsSuperadmin
-                ? "View system-wide audit trail and runtime logs"
-                : "View your organization's audit trail"}
-            </p>
-          </div>
-        </div>
+    <DashboardLayout>
+      <PageContainer>
+        <PageHeader
+          title="Audit Logs"
+          description={
+            isSuperadmin
+              ? "View system-wide audit trail and runtime logs"
+              : "View your organization's audit trail"
+          }
+        />
 
-        {/* Main Content */}
         <Card>
           <CardHeader>
             <CardTitle>System Logs</CardTitle>
             <CardDescription>
-              {actuallyIsSuperadmin
+              {isSuperadmin
                 ? "Monitor all system activities and debug issues"
                 : "Track changes and activities in your organization"}
             </CardDescription>
@@ -265,7 +250,7 @@ export default function AuditLogsPage() {
                   <ScrollText className="h-4 w-4" />
                   Audit Trail
                 </TabsTrigger>
-                {actuallyIsSuperadmin && (
+                {isSuperadmin && (
                   <TabsTrigger value="runtime" className="gap-2">
                     <Server className="h-4 w-4" />
                     Runtime Logs
@@ -300,31 +285,23 @@ export default function AuditLogsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Services</SelectItem>
-                    <SelectItem value="auth-service">Auth Service</SelectItem>
-                    <SelectItem value="user-service">User Service</SelectItem>
-                    <SelectItem value="shipment-service">
-                      Shipment Service
-                    </SelectItem>
-                    <SelectItem value="partner-service">
-                      Partner Service
-                    </SelectItem>
-                    <SelectItem value="wallet-service">
-                      Wallet Service
-                    </SelectItem>
-                    <SelectItem value="license-service">
-                      License Service
-                    </SelectItem>
+                    {services.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s
+                          .replace("-", " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
 
                 {activeTab === "audit" && (
                   <>
-                    {/* Action Category Filter */}
                     <Select
-                      value={selectedCategory || "all"}
+                      value={selectedCategory}
                       onValueChange={(v) => {
-                        setSelectedCategory(v === "all" ? "all" : v);
-                        setSelectedAction(""); // Reset action when category changes
+                        setSelectedCategory(v);
+                        setSelectedAction("");
                         handleFilterChange();
                       }}
                     >
@@ -333,48 +310,14 @@ export default function AuditLogsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem value="CRUD">CRUD Operations</SelectItem>
-                        <SelectItem value="AUTH">Authentication</SelectItem>
-                        <SelectItem value="USER">User Management</SelectItem>
-                        <SelectItem value="PROFILE">
-                          Profile Management
-                        </SelectItem>
-                        <SelectItem value="CLIENT">
-                          Client Management
-                        </SelectItem>
-                        <SelectItem value="OUTLET">
-                          Outlet Management
-                        </SelectItem>
-                        <SelectItem value="ADDRESS">
-                          Address Management
-                        </SelectItem>
-                        <SelectItem value="INVITATION">Invitations</SelectItem>
-                        <SelectItem value="SHIPMENT">Shipments</SelectItem>
-                        <SelectItem value="NDR">NDR Management</SelectItem>
-                        <SelectItem value="LABEL_MANIFEST">
-                          Labels & Manifests
-                        </SelectItem>
-                        <SelectItem value="PICKUP">
-                          Pickup Scheduling
-                        </SelectItem>
-                        <SelectItem value="PARTNER">
-                          Partner/Courier Management
-                        </SelectItem>
-                        <SelectItem value="PINCODE">
-                          Pincode Management
-                        </SelectItem>
-                        <SelectItem value="WALLET">
-                          Wallet & Payments
-                        </SelectItem>
-                        <SelectItem value="LICENSE">Licensing</SelectItem>
-                        <SelectItem value="SUPPORT">Support Tickets</SelectItem>
-                        <SelectItem value="SYSTEM">
-                          System Operations
-                        </SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c.replace(/_/g, " ")}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
-                    {/* Action Filter - Dynamic based on category */}
                     <Select
                       value={selectedAction || "all"}
                       onValueChange={(v) => {
@@ -392,29 +335,20 @@ export default function AuditLogsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Actions</SelectItem>
-                        {selectedCategory === "all"
-                          ? allActionList.map((action) => (
-                              <SelectItem key={action} value={action}>
-                                {action
-                                  .replace(/_/g, " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (c) => c.toUpperCase())}
-                              </SelectItem>
-                            ))
-                          : availableActions[selectedCategory]?.map(
-                              (action: string) => (
-                                <SelectItem key={action} value={action}>
-                                  {action
-                                    .replace(/_/g, " ")
-                                    .toLowerCase()
-                                    .replace(/\b\w/g, (c) => c.toUpperCase())}
-                                </SelectItem>
-                              ),
-                            )}
+                        {(selectedCategory === "all"
+                          ? allActionList
+                          : availableActions[selectedCategory] || []
+                        ).map((action: string) => (
+                          <SelectItem key={action} value={action}>
+                            {action
+                              .replace(/_/g, " ")
+                              .toLowerCase()
+                              .replace(/\b\w/g, (c) => c.toUpperCase())}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
-                    {/* Expanded Resource Filter */}
                     <Select
                       value={selectedResource || "all"}
                       onValueChange={(v) => {
@@ -427,46 +361,11 @@ export default function AuditLogsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Resources</SelectItem>
-                        <SelectItem value="User">Users</SelectItem>
-                        <SelectItem value="Client">Clients</SelectItem>
-                        <SelectItem value="Outlet">Outlets</SelectItem>
-                        <SelectItem value="UserProfile">
-                          User Profiles
-                        </SelectItem>
-                        <SelectItem value="Address">Addresses</SelectItem>
-                        <SelectItem value="UserInvitation">
-                          User Invitations
-                        </SelectItem>
-                        <SelectItem value="Shipment">Shipments</SelectItem>
-                        <SelectItem value="Partner">Partners</SelectItem>
-                        <SelectItem value="PartnerChannel">
-                          Partner Channels
-                        </SelectItem>
-                        <SelectItem value="PincodeType">
-                          Pincode Types
-                        </SelectItem>
-                        <SelectItem value="Wallet">Wallet</SelectItem>
-                        <SelectItem value="WalletTransaction">
-                          Wallet Transactions
-                        </SelectItem>
-                        <SelectItem value="PayoutRequest">
-                          Payout Requests
-                        </SelectItem>
-                        <SelectItem value="License">Licenses</SelectItem>
-                        <SelectItem value="LicenseActivation">
-                          License Activations
-                        </SelectItem>
-                        <SelectItem value="SupportTicket">
-                          Support Tickets
-                        </SelectItem>
-                        <SelectItem value="NDRCase">NDR Cases</SelectItem>
-                        <SelectItem value="PickupSchedule">
-                          Pickup Schedules
-                        </SelectItem>
-                        <SelectItem value="ShippingLabel">
-                          Shipping Labels
-                        </SelectItem>
-                        <SelectItem value="Manifest">Manifests</SelectItem>
+                        {resources.map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {r}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </>
@@ -501,7 +400,6 @@ export default function AuditLogsPage() {
                     handleFilterChange();
                   }}
                 />
-
                 <Input
                   type="date"
                   value={endDate}
@@ -525,7 +423,7 @@ export default function AuditLogsPage() {
                     <Button
                       variant="outline"
                       onClick={() =>
-                        actuallyIsSuperadmin
+                        isSuperadmin
                           ? refetchAdminAudit()
                           : refetchClientAudit()
                       }
@@ -542,71 +440,68 @@ export default function AuditLogsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[180px]">
-                              Timestamp
-                            </TableHead>
-                            <TableHead>Service</TableHead>
-                            <TableHead>Action</TableHead>
-                            <TableHead>Resource</TableHead>
-                            <TableHead>User ID</TableHead>
-                            <TableHead className="w-[100px]">Details</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {auditLogs.map((log: AuditEvent) => (
-                            <TableRow key={log.id}>
-                              <TableCell className="text-sm">
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3 text-muted-foreground" />
-                                  {formatDateTime(log.timestamp)}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{log.service}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    log.action === "DELETE"
-                                      ? "destructive"
-                                      : log.action === "CREATE"
-                                        ? "default"
-                                        : "secondary"
-                                  }
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[180px]">Timestamp</TableHead>
+                          <TableHead>Service</TableHead>
+                          <TableHead>Action</TableHead>
+                          <TableHead>Resource</TableHead>
+                          <TableHead>User ID</TableHead>
+                          <TableHead className="w-[100px]">Details</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {auditLogs.map((log: AuditEvent) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="text-sm">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3 text-muted-foreground" />
+                                {formatDateTime(log.timestamp)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{log.service}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  log.action === "DELETE"
+                                    ? "destructive"
+                                    : log.action === "CREATE"
+                                      ? "default"
+                                      : "secondary"
+                                }
+                              >
+                                {log.action}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {log.resource}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {log.userId?.slice(0, 8) || "System"}...
+                            </TableCell>
+                            <TableCell>
+                              {(log.changes || log.metadata) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    setSelectedLog(log);
+                                    setIsDialogOpen(true);
+                                  }}
                                 >
-                                  {log.action}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {log.resource}
-                              </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {log.userId?.slice(0, 8) || "System"}...
-                              </TableCell>
-                              <TableCell>
-                                {(log.changes || log.metadata) && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => handleViewDetails(log)}
-                                  >
-                                    <Code className="h-3 w-3 mr-1" />
-                                    View
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Pagination */}
+                                  <Code className="h-3 w-3 mr-1" />
+                                  View
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                     <div className="flex items-center justify-between mt-4">
                       <p className="text-sm text-muted-foreground">
                         Showing {auditLogs.length} logs
@@ -634,8 +529,8 @@ export default function AuditLogsPage() {
                 )}
               </TabsContent>
 
-              {/* Runtime Logs Tab (Superadmin Only) */}
-              {actuallyIsSuperadmin && (
+              {/* Runtime Logs Tab */}
+              {isSuperadmin && (
                 <TabsContent value="runtime">
                   {isLoadingRuntime ? (
                     <div className="flex items-center justify-center py-12">
@@ -653,8 +548,7 @@ export default function AuditLogsPage() {
                         Retry
                       </Button>
                     </div>
-                  ) : !Array.isArray(runtimeLogs) ||
-                    runtimeLogs.length === 0 ? (
+                  ) : runtimeLogs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                       <Server className="h-12 w-12 mb-4 opacity-50" />
                       <p className="text-lg font-medium">
@@ -699,140 +593,122 @@ export default function AuditLogsPage() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Log Details Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Code className="h-5 w-5" />
-              Audit Log Details
-            </DialogTitle>
-            <DialogDescription>
-              Detailed information about this audit event
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedLog && (
-            <div className="space-y-4">
-              {/* Basic Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    Timestamp
-                  </Label>
-                  <p className="text-sm font-medium">
-                    {formatDateTime(selectedLog.timestamp)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    Service
-                  </Label>
-                  <p className="text-sm font-medium">{selectedLog.service}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    Action
-                  </Label>
-                  <Badge
-                    variant={
-                      selectedLog.action === "DELETE"
-                        ? "destructive"
-                        : selectedLog.action === "CREATE"
-                          ? "default"
-                          : "secondary"
-                    }
-                  >
-                    {selectedLog.action}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    Resource
-                  </Label>
-                  <p className="text-sm font-medium">{selectedLog.resource}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    User ID
-                  </Label>
-                  <p className="text-sm font-mono text-muted-foreground">
-                    {selectedLog.userId || "System"}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    Client ID
-                  </Label>
-                  <p className="text-sm font-mono text-muted-foreground">
-                    {selectedLog.clientId || "N/A"}
-                  </p>
-                </div>
-                {selectedLog.resourceId && (
-                  <div className="col-span-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Resource ID
-                    </Label>
-                    <p className="text-sm font-mono text-xs break-all">
-                      {selectedLog.resourceId}
-                    </p>
-                  </div>
-                )}
-                {selectedLog.ipAddress && (
+        {/* Log Details Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Code className="h-5 w-5" />
+                Audit Log Details
+              </DialogTitle>
+              <DialogDescription>
+                Detailed information about this audit event
+              </DialogDescription>
+            </DialogHeader>
+            {selectedLog && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs text-muted-foreground">
-                      IP Address
+                      Timestamp
                     </Label>
-                    <p className="text-sm font-mono">{selectedLog.ipAddress}</p>
+                    <p className="text-sm font-medium">
+                      {formatDateTime(selectedLog.timestamp)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Service
+                    </Label>
+                    <p className="text-sm font-medium">{selectedLog.service}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Action
+                    </Label>
+                    <Badge
+                      variant={
+                        selectedLog.action === "DELETE"
+                          ? "destructive"
+                          : selectedLog.action === "CREATE"
+                            ? "default"
+                            : "secondary"
+                      }
+                    >
+                      {selectedLog.action}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Resource
+                    </Label>
+                    <p className="text-sm font-medium">
+                      {selectedLog.resource}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      User ID
+                    </Label>
+                    <p className="text-sm font-mono text-muted-foreground">
+                      {selectedLog.userId || "System"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Client ID
+                    </Label>
+                    <p className="text-sm font-mono text-muted-foreground">
+                      {selectedLog.clientId || "N/A"}
+                    </p>
+                  </div>
+                  {selectedLog.resourceId && (
+                    <div className="col-span-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Resource ID
+                      </Label>
+                      <p className="text-sm font-mono break-all">
+                        {selectedLog.resourceId}
+                      </p>
+                    </div>
+                  )}
+                  {selectedLog.ipAddress && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        IP Address
+                      </Label>
+                      <p className="text-sm font-mono">
+                        {selectedLog.ipAddress}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {selectedLog.changes && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Changes
+                    </Label>
+                    <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto">
+                      {JSON.stringify(selectedLog.changes, null, 2)}
+                    </pre>
                   </div>
                 )}
-                {selectedLog.userAgent && (
-                  <div className="col-span-2">
+                {selectedLog.metadata && (
+                  <div>
                     <Label className="text-xs text-muted-foreground">
-                      User Agent
+                      Metadata
                     </Label>
-                    <p className="text-sm text-muted-foreground break-all">
-                      {selectedLog.userAgent}
-                    </p>
+                    <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto">
+                      {JSON.stringify(selectedLog.metadata, null, 2)}
+                    </pre>
                   </div>
                 )}
               </div>
-
-              {/* Changes */}
-              {selectedLog.changes &&
-                Object.keys(selectedLog.changes).length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">
-                      Changes
-                    </Label>
-                    <div className="bg-muted rounded-md p-3">
-                      <pre className="text-xs overflow-x-auto">
-                        {JSON.stringify(selectedLog.changes, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-
-              {/* Metadata */}
-              {selectedLog.metadata &&
-                Object.keys(selectedLog.metadata).length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">
-                      Metadata
-                    </Label>
-                    <div className="bg-muted rounded-md p-3">
-                      <pre className="text-xs overflow-x-auto">
-                        {JSON.stringify(selectedLog.metadata, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </DialogContent>
+        </Dialog>
+      </PageContainer>
     </DashboardLayout>
   );
 }

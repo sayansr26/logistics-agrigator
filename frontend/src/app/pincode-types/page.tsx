@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  PageContainer,
+  PageHeader,
+  StatsCard,
+  StatsGrid,
+} from "@/components/shared";
+import {
   useGetPincodeTypesQuery,
   useCreatePincodeTypeMutation,
   useUpdatePincodeTypeMutation,
@@ -44,6 +51,8 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
+  Hash,
+  ToggleLeft,
 } from "lucide-react";
 
 export default function PincodeTypesPage() {
@@ -63,7 +72,6 @@ export default function PincodeTypesPage() {
     data: pincodeTypesData,
     isLoading,
     error,
-    refetch,
   } = useGetPincodeTypesQuery({
     search: searchTerm || undefined,
   });
@@ -72,13 +80,21 @@ export default function PincodeTypesPage() {
   const [updatePincodeType] = useUpdatePincodeTypeMutation();
   const [deletePincodeType] = useDeletePincodeTypeMutation();
 
+  const pincodeTypes = pincodeTypesData?.data || [];
+  const totalTypes = pincodeTypes.length;
+  const activeTypes = pincodeTypes.filter(
+    (t: PincodeType) => t.isActive,
+  ).length;
+  const yesNoTypes = pincodeTypes.filter(
+    (t: PincodeType) => t.type === "yes_no",
+  ).length;
+  const numberTypes = pincodeTypes.filter(
+    (t: PincodeType) => t.type === "number",
+  ).length;
+
   const handleCreate = async () => {
     try {
-      await createPincodeType({
-        name: formData.name,
-        type: formData.type,
-        isActive: formData.isActive,
-      }).unwrap();
+      await createPincodeType(formData).unwrap();
       setShowCreateDialog(false);
       resetForm();
     } catch (error) {
@@ -101,11 +117,7 @@ export default function PincodeTypesPage() {
     try {
       await updatePincodeType({
         id: selectedPincodeType.id,
-        data: {
-          name: formData.name,
-          type: formData.type,
-          isActive: formData.isActive,
-        },
+        data: formData,
       }).unwrap();
       setShowEditDialog(false);
       resetForm();
@@ -131,119 +143,145 @@ export default function PincodeTypesPage() {
   };
 
   const resetForm = () => {
-    setFormData({
-      name: "",
-      type: "yes_no",
-      isActive: true,
-    });
+    setFormData({ name: "", type: "yes_no", isActive: true });
     setSelectedPincodeType(null);
   };
 
   return (
-    <DashboardLayout
-      breadcrumbs={[{ title: "Home", href: "/" }, { title: "Pincode Types" }]}
-    >
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Pincode Types</h1>
-            <p className="text-muted-foreground">
-              Manage pincode type configurations (yes/no or number types)
-            </p>
-          </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Pincode Type
-          </Button>
-        </div>
+    <DashboardLayout>
+      <PageContainer>
+        <PageHeader
+          title="Pincode Types"
+          description="Manage pincode type configurations (yes/no or number types)"
+          primaryAction={{
+            label: "Create Pincode Type",
+            onClick: () => setShowCreateDialog(true),
+          }}
+        />
+
+        {/* Stats */}
+        <StatsGrid columns={4}>
+          <StatsCard
+            title="Total Types"
+            value={totalTypes}
+            icon={Settings}
+            iconColor="text-blue-600"
+          />
+          <StatsCard
+            title="Active Types"
+            value={activeTypes}
+            icon={CheckCircle}
+            iconColor="text-green-600"
+          />
+          <StatsCard
+            title="Yes/No Types"
+            value={yesNoTypes}
+            icon={ToggleLeft}
+            iconColor="text-purple-600"
+          />
+          <StatsCard
+            title="Number Types"
+            value={numberTypes}
+            icon={Hash}
+            iconColor="text-orange-600"
+          />
+        </StatsGrid>
 
         {/* Search */}
-        <div className="flex items-center space-x-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search pincode types..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search pincode types..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Table */}
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">
-                    Loading...
-                  </TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="text-center text-destructive"
-                  >
-                    Error loading pincode types
-                  </TableCell>
-                </TableRow>
-              ) : !pincodeTypesData?.data ||
-                pincodeTypesData.data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center">
-                    No pincode types found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                pincodeTypesData.data.map((pincodeType) => (
-                  <TableRow key={pincodeType.id}>
-                    <TableCell className="font-medium">
-                      {pincodeType.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{pincodeType.type}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {pincodeType.isActive ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(pincodeType.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(pincodeType)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(pincodeType)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center">
+                      Loading...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : error ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-destructive"
+                    >
+                      Error loading pincode types
+                    </TableCell>
+                  </TableRow>
+                ) : pincodeTypes.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No pincode types found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pincodeTypes.map((pincodeType: PincodeType) => (
+                    <TableRow key={pincodeType.id}>
+                      <TableCell className="font-medium">
+                        {pincodeType.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{pincodeType.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {pincodeType.isActive ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(pincodeType.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(pincodeType)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(pincodeType)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
         {/* Create Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -328,7 +366,6 @@ export default function PincodeTypesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  placeholder="e.g., COD, Max Weight"
                 />
               </div>
               <div>
@@ -375,7 +412,7 @@ export default function PincodeTypesPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent>
             <DialogHeader>
@@ -401,7 +438,7 @@ export default function PincodeTypesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageContainer>
     </DashboardLayout>
   );
 }

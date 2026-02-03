@@ -17,18 +17,49 @@ interface Partner {
   displayName?: string;
   apiEndpoint?: string;
   apiUrl?: string;
+  apiToken?: string;
+  apiVersion?: string;
   isActive: boolean;
+
+  // Channel Mode
+  channelMode?: "SINGLE" | "MULTI";
+
+  // Service Configuration
   supportsCOD?: boolean;
   supportsReverse?: boolean;
   supportedServices?: string[];
   minWeight?: number;
   maxWeight?: number;
+  maxDimensions?: {
+    length: number;
+    width: number;
+    height: number;
+  };
+
+  // Pricing Configuration
+  baseRate?: number;
+  perKgRate?: number;
+  codChargePercent?: number;
+  fuelSurcharge?: number;
+
+  // Delivery Configuration
   defaultDeliveryDays?: number;
+
+  // Service Areas
+  servicePincodes?: string[];
+
+  // Timestamps
   createdAt: string;
   updatedAt: string;
+
+  // Relations count
   _count?: {
     shipments?: number;
     rates?: number;
+    pincodeAssigns?: number;
+    chargePackages?: number;
+    channelConfigs?: number;
+    chargesTypes?: number;
   };
 }
 

@@ -64,6 +64,7 @@ model Partner {
   chargePackages      ChargePackage[]
   channelConfigs      PartnerChannelConfig[]
   chargesTypes        ChargesType[]
+  pincodeAssigns      PartnerPincodeAssign[]
 
   @@index([isActive])
   @@map("partners")
@@ -282,9 +283,10 @@ model Pincode {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  area         Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
-  state        State         @relation(fields: [stateId], references: [id], onDelete: Cascade)
-  zonePincodes ZonePincode[]
+  area           Area?                  @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  state          State                  @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  zonePincodes   ZonePincode[]
+  partnerAssigns PartnerPincodeAssign[]
 
   @@index([code, status])
   @@index([areaId, status])
@@ -449,6 +451,9 @@ model PincodeType {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Relations
+  partnerValues PartnerPincodeTypeValue[]
+
   @@index([isActive, type])
   @@map("pincode_types")
 }
@@ -509,4 +514,45 @@ model ChargePackage {
   @@index([partnerId, isActive])
   @@index([type])
   @@map("charge_packages")
+}
+
+// ========================================
+// PARTNER PINCODE ASSIGNMENT
+// ========================================
+
+model PartnerPincodeAssign {
+  id        String   @id @default(uuid()) @db.Uuid
+  partnerId String   @map("partner_id") // CUID to match Partner.id
+  pincodeId String   @map("pincode_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  partner           Partner                   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  pincode           Pincode                   @relation(fields: [pincodeId], references: [id], onDelete: Cascade)
+  pincodeTypeValues PartnerPincodeTypeValue[]
+
+  @@unique([partnerId, pincodeId])
+  @@index([partnerId, isActive])
+  @@index([pincodeId])
+  @@map("partner_pincode_assigns")
+}
+
+model PartnerPincodeTypeValue {
+  id               String   @id @default(uuid()) @db.Uuid
+  partnerPincodeId String   @map("partner_pincode_id") @db.Uuid
+  pincodeTypeId    String   @map("pincode_type_id") @db.Uuid
+  value            String   @db.VarChar(255) // "yes"/"no" for yes_no, number for number
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  partnerPincode PartnerPincodeAssign @relation(fields: [partnerPincodeId], references: [id], onDelete: Cascade)
+  pincodeType    PincodeType          @relation(fields: [pincodeTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerPincodeId, pincodeTypeId])
+  @@index([partnerPincodeId])
+  @@index([pincodeTypeId])
+  @@map("partner_pincode_type_values")
 }

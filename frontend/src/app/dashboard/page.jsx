@@ -1,451 +1,308 @@
 "use client";
 
+import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
-
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  PageHeader,
+  PageContainer,
+  StatsCard,
+  StatsGrid,
+  DataTable,
+} from "@/components/shared";
 import {
-  Package,
   Truck,
-  Users,
-  TrendingUp,
-  TrendingDown,
-  Clock,
+  Globe,
+  IndianRupee,
   MapPin,
-  DollarSign,
-  AlertTriangle,
   CheckCircle,
   XCircle,
-  MoreHorizontal,
   Plus,
   Eye,
-  ArrowUpRight,
-  ArrowDownRight,
-  Calendar,
-  Bell,
+  Settings,
+  ScrollText,
+  ArrowRight,
 } from "lucide-react";
-
-// Mock data - will be replaced with API calls
-const dashboardStats = {
-  totalShipments: 1247,
-  shipmentsChange: 12.5,
-  activeShipments: 89,
-  activeChange: -2.3,
-  totalRevenue: 45780,
-  revenueChange: 8.7,
-  customerSatisfaction: 94.2,
-  satisfactionChange: 1.8,
-};
-
-const recentShipments = [
-  {
-    id: "LOG2024001",
-    customer: "TechCorp Inc.",
-    destination: "New York, USA",
-    status: "in_transit",
-    priority: "high",
-    estimatedDelivery: "2024-08-20",
-    value: 1200,
-  },
-  {
-    id: "LOG2024002",
-    customer: "Fashion Store",
-    destination: "London, UK",
-    status: "delivered",
-    priority: "medium",
-    estimatedDelivery: "2024-08-18",
-    value: 450,
-  },
-  {
-    id: "LOG2024003",
-    customer: "Electronics Hub",
-    destination: "Toronto, Canada",
-    status: "pending",
-    priority: "low",
-    estimatedDelivery: "2024-08-22",
-    value: 2800,
-  },
-  {
-    id: "LOG2024004",
-    customer: "BookWorld",
-    destination: "Sydney, Australia",
-    status: "delayed",
-    priority: "medium",
-    estimatedDelivery: "2024-08-19",
-    value: 85,
-  },
-];
-
-const alerts = [
-  {
-    id: 1,
-    type: "warning",
-    title: "Delayed Shipment",
-    message: "LOG2024004 is delayed due to weather conditions",
-    time: "2 hours ago",
-  },
-  {
-    id: 2,
-    type: "success",
-    title: "Delivery Completed",
-    message: "LOG2024002 delivered successfully to London",
-    time: "4 hours ago",
-  },
-  {
-    id: 3,
-    type: "info",
-    title: "New Integration",
-    message: "Shopify integration is now active",
-    time: "1 day ago",
-  },
-];
-
-const performanceMetrics = [
-  { label: "On-time Delivery", value: 94.2, target: 95, color: "bg-green-500" },
-  { label: "Cost Efficiency", value: 87.5, target: 90, color: "bg-blue-500" },
-  {
-    label: "Customer Satisfaction",
-    value: 96.8,
-    target: 95,
-    color: "bg-purple-500",
-  },
-  {
-    label: "Damage Rate",
-    value: 1.2,
-    target: 2,
-    color: "bg-red-500",
-    inverse: true,
-  },
-];
-
-function getStatusColor(status) {
-  switch (status) {
-    case "delivered":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-    case "in_transit":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-    case "pending":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
-    case "delayed":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
-
-function getPriorityColor(priority) {
-  switch (priority) {
-    case "high":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
-    case "medium":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
-    case "low":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
+import { useGetPartnersQuery } from "@/store/api/endpoints/partnersApi";
+import { useGetZonesQuery } from "@/store/api/endpoints/zonesApi";
+import { useGetChargesTypesQuery } from "@/store/api/endpoints/chargesTypeApi";
 
 export default function DashboardPage() {
+  // Fetch real data from APIs
+  const { data: partnersData, isLoading: partnersLoading } =
+    useGetPartnersQuery({});
+  const { data: zonesData, isLoading: zonesLoading } = useGetZonesQuery({});
+  const { data: chargesData, isLoading: chargesLoading } =
+    useGetChargesTypesQuery({});
+
+  const partners = partnersData?.data?.partners || [];
+  const zones = zonesData?.data?.zones || [];
+  const chargesTypes = chargesData?.data || [];
+
+  const activePartners = partners.filter((p) => p.isActive);
+  const isLoading = partnersLoading || zonesLoading || chargesLoading;
+
+  // Define columns for partners table
+  const partnerColumns = [
+    {
+      key: "name",
+      header: "Partner",
+      render: (partner) => (
+        <Link
+          href={`/partners/${partner.id}`}
+          className="font-medium hover:underline"
+        >
+          {partner.displayName || partner.name}
+        </Link>
+      ),
+    },
+    {
+      key: "code",
+      header: "Code",
+      render: (partner) => (
+        <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+          {partner.code}
+        </code>
+      ),
+    },
+    {
+      key: "isActive",
+      header: "Status",
+      render: (partner) =>
+        partner.isActive ? (
+          <Badge className="bg-green-100 text-green-800">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Active
+          </Badge>
+        ) : (
+          <Badge variant="secondary">
+            <XCircle className="h-3 w-3 mr-1" />
+            Inactive
+          </Badge>
+        ),
+    },
+    {
+      key: "channelMode",
+      header: "Channel Mode",
+      render: (partner) => (
+        <Badge variant="outline">{partner.channelMode || "SINGLE"}</Badge>
+      ),
+    },
+    {
+      key: "pincodes",
+      header: "Pincodes",
+      render: (partner) => (
+        <div className="flex items-center">
+          <MapPin className="h-3 w-3 mr-1 text-muted-foreground" />
+          {partner._count?.pincodeAssigns || 0}
+        </div>
+      ),
+    },
+  ];
+
+  // Quick actions for navigation
+  const quickActions = [
+    {
+      title: "Add Partner",
+      description: "Create a new courier partner",
+      href: "/partners/add",
+      icon: Plus,
+      color: "text-blue-600",
+    },
+    {
+      title: "Manage Zones",
+      description: "Configure delivery zones",
+      href: "/zones",
+      icon: Globe,
+      color: "text-green-600",
+    },
+    {
+      title: "Charges Types",
+      description: "Set up charge configurations",
+      href: "/charges-types",
+      icon: IndianRupee,
+      color: "text-purple-600",
+    },
+    {
+      title: "Audit Logs",
+      description: "View system activity",
+      href: "/audit-logs",
+      icon: ScrollText,
+      color: "text-orange-600",
+    },
+  ];
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="space-y-8">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground">
-                Welcome back! Here&apos;s what&apos;s happening with your
-                logistics operations.
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm">
-                <Calendar className="mr-2 h-4 w-4" />
-                Last 30 days
-              </Button>
-              <Button size="sm">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Shipment
-              </Button>
-            </div>
-          </div>
+        <PageContainer>
+          <PageHeader
+            title="Dashboard"
+            description="Platform overview and quick actions"
+            primaryAction={{
+              label: "Add Partner",
+              href: "/partners/add",
+            }}
+          />
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Shipments
-                </CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats.totalShipments.toLocaleString()}
-                </div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />+
-                  {dashboardStats.shipmentsChange}% from last month
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Active Shipments
-                </CardTitle>
-                <Truck className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats.activeShipments}
-                </div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                  {dashboardStats.activeChange}% from last week
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${dashboardStats.totalRevenue.toLocaleString()}
-                </div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />+
-                  {dashboardStats.revenueChange}% from last month
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Customer Satisfaction
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats.customerSatisfaction}%
-                </div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />+
-                  {dashboardStats.satisfactionChange}% from last month
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <StatsGrid columns={4}>
+            <StatsCard
+              title="Courier Partners"
+              value={partners.length}
+              description={`${activePartners.length} active`}
+              icon={Truck}
+              isLoading={partnersLoading}
+            />
+            <StatsCard
+              title="Active Partners"
+              value={activePartners.length}
+              description="Ready for operations"
+              icon={CheckCircle}
+              iconColor="text-green-500"
+              isLoading={partnersLoading}
+            />
+            <StatsCard
+              title="Zones"
+              value={zones.length}
+              description="Delivery zones configured"
+              icon={Globe}
+              isLoading={zonesLoading}
+            />
+            <StatsCard
+              title="Charges Types"
+              value={chargesTypes.length}
+              description="Charge configurations"
+              icon={IndianRupee}
+              isLoading={chargesLoading}
+            />
+          </StatsGrid>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Recent Shipments */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Recent Shipments</CardTitle>
-                    <CardDescription>
-                      Latest shipment activities and status updates
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Eye className="mr-2 h-4 w-4" />
-                    View All
+            {/* Partners Overview */}
+            <div className="lg:col-span-2">
+              <DataTable
+                title="Courier Partners"
+                description="Overview of all configured courier partners"
+                columns={partnerColumns}
+                data={partners.slice(0, 5)}
+                keyField="id"
+                isLoading={isLoading}
+                emptyMessage="No partners configured yet"
+                emptyIcon={
+                  <Truck className="h-12 w-12 text-muted-foreground mb-4" />
+                }
+                emptyAction={
+                  <Button asChild>
+                    <Link href="/partners/add">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add First Partner
+                    </Link>
                   </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tracking ID</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Destination</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentShipments.map((shipment) => (
-                      <TableRow key={shipment.id}>
-                        <TableCell className="font-medium">
-                          {shipment.id}
-                        </TableCell>
-                        <TableCell>{shipment.customer}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <MapPin className="mr-1 h-3 w-3 text-muted-foreground" />
-                            {shipment.destination}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(shipment.status)}>
-                            {shipment.status.replace("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={getPriorityColor(shipment.priority)}
-                          >
-                            {shipment.priority}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          ${shipment.value.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                }
+                headerActions={
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/partners">
+                      <Eye className="mr-2 h-4 w-4" />
+                      View All
+                    </Link>
+                  </Button>
+                }
+              />
+            </div>
 
-            {/* Alerts & Notifications */}
+            {/* Quick Actions */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Alerts & Notifications</CardTitle>
-                  <Bell className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <CardDescription>
-                  Important updates and system alerts
-                </CardDescription>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>Common tasks and navigation</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className="flex items-start space-x-3 p-3 rounded-lg border"
+              <CardContent className="space-y-3">
+                {quickActions.map((action) => (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className="flex items-center p-3 rounded-lg border hover:bg-muted transition-colors group"
                   >
-                    <div className="flex-shrink-0">
-                      {alert.type === "warning" && (
-                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                      )}
-                      {alert.type === "success" && (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      )}
-                      {alert.type === "error" && (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                      {alert.type === "info" && (
-                        <Clock className="h-4 w-4 text-blue-500" />
-                      )}
+                    <div
+                      className={`p-2 rounded-lg bg-muted mr-3 ${action.color}`}
+                    >
+                      <action.icon className="h-4 w-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        {alert.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {alert.time}
+                      <p className="text-sm font-medium">{action.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {action.description}
                       </p>
                     </div>
-                  </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                  </Link>
                 ))}
-                <Button variant="outline" className="w-full" size="sm">
-                  View All Notifications
-                </Button>
               </CardContent>
             </Card>
           </div>
 
-          {/* Performance Metrics */}
+          {/* System Status */}
           <Card>
             <CardHeader>
-              <CardTitle>Performance Metrics</CardTitle>
+              <CardTitle>System Status</CardTitle>
               <CardDescription>
-                Key performance indicators for your logistics operations
+                Configuration status of your logistics platform
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {performanceMetrics.map((metric) => (
-                  <div key={metric.label} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        {metric.label}
-                      </span>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-sm font-bold">
-                          {metric.value}%
-                        </span>
-                        {metric.inverse ? (
-                          metric.value <= metric.target ? (
-                            <ArrowDownRight className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <ArrowUpRight className="h-3 w-3 text-red-500" />
-                          )
-                        ) : metric.value >= metric.target ? (
-                          <ArrowUpRight className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <ArrowDownRight className="h-3 w-3 text-red-500" />
-                        )}
-                      </div>
-                    </div>
-                    <Progress value={metric.value} className="h-2" />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Target: {metric.target}%</span>
-                      <span
-                        className={
-                          metric.inverse
-                            ? metric.value <= metric.target
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-600 dark:text-red-400"
-                            : metric.value >= metric.target
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-600 dark:text-red-400"
-                        }
-                      >
-                        {metric.inverse
-                          ? metric.value <= metric.target
-                            ? "On Target"
-                            : "Above Target"
-                          : metric.value >= metric.target
-                            ? "On Target"
-                            : "Below Target"}
-                      </span>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 rounded-full bg-green-100 dark:bg-green-900">
+                    <Truck className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
-                ))}
+                  <div>
+                    <p className="text-sm font-medium">Partners</p>
+                    <p className="text-2xl font-bold">
+                      {activePartners.length}/{partners.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Active / Total
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
+                    <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Zones</p>
+                    <p className="text-2xl font-bold">{zones.length}</p>
+                    <p className="text-xs text-muted-foreground">Configured</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
+                    <IndianRupee className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Charges</p>
+                    <p className="text-2xl font-bold">{chargesTypes.length}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Charge Types
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
-        </div>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   );

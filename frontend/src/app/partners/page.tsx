@@ -2,16 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +41,13 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  PageHeader,
+  PageContainer,
+  StatsCard,
+  StatsGrid,
+  DataTablePagination,
+} from "@/components/shared";
+import {
   Truck,
   Package,
   Search,
@@ -54,11 +56,7 @@ import {
   Eye,
   Edit,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
   Plus,
-  TrendingUp,
-  Clock,
   Power,
   PowerOff,
   Loader2,
@@ -66,8 +64,9 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  ChevronDown,
   Users,
+  MapPin,
+  IndianRupee,
 } from "lucide-react";
 
 // RTK Query hooks
@@ -99,13 +98,11 @@ export default function PartnersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [codFilter, setCodFilter] = useState("all");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // UI State
   const [showFilters, setShowFilters] = useState(false);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -147,26 +144,15 @@ export default function PartnersPage() {
   useEffect(() => {
     const success = searchParams.get("success");
     if (success) {
-      let message = "";
-      switch (success) {
-        case "partner-created":
-          message = "Partner created successfully!";
-          break;
-        case "partner-updated":
-          message = "Partner updated successfully!";
-          break;
-        case "partner-deleted":
-          message = "Partner deleted successfully!";
-          break;
-        case "partner-activated":
-          message = "Partner activated successfully!";
-          break;
-        case "partner-deactivated":
-          message = "Partner deactivated successfully!";
-          break;
-      }
-      if (message) {
-        setSuccessMessage(message);
+      const messages: Record<string, string> = {
+        "partner-created": "Partner created successfully!",
+        "partner-updated": "Partner updated successfully!",
+        "partner-deleted": "Partner deleted successfully!",
+        "partner-activated": "Partner activated successfully!",
+        "partner-deactivated": "Partner deactivated successfully!",
+      };
+      if (messages[success]) {
+        setSuccessMessage(messages[success]);
         setShowSuccessMessage(true);
         router.replace("/partners", { scroll: false });
         setTimeout(() => setShowSuccessMessage(false), 5000);
@@ -205,52 +191,10 @@ export default function PartnersPage() {
     }
   };
 
-  // Custom breadcrumbs
-  const customBreadcrumbs = [
-    { title: "Home", href: "/" },
-    { title: "Courier Partners" },
-  ];
-
-  // Render partner status badge
-  const renderStatusBadge = (isActive: boolean) => {
-    if (isActive) {
-      return (
-        <Badge className="bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
-          <CheckCircle className="mr-1 h-3 w-3" />
-          Active
-        </Badge>
-      );
-    }
-    return (
-      <Badge className="bg-muted text-muted-foreground hover:bg-muted/80">
-        <XCircle className="mr-1 h-3 w-3" />
-        Inactive
-      </Badge>
-    );
-  };
-
-  // Render service badges
-  const renderServiceBadges = (partner: Partner) => {
-    return (
-      <div className="flex gap-1">
-        {partner.supportsCOD && (
-          <Badge variant="outline" className="text-xs">
-            COD
-          </Badge>
-        )}
-        {partner.supportsReverse && (
-          <Badge variant="outline" className="text-xs">
-            Reverse
-          </Badge>
-        )}
-      </div>
-    );
-  };
-
   // Loading state
   if (isLoading) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout>
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
@@ -264,7 +208,7 @@ export default function PartnersPage() {
   // Error state
   if (error) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout>
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-96">
             <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
@@ -272,8 +216,7 @@ export default function PartnersPage() {
               Failed to Load Partners
             </h3>
             <p className="text-muted-foreground mb-4">
-              {error?.data?.error?.message ||
-                "An error occurred while loading partners"}
+              An error occurred while loading partners
             </p>
             <Button onClick={() => refetch()} variant="outline">
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -286,8 +229,8 @@ export default function PartnersPage() {
   }
 
   return (
-    <DashboardLayout breadcrumbs={customBreadcrumbs}>
-      <div className="space-y-4">
+    <DashboardLayout>
+      <PageContainer>
         {/* Success Message */}
         {showSuccessMessage && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start justify-between">
@@ -308,91 +251,43 @@ export default function PartnersPage() {
         )}
 
         {/* Page Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Courier Partners
-            </h1>
-            <p className="text-muted-foreground">
-              Manage your courier service providers and their configurations
-            </p>
-          </div>
-          {canCreatePartner && (
-            <Button onClick={() => router.push("/partners/add")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Partner
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          title="Courier Partners"
+          description="Manage your courier service providers and their configurations"
+          primaryAction={
+            canCreatePartner
+              ? { label: "Add Partner", href: "/partners/add" }
+              : undefined
+          }
+        />
 
         {/* Statistics Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Partners
-                  </p>
-                  <p className="text-2xl font-bold">{totalPartners}</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Users className="h-5 w-5 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Active Partners
-                  </p>
-                  <p className="text-2xl font-bold">{activeCount}</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Inactive Partners
-                  </p>
-                  <p className="text-2xl font-bold">{inactiveCount}</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center">
-                  <XCircle className="h-5 w-5 text-gray-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    COD Enabled
-                  </p>
-                  <p className="text-2xl font-bold">
-                    {partners.filter((p) => p.supportsCOD).length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center">
-                  <Package className="h-5 w-5 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <StatsGrid columns={4}>
+          <StatsCard
+            title="Total Partners"
+            value={totalPartners}
+            icon={Users}
+            iconColor="text-blue-600"
+          />
+          <StatsCard
+            title="Active Partners"
+            value={activeCount}
+            icon={CheckCircle}
+            iconColor="text-green-600"
+          />
+          <StatsCard
+            title="Inactive Partners"
+            value={inactiveCount}
+            icon={XCircle}
+            iconColor="text-gray-600"
+          />
+          <StatsCard
+            title="COD Enabled"
+            value={partners.filter((p) => p.supportsCOD).length}
+            icon={IndianRupee}
+            iconColor="text-purple-600"
+          />
+        </StatsGrid>
 
         {/* Filters and Search */}
         <Card>
@@ -406,9 +301,7 @@ export default function PartnersPage() {
                   placeholder="Search partners by name or code..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
-                  className={`pl-10 ${isSearchFocused ? "ring-2 ring-blue-500" : ""}`}
+                  className="pl-10"
                 />
               </div>
 
@@ -446,61 +339,48 @@ export default function PartnersPage() {
 
             {/* Advanced Filters Panel */}
             {showFilters && (
-              <div className="mt-4 pt-4 border-t space-y-3">
-                <div className="grid grid-cols-4 gap-4">
-                  <Select value={codFilter} onValueChange={setCodFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="COD Support" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="yes">COD Enabled</SelectItem>
-                      <SelectItem value="no">COD Disabled</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort By" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="code">Code</SelectItem>
+                    <SelectItem value="createdAt">Created Date</SelectItem>
+                    <SelectItem value="updatedAt">Updated Date</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sort By" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="code">Code</SelectItem>
-                      <SelectItem value="createdAt">Created Date</SelectItem>
-                      <SelectItem value="updatedAt">Updated Date</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Select
+                  value={sortOrder}
+                  onValueChange={(value) =>
+                    setSortOrder(value as "asc" | "desc")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort Order" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                    <SelectItem value="desc">Descending</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                  <Select
-                    value={sortOrder}
-                    onValueChange={(value) =>
-                      setSortOrder(value as "asc" | "desc")
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sort Order" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="asc">Ascending</SelectItem>
-                      <SelectItem value="desc">Descending</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={itemsPerPage.toString()}
-                    onValueChange={(value) => setItemsPerPage(parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Per Page" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 per page</SelectItem>
-                      <SelectItem value="10">10 per page</SelectItem>
-                      <SelectItem value="25">25 per page</SelectItem>
-                      <SelectItem value="50">50 per page</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => setItemsPerPage(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Per Page" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 per page</SelectItem>
+                    <SelectItem value="10">10 per page</SelectItem>
+                    <SelectItem value="25">25 per page</SelectItem>
+                    <SelectItem value="50">50 per page</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </CardContent>
@@ -528,6 +408,15 @@ export default function PartnersPage() {
                         <p className="text-muted-foreground">
                           No partners found
                         </p>
+                        {canCreatePartner && (
+                          <Button
+                            className="mt-4"
+                            onClick={() => router.push("/partners/add")}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add First Partner
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -542,7 +431,12 @@ export default function PartnersPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{partner.name}</p>
+                            <Link
+                              href={`/partners/${partner.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {partner.name}
+                            </Link>
                             <p className="text-sm text-muted-foreground">
                               {partner.displayName}
                             </p>
@@ -570,7 +464,17 @@ export default function PartnersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {renderStatusBadge(partner.isActive)}
+                        {partner.isActive ? (
+                          <Badge className="bg-green-50 text-green-700">
+                            <CheckCircle className="mr-1 h-3 w-3" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-muted text-muted-foreground">
+                            <XCircle className="mr-1 h-3 w-3" />
+                            Inactive
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -600,6 +504,22 @@ export default function PartnersPage() {
                                 Edit Partner
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/partners/${partner.id}/pincodes`)
+                              }
+                            >
+                              <MapPin className="mr-2 h-4 w-4" />
+                              Pincode Assign
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/partners/${partner.id}/charges`)
+                              }
+                            >
+                              <IndianRupee className="mr-2 h-4 w-4" />
+                              Charges Types
+                            </DropdownMenuItem>
                             {canManagePartner && (
                               <>
                                 <DropdownMenuSeparator />
@@ -657,80 +577,13 @@ export default function PartnersPage() {
 
         {/* Pagination */}
         {pagination && pagination.totalPages > 1 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                  {Math.min(currentPage * itemsPerPage, totalPartners)} of{" "}
-                  {totalPartners} partners
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.max(1, prev - 1))
-                    }
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <div className="flex gap-1">
-                    {Array.from(
-                      { length: pagination.totalPages },
-                      (_, i) => i + 1,
-                    )
-                      .filter((page) => {
-                        // Show first page, last page, and pages around current
-                        return (
-                          page === 1 ||
-                          page === pagination.totalPages ||
-                          Math.abs(page - currentPage) <= 1
-                        );
-                      })
-                      .map((page, index, array) => (
-                        <>
-                          {index > 0 && array[index - 1] !== page - 1 && (
-                            <span
-                              key={`ellipsis-${page}`}
-                              className="px-2 py-1"
-                            >
-                              ...
-                            </span>
-                          )}
-                          <Button
-                            key={page}
-                            variant={
-                              currentPage === page ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => setCurrentPage(page)}
-                            className="w-10"
-                          >
-                            {page}
-                          </Button>
-                        </>
-                      ))}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) =>
-                        Math.min(pagination.totalPages, prev + 1),
-                      )
-                    }
-                    disabled={currentPage === pagination.totalPages}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={totalPartners}
+            pageSize={itemsPerPage}
+          />
         )}
 
         {/* Confirmation Dialog */}
@@ -799,7 +652,7 @@ export default function PartnersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageContainer>
     </DashboardLayout>
   );
 }

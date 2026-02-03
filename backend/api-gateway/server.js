@@ -358,6 +358,15 @@ const services = {
       "^/api/v1/charge-packages": "/api/v1/charge-packages", // Charge packages → /api/v1/charge-packages/*
     },
   },
+  // Partner Pincode Assignment Management (NEW - Pincode assignment with type values)
+  "partner-pincodes": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/partners/([^/]+)/pincodes": "/api/v1/$1/pincodes", // Partner pincodes → /api/v1/:partnerId/pincodes/*
+      "^/api/v1/partners/pincodes": "/api/v1/pincodes", // Template download → /api/v1/pincodes/template
+      "^/api/v1/pincodes": "/api/v1/pincodes", // Pincode search → /api/v1/pincodes/search
+    },
+  },
   // System management endpoints (also in partner service)
   "services-status": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
@@ -850,6 +859,54 @@ const services = {
  *       503:
  *         description: Platform service unavailable
  */
+
+// Manual proxy for Partner Pincode Assignment endpoints
+// MUST be registered BEFORE the general service proxy loop to have priority
+// Routes: /api/v1/partners/:partnerId/pincodes/*, /api/v1/partners/pincodes/*, /api/v1/pincodes/*
+logger.info("Adding manual proxy for partner pincode assignment endpoints");
+app.use(
+  [
+    "/api/v1/partners/:partnerId/pincodes",
+    "/api/v1/partners/pincodes",
+    "/api/v1/pincodes",
+  ],
+  createProxyMiddleware({
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    changeOrigin: true,
+    pathRewrite: (path) => {
+      // Rewrite /api/v1/partners/:partnerId/pincodes to /api/v1/:partnerId/pincodes
+      // Rewrite /api/v1/partners/pincodes to /api/v1/pincodes
+      // Keep /api/v1/pincodes as is (search endpoint)
+      if (path.startsWith("/api/v1/partners/")) {
+        const rewritten = path.replace("/api/v1/partners/", "/api/v1/");
+        logger.info(`[Partner Pincodes] Rewriting ${path} to ${rewritten}`);
+        return rewritten;
+      }
+      logger.info(`[Partner Pincodes] Proxying ${path} (no rewrite)`);
+      return path;
+    },
+    parseReqBody: false,
+    onError: (err, req, res) => {
+      logger.error(`Proxy error for partner pincodes:`, {
+        error: err.message,
+        path: req.path,
+      });
+      res.status(503).json({
+        status: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Partner service is currently unavailable",
+        },
+      });
+    },
+    onProxyReq: (proxyReq, req, _res) => {
+      const internalSecret = process.env.INTERNAL_SECRET;
+      if (internalSecret) {
+        proxyReq.setHeader("X-Internal-Request", internalSecret);
+      }
+    },
+  }),
+);
 
 // Create proxy middleware for each service
 Object.keys(services).forEach((service) => {
