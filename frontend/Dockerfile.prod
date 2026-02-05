@@ -26,39 +26,39 @@ COPY --chown=nodejs:nodejs frontend ./frontend
 USER nodejs
 RUN cd /app/frontend && \
     pnpm build && \
-    ls -la .next/standalone/ && \
-    ls -la .next/standalone/frontend/
+    ls -la .next/standalone/
 
 # =============== PRODUCTION RUNTIME SETUP ===============
 # Fix static assets 404 issue
 # Next.js standalone structure:
-#   .next/standalone/frontend/server.js
+#   .next/standalone/server.js (not .next/standalone/frontend/server.js)
 #   .next/static/ (static assets remain here after build)
 # The server expects .next/static/ alongside server.js
 USER root
 
 # Verify standalone structure exists
-RUN if [ ! -f "/app/frontend/.next/standalone/frontend/server.js" ]; then \
+RUN if [ ! -f "/app/frontend/.next/standalone/server.js" ]; then \
         echo "ERROR: Build failed - standalone server.js not found"; \
         ls -la /app/frontend/.next/; \
+        ls -la /app/frontend/.next/standalone/; \
         exit 1; \
     fi
 
 # CRITICAL: Copy static assets to the standalone structure
 # Standalone server expects .next/static/ relative to server.js
-RUN mkdir -p /app/frontend/.next/standalone/frontend/.next && \
-    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/frontend/.next/
+RUN mkdir -p /app/frontend/.next/standalone/.next && \
+    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/.next/
 
 # Copy public assets (if exists - some projects don't have public folder)
-RUN mkdir -p /app/frontend/.next/standalone/frontend && \
+RUN mkdir -p /app/frontend/.next/standalone && \
     if [ -d "/app/frontend/public" ]; then \
-        cp -r /app/frontend/public /app/frontend/.next/standalone/frontend/; \
+        cp -r /app/frontend/public /app/frontend/.next/standalone/; \
     fi
 
 # Set ownership
 RUN chown -R nodejs:nodejs /app
 
-# Run from standalone directory, execute frontend/server.js
+# Run from standalone directory, execute server.js directly
 USER nodejs
 WORKDIR /app/frontend/.next/standalone
 
@@ -67,4 +67,4 @@ EXPOSE 3000
 ENV PORT 3000
 ENV NODE_ENV production
 
-CMD ["node", "frontend/server.js"]
+CMD ["node", "server.js"]
