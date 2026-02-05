@@ -22,9 +22,12 @@ RUN pnpm install --frozen-lockfile
 # Copy frontend source
 COPY --chown=nodejs:nodejs frontend ./frontend
 
-# Build frontend
+# Build frontend with error checking
 USER nodejs
-RUN cd /app/frontend && pnpm build
+RUN cd /app/frontend && \
+    pnpm build && \
+    ls -la .next/standalone/ && \
+    ls -la .next/standalone/frontend/
 
 # =============== PRODUCTION RUNTIME SETUP ===============
 # Fix static assets 404 issue
@@ -33,6 +36,13 @@ RUN cd /app/frontend && pnpm build
 #   .next/static/ (static assets remain here after build)
 # The server expects .next/static/ alongside server.js
 USER root
+
+# Verify standalone structure exists
+RUN if [ ! -f "/app/frontend/.next/standalone/frontend/server.js" ]; then \
+        echo "ERROR: Build failed - standalone server.js not found"; \
+        ls -la /app/frontend/.next/; \
+        exit 1; \
+    fi
 
 # CRITICAL: Copy static assets to the standalone structure
 # Standalone server expects .next/static/ relative to server.js
