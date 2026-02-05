@@ -136,12 +136,17 @@ const getPincodesByArea = {
 
 /**
  * GET /api/v1/geography/pincodes/search?code=123&city=name&state=name&district=name
+ * Also accepts 'q' as alias for 'code' (for frontend compatibility)
  */
 const searchPincodes = {
   query: Joi.object({
     code: Joi.string().min(1).max(6).optional().messages({
       "string.min": "Code must be at least 1 character",
       "string.max": "Code cannot exceed 6 characters",
+    }),
+    q: Joi.string().min(1).max(6).optional().messages({
+      "string.min": "Search query must be at least 1 character",
+      "string.max": "Search query cannot exceed 6 characters",
     }),
     city: Joi.string().min(2).max(100).optional().messages({
       "string.min": "City must be at least 2 characters",
@@ -160,7 +165,7 @@ const searchPincodes = {
       "number.max": "Limit cannot exceed 100",
     }),
   })
-    .or("code", "city", "state", "district")
+    .or("code", "q", "city", "state", "district")
     .messages({
       "object.missing": "At least one search parameter is required",
     }),

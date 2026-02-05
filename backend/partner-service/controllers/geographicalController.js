@@ -229,14 +229,18 @@ async function getPincodesByArea(req, res) {
 /**
  * 5. Search pincodes with comprehensive filtering
  * @route GET /api/v1/geography/pincodes/search?code=123456&city=name&state=name&district=name
+ * @route GET /api/v1/geography/pincodes/search?q=123456 (alias for code)
  * @access Public
  */
 async function searchPincodes(req, res) {
   try {
-    const { code, city, state, district, page, limit, sortBy } = req.query;
+    const { code, q, city, state, district, page, limit, sortBy } = req.query;
+
+    // Use 'q' as alias for 'code' (for frontend compatibility)
+    const searchCode = code || q;
 
     logger.info("Searching pincodes", {
-      code,
+      code: searchCode,
       city,
       state,
       district,
@@ -246,12 +250,12 @@ async function searchPincodes(req, res) {
     });
 
     // Validation - at least one search parameter required
-    if (!code && !city && !state && !district) {
+    if (!searchCode && !city && !state && !district) {
       return res
         .status(400)
         .json(
           APIResponse.error(
-            "At least one search parameter (code, city, state, or district) is required",
+            "At least one search parameter (code/q, city, state, or district) is required",
             "VALIDATION_ERROR",
           ),
         );
@@ -259,7 +263,7 @@ async function searchPincodes(req, res) {
 
     const geographicalService = getGeographicalService();
     const params = {
-      pincode: code, // Service expects 'pincode' parameter
+      pincode: searchCode, // Service expects 'pincode' parameter
       city,
       state,
       district,
