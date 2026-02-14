@@ -351,11 +351,11 @@ const services = {
       "^/api/v1/charges-types": "/api/v1/charges-types", // Charges types → /api/v1/charges-types/*
     },
   },
-  // Charge Package Management (Zone System v2 - partner charge packages)
-  "charge-packages": {
+  // Charges Rule Management (NEW - replaces legacy charge packages)
+  charges: {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {
-      "^/api/v1/charge-packages": "/api/v1/charge-packages", // Charge packages → /api/v1/charge-packages/*
+      "^/api/v1/charges": "/api/v1/charges", // Charges → /api/v1/charges/*
     },
   },
   // Partner Pincode Assignment Management (NEW - Pincode assignment with type values)

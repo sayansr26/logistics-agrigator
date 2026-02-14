@@ -356,20 +356,12 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     description: "Remittance management",
   },
   {
-    path: "/charges/create",
-    public: false,
-    roles: ["superadmin", "admin", "accounts"],
-    permission: "billing:create:all",
-    title: "Create Charge",
-    description: "Add new charge",
-  },
-  {
     path: "/charges",
     public: false,
-    roles: ["superadmin", "admin", "accounts"],
-    permission: "billing:list:*",
-    title: "Charges",
-    description: "View charges",
+    roles: ["superadmin", "admin"],
+    permission: "partner:manage:all",
+    title: "Charges Management",
+    description: "Manage charge rules for courier partners",
   },
 
   // ==================== ZONES ====================

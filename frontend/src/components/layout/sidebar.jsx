@@ -119,6 +119,14 @@ const getNavigationSections = () => {
           disabled: false,
         },
         {
+          title: "Charges Management",
+          href: "/charges",
+          icon: CreditCard,
+          permission: "partner:manage:all",
+          roles: ["superadmin", "admin"],
+          disabled: false,
+        },
+        {
           title: "Geography",
           href: "/geography",
           icon: Map,

@@ -399,6 +399,32 @@ export const outletApi = baseApi.injectEndpoints({
 export const { useListOutletsQuery, useCreateOutletMutation } = outletApi;
 ```
 
+### RTK Query transformResponse Pattern (IMPORTANT)
+
+**All backend APIs return a `{ status, data, meta }` envelope.** The `transformResponse` on `fetchBaseQuery` (in `baseApi.ts`) is NOT supported by RTK Query and is silently ignored. Each endpoint MUST define its own `transformResponse`:
+
+```typescript
+// ✅ CORRECT: Unwrap envelope per endpoint
+getItems: builder.query<{ items: Item[] }, void>({
+  query: () => "/api/v1/items",
+  transformResponse: (response: any) => ({
+    items: response?.data?.items || [],
+    pagination: response?.data?.pagination || {},
+  }),
+}),
+
+// ❌ WRONG: No transformResponse — UI gets raw { status, data: {...}, meta } envelope
+```
+
+**Existing APIs and their transform status:**
+
+- `chargesApi.ts` — ✅ Has transformResponse (unwraps correctly)
+- `chargesTypeApi.ts` — ✅ Has transformResponse (returns `{ data: [...], meta }`)
+- `pincodeTypeApi.ts` — ✅ Has transformResponse (returns `{ data: [...], meta }`)
+- `authApi.ts` — ✅ Has transformResponse
+- `partnersApi.ts` — ⚠️ No transformResponse (access via `data?.data?.partners`)
+- `zonesApi.ts` — ⚠️ No transformResponse (access via `data?.data?.zones`)
+
 ### Geo-Autocomplete Pattern
 
 ```typescript

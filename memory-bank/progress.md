@@ -5,10 +5,10 @@
 ## Overall Project Status
 
 ```
-Phase 1: Core Services & Auth     [█████████████████████] 95%
-Phase 2: Courier Integration      [████████████████████░] 95%
+Phase 1: Core Services & Auth     [█████████████████████] 97%
+Phase 2: Courier Integration      [█████████████████████] 97%
 Phase 3: Platform Integrations    [████░░░░░░░░░░░░░░░░] 20%
-Overall Project Progress          [█████████████████░░░] 80%
+Overall Project Progress          [█████████████████░░░] 82%
 ```
 
 ## What Works ✅
@@ -50,7 +50,7 @@ Overall Project Progress          [███████████████
 - ✅ Zone mapping
 - ✅ Partner configuration
 - ✅ HMAC authentication
-- ✅ **Partner Channel Management** (NEW - January 15, 2026)
+- ✅ **Partner Channel Management** (January 15, 2026)
   - ✅ Single/Multi-channel API configuration support
   - ✅ Channel mode toggle (SINGLE/MULTI)
   - ✅ Multiple API endpoints per partner with priority
@@ -61,7 +61,7 @@ Overall Project Progress          [███████████████
   - ✅ Frontend: Channel mode toggle in partner creation
   - ✅ Frontend: Dynamic multi-channel form
   - ✅ Frontend: RTK Query API endpoints
-- ✅ **Pincode Type Service Charges** (NEW - January 2026)
+- ✅ **Pincode Type Service Charges** (January 2026)
   - ✅ Many-to-many relationship between pincode types and partners
   - ✅ Service charge CRUD operations
   - ✅ Bulk charge creation (multiple types × multiple partners)
@@ -69,6 +69,17 @@ Overall Project Progress          [███████████████
   - ✅ Multi-select dialogs for pincode types and partners
   - ✅ Edit functionality with type/partner/charge/status updates
   - ✅ Statistics dashboard (total, active, inactive, total value)
+- ✅ **Charges Management Module** (NEW - February 14, 2026)
+  - ✅ `ChargeRule` Prisma model with `ChargeRuleKind`, `ChargeRuleBase`, `ChargeCalcType` enums
+  - ✅ Full CRUD: controller, service, Joi validation, routes with auth + rate limiting
+  - ✅ Charges Rule Calculation Engine (`chargesRuleCalculationService.js`)
+  - ✅ Quote engine refactored to use new ChargeRule system
+  - ✅ Hard replace: Legacy `ChargePackage` model, enums, routes, controller, service all removed
+  - ✅ Migration: `20260214_add_charge_rules_remove_charge_packages`
+  - ✅ Frontend: `/charges` page with table, filters, modal CRUD, conditional dynamic form
+  - ✅ Frontend: RTK Query endpoints with `transformResponse` envelope unwrapping
+  - ✅ Frontend: Sidebar link (superadmin/admin only), route permissions updated
+  - ✅ Audit logging for all charge rule CRUD operations
 
 #### Wallet Service (100% Complete)
 
@@ -129,9 +140,18 @@ Overall Project Progress          [███████████████
   - ✅ Address CRUD (add, edit, delete)
   - ✅ Geo-autocomplete for pincode/city/state
 
+#### Completed Features (continued)
+
+- ✅ **Charges Management Page** (NEW - February 14, 2026)
+  - ✅ Table view with partner/kind/base/status filters + search
+  - ✅ Modal-based Create with dynamic conditional form fields
+  - ✅ Modal-based View/Edit with inline editing
+  - ✅ Toggle status and soft-delete actions
+  - ✅ RTK Query integration with proper `transformResponse`
+
 #### In Progress
 
-- ⏳ Redux/RTK Query migration (60% complete)
+- ⏳ Redux/RTK Query migration (65% complete)
 - ⏳ Outlet portal pages (my-shipments, my-addresses)
 - ⏳ Shipment creation form
 - ⏳ Bulk upload interface
@@ -207,6 +227,15 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Charges Management Module - Hard Replace (February 14, 2026)**
+  - New `ChargeRule` engine replaces legacy `ChargePackage` system entirely
+  - Backend: Prisma model, CRUD API, calculation engine, quote engine integration
+  - Frontend: Full management UI at `/charges` with dynamic forms and RTK Query
+  - Deleted all legacy ChargePackage code (5 backend files + 1 frontend file)
+  - Dropped `charge_packages` table and 3 legacy enums from database
+  - Fixed RTK Query `transformResponse` pattern for API envelope unwrapping
+  - Fixed `APIResponse.success()` meta string spread bug
 
 - ✅ **Pincode Search Endpoint Unification (February 14, 2026)**
   - Canonicalized search/autocomplete endpoint to `GET /api/v1/geography/pincodes/search`
@@ -310,6 +339,39 @@ Overall Project Progress          [███████████████
 ### February 2026
 
 ```
+[2026-02-14] Charges Management Module (Hard Replace) - COMPLETE
+  Backend (partner-service):
+  - Created ChargeRule Prisma model with 3 enums (ChargeRuleKind, ChargeRuleBase, ChargeCalcType)
+  - Created chargesController.js, chargesService.js, chargesSchemas.js (Joi), charges.js (routes)
+  - Created chargesRuleCalculationService.js (calculation engine)
+  - Refactored quoteCalculationService.js to use new ChargeRule engine
+  - Added chargesManagementLimiter (30 req/15 min)
+  - Audit logging for all CRUD operations
+  - Migration: 20260214_add_charge_rules_remove_charge_packages
+
+  API Gateway:
+  - Added /api/v1/charges proxy to partner-service
+  - Removed legacy charge-packages proxy
+
+  Frontend:
+  - Created /charges page (page.tsx) with table + filters + modal CRUD + conditional form
+  - Created chargesApi.ts RTK Query endpoints with transformResponse
+  - Added Charges Management sidebar link (superadmin/admin only)
+  - Updated routePermissions.ts
+
+  Legacy Cleanup (Hard Replace):
+  - Deleted: chargePackageService.js, chargePackageController.js, chargePackageSchemas.js
+  - Deleted: chargePackages.js (route), chargePackagesApi.ts (RTK)
+  - Removed ChargePackage model + 3 enums from Prisma schema
+  - Removed ChargePackage tag from baseApi.ts
+  - Updated partner _count references from chargePackages → chargeRules
+  - Removed chargePackageManagementLimiter from rateLimiter.js
+
+  Bug Fixes:
+  - Fixed RTK Query data access: added transformResponse to unwrap { status, data, meta } envelope
+  - Fixed page data paths for partners, chargesTypes, pincodeTypes, zones
+  - Fixed APIResponse.success() meta: string → { message: "..." } to prevent char spread
+
 [2026-02-14] Pincode Search Unification (Phase 1) - COMPLETE
   Backend:
   - Canonical endpoint confirmed as GET /api/v1/geography/pincodes/search
@@ -507,12 +569,13 @@ Overall Project Progress          [███████████████
 | Milestone                   | Target Date | Status         |
 | --------------------------- | ----------- | -------------- |
 | Outlet Module Complete      | Jan 2026    | ✅ Complete    |
-| Outlet Portal Pages         | Jan 2026    | 📋 Planned     |
-| License Service Integration | Jan 2026    | 🔄 In Progress |
-| Shipment Bulk Operations    | Jan 2026    | 📋 Planned     |
-| Support Service MVP         | Feb 2026    | 📋 Planned     |
-| Platform Service (Shopify)  | Feb 2026    | 📋 Planned     |
-| Frontend Redux Complete     | Feb 2026    | 📋 Planned     |
+| Charges Management Module   | Feb 2026    | ✅ Complete    |
+| Outlet Portal Pages         | Feb 2026    | 📋 Planned     |
+| License Service Integration | Feb 2026    | 🔄 In Progress |
+| Shipment Bulk Operations    | Feb 2026    | 📋 Planned     |
+| Support Service MVP         | Mar 2026    | 📋 Planned     |
+| Platform Service (Shopify)  | Mar 2026    | 📋 Planned     |
+| Frontend Redux Complete     | Mar 2026    | 📋 Planned     |
 
 ## Metrics
 

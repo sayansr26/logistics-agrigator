@@ -479,6 +479,95 @@ GET /api/v1/geography/pincodes/search
 - Partner pincode assignment autocomplete must call geography endpoint.
 - Response adapters should normalize envelope and unwrapped payloads before component mapping.
 
+### 13. Charges Rule Engine Pattern (NEW - February 2026)
+
+**Flexible charge rule model** replacing the legacy `ChargePackage` system. A single `ChargeRule` model holds conditional fields for multiple base types.
+
+**Enums:**
+
+```prisma
+enum ChargeRuleKind {
+  PARTNER_CHARGES_TYPE // Linked to partner's ChargesType
+  GEOLOGICAL // Linked to PincodeType
+  ADDON // Standalone addon charges
+}
+
+enum ChargeRuleBase {
+  INVOICE_VALUE // From/To amount slabs
+  WEIGHT // Min/Max kg slabs
+  ZONE_TO_ZONE_WEIGHT // Zone pair + weight slab
+  DISTANCE_BASE_WEIGHT // KM range + weight slab
+}
+
+enum ChargeCalcType {
+  FLAT // Fixed charge (₹)
+  PERCENTAGE // Percentage of value
+}
+```
+
+**Calculation Logic:**
+
+```
+1. Fetch all active ChargeRules for a partner
+2. Group rules by category: (partnerId + kind + chargesTypeId/pincodeTypeId + base)
+3. For each category, evaluate all matching rules against shipment context
+4. Within a category: compute all matching slabs, take the HIGHEST charge
+5. For GEOLOGICAL kind: compute pickup and delivery sides independently, SUM both
+6. Final total = sum of highest charge from each category
+7. Return total + detailed breakdown per category
+```
+
+**API Routes:**
+
+| Method | Endpoint            | Description    |
+| ------ | ------------------- | -------------- |
+| POST   | /api/v1/charges     | Create rule    |
+| GET    | /api/v1/charges     | List rules     |
+| GET    | /api/v1/charges/:id | Get rule by ID |
+| PUT    | /api/v1/charges/:id | Update rule    |
+| DELETE | /api/v1/charges/:id | Soft-delete    |
+
+**Frontend Pattern:**
+
+- Modal-based CRUD with dynamic form fields based on selected `kind` and `base`
+- RTK Query with `transformResponse` to unwrap `{ status, data, meta }` envelope
+
+### 14. RTK Query Response Envelope Pattern (NEW - February 2026)
+
+**All backend APIs return a standard envelope:**
+
+```json
+{
+  "status": "success",
+  "data": {
+    /* actual payload */
+  },
+  "meta": { "timestamp": "..." }
+}
+```
+
+**RTK Query endpoints MUST use `transformResponse` to unwrap the envelope:**
+
+```typescript
+// ✅ CORRECT: Unwrap envelope in each endpoint
+getItems: builder.query<{ items: Item[] }, void>({
+  query: () => "/api/v1/items",
+  transformResponse: (response: any) => ({
+    items: response?.data?.items || [],
+    pagination: response?.data?.pagination || {},
+  }),
+}),
+
+// ❌ WRONG: Rely on baseApi transformResponse (fetchBaseQuery ignores it)
+getItems: builder.query<{ items: Item[] }, void>({
+  query: () => "/api/v1/items",
+  // No transformResponse — hook returns raw envelope, UI gets blank data
+}),
+```
+
+**Note:** `fetchBaseQuery` does NOT support `transformResponse` at the `baseQuery` level.
+Each endpoint must define its own `transformResponse` to extract data from the envelope.
+
 ## Component Relationships
 
 ### Inter-Service Communication
@@ -520,4 +609,4 @@ Redis Cache Structure:
 
 **Architecture Status**: Stable
 **Last Pattern Review**: February 14, 2026
-**Recent Additions**: Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Recent Additions**: Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

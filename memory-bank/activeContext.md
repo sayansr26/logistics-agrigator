@@ -35,18 +35,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus       |
-| -------------------- | ---- | ------------- | ---------- | ------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 90%        | Outlet routes added |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard  |
-| **User Service**     | 3003 | ✅ Production | 100%       | Outlet module added |
-| **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations     |
-| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Pincode imports     |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable              |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started         |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next        |
-| **Frontend**         | 3000 | ✅ Production | 65%        | Redux/RTK Query     |
+| Service              | Port | Status        | Completion | Current Focus              |
+| -------------------- | ---- | ------------- | ---------- | -------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 92%        | Charges proxy added        |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard         |
+| **User Service**     | 3003 | ✅ Production | 100%       | Outlet module added        |
+| **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations            |
+| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Charges Rule Engine added  |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable                     |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending        |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next               |
+| **Frontend**         | 3000 | ✅ Production | 70%        | Charges Management UI done |
 
 ## Immediate Priorities
 
@@ -119,6 +119,30 @@ The primary focus is implementing a robust security layer and role-based access 
 ## Recent Changes
 
 ### February 14, 2026
+
+- ✅ **Charges Management Module (Hard Replace of ChargePackage)** — COMPLETE
+  - **Backend (partner-service):**
+    - New `ChargeRule` Prisma model with 3 enums (`ChargeRuleKind`, `ChargeRuleBase`, `ChargeCalcType`)
+    - Migration `20260214_add_charge_rules_remove_charge_packages` (creates `charge_rules` table, drops `charge_packages` table + legacy enums)
+    - Full CRUD: `chargesController.js`, `chargesService.js`, `chargesSchemas.js` (Joi), `charges.js` (routes)
+    - Rate limiter: `chargesManagementLimiter` (30 req/15 min)
+    - Audit logging for all operations
+    - `chargesRuleCalculationService.js` — charge calculation engine ("pick highest per category", "sum geological charges")
+    - `quoteCalculationService.js` refactored to use new engine; all legacy `ChargePackage` usage removed
+  - **API Gateway:** `/api/v1/charges` proxy to partner-service; legacy `charge-packages` proxy removed
+  - **Frontend:**
+    - New `/charges` page (`page.tsx`) with table + filters (partner, kind, base, status, search) + modal CRUD + dynamic conditional form
+    - RTK Query `chargesApi.ts` with `transformResponse` for all 6 endpoints
+    - Sidebar link under "Configuration" (superadmin/admin only)
+    - Route permissions updated in `routePermissions.ts`
+  - **Legacy Cleanup (Hard Replace):**
+    - Deleted: `chargePackageService.js`, `chargePackageController.js`, `chargePackageSchemas.js`, `chargePackages.js` (route), `chargePackagesApi.ts` (RTK)
+    - Removed `ChargePackage` model + enums from Prisma schema
+    - Removed `ChargePackage` tag from `baseApi.ts`
+    - Updated partner `_count` references to `chargeRules`
+    - Removed `chargePackageManagementLimiter` from rateLimiter
+  - **Bug Fix:** RTK Query data access — added `transformResponse` to unwrap `{ status, data, meta }` envelope; fixed page data paths for partners, chargesTypes, pincodeTypes, zones
+  - **Bug Fix:** `APIResponse.success()` meta — changed string args to `{ message: "..." }` objects to prevent character-by-character spread
 
 - ✅ **Pincode Search Unification (Phase 1)**
   - Frontend partner pincode autocomplete moved to `GET /api/v1/geography/pincodes/search`
@@ -223,27 +247,35 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Key Reference Files
 
-| Purpose             | Location                                               |
-| ------------------- | ------------------------------------------------------ |
-| Auth patterns       | `backend/auth-service/`                                |
-| RBAC permissions    | `shared/constants/permissions.js`                      |
-| Outlet routes       | `backend/user-service/routes/outlets.js`               |
-| Outlet controller   | `backend/user-service/controllers/outletController.js` |
-| Outlet frontend     | `frontend/src/app/outlets/page.tsx`                    |
-| Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`        |
-| API response format | `shared/lib/response.js`                               |
-| Error classes       | `shared/lib/errors.js`                                 |
+| Purpose             | Location                                                            |
+| ------------------- | ------------------------------------------------------------------- |
+| Auth patterns       | `backend/auth-service/`                                             |
+| RBAC permissions    | `shared/constants/permissions.js`                                   |
+| Charges routes      | `backend/partner-service/routes/charges.js`                         |
+| Charges controller  | `backend/partner-service/controllers/chargesController.js`          |
+| Charges service     | `backend/partner-service/services/chargesService.js`                |
+| Charges calc engine | `backend/partner-service/services/chargesRuleCalculationService.js` |
+| Quote calc service  | `backend/partner-service/services/quoteCalculationService.js`       |
+| Charges frontend    | `frontend/src/app/charges/page.tsx`                                 |
+| Charges API (RTK)   | `frontend/src/store/api/endpoints/chargesApi.ts`                    |
+| Outlet routes       | `backend/user-service/routes/outlets.js`                            |
+| Outlet controller   | `backend/user-service/controllers/outletController.js`              |
+| Outlet frontend     | `frontend/src/app/outlets/page.tsx`                                 |
+| Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`                     |
+| API response format | `shared/lib/response.js`                                            |
+| Error classes       | `shared/lib/errors.js`                                              |
 
 ## Next Steps
 
 1. ~~Complete Outlet Module~~ ✅ DONE
-2. Build Outlet Portal pages (my-shipments, my-addresses)
-3. Finish License service integration
-4. Begin Shipment bulk operations
-5. Continue Frontend Redux migration
+2. ~~Charges Management Module~~ ✅ DONE
+3. Build Outlet Portal pages (my-shipments, my-addresses)
+4. Finish License service integration
+5. Begin Shipment bulk operations
+6. Continue Frontend Redux migration
 
 ---
 
-**Sprint**: Audit Logging Enhancement + License Service Integration
+**Sprint**: Charges Management + License Service Integration
 **Week**: Active Development
 **Next Review**: Weekly

@@ -85,7 +85,7 @@ async function getPartnerById(id) {
           shipments: true,
           rates: true,
           pincodeAssigns: true,
-          chargePackages: true,
+          chargeRules: true,
           channelConfigs: true,
           chargesTypes: true,
         },

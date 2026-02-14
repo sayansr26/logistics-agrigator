@@ -16,8 +16,8 @@ const { getRedisClient } = require("../config/redis");
 
 // Import services (lazy load to avoid circular dependencies)
 let _distanceZoneService = null;
-let _pincodeTypeService = null;
-let _chargePackageService = null;
+let _chargesRuleCalcService = null;
+let _zoneCoverageValidationService = null;
 
 const getDistanceZoneService = () => {
   if (!_distanceZoneService) {
@@ -27,19 +27,19 @@ const getDistanceZoneService = () => {
   return _distanceZoneService;
 };
 
-const getPincodeTypeService = () => {
-  if (!_pincodeTypeService) {
-    // pincodeTypeService exports a singleton instance, not the class
-    _pincodeTypeService = require("./pincodeTypeService");
+const getChargesRuleCalcService = () => {
+  if (!_chargesRuleCalcService) {
+    _chargesRuleCalcService = require("./chargesRuleCalculationService");
   }
-  return _pincodeTypeService;
+  return _chargesRuleCalcService;
 };
 
-const getChargePackageService = () => {
-  if (!_chargePackageService) {
-    _chargePackageService = require("./chargePackageService");
+const getZoneCoverageValidationService = () => {
+  if (!_zoneCoverageValidationService) {
+    const ZoneCoverageValidationService = require("./zoneCoverageValidationService");
+    _zoneCoverageValidationService = new ZoneCoverageValidationService();
   }
-  return _chargePackageService;
+  return _zoneCoverageValidationService;
 };
 
 // ==========================================
@@ -54,135 +54,46 @@ const CACHE_TTL = 300; // 5 minutes for quote results
 // ==========================================
 
 /**
- * Calculate charge for a WEIGHT package
- * Formula: baseCharge + (ceil((weight - baseUnit) / addonUnit) * addonCharge)
- */
-function calculateWeightCharge(pkg, weightKg) {
-  const baseCharge = parseFloat(pkg.baseCharge);
-  const baseUnit = parseFloat(pkg.baseUnit) || 0;
-  const addonUnit = parseFloat(pkg.addonUnit) || 1;
-  const addonCharge = parseFloat(pkg.addonCharge) || 0;
-
-  if (weightKg <= baseUnit) {
-    return {
-      packageId: pkg.id,
-      packageName: pkg.name,
-      type: "WEIGHT",
-      baseCharge,
-      addonCharge: 0,
-      addonUnits: 0,
-      totalCharge: baseCharge,
-      calculation: `Base charge for up to ${baseUnit}kg`,
-    };
-  }
-
-  const extraWeight = weightKg - baseUnit;
-  const addonUnits = Math.ceil(extraWeight / addonUnit);
-  const addonTotal = addonUnits * addonCharge;
-  const totalCharge = baseCharge + addonTotal;
-
-  return {
-    packageId: pkg.id,
-    packageName: pkg.name,
-    type: "WEIGHT",
-    baseCharge,
-    addonCharge: addonTotal,
-    addonUnits,
-    totalCharge,
-    calculation: `${baseCharge} (base) + ${addonUnits} x ${addonCharge} (${extraWeight.toFixed(2)}kg extra)`,
-  };
-}
-
-/**
- * Calculate charge for a DISTANCE package
- * Formula: baseCharge + (ceil((distance - baseUnit) / addonUnit) * addonCharge)
- */
-function calculateDistanceCharge(pkg, distanceKm) {
-  const baseCharge = parseFloat(pkg.baseCharge);
-  const baseUnit = parseFloat(pkg.baseUnit) || 0;
-  const addonUnit = parseFloat(pkg.addonUnit) || 1;
-  const addonCharge = parseFloat(pkg.addonCharge) || 0;
-
-  if (distanceKm <= baseUnit) {
-    return {
-      packageId: pkg.id,
-      packageName: pkg.name,
-      type: "DISTANCE",
-      baseCharge,
-      addonCharge: 0,
-      addonUnits: 0,
-      totalCharge: baseCharge,
-      calculation: `Base charge for up to ${baseUnit}km`,
-    };
-  }
-
-  const extraDistance = distanceKm - baseUnit;
-  const addonUnits = Math.ceil(extraDistance / addonUnit);
-  const addonTotal = addonUnits * addonCharge;
-  const totalCharge = baseCharge + addonTotal;
-
-  return {
-    packageId: pkg.id,
-    packageName: pkg.name,
-    type: "DISTANCE",
-    baseCharge,
-    addonCharge: addonTotal,
-    addonUnits,
-    totalCharge,
-    calculation: `${baseCharge} (base) + ${addonUnits} x ${addonCharge} (${extraDistance.toFixed(2)}km extra)`,
-  };
-}
-
-/**
- * Calculate charge for a GENERIC package
- * Currently only supports FLAT calc type
- */
-function calculateGenericCharge(
-  pkg,
-  paymentType,
-  codAmount = 0,
-  declaredValue = 0,
-) {
-  const baseCharge = parseFloat(pkg.baseCharge);
-  const appliesTo = pkg.appliesTo || "ANY";
-  const calcType = pkg.calcType || "FLAT";
-
-  // Check if package applies to this payment type
-  const paymentTypeUpper = paymentType?.toUpperCase() || "PREPAID";
-  if (appliesTo !== "ANY" && appliesTo !== paymentTypeUpper) {
-    return null; // Package doesn't apply
-  }
-
-  let totalCharge = baseCharge;
-  let calculation = `${pkg.name}: ${baseCharge}`;
-
-  // Future: support percentage-based calculations
-  if (calcType === "PERCENTAGE_OF_COD" && codAmount > 0) {
-    totalCharge = (baseCharge / 100) * codAmount;
-    calculation = `${pkg.name}: ${baseCharge}% of COD ₹${codAmount}`;
-  } else if (calcType === "PERCENTAGE_OF_DECLARED_VALUE" && declaredValue > 0) {
-    totalCharge = (baseCharge / 100) * declaredValue;
-    calculation = `${pkg.name}: ${baseCharge}% of declared value ₹${declaredValue}`;
-  }
-
-  return {
-    packageId: pkg.id,
-    packageName: pkg.name,
-    type: "GENERIC",
-    appliesTo,
-    calcType,
-    baseCharge,
-    totalCharge,
-    calculation,
-  };
-}
-
-/**
  * Generate cache key for quote request
  */
 function generateCacheKey(params) {
   const { fromPincode, toPincode, weight, paymentType } = params;
   return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}`;
+}
+
+/**
+ * Get GEOLOGICAL zone IDs for a pincode under a specific partner
+ */
+async function getGeoZoneIds(partnerId, pincode) {
+  try {
+    const zoneCoverageService = getZoneCoverageValidationService();
+    const result = await zoneCoverageService.getZonesByPincode(
+      partnerId,
+      pincode,
+    );
+    if (!result.success || !result.zones) return [];
+    // Filter to only GEOLOGICAL type zones
+    // The zone model has zoneType field, but getZonesByPincode doesn't expose it.
+    // We need to query zones directly.
+    const zoneIds = result.zones.map((z) => z.id);
+    if (zoneIds.length === 0) return [];
+
+    const geoZones = await prisma.zone.findMany({
+      where: {
+        id: { in: zoneIds },
+        zoneType: "GEOLOGICAL",
+      },
+      select: { id: true },
+    });
+    return geoZones.map((z) => z.id);
+  } catch (error) {
+    logger.debug("Error getting geo zones for pincode", {
+      partnerId,
+      pincode,
+      error: error.message,
+    });
+    return [];
+  }
 }
 
 // ==========================================
@@ -324,8 +235,7 @@ async function calculateRates(params) {
   }
 
   const distanceZoneService = getDistanceZoneService();
-  const pincodeTypeService = getPincodeTypeService();
-  const chargePackageService = getChargePackageService();
+  const chargesRuleCalcService = getChargesRuleCalcService();
 
   // Calculate volumetric weight if dimensions provided
   let effectiveWeight = weight;
@@ -376,94 +286,29 @@ async function calculateRates(params) {
           };
         }
 
-        // Get partner-specific pincode type charges for both locations
-        let pickupTypeCharges = { totalCharge: 0, activeTypes: [] };
-        let deliveryTypeCharges = { totalCharge: 0, activeTypes: [] };
+        // Resolve GEOLOGICAL zone IDs for pickup and delivery
+        const [pickupGeoZoneIds, deliveryGeoZoneIds] = await Promise.all([
+          getGeoZoneIds(partner.id, fromPincode),
+          getGeoZoneIds(partner.id, toPincode),
+        ]);
 
-        try {
-          pickupTypeCharges = await pincodeTypeService.getTypesByPincode(
-            fromPincode,
-            partner.id, // Partner-specific lookup
-          );
-        } catch (error) {
-          logger.debug("No pincode type for pickup", {
-            fromPincode,
-            partnerId: partner.id,
-            error: error.message,
-          });
-        }
-
-        try {
-          deliveryTypeCharges = await pincodeTypeService.getTypesByPincode(
-            toPincode,
-            partner.id, // Partner-specific lookup
-          );
-        } catch (error) {
-          logger.debug("No pincode type for delivery", {
-            toPincode,
-            partnerId: partner.id,
-            error: error.message,
-          });
-        }
-
-        const pincodeTypeCharge =
-          pickupTypeCharges.totalCharge + deliveryTypeCharges.totalCharge;
-
-        // Get partner's charge packages
-        const packages = await chargePackageService.getPackagesByPartner(
-          partner.id,
-          {
-            isActive: true,
-          },
-        );
-
-        if (packages.length === 0) {
-          return {
-            partnerId: partner.id,
-            partnerName: partner.displayName || partner.name,
-            serviceable: true,
-            error: "No charge packages configured for partner",
-          };
-        }
-
-        // Calculate charges from packages
-        const breakdown = {
-          weightCharges: [],
-          distanceCharges: [],
-          genericCharges: [],
+        // Build shipment context for the new charges rule engine
+        const chargeContext = {
+          effectiveWeight,
+          invoiceValue: declaredValue,
+          distanceKm: zoneResult.distanceKm,
+          divisionSuffix: zoneResult.zoneSuffix,
+          pickupGeoZoneIds,
+          deliveryGeoZoneIds,
         };
 
-        let totalWeightCharge = 0;
-        let totalDistanceCharge = 0;
-        let totalGenericCharge = 0;
+        // Calculate charges using the new charge rule engine
+        const chargesResult = await chargesRuleCalcService.calculateCharges(
+          partner.id,
+          chargeContext,
+        );
 
-        for (const pkg of packages) {
-          if (pkg.type === "WEIGHT") {
-            const charge = calculateWeightCharge(pkg, effectiveWeight);
-            breakdown.weightCharges.push(charge);
-            totalWeightCharge += charge.totalCharge;
-          } else if (pkg.type === "DISTANCE") {
-            const charge = calculateDistanceCharge(pkg, zoneResult.distanceKm);
-            breakdown.distanceCharges.push(charge);
-            totalDistanceCharge += charge.totalCharge;
-          } else if (pkg.type === "GENERIC") {
-            const charge = calculateGenericCharge(
-              pkg,
-              paymentType,
-              codAmount,
-              declaredValue,
-            );
-            if (charge) {
-              breakdown.genericCharges.push(charge);
-              totalGenericCharge += charge.totalCharge;
-            }
-          }
-        }
-
-        // Calculate total rate
-        const baseRate =
-          totalWeightCharge + totalDistanceCharge + totalGenericCharge;
-        const totalRate = baseRate + pincodeTypeCharge;
+        const totalRate = chargesResult.totalCharge;
 
         return {
           partnerId: partner.id,
@@ -473,35 +318,9 @@ async function calculateRates(params) {
           zoneSuffix: zoneResult.zoneSuffix,
           zoneName: zoneResult.zone?.name,
           estimatedDays: partner.defaultDeliveryDays,
-          breakdown: {
-            weight: {
-              effectiveWeight,
-              charges: breakdown.weightCharges,
-              total: totalWeightCharge,
-            },
-            distance: {
-              distanceKm: zoneResult.distanceKm,
-              charges: breakdown.distanceCharges,
-              total: totalDistanceCharge,
-            },
-            generic: {
-              charges: breakdown.genericCharges,
-              total: totalGenericCharge,
-            },
-            pincodeType: {
-              pickup: {
-                charges: pickupTypeCharges.activeTypes,
-                total: pickupTypeCharges.totalCharge,
-              },
-              delivery: {
-                charges: deliveryTypeCharges.activeTypes,
-                total: deliveryTypeCharges.totalCharge,
-              },
-              total: pincodeTypeCharge,
-            },
-          },
-          baseRate,
-          pincodeTypeCharge,
+          chargesBreakdown: chargesResult.breakdown,
+          rulesEvaluated: chargesResult.rulesEvaluated,
+          categoriesMatched: chargesResult.categoriesMatched,
           totalRate,
         };
       } catch (error) {
@@ -662,10 +481,4 @@ module.exports = {
   calculateRates,
   validateCharges,
   clearCache,
-  // Export helpers for testing
-  _helpers: {
-    calculateWeightCharge,
-    calculateDistanceCharge,
-    calculateGenericCharge,
-  },
 };

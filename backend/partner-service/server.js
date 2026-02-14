@@ -141,23 +141,26 @@ app.use("/api/v1/charges-types", require("./routes/chargesTypes"));
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));
 
-// Charge Package Management Routes (NEW - replaces legacy packages)
-app.use("/api/v1/charge-packages", require("./routes/chargePackages"));
+// Charges Rule Management Routes (NEW - replaces legacy charge packages)
+app.use("/api/v1/charges", require("./routes/charges"));
 
 // Partner Pincode Assignment Routes (NEW - Pincode assignment with type values)
 app.use("/api/v1", require("./routes/partnerPincodes"));
 
 // ============================================================================
 // DEPRECATED ENDPOINTS - Return 410 Gone responses
-// These endpoints have been replaced by the new Zone System v2 and Charge Packages
+// These endpoints have been replaced by the new Zone System v2 and Charge Rules
 // ============================================================================
-app.all("/api/packages/*", deprecated("/api/v1/charge-packages", "2024-12-26"));
-app.all("/api/packages", deprecated("/api/v1/charge-packages", "2024-12-26"));
+app.all("/api/packages/*", deprecated("/api/v1/charges", "2024-12-26"));
+app.all("/api/packages", deprecated("/api/v1/charges", "2024-12-26"));
+app.all("/api/discounts/*", deprecated("/api/v1/charges", "2024-12-26"));
+app.all("/api/discounts", deprecated("/api/v1/charges", "2024-12-26"));
+// Legacy charge-packages route (deprecated)
 app.all(
-  "/api/discounts/*",
-  deprecated("/api/v1/charge-packages", "2024-12-26"),
+  "/api/v1/charge-packages/*",
+  deprecated("/api/v1/charges", "2025-02-14"),
 );
-app.all("/api/discounts", deprecated("/api/v1/charge-packages", "2024-12-26"));
+app.all("/api/v1/charge-packages", deprecated("/api/v1/charges", "2025-02-14"));
 app.all(
   "/api/v1/charge-calculation/*",
   deprecated("/api/v1/partners/calculate", "2024-12-26"),
@@ -358,8 +361,8 @@ app.get("/", (req, res) => {
       partnerChannels: "/api/v1/partners/:partnerId/channels",
       channelMode: "/api/v1/partners/:partnerId/channel-mode",
 
-      // Charge Packages (NEW - replaces legacy packages/charges)
-      chargePackages: "/api/v1/charge-packages",
+      // Charges Rule Management (NEW - replaces legacy charge packages)
+      charges: "/api/v1/charges",
 
       // Geography
       geography: "/api/v1/geography",
@@ -372,8 +375,9 @@ app.get("/", (req, res) => {
     deprecatedEndpoints: {
       note: "The following endpoints have been deprecated and return 410 Gone",
       deprecated: [
-        "/api/packages/* -> Use /api/v1/charge-packages",
-        "/api/discounts/* -> Use /api/v1/charge-packages",
+        "/api/packages/* -> Use /api/v1/charges",
+        "/api/discounts/* -> Use /api/v1/charges",
+        "/api/v1/charge-packages/* -> Use /api/v1/charges",
         "/api/v1/charge-calculation/* -> Use /api/partners/calculate",
         "/api/v1/partner-assignment/* -> Use /api/partners/serviceability",
       ],
@@ -381,7 +385,7 @@ app.get("/", (req, res) => {
     features: [
       "Partner Management (CRUD)",
       "Zone System v2 with Distance and Geological Zones",
-      "Charge Package Management (Weight, Distance, Generic)",
+      "Charges Rule Management (Invoice, Weight, Zone-to-Zone, Distance-Based)",
       "Quote Engine with Charge Breakdown",
       "Pincode Type Management",
       "Charges Type Management (Partner-specific)",

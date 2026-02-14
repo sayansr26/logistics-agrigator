@@ -57,7 +57,7 @@ interface Partner {
     shipments?: number;
     rates?: number;
     pincodeAssigns?: number;
-    chargePackages?: number;
+    chargeRules?: number;
     channelConfigs?: number;
     chargesTypes?: number;
   };

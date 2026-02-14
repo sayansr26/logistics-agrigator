@@ -291,19 +291,19 @@ const pincodeTypeManagementLimiter = rateLimit({
 });
 
 /**
- * Charge Package Management Rate Limiter
- * Applies to new charge package CRUD operations (WEIGHT/DISTANCE/GENERIC)
+ * Charges Rule Management Rate Limiter
+ * Applies to new charge rule CRUD operations (INVOICE/WEIGHT/ZONE/DISTANCE)
  * 30 requests per 15 minutes per user
  */
-const chargePackageManagementLimiter = rateLimit({
+const chargesManagementLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each user to 30 charge package operations per windowMs
+  max: 30, // Limit each user to 30 charge rule operations per windowMs
   message: {
     status: "error",
     error: {
       code: "RATE_LIMIT_EXCEEDED",
       message:
-        "Too many charge package management requests. Please try again in 15 minutes.",
+        "Too many charges management requests. Please try again in 15 minutes.",
       retryAfter: 15 * 60, // seconds
     },
   },
@@ -323,7 +323,7 @@ module.exports = {
   packageManagementLimiter,
   discountManagementLimiter,
   chargeCalculationLimiter,
-  chargePackageManagementLimiter,
+  chargesManagementLimiter,
   partnerAssignmentLimiter,
   performanceAnalyticsLimiter,
   systemManagementLimiter,
