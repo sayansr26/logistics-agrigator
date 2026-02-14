@@ -190,7 +190,8 @@ const deletePartnerPincodeSchema = {
 
 /**
  * GET /api/pincodes/search
- * Autocomplete search for pincodes
+ * DEPRECATED: Autocomplete search for pincodes
+ * Use /api/v1/geography/pincodes/search instead.
  */
 const searchPincodesSchema = {
   query: Joi.object({
@@ -198,12 +199,21 @@ const searchPincodesSchema = {
       .min(1)
       .max(6)
       .pattern(/^[0-9]*$/)
-      .required()
+      .optional()
       .messages({
         "string.min": "Search term must be at least 1 character",
         "string.max": "Search term must not exceed 6 characters",
         "string.pattern.base": "Search term must contain only numbers",
-        "any.required": "Search term 'q' is required",
+      }),
+    code: Joi.string()
+      .min(1)
+      .max(6)
+      .pattern(/^[0-9]*$/)
+      .optional()
+      .messages({
+        "string.min": "Search term must be at least 1 character",
+        "string.max": "Search term must not exceed 6 characters",
+        "string.pattern.base": "Search term must contain only numbers",
       }),
     limit: Joi.number()
       .integer()
@@ -217,9 +227,12 @@ const searchPincodesSchema = {
         "number.min": "Limit must be at least 1",
         "number.max": "Limit must not exceed 50",
       }),
-  }).messages({
-    "object.unknown": "Unknown field in query parameters",
-  }),
+  })
+    .or("q", "code")
+    .messages({
+      "object.unknown": "Unknown field in query parameters",
+      "object.missing": "Search term 'q' or 'code' is required",
+    }),
 };
 
 /**

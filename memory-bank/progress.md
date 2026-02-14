@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: January 2026
+> Development status and changelog | Last Updated: February 14, 2026
 
 ## Overall Project Status
 
@@ -208,6 +208,22 @@ Overall Project Progress          [███████████████
 
 ### This Week's Progress
 
+- ✅ **Pincode Search Endpoint Unification (February 14, 2026)**
+  - Canonicalized search/autocomplete endpoint to `GET /api/v1/geography/pincodes/search`
+  - Deprecated protected endpoint `GET /api/v1/pincodes/search` retained temporarily with deprecation headers and sunset metadata
+  - Added API Gateway deprecation warning logs for old endpoint usage
+  - Updated deprecated partner route/controller/validation to support both `q` and `code` aliases during migration window
+  - Updated frontend partner pincode search endpoint to geography API with response normalization transform
+
+- ✅ **Database Init and Migration Recovery (February 14, 2026)**
+  - Hardened `pnpm run db:init` flow via `scripts/init-databases.sh`:
+    - environment-aware compose/env-file selection for dev vs production
+    - strict fail-fast behavior to avoid partial migrations
+    - deploy committed migrations only (no migration generation in init path)
+    - preflight checks for Prisma schema/migrations presence
+  - Fixed partner migration `20260129102803_create_charges_types` for fresh DB compatibility
+  - Added missing migration file `20260206080310_create_partner_pincode_assigns/migration.sql`
+
 - ✅ **Audit Logging Enhancement** (January 24, 2026)
   - Standardized all audit action names to UPPERCASE_WITH_UNDERSCORES format
   - Created centralized audit actions constants (70+ actions)
@@ -290,6 +306,33 @@ Overall Project Progress          [███████████████
 | #7  | Auth         | Outlet role in RBAC          | Jan 2026   |
 
 ## Changelog
+
+### February 2026
+
+```
+[2026-02-14] Pincode Search Unification (Phase 1) - COMPLETE
+  Backend:
+  - Canonical endpoint confirmed as GET /api/v1/geography/pincodes/search
+  - Deprecated GET /api/v1/pincodes/search now adds Deprecation/Sunset/Link headers
+  - Deprecated controller path switched to geography service-backed search
+  - Deprecated query validation supports q or code with at-least-one rule
+  - API Gateway logs structured warning events for deprecated endpoint hits
+
+  Frontend:
+  - Updated partner pincode autocomplete endpoint to geography search path
+  - Added transformResponse normalization for envelope and unwrapped payload formats
+
+[2026-02-14] Database Initialization Reliability Fixes - COMPLETE
+  Infrastructure:
+  - scripts/init-databases.sh now uses strict mode (set -euo pipefail)
+  - Uses .env + docker-compose.yml in dev and .env.production + docker-compose.production.yml in production
+  - Waits for service readiness with exec probes and deploys committed Prisma migrations only
+  - Aborts on any failed service migration to prevent partial state
+
+  Partner Service Migrations:
+  - Fixed migration 20260129102803_create_charges_types (conditional ALTER on pincode_types.type)
+  - Added missing migration file 20260206080310_create_partner_pincode_assigns/migration.sql
+```
 
 ### January 2026
 
@@ -495,6 +538,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: January 24, 2026
+**Last Updated**: February 14, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

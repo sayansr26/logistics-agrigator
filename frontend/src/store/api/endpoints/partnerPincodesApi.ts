@@ -53,7 +53,19 @@ export interface SearchPincodeResult {
 }
 
 export interface PincodesSearchResponse {
-  pincodes: SearchPincodeResult[];
+  status: string;
+  data: {
+    pincodes: SearchPincodeResult[];
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  };
+  meta?: {
+    timestamp: string;
+  };
 }
 
 export interface ImportResult {
@@ -174,9 +186,36 @@ export const partnerPincodesApi = baseApi.injectEndpoints({
       { q: string; limit?: number }
     >({
       query: ({ q, limit = 10 }) => ({
-        url: "/api/v1/pincodes/search",
+        // Canonical endpoint: public geography pincode search
+        url: "/api/v1/geography/pincodes/search",
         params: { q, limit },
       }),
+      transformResponse: (response: any): PincodesSearchResponse => {
+        // Handle both envelope ({status,data,meta}) and unwrapped ({pincodes,pagination}) payloads
+        const payload =
+          response?.data && Array.isArray(response?.data?.pincodes)
+            ? response.data
+            : response;
+
+        const rawPincodes = Array.isArray(payload?.pincodes)
+          ? payload.pincodes
+          : [];
+
+        return {
+          status: response?.status || "success",
+          data: {
+            // Keep only fields needed by assign dialog to avoid shape drift issues
+            pincodes: rawPincodes
+              .filter((p: any) => p?.id && p?.code)
+              .map((p: any) => ({
+                id: p.id,
+                code: p.code,
+              })),
+            pagination: payload?.pagination,
+          },
+          meta: response?.meta,
+        };
+      },
     }),
 
     // Import pincodes from Excel

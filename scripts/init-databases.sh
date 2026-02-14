@@ -3,7 +3,26 @@
 # Logistics Aggregator Portal - Database Initialization Script
 # Waits for containers, deploys migrations, and runs seeds
 
-set -e
+set -euo pipefail
+
+# Compose configuration (dev by default, production when NODE_ENV=production)
+COMPOSE_FILE_PATH="docker-compose.yml"
+ENV_FILE_PATH=".env"
+
+if [ "${NODE_ENV:-}" = "production" ]; then
+    COMPOSE_FILE_PATH="docker-compose.production.yml"
+    ENV_FILE_PATH=".env.production"
+fi
+
+if [ -f "$COMPOSE_FILE_PATH" ]; then
+    COMPOSE_CMD=(docker-compose -f "$COMPOSE_FILE_PATH")
+else
+    COMPOSE_CMD=(docker-compose)
+fi
+
+if [ -f "$ENV_FILE_PATH" ]; then
+    COMPOSE_CMD+=(--env-file "$ENV_FILE_PATH")
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -28,7 +47,15 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+dc() {
+    "${COMPOSE_CMD[@]}" "$@"
+}
+
 echo "🗄️  Starting database initialization..."
+print_status "Using compose file: $COMPOSE_FILE_PATH"
+if [ -f "$ENV_FILE_PATH" ]; then
+    print_status "Using env file: $ENV_FILE_PATH"
+fi
 echo ""
 
 # Function to wait for a service to be healthy
@@ -40,7 +67,9 @@ wait_for_service() {
     print_status "Waiting for $service_name to be healthy..."
 
     while [ $attempt -le $max_attempts ]; do
-        if docker-compose ps | grep -q "$service_name.*Up.*healthy" || docker-compose ps | grep -q "$service_name.*Up"; then
+        # Prefer direct exec probe over parsing docker-compose ps output.
+        # If exec works, the container is running and reachable.
+        if dc exec -T "$service_name" sh -c 'exit 0' > /dev/null 2>&1; then
             print_success "✅ $service_name is ready"
             return 0
         fi
@@ -62,7 +91,7 @@ wait_for_postgres() {
     local attempt=1
 
     while [ $attempt -le $max_attempts ]; do
-        if docker-compose exec -T postgres pg_isready -U logistics -d logistics_main > /dev/null 2>&1; then
+        if dc exec -T postgres sh -lc 'pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}"' > /dev/null 2>&1; then
             print_success "✅ PostgreSQL is ready"
             return 0
         fi
@@ -76,61 +105,33 @@ wait_for_postgres() {
     return 1
 }
 
-# Function to check if migrations exist
-check_migrations_exist() {
-    local service=$1
-    
-    # Check if migrations directory has any migration folders (not just migration_lock.toml)
-    local migration_count=$(docker-compose exec -T $service sh -c 'ls -1 prisma/migrations/ 2>/dev/null | grep -v "migration_lock.toml" | wc -l' 2>/dev/null || echo "0")
-    
-    if [ "$migration_count" -gt 0 ]; then
-        return 0  # Migrations exist
-    else
-        return 1  # No migrations
-    fi
-}
-
-# Function to create initial migration
-create_initial_migration() {
-    local service=$1
-    
-    print_status "Creating initial migration for $service..."
-    
-    if docker-compose exec -T $service npx prisma migrate dev --name init --create-only > /dev/null 2>&1; then
-        print_success "✅ Initial migration created for $service"
-        return 0
-    else
-        print_warning "⚠️  Failed to create migration for $service (may not have schema.prisma)"
-        return 1
-    fi
-}
-
 # Function to deploy migrations for a service
 deploy_migrations() {
     local service=$1
-    local service_name="${service//-/_}" # Convert hyphens to underscores for display
 
     print_status "Deploying migrations for $service..."
 
-    if docker-compose ps | grep -q "$service.*Up"; then
-        # Check if migrations exist, if not create them
-        if ! check_migrations_exist "$service"; then
-            print_warning "⚠️  No migrations found for $service, creating initial migration..."
-            if ! create_initial_migration "$service"; then
-                return 1
-            fi
-        fi
-        
-        # Deploy migrations
-        if docker-compose exec -T $service npx prisma migrate deploy > /dev/null 2>&1; then
-            print_success "✅ Migrations deployed for $service"
-            return 0
-        else
-            print_warning "⚠️  Migration deployment failed for $service"
-            return 1
-        fi
+    # db:init must never silently skip a service.
+    # Wait for each service explicitly and fail if unavailable.
+    wait_for_service "$service" || return 1
+
+    # Validate Prisma schema/migrations presence before deploy.
+    if ! dc exec -T "$service" sh -c 'test -f prisma/schema.prisma'; then
+        print_error "❌ prisma/schema.prisma not found in $service"
+        return 1
+    fi
+
+    if ! dc exec -T "$service" sh -c 'test -d prisma/migrations'; then
+        print_error "❌ prisma/migrations directory not found in $service"
+        return 1
+    fi
+
+    # Deploy committed migrations only (never generate new migrations in init script).
+    if dc exec -T "$service" npx prisma migrate deploy --schema=prisma/schema.prisma > /dev/null 2>&1; then
+        print_success "✅ Migrations deployed for $service"
+        return 0
     else
-        print_warning "⚠️  $service is not running, skipping migrations"
+        print_error "❌ Migration deployment failed for $service"
         return 1
     fi
 }
@@ -141,12 +142,12 @@ run_seeds() {
 
     print_status "Running seeds for $service..."
 
-    if docker-compose ps | grep -q "$service.*Up"; then
+    if dc exec -T "$service" sh -c 'exit 0' > /dev/null 2>&1; then
         # Try pnpm run db:seed first, then fallback to direct seed script execution
-        if docker-compose exec -T $service pnpm run db:seed > /dev/null 2>&1; then
+        if dc exec -T "$service" pnpm run db:seed > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service"
             return 0
-        elif docker-compose exec -T $service sh -c 'test -f prisma/seed.js && node prisma/seed.js' > /dev/null 2>&1; then
+        elif dc exec -T "$service" sh -c 'test -f prisma/seed.js && node prisma/seed.js' > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service (direct execution)"
             return 0
         else
@@ -185,22 +186,32 @@ print_status "Step 2: Deploying migrations..."
 echo ""
 
 migration_count=0
+failed_migrations=()
+migrated_services=()
 for service in "${SERVICES_WITH_PRISMA[@]}"; do
     if deploy_migrations "$service"; then
         migration_count=$((migration_count + 1))
+        migrated_services+=("$service")
+    else
+        failed_migrations+=("$service")
     fi
 done
 
 echo ""
-print_success "✅ Deployed migrations for $migration_count services"
-echo ""
+if [ ${#failed_migrations[@]} -gt 0 ]; then
+    print_error "❌ Migration deployment failed for: ${failed_migrations[*]}"
+    print_error "db:init aborted to prevent partial migration state."
+    exit 1
+else
+    print_success "✅ Deployed migrations for $migration_count services"
+fi
 
 # Step 3: Run seeds (optional - only for services that need seed data)
 print_status "Step 3: Running seed data..."
 echo ""
 
 seed_count=0
-for service in "${SERVICES_WITH_PRISMA[@]}"; do
+for service in "${migrated_services[@]}"; do
     if run_seeds "$service"; then
         seed_count=$((seed_count + 1))
     fi

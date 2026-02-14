@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Bank Manager"
+  short_description: "Keep memory-bank docs current and consistent"
+  default_prompt: "Use $manage-memory-bank to update memory-bank files after this implementation task."

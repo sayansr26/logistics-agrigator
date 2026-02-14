@@ -2,8 +2,22 @@
 ALTER TABLE "partner_channel_configs" ALTER COLUMN "id" DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE "pincode_types" ALTER COLUMN "id" DROP DEFAULT,
-ALTER COLUMN "type" DROP DEFAULT;
+ALTER TABLE "pincode_types" ALTER COLUMN "id" DROP DEFAULT;
+
+-- The next migration (20260129120000_simplify_pincode_types) introduces
+-- pincode_types.type. On fresh databases this column does not exist yet.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'pincode_types'
+          AND column_name = 'type'
+    ) THEN
+        EXECUTE 'ALTER TABLE "pincode_types" ALTER COLUMN "type" DROP DEFAULT';
+    END IF;
+END $$;
 
 -- CreateTable
 CREATE TABLE "charges_types" (

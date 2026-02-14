@@ -1,6 +1,6 @@
 # System Patterns - Logistics Aggregator Portal
 
-> Architecture and design patterns | Last Updated: January 24, 2026
+> Architecture and design patterns | Last Updated: February 14, 2026
 
 ## Architecture Overview
 
@@ -453,6 +453,32 @@ useEffect(() => {
 }, [pincodeDetails]);
 ```
 
+### 12. Geography-First Pincode Search Pattern (NEW - February 2026)
+
+**Canonical endpoint for all pincode search/autocomplete use-cases:**
+
+```http
+GET /api/v1/geography/pincodes/search
+```
+
+**Compatibility rule:**
+
+- Accept both `q` and `code` aliases during migration.
+
+**Deprecation bridge (phase 1):**
+
+- Legacy endpoint `GET /api/v1/pincodes/search` stays temporarily available.
+- Legacy endpoint includes:
+  - `Deprecation: true`
+  - `Sunset: 2026-06-30T00:00:00.000Z`
+  - `Link: </api/v1/geography/pincodes/search>; rel="successor-version"`
+- API Gateway writes structured warning logs for all deprecated endpoint hits.
+
+**Frontend integration rule:**
+
+- Partner pincode assignment autocomplete must call geography endpoint.
+- Response adapters should normalize envelope and unwrapped payloads before component mapping.
+
 ## Component Relationships
 
 ### Inter-Service Communication
@@ -488,9 +514,10 @@ Redis Cache Structure:
 4. **PNPM Workspace**: Monorepo for shared code management
 5. **Docker Compose**: Consistent development environment
 6. **Winston**: Structured logging with file rotation
+7. **Geography endpoint canonicalization**: Pincode search standard is `/api/v1/geography/pincodes/search`; old `/api/v1/pincodes/search` is temporary/deprecated
 
 ---
 
 **Architecture Status**: Stable
-**Last Pattern Review**: January 24, 2026
-**Recent Additions**: Outlet Module Pattern, Audit Action Standardization
+**Last Pattern Review**: February 14, 2026
+**Recent Additions**: Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

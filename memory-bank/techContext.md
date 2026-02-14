@@ -1,6 +1,6 @@
 # Tech Context - Logistics Aggregator Portal
 
-> Technologies, tools, and development setup | Last Updated: December 2024
+> Technologies, tools, and development setup | Last Updated: February 14, 2026
 
 ## Technology Stack
 
@@ -98,6 +98,7 @@ pnpm run stop                   # Stop all services
 pnpm run prisma:studio          # Visual database browser
 pnpm run prisma:generate        # Generate Prisma clients
 pnpm run migrate:deploy:all     # Deploy all migrations
+pnpm run db:init                # Container-aware migration + seed bootstrap
 
 # Logs & Health
 pnpm run logs                   # All service logs
@@ -229,6 +230,19 @@ docker exec logistics-auth-service npx prisma generate
 # Reset database (development only!)
 docker exec logistics-auth-service npx prisma migrate reset
 ```
+
+### `db:init` Execution Contract (Updated February 14, 2026)
+
+- Script path: `scripts/init-databases.sh`
+- Mode selection:
+  - Development: `docker-compose.yml` + `.env`
+  - Production (`NODE_ENV=production`): `docker-compose.production.yml` + `.env.production`
+- Reliability rules:
+  - Uses strict shell mode (`set -euo pipefail`)
+  - Waits for database/service readiness via container exec probes
+  - Deploys committed Prisma migrations only (`prisma migrate deploy --schema=prisma/schema.prisma`)
+  - Verifies `prisma/schema.prisma` and `prisma/migrations` exist per service
+  - Fails fast on any migration failure to prevent partial migration states
 
 ## External Service Integration
 
@@ -389,7 +403,11 @@ export const { useListOutletsQuery, useCreateOutletMutation } = outletApi;
 
 ```typescript
 // Uses existing geoApi endpoints
-import { useGetStatesQuery, useGetCitiesQuery, useGetPincodeDetailsQuery } from "@/store/api/endpoints/geoApi";
+import {
+  useGetStatesQuery,
+  useGetCitiesQuery,
+  useGetPincodeDetailsQuery,
+} from "@/store/api/endpoints/geoApi";
 
 // Pincode entry auto-fills city and state
 const { data: pincodeDetails } = useGetPincodeDetailsQuery(pincode, {
@@ -412,9 +430,18 @@ const [showEditDialog, setShowEditDialog] = useState(false);
 const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
 // Handlers open modals, don't navigate
-const handleView = (id) => { setSelectedId(id); setShowViewDialog(true); };
-const handleEdit = (id) => { setSelectedId(id); setShowEditDialog(true); };
-const handleDelete = (item) => { setItemToDelete(item); setShowDeleteDialog(true); };
+const handleView = (id) => {
+  setSelectedId(id);
+  setShowViewDialog(true);
+};
+const handleEdit = (id) => {
+  setSelectedId(id);
+  setShowEditDialog(true);
+};
+const handleDelete = (item) => {
+  setItemToDelete(item);
+  setShowDeleteDialog(true);
+};
 ```
 
 ---
@@ -422,4 +449,4 @@ const handleDelete = (item) => { setItemToDelete(item); setShowDeleteDialog(true
 **Environment**: Development  
 **Node Version**: 18.x LTS  
 **Package Manager**: PNPM 8.15.1  
-**Last Updated**: January 2026
+**Last Updated**: February 14, 2026

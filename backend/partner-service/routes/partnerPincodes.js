@@ -26,6 +26,18 @@ const {
   exportPincodesSchema,
 } = require("../validation/partnerPincodeSchema");
 
+const PINCODE_SEARCH_DEPRECATION_SUNSET = "2026-06-30T00:00:00.000Z";
+
+function setDeprecatedPincodeSearchHeaders(_req, res, next) {
+  res.setHeader("Deprecation", "true");
+  res.setHeader("Sunset", PINCODE_SEARCH_DEPRECATION_SUNSET);
+  res.setHeader(
+    "Link",
+    '</api/v1/geography/pincodes/search>; rel="successor-version"',
+  );
+  next();
+}
+
 // Apply authentication to all partner pincode routes
 router.use(authMiddleware.authenticate);
 
@@ -372,13 +384,20 @@ router.get("/pincodes/template", partnerPincodeController.downloadTemplate);
  *   get:
  *     tags: [Pincodes]
  *     summary: Search pincodes for autocomplete
- *     description: Searches pincodes by code for autocomplete functionality
+ *     description: DEPRECATED. Use /api/v1/geography/pincodes/search
+ *     deprecated: true
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: q
- *         required: true
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pincode code to search for
+ *       - in: query
+ *         name: code
+ *         required: false
  *         schema:
  *           type: string
  *         description: Pincode code to search for
@@ -394,6 +413,7 @@ router.get("/pincodes/template", partnerPincodeController.downloadTemplate);
  */
 router.get(
   "/pincodes/search",
+  setDeprecatedPincodeSearchHeaders,
   validate(searchPincodesSchema),
   partnerPincodeController.searchPincodes,
 );

@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: January 24, 2026
+> Current work focus and priorities | Last Updated: February 14, 2026
 
 ## Current Sprint Focus
 
@@ -109,12 +109,36 @@ The primary focus is implementing a robust security layer and role-based access 
 2. **Redis for Caching**: 5-minute TTL for permissions
 3. **JWT + Redis Sessions**: Scalable auth pattern
 4. **HMAC for External APIs**: Partner and Wallet service auth
+5. **Canonical pincode search endpoint**: Use `GET /api/v1/geography/pincodes/search` for all search/autocomplete flows
+6. **Deprecated endpoint window**: `GET /api/v1/pincodes/search` remains temporary with deprecation headers and sunset date `2026-06-30T00:00:00.000Z`
 
 ## Current Blockers
 
 1. **None currently identified**
 
 ## Recent Changes
+
+### February 14, 2026
+
+- ✅ **Pincode Search Unification (Phase 1)**
+  - Frontend partner pincode autocomplete moved to `GET /api/v1/geography/pincodes/search`
+  - Deprecated endpoint `GET /api/v1/pincodes/search` now emits `Deprecation`, `Sunset`, and `Link` headers
+  - API Gateway logs warning events when deprecated endpoint is used
+  - Deprecated controller path now supports both `q` and `code` query aliases
+
+- ✅ **Assign Pincode Search Payload Normalization**
+  - Updated RTK endpoint response transform for geography pincode search to normalize envelope/unwrapped payloads
+  - Standardized autocomplete data mapping to `{ id, code }` for assign dialog consumption
+
+- ✅ **`db:init` Migration Reliability Hardening**
+  - `scripts/init-databases.sh` now selects compose/env by `NODE_ENV` (`.env` + `docker-compose.yml` for dev, `.env.production` + `docker-compose.production.yml` for prod)
+  - Added fail-fast behavior to prevent partial migration state across services
+  - Removed migration generation from init flow; now deploys committed migrations only
+  - Added schema/migrations presence checks before deploy
+
+- ✅ **Partner DB Migration Fixes**
+  - Fixed `20260129102803_create_charges_types` migration to avoid failing on fresh DBs when `pincode_types.type` column does not exist yet
+  - Added missing `20260206080310_create_partner_pincode_assigns/migration.sql`
 
 ### January 24, 2026
 

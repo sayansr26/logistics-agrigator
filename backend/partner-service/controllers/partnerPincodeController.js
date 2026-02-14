@@ -21,6 +21,7 @@
 const logger = require("../shared/lib/logger");
 const APIResponse = require("../shared/lib/response");
 const partnerPincodeService = require("../services/partnerPincodeService");
+const { getGeographicalService } = require("../services/geographicalService");
 const { prisma } = require("../config/database");
 
 /**
@@ -386,38 +387,65 @@ async function deletePartnerPincode(req, res) {
 }
 
 /**
- * 6. Search pincodes for autocomplete
+ * 6. Search pincodes for autocomplete (DEPRECATED - use /api/v1/geography/pincodes/search)
  * @route GET /api/pincodes/search
  * @access Admin
  */
 async function searchPincodes(req, res) {
   try {
-    const query = req.query.q;
+    const query = req.query.q || req.query.code;
     const limit = req.query.limit ? parseInt(req.query.limit) : 10;
 
     if (!query) {
       return res
         .status(400)
         .json(
-          APIResponse.error("Search query 'q' is required", "VALIDATION_ERROR"),
+          APIResponse.error(
+            "Search query 'q' or 'code' is required",
+            "VALIDATION_ERROR",
+          ),
         );
     }
 
-    logger.info("Searching pincodes", {
+    logger.warn("Deprecated pincode search endpoint used", {
+      endpoint: "/api/v1/pincodes/search",
+      successor: "/api/v1/geography/pincodes/search",
       query,
       limit,
       userId: req.user?.id,
     });
 
-    const pincodes = await partnerPincodeService.searchPincodes(query, limit);
+    const geographicalService = getGeographicalService();
+    const result = await geographicalService.searchPincodes({
+      pincode: query,
+      page: 1,
+      limit,
+      sortBy: "code",
+    });
 
-    logger.info("Pincodes searched successfully", {
+    if (!result.success) {
+      return res
+        .status(500)
+        .json(
+          APIResponse.error(
+            result.error || "Pincode search failed",
+            "SERVICE_ERROR",
+          ),
+        );
+    }
+
+    logger.info("Deprecated endpoint served pincode search successfully", {
       query,
-      count: pincodes.length,
+      count: result.data?.length || 0,
       userId: req.user?.id,
     });
 
-    res.json(APIResponse.success({ pincodes }));
+    res.json(
+      APIResponse.success({
+        pincodes: result.data || [],
+        pagination: result.pagination,
+      }),
+    );
   } catch (error) {
     logger.error("Failed to search pincodes", {
       error: error.message,

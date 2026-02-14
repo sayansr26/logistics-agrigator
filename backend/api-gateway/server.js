@@ -904,6 +904,20 @@ app.use(
       if (internalSecret) {
         proxyReq.setHeader("X-Internal-Request", internalSecret);
       }
+
+      if (
+        req.path === "/api/v1/pincodes/search" ||
+        req.originalUrl.startsWith("/api/v1/pincodes/search?")
+      ) {
+        logger.warn("Deprecated pincode search endpoint accessed via gateway", {
+          path: req.path,
+          originalUrl: req.originalUrl,
+          method: req.method,
+          userId: req.headers["x-user-id"] || null,
+          timestamp: new Date().toISOString(),
+          successor: "/api/v1/geography/pincodes/search",
+        });
+      }
     },
   }),
 );
