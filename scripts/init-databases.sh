@@ -145,14 +145,47 @@ deploy_migrations() {
     local migrate_output
     migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
     local migrate_exit=$?
+
     if [ $migrate_exit -eq 0 ]; then
         print_success "✅ Migrations deployed for $service"
         return 0
-    else
-        print_error "❌ Migration deployment failed for $service"
-        echo "$migrate_output" | tail -20
-        return 1
     fi
+
+    # P3005: DB has tables but no _prisma_migrations history (created via db push / first deploy).
+    # Baseline: mark all existing migrations as applied so migrate deploy can track future ones.
+    if echo "$migrate_output" | grep -q "P3005"; then
+        print_warning "⚠️  $service: database has schema but no migration history. Baselining..."
+
+        local migration_names
+        migration_names=$(dc exec -T "$service" sh -c "ls '$migrations_dir'" 2>/dev/null | grep -E '^[0-9]{14}')
+
+        if [ -z "$migration_names" ]; then
+            print_error "❌ No migrations found to baseline for $service"
+            echo "$migrate_output" | tail -10
+            return 1
+        fi
+
+        local baseline_ok=1
+        for migration in $migration_names; do
+            if dc exec -T "$service" npx prisma migrate resolve --applied "$migration" --schema="$schema_path" > /dev/null 2>&1; then
+                print_status "  Baselined: $migration"
+            else
+                print_warning "  ⚠️  Could not baseline $migration (may already be recorded)"
+            fi
+        done
+
+        # Re-run deploy after baselining (no-op for baselined migrations, applies any new ones)
+        migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
+        migrate_exit=$?
+        if [ $migrate_exit -eq 0 ]; then
+            print_success "✅ Migrations deployed for $service (baselined)"
+            return 0
+        fi
+    fi
+
+    print_error "❌ Migration deployment failed for $service"
+    echo "$migrate_output" | tail -20
+    return 1
 }
 
 # Function to run seeds for a service
