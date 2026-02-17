@@ -142,11 +142,15 @@ deploy_migrations() {
     fi
 
     # Deploy committed migrations only (never generate new migrations in init script).
-    if dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" > /dev/null 2>&1; then
+    local migrate_output
+    migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
+    local migrate_exit=$?
+    if [ $migrate_exit -eq 0 ]; then
         print_success "✅ Migrations deployed for $service"
         return 0
     else
         print_error "❌ Migration deployment failed for $service"
+        echo "$migrate_output" | tail -20
         return 1
     fi
 }
