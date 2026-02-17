@@ -106,6 +106,19 @@ wait_for_postgres() {
 }
 
 # Function to deploy migrations for a service
+find_schema_path() {
+    local service=$1
+    # Try dev layout first (WORKDIR=/app, schema copied directly: prisma/schema.prisma)
+    # then production layout (WORKDIR=/app, service in subdirectory: backend/<service>/prisma/schema.prisma)
+    for candidate in "prisma/schema.prisma" "backend/${service}/prisma/schema.prisma"; do
+        if dc exec -T "$service" sh -c "test -f $candidate" 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 deploy_migrations() {
     local service=$1
 
@@ -115,19 +128,21 @@ deploy_migrations() {
     # Wait for each service explicitly and fail if unavailable.
     wait_for_service "$service" || return 1
 
-    # Validate Prisma schema/migrations presence before deploy.
-    if ! dc exec -T "$service" sh -c 'test -f prisma/schema.prisma'; then
+    # Detect schema path (works for both dev and production container layouts)
+    local schema_path
+    schema_path=$(find_schema_path "$service") || {
         print_error "❌ prisma/schema.prisma not found in $service"
         return 1
-    fi
+    }
 
-    if ! dc exec -T "$service" sh -c 'test -d prisma/migrations'; then
+    local migrations_dir="${schema_path%/schema.prisma}/migrations"
+    if ! dc exec -T "$service" sh -c "test -d $migrations_dir" 2>/dev/null; then
         print_error "❌ prisma/migrations directory not found in $service"
         return 1
     fi
 
     # Deploy committed migrations only (never generate new migrations in init script).
-    if dc exec -T "$service" npx prisma migrate deploy --schema=prisma/schema.prisma > /dev/null 2>&1; then
+    if dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" > /dev/null 2>&1; then
         print_success "✅ Migrations deployed for $service"
         return 0
     else
@@ -143,12 +158,16 @@ run_seeds() {
     print_status "Running seeds for $service..."
 
     if dc exec -T "$service" sh -c 'exit 0' > /dev/null 2>&1; then
-        # Try pnpm run db:seed first, then fallback to direct seed script execution
-        if dc exec -T "$service" pnpm run db:seed > /dev/null 2>&1; then
-            print_success "✅ Seeds executed for $service"
-            return 0
-        elif dc exec -T "$service" sh -c 'test -f prisma/seed.js && node prisma/seed.js' > /dev/null 2>&1; then
+        local schema_path
+        schema_path=$(find_schema_path "$service") || true
+        local seed_dir="${schema_path%/schema.prisma}"
+
+        # Try service-level pnpm db:seed, then direct seed.js execution
+        if dc exec -T "$service" sh -c "cd \$(dirname $schema_path) 2>/dev/null && test -f seed.js && node seed.js" > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service (direct execution)"
+            return 0
+        elif dc exec -T "$service" pnpm run db:seed > /dev/null 2>&1; then
+            print_success "✅ Seeds executed for $service"
             return 0
         else
             print_warning "⚠️  Seed execution failed for $service (service may not have seed file)"
