@@ -196,8 +196,11 @@ async function listZones(req, res) {
       userRole,
     );
 
-    // Extract partnerId from authenticated user
-    const partnerId = req.user?.partnerId;
+    // For admin/superadmin, allow filtering by partnerId from query params
+    // For non-admin users, use partnerId from authenticated user context
+    const partnerId = isAdminOrSuperadmin
+      ? req.query.partnerId || req.user?.partnerId
+      : req.user?.partnerId;
 
     // Non-admin users must have a partnerId
     if (!isAdminOrSuperadmin && !partnerId) {

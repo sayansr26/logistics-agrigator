@@ -322,10 +322,13 @@ const listZones = {
     limit: Joi.number().integer().min(1).max(100).default(20),
     status: Joi.boolean().optional(),
     zoneType: schemas.zoneType.optional(),
+    partnerId: Joi.string().optional(),
     search: Joi.string().min(1).max(100).optional().messages({
       "string.min": "Search term must be at least 1 character",
       "string.max": "Search term cannot exceed 100 characters",
     }),
+    sortBy: Joi.string().valid("createdAt", "name", "updatedAt").optional(),
+    sortOrder: Joi.string().valid("asc", "desc").optional(),
   }),
 };
 

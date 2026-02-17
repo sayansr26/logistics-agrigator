@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: February 14, 2026
+> Development status and changelog | Last Updated: February 17, 2026
 
 ## Overall Project Status
 
@@ -227,6 +227,13 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Charges Zones Query Fix (February 17, 2026)**
+  - Fixed: partnerId rejected as "not allowed" in GET /api/v1/zones validation
+  - Backend: Added partnerId, sortBy, sortOrder to listZones Joi schema (zoneSchemas.js)
+  - Backend: Updated zoneController.js to use query partnerId for admin/superadmin users
+  - Frontend: Added partnerId to GetZonesParams interface (zonesApi.ts)
+  - Affects both ZONE_TO_ZONE_WEIGHT (Geological) and DISTANCE_BASE_WEIGHT charge types
 
 - ✅ **Charges Management Module - Hard Replace (February 14, 2026)**
   - New `ChargeRule` engine replaces legacy `ChargePackage` system entirely
@@ -601,6 +608,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: February 14, 2026
+**Last Updated**: February 17, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

@@ -94,6 +94,7 @@ interface GetZonesParams {
   page?: number;
   limit?: number;
   zoneType?: ZoneType;
+  partnerId?: string;
   status?: boolean;
   search?: string;
   sortBy?: string;

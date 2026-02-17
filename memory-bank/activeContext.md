@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: February 14, 2026
+> Current work focus and priorities | Last Updated: February 17, 2026
 
 ## Current Sprint Focus
 
@@ -117,6 +117,15 @@ The primary focus is implementing a robust security layer and role-based access 
 1. **None currently identified**
 
 ## Recent Changes
+
+### February 17, 2026
+
+- ✅ **Charges Zones Query Fix** — partnerId was rejected by Joi validation in GET /api/v1/zones
+  - Root cause: Frontend charges page passed `partnerId` as query param but backend `listZones` schema didn't allow it
+  - Backend fix: Added `partnerId`, `sortBy`, `sortOrder` to `zoneSchemas.js` listZones validation
+  - Backend fix: Updated `zoneController.js` to use query `partnerId` for admin/superadmin (non-admin still uses auth context)
+  - Frontend fix: Added `partnerId` to `GetZonesParams` in `zonesApi.ts`
+  - Both Zone-to-Zone (Geological) and Distance-Based charge types now work
 
 ### February 14, 2026
 
