@@ -141,6 +141,18 @@ deploy_migrations() {
         return 1
     fi
 
+    # Sync schema to DB first (adds missing columns / drops removed ones).
+    # This ensures the DB matches the current schema even if the entrypoint's db push
+    # timed out or failed silently during container startup.
+    # --accept-data-loss is required when columns are dropped (breaking migrations).
+    print_status "  Syncing schema for $service..."
+    dc exec -T "$service" npx prisma db push \
+        --schema="$schema_path" \
+        --accept-data-loss \
+        --skip-generate > /dev/null 2>&1 \
+        && print_status "  Schema synced for $service" \
+        || print_warning "  ⚠️  Schema sync skipped for $service (DB may not be ready yet)"
+
     # Helper: baseline all migrations in the migrations_dir as applied
     baseline_all() {
         local migration_names
