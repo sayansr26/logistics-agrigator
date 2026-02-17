@@ -172,45 +172,20 @@ deploy_migrations() {
         return 0
     fi
 
-    # P3005: DB has tables but no _prisma_migrations history (created via db push / first deploy).
-    # Baseline all migrations then re-deploy.
-    if echo "$migrate_output" | grep -q "P3005"; then
-        print_warning "⚠️  $service: database has schema but no migration history. Baselining..."
-        baseline_all || { echo "$migrate_output" | tail -10; return 1; }
-
+    # P3005 / P3009 / P3018: DB schema exists but migration history is missing or has failed entries.
+    # Strategy: baseline_all() marks every migration in the directory as applied (idempotent –
+    # already-applied ones are silently skipped). This resolves failed entries too.
+    # Then a final migrate deploy succeeds as a no-op or applies any genuinely new migrations.
+    if echo "$migrate_output" | grep -qE "P3005|P3009|P3018"; then
+        local error_code
+        error_code=$(echo "$migrate_output" | grep -oE "P3005|P3009|P3018" | head -1)
+        print_warning "⚠️  $service: ${error_code} detected. Baselining all migrations..."
+        baseline_all
         migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
         migrate_exit=$?
         if [ $migrate_exit -eq 0 ]; then
-            print_success "✅ Migrations deployed for $service (baselined)"
+            print_success "✅ Migrations deployed for $service (${error_code} resolved)"
             return 0
-        fi
-    fi
-
-    # P3018 / P3009: a migration is in failed state (schema already exists from db push, or
-    # a previous db:init run left it in failed state). Resolve it as applied, then re-deploy.
-    # P3018 format: "Migration name: <name>"
-    # P3009 format: "The `<name>` migration started at ... failed"
-    if echo "$migrate_output" | grep -qE "P3018|P3009"; then
-        local failed_migration
-        # Try P3018 format first
-        failed_migration=$(echo "$migrate_output" | grep "Migration name:" | awk '{print $NF}' | tr -d '[:space:]')
-        # Fall back to P3009 format (backtick-wrapped name before " migration started at")
-        if [ -z "$failed_migration" ]; then
-            failed_migration=$(echo "$migrate_output" | grep "migration started at" | sed "s/.*\`\([^\`]*\)\`.*/\1/" | tr -d '[:space:]')
-        fi
-        if [ -n "$failed_migration" ]; then
-            print_warning "⚠️  $service: migration '$failed_migration' in failed state. Resolving..."
-            if dc exec -T "$service" npx prisma migrate resolve --applied "$failed_migration" --schema="$schema_path" > /dev/null 2>&1; then
-                print_status "  Resolved: $failed_migration"
-                migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
-                migrate_exit=$?
-                if [ $migrate_exit -eq 0 ]; then
-                    print_success "✅ Migrations deployed for $service (failed migration resolved)"
-                    return 0
-                fi
-            else
-                print_error "❌ Could not resolve failed migration $failed_migration"
-            fi
         fi
     fi
 
