@@ -186,19 +186,26 @@ deploy_migrations() {
         fi
     fi
 
-    # P3018: a previous migration is in failed state (e.g. schema already exists from db push).
-    # Resolve it as applied, then re-deploy.
-    if echo "$migrate_output" | grep -q "P3018"; then
+    # P3018 / P3009: a migration is in failed state (schema already exists from db push, or
+    # a previous db:init run left it in failed state). Resolve it as applied, then re-deploy.
+    # P3018 format: "Migration name: <name>"
+    # P3009 format: "The `<name>` migration started at ... failed"
+    if echo "$migrate_output" | grep -qE "P3018|P3009"; then
         local failed_migration
+        # Try P3018 format first
         failed_migration=$(echo "$migrate_output" | grep "Migration name:" | awk '{print $NF}' | tr -d '[:space:]')
+        # Fall back to P3009 format (backtick-wrapped name before " migration started at")
+        if [ -z "$failed_migration" ]; then
+            failed_migration=$(echo "$migrate_output" | grep "migration started at" | sed "s/.*\`\([^\`]*\)\`.*/\1/" | tr -d '[:space:]')
+        fi
         if [ -n "$failed_migration" ]; then
-            print_warning "⚠️  $service: migration '$failed_migration' in failed state (schema already applied). Resolving..."
+            print_warning "⚠️  $service: migration '$failed_migration' in failed state. Resolving..."
             if dc exec -T "$service" npx prisma migrate resolve --applied "$failed_migration" --schema="$schema_path" > /dev/null 2>&1; then
                 print_status "  Resolved: $failed_migration"
                 migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
                 migrate_exit=$?
                 if [ $migrate_exit -eq 0 ]; then
-                    print_success "✅ Migrations deployed for $service (P3018 resolved)"
+                    print_success "✅ Migrations deployed for $service (failed migration resolved)"
                     return 0
                 fi
             else
