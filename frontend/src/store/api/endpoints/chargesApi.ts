@@ -1,25 +1,24 @@
 import { baseApi } from "../baseApi";
 
 /**
- * Charges Rule Management API Endpoints
+ * Charges Rule Management API Endpoints (redesigned)
  *
- * Replaces legacy chargePackagesApi.
- * All charge rule endpoints route through API Gateway (port 3001).
+ * No kind field. New field set per base:
+ * - INVOICE_VALUE:        minValue, percentageValue, + chargesTypeId|pincodeTypeId
+ * - WEIGHT:               minValue, perKg, perKgCharge, + chargesTypeId|pincodeTypeId
+ * - ZONE_TO_ZONE_WEIGHT:  minValue, perKg, perKgCharge, fromZoneId, toZoneId
+ * - DISTANCE_BASE_WEIGHT: minValue, perKg, perKgCharge, zoneMilestoneId
  */
 
 // ===========================
 // Enums and Types
 // ===========================
 
-export type ChargeRuleKind = "PARTNER_CHARGES_TYPE" | "GEOLOGICAL" | "ADDON";
-
 export type ChargeRuleBase =
   | "INVOICE_VALUE"
   | "WEIGHT"
   | "ZONE_TO_ZONE_WEIGHT"
   | "DISTANCE_BASE_WEIGHT";
-
-export type ChargeCalcType = "FLAT" | "PERCENTAGE";
 
 // ===========================
 // Interfaces
@@ -42,34 +41,33 @@ interface PincodeType {
   type: string;
 }
 
+interface ZoneMilestoneRef {
+  id: string;
+  minKm: number;
+  maxKm: number;
+  suffix: string;
+  zoneId: string;
+}
+
 export interface ChargeRule {
   id: string;
   partnerId: string;
-  kind: ChargeRuleKind;
   base: ChargeRuleBase;
+  // Type link (Invoice/Weight only – exactly one)
   chargesTypeId?: string | null;
   pincodeTypeId?: string | null;
-  // INVOICE_VALUE fields
-  fromAmount?: number | null;
-  toAmount?: number | null;
-  // Shared charge + calcType
-  charge?: number | null;
-  calcType?: ChargeCalcType | null;
-  // WEIGHT fields
-  minKg?: number | null;
-  maxKg?: number | null;
-  // ZONE_TO_ZONE_WEIGHT fields
+  // Shared min value
+  minValue?: number | null;
+  // INVOICE_VALUE
+  percentageValue?: number | null;
+  // WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT
+  perKg?: number | null;
+  perKgCharge?: number | null;
+  // ZONE_TO_ZONE_WEIGHT
   fromZoneId?: string | null;
   toZoneId?: string | null;
-  // Shared weight slab fields
-  minWeightKg?: number | null;
-  addonWeightKg?: number | null;
-  weightCharge?: number | null;
-  addonCharge?: number | null;
-  // DISTANCE_BASE_WEIGHT fields
-  division?: string | null;
-  fromKm?: number | null;
-  toKm?: number | null;
+  // DISTANCE_BASE_WEIGHT
+  zoneMilestoneId?: string | null;
   // Status
   isActive: boolean;
   createdAt: string;
@@ -78,52 +76,35 @@ export interface ChargeRule {
   partner?: Partner;
   chargesType?: ChargesType | null;
   pincodeType?: PincodeType | null;
+  zoneMilestone?: ZoneMilestoneRef | null;
 }
 
 export interface CreateChargeRuleRequest {
   partnerId: string;
-  kind: ChargeRuleKind;
   base: ChargeRuleBase;
   chargesTypeId?: string | null;
   pincodeTypeId?: string | null;
-  fromAmount?: number | null;
-  toAmount?: number | null;
-  charge?: number | null;
-  calcType?: ChargeCalcType | null;
-  minKg?: number | null;
-  maxKg?: number | null;
+  minValue: number;
+  percentageValue?: number | null;
+  perKg?: number | null;
+  perKgCharge?: number | null;
   fromZoneId?: string | null;
   toZoneId?: string | null;
-  minWeightKg?: number | null;
-  addonWeightKg?: number | null;
-  weightCharge?: number | null;
-  addonCharge?: number | null;
-  division?: string | null;
-  fromKm?: number | null;
-  toKm?: number | null;
+  zoneMilestoneId?: string | null;
   isActive?: boolean;
 }
 
 export interface UpdateChargeRuleRequest {
-  kind?: ChargeRuleKind;
   base?: ChargeRuleBase;
   chargesTypeId?: string | null;
   pincodeTypeId?: string | null;
-  fromAmount?: number | null;
-  toAmount?: number | null;
-  charge?: number | null;
-  calcType?: ChargeCalcType | null;
-  minKg?: number | null;
-  maxKg?: number | null;
+  minValue?: number | null;
+  percentageValue?: number | null;
+  perKg?: number | null;
+  perKgCharge?: number | null;
   fromZoneId?: string | null;
   toZoneId?: string | null;
-  minWeightKg?: number | null;
-  addonWeightKg?: number | null;
-  weightCharge?: number | null;
-  addonCharge?: number | null;
-  division?: string | null;
-  fromKm?: number | null;
-  toKm?: number | null;
+  zoneMilestoneId?: string | null;
   isActive?: boolean;
 }
 
@@ -131,12 +112,12 @@ export interface GetChargeRulesParams {
   page?: number;
   limit?: number;
   partnerId?: string;
-  kind?: ChargeRuleKind;
   chargesTypeId?: string;
+  pincodeTypeId?: string;
   base?: ChargeRuleBase;
   isActive?: boolean;
   search?: string;
-  sortBy?: "createdAt" | "updatedAt" | "kind" | "base";
+  sortBy?: "createdAt" | "updatedAt" | "base";
   sortOrder?: "asc" | "desc";
 }
 
@@ -163,7 +144,6 @@ export const chargesApi = baseApi.injectEndpoints({
         method: "GET",
         params: params || {},
       }),
-      // Backend returns: { status, data: { chargeRules: [...], pagination: {...} }, meta }
       transformResponse: (response: any) => ({
         chargeRules: response?.data?.chargeRules || [],
         pagination: response?.data?.pagination || {
@@ -190,7 +170,6 @@ export const chargesApi = baseApi.injectEndpoints({
         url: `/api/v1/charges/${id}`,
         method: "GET",
       }),
-      // Backend returns: { status, data: { chargeRule: {...} }, meta }
       transformResponse: (response: any) => ({
         chargeRule: response?.data?.chargeRule || null,
       }),

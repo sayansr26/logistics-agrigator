@@ -407,7 +407,8 @@ model ZoneMilestone {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  zone        Zone         @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  chargeRules ChargeRule[]
 
   @@unique([zoneId, sortOrder])
   @@unique([zoneId, minKm])
@@ -504,12 +505,6 @@ model PartnerPincodeTypeValue {
 // CHARGE RULE MANAGEMENT (Charges Engine)
 // ========================================
 
-enum ChargeRuleKind {
-  PARTNER_CHARGES_TYPE // Linked to a ChargesType defined per partner
-  GEOLOGICAL // Pincode-type based geological charge
-  ADDON // Additional/extra charge
-}
-
 enum ChargeRuleBase {
   INVOICE_VALUE
   WEIGHT
@@ -517,49 +512,33 @@ enum ChargeRuleBase {
   DISTANCE_BASE_WEIGHT
 }
 
-enum ChargeCalcType {
-  FLAT
-  PERCENTAGE
-}
-
 model ChargeRule {
   id        String         @id @default(uuid()) @db.Uuid
   partnerId String         @map("partner_id") // CUID to match Partner.id
-  kind      ChargeRuleKind
   base      ChargeRuleBase
 
-  // Link to partner's ChargesType (required when kind = PARTNER_CHARGES_TYPE)
+  // Link to partner's ChargesType (for INVOICE_VALUE/WEIGHT when "Charges Types" selected)
   chargesTypeId String? @map("charges_type_id") @db.Uuid
 
-  // Link to PincodeType (required when kind = GEOLOGICAL)
+  // Link to PincodeType (for INVOICE_VALUE/WEIGHT when "Pincode Types" selected)
   pincodeTypeId String? @map("pincode_type_id") @db.Uuid
 
-  // ---- Fields for INVOICE_VALUE base ----
-  fromAmount Decimal? @map("from_amount") @db.Decimal(12, 2)
-  toAmount   Decimal? @map("to_amount") @db.Decimal(12, 2)
+  // ---- Shared min value (all bases) ----
+  minValue Decimal? @map("min_value") @db.Decimal(12, 2)
 
-  // ---- Shared charge + calcType (INVOICE_VALUE & WEIGHT) ----
-  charge   Decimal?        @db.Decimal(12, 2)
-  calcType ChargeCalcType? @map("calc_type")
+  // ---- For INVOICE_VALUE base ----
+  percentageValue Decimal? @map("percentage_value") @db.Decimal(10, 4)
 
-  // ---- Fields for WEIGHT base ----
-  minKg Decimal? @map("min_kg") @db.Decimal(10, 3)
-  maxKg Decimal? @map("max_kg") @db.Decimal(10, 3)
+  // ---- For WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT ----
+  perKg       Decimal? @map("per_kg") @db.Decimal(10, 3)
+  perKgCharge Decimal? @map("per_kg_charge") @db.Decimal(12, 2)
 
-  // ---- Fields for ZONE_TO_ZONE_WEIGHT base ----
+  // ---- For ZONE_TO_ZONE_WEIGHT ----
   fromZoneId String? @map("from_zone_id") @db.Uuid
   toZoneId   String? @map("to_zone_id") @db.Uuid
 
-  // ---- Shared weight slab fields (ZONE_TO_ZONE_WEIGHT & DISTANCE_BASE_WEIGHT) ----
-  minWeightKg   Decimal? @map("min_weight_kg") @db.Decimal(10, 3)
-  addonWeightKg Decimal? @map("addon_weight_kg") @db.Decimal(10, 3)
-  weightCharge  Decimal? @map("weight_charge") @db.Decimal(12, 2)
-  addonCharge   Decimal? @map("addon_charge") @db.Decimal(12, 2)
-
-  // ---- Fields for DISTANCE_BASE_WEIGHT base ----
-  division String? @db.VarChar(50)
-  fromKm   Int?    @map("from_km")
-  toKm     Int?    @map("to_km")
+  // ---- For DISTANCE_BASE_WEIGHT ----
+  zoneMilestoneId String? @map("zone_milestone_id") @db.Uuid
 
   // Status and timestamps
   isActive  Boolean  @default(true) @map("is_active")
@@ -567,12 +546,14 @@ model ChargeRule {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  partner     Partner      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  chargesType ChargesType? @relation(fields: [chargesTypeId], references: [id], onDelete: SetNull)
-  pincodeType PincodeType? @relation(fields: [pincodeTypeId], references: [id], onDelete: SetNull)
+  partner       Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  chargesType   ChargesType?   @relation(fields: [chargesTypeId], references: [id], onDelete: SetNull)
+  pincodeType   PincodeType?   @relation(fields: [pincodeTypeId], references: [id], onDelete: SetNull)
+  zoneMilestone ZoneMilestone? @relation(fields: [zoneMilestoneId], references: [id], onDelete: SetNull)
 
-  @@index([partnerId, kind, base, isActive])
+  @@index([partnerId, base, isActive])
   @@index([partnerId, chargesTypeId, base, isActive])
   @@index([partnerId, pincodeTypeId, isActive])
+  @@index([partnerId, zoneMilestoneId, isActive])
   @@map("charge_rules")
 }

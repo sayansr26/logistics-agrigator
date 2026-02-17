@@ -41,11 +41,10 @@ import {
   Eye,
   Save,
   MapPin,
-  Weight,
   DollarSign,
   Layers,
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   useGetChargeRulesQuery,
   useGetChargeRuleByIdQuery,
@@ -55,9 +54,7 @@ import {
   useToggleChargeRuleStatusMutation,
 } from "@/store/api/endpoints/chargesApi";
 import type {
-  ChargeRuleKind,
   ChargeRuleBase,
-  ChargeCalcType,
   CreateChargeRuleRequest,
 } from "@/store/api/endpoints/chargesApi";
 import { useGetPartnersQuery } from "@/store/api/endpoints/partnersApi";
@@ -69,31 +66,12 @@ import { useGetZonesQuery } from "@/store/api/endpoints/zonesApi";
 // HELPERS
 // ============================================
 
-const KIND_LABELS: Record<string, string> = {
-  PARTNER_CHARGES_TYPE: "Partner Charge Type",
-  GEOLOGICAL: "Geological Charges",
-  ADDON: "Addon Charges",
-};
-
 const BASE_LABELS: Record<string, string> = {
   INVOICE_VALUE: "Invoice Value",
   WEIGHT: "Weight",
   ZONE_TO_ZONE_WEIGHT: "Zone to Zone (Weight)",
   DISTANCE_BASE_WEIGHT: "Distance Based (Weight)",
 };
-
-function getKindColor(kind: string) {
-  switch (kind) {
-    case "PARTNER_CHARGES_TYPE":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-    case "GEOLOGICAL":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300";
-    case "ADDON":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-}
 
 function getBaseColor(base: string) {
   switch (base) {
@@ -122,18 +100,123 @@ function formatCurrency(value: number | string | null | undefined) {
 }
 
 function getRuleSummary(rule: any) {
+  const minVal = formatCurrency(rule.minValue);
   switch (rule.base) {
     case "INVOICE_VALUE":
-      return `₹${rule.fromAmount || 0} - ₹${rule.toAmount || "∞"} → ${rule.calcType === "PERCENTAGE" ? `${rule.charge}%` : formatCurrency(rule.charge)}`;
+      return `${rule.percentageValue}% | min ${minVal}`;
     case "WEIGHT":
-      return `${rule.minKg || 0}kg - ${rule.maxKg || "∞"}kg → ${rule.calcType === "PERCENTAGE" ? `${rule.charge}%` : formatCurrency(rule.charge)}`;
+      return `ceil(wt/${rule.perKg}kg) × ${formatCurrency(rule.perKgCharge)} | min ${minVal}`;
     case "ZONE_TO_ZONE_WEIGHT":
-      return `Min ${rule.minWeightKg || 0}kg, ${formatCurrency(rule.weightCharge)} + ${formatCurrency(rule.addonCharge)}/extra ${rule.addonWeightKg || 1}kg`;
-    case "DISTANCE_BASE_WEIGHT":
-      return `${rule.fromKm || 0}-${rule.toKm || "∞"}km, ${formatCurrency(rule.weightCharge)} + ${formatCurrency(rule.addonCharge)}/extra`;
+      return `ceil(wt/${rule.perKg}kg) × ${formatCurrency(rule.perKgCharge)} | min ${minVal}`;
+    case "DISTANCE_BASE_WEIGHT": {
+      const ms = rule.zoneMilestone;
+      const label = ms ? `${ms.minKm}-${ms.maxKm}km` : "-";
+      return `Slab ${label} | ceil(wt/${rule.perKg}kg) × ${formatCurrency(rule.perKgCharge)} | min ${minVal}`;
+    }
     default:
       return "-";
   }
+}
+
+// ============================================
+// SHARED FIELD: Type Selector (ChargesType / PincodeType)
+// ============================================
+function TypeSelector({
+  partnerId,
+  typeMode,
+  chargesTypeId,
+  pincodeTypeId,
+  onTypeModeChange,
+  onChargesTypeChange,
+  onPincodeTypeChange,
+  errors,
+}: {
+  partnerId: string;
+  typeMode: "CHARGES_TYPE" | "PINCODE_TYPE" | "";
+  chargesTypeId: string;
+  pincodeTypeId: string;
+  onTypeModeChange: (v: string) => void;
+  onChargesTypeChange: (v: string) => void;
+  onPincodeTypeChange: (v: string) => void;
+  errors: any;
+}) {
+  const { data: chargesTypesData } = useGetChargesTypesQuery(
+    { partnerId, isActive: true },
+    { skip: !partnerId || typeMode !== "CHARGES_TYPE" },
+  );
+  const chargesTypes = (chargesTypesData as any)?.data || [];
+
+  const { data: pincodeTypesData } = useGetPincodeTypesQuery(
+    { isActive: true },
+    { skip: typeMode !== "PINCODE_TYPE" },
+  );
+  const pincodeTypes = (pincodeTypesData as any)?.data || [];
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label>Select Type *</Label>
+        <Select value={typeMode} onValueChange={onTypeModeChange}>
+          <SelectTrigger className={errors.typeMode ? "border-red-500" : ""}>
+            <SelectValue placeholder="Choose type category..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="CHARGES_TYPE">Charges Types</SelectItem>
+            <SelectItem value="PINCODE_TYPE">Pincode Types</SelectItem>
+          </SelectContent>
+        </Select>
+        {errors.typeMode && (
+          <p className="text-red-500 text-sm">{errors.typeMode}</p>
+        )}
+      </div>
+
+      {typeMode === "CHARGES_TYPE" && (
+        <div className="space-y-1">
+          <Label>Charges Type *</Label>
+          <Select value={chargesTypeId} onValueChange={onChargesTypeChange}>
+            <SelectTrigger
+              className={errors.chargesTypeId ? "border-red-500" : ""}
+            >
+              <SelectValue placeholder="Select charges type..." />
+            </SelectTrigger>
+            <SelectContent>
+              {chargesTypes.map((ct: any) => (
+                <SelectItem key={ct.id} value={ct.id}>
+                  {ct.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.chargesTypeId && (
+            <p className="text-red-500 text-sm">{errors.chargesTypeId}</p>
+          )}
+        </div>
+      )}
+
+      {typeMode === "PINCODE_TYPE" && (
+        <div className="space-y-1">
+          <Label>Pincode Type *</Label>
+          <Select value={pincodeTypeId} onValueChange={onPincodeTypeChange}>
+            <SelectTrigger
+              className={errors.pincodeTypeId ? "border-red-500" : ""}
+            >
+              <SelectValue placeholder="Select pincode type..." />
+            </SelectTrigger>
+            <SelectContent>
+              {pincodeTypes.map((pt: any) => (
+                <SelectItem key={pt.id} value={pt.id}>
+                  {pt.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.pincodeTypeId && (
+            <p className="text-red-500 text-sm">{errors.pincodeTypeId}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ============================================
@@ -148,82 +231,63 @@ function CreateChargeRuleModal({
   onClose: () => void;
   partners: any[];
 }) {
-  const [formData, setFormData] = useState<any>({
+  const initialForm = {
     partnerId: "",
-    kind: "",
     base: "",
+    typeMode: "" as "CHARGES_TYPE" | "PINCODE_TYPE" | "",
     chargesTypeId: "",
     pincodeTypeId: "",
-    fromAmount: "",
-    toAmount: "",
-    charge: "",
-    calcType: "FLAT",
-    minKg: "",
-    maxKg: "",
+    // Shared
+    minValue: "",
+    // INVOICE_VALUE
+    percentageValue: "",
+    // WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT
+    perKg: "",
+    perKgCharge: "",
+    // ZONE_TO_ZONE_WEIGHT
     fromZoneId: "",
     toZoneId: "",
-    minWeightKg: "",
-    addonWeightKg: "",
-    weightCharge: "",
-    addonCharge: "",
-    division: "",
-    fromKm: "",
-    toKm: "",
+    // DISTANCE_BASE_WEIGHT - multiple milestones support
+    selectedMilestones: [] as string[], // milestone IDs
+    milestonePerKg: {} as Record<string, string>,
+    milestonePerKgCharge: {} as Record<string, string>,
     isActive: true,
-  });
-  const [errors, setErrors] = useState<any>({});
+  };
 
+  const [formData, setFormData] = useState<any>(initialForm);
+  const [errors, setErrors] = useState<any>({});
   const [createRule, { isLoading }] = useCreateChargeRuleMutation();
 
-  // Fetch charges types for selected partner
-  const { data: chargesTypesData } = useGetChargesTypesQuery(
-    { partnerId: formData.partnerId, isActive: true },
-    { skip: !formData.partnerId },
-  );
-  const chargesTypes = (chargesTypesData as any)?.data || [];
-
-  // Fetch pincode types
-  const { data: pincodeTypesData } = useGetPincodeTypesQuery(
-    { isActive: true },
-    { skip: formData.kind !== "GEOLOGICAL" },
-  );
-  const pincodeTypes = (pincodeTypesData as any)?.data || [];
-
-  // Fetch zones (GEOLOGICAL type) for selected partner
-  const { data: zonesData } = useGetZonesQuery(
+  // Geological zones for Zone-to-Zone
+  const { data: geoZonesData } = useGetZonesQuery(
     { partnerId: formData.partnerId, status: true },
-    { skip: !formData.partnerId || formData.base !== "ZONE_TO_ZONE_WEIGHT" },
+    {
+      skip: !formData.partnerId || formData.base !== "ZONE_TO_ZONE_WEIGHT",
+    },
   );
-  const zones =
-    (zonesData as any)?.data?.zones?.filter?.(
+  const geoZones =
+    (geoZonesData as any)?.data?.zones?.filter?.(
       (z: any) => z.zoneType === "GEOLOGICAL",
     ) || [];
 
+  // Distance zones with milestones
+  const { data: distZonesData } = useGetZonesQuery(
+    { partnerId: formData.partnerId, status: true },
+    {
+      skip: !formData.partnerId || formData.base !== "DISTANCE_BASE_WEIGHT",
+    },
+  );
+  const distanceZones =
+    (distZonesData as any)?.data?.zones?.filter?.(
+      (z: any) => z.zoneType === "DISTANCE",
+    ) || [];
+  const allMilestones = distanceZones.flatMap((z: any) =>
+    (z.milestones || []).map((m: any) => ({ ...m, zoneName: z.name })),
+  );
+
   useEffect(() => {
     if (open) {
-      setFormData({
-        partnerId: "",
-        kind: "",
-        base: "",
-        chargesTypeId: "",
-        pincodeTypeId: "",
-        fromAmount: "",
-        toAmount: "",
-        charge: "",
-        calcType: "FLAT",
-        minKg: "",
-        maxKg: "",
-        fromZoneId: "",
-        toZoneId: "",
-        minWeightKg: "",
-        addonWeightKg: "",
-        weightCharge: "",
-        addonCharge: "",
-        division: "",
-        fromKm: "",
-        toKm: "",
-        isActive: true,
-      });
+      setFormData(initialForm);
       setErrors({});
     }
   }, [open]);
@@ -231,88 +295,140 @@ function CreateChargeRuleModal({
   const handleChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev: any) => ({ ...prev, [field]: null }));
-
-    // Reset dependent fields
     if (field === "partnerId") {
       setFormData((prev: any) => ({
         ...prev,
-        [field]: value,
+        partnerId: value,
         chargesTypeId: "",
         fromZoneId: "",
         toZoneId: "",
+        selectedMilestones: [],
       }));
     }
-    if (field === "kind") {
+    if (field === "base") {
       setFormData((prev: any) => ({
         ...prev,
-        [field]: value,
+        base: value,
+        typeMode: "",
         chargesTypeId: "",
         pincodeTypeId: "",
+        fromZoneId: "",
+        toZoneId: "",
+        selectedMilestones: [],
+        milestonePerKg: {},
+        milestonePerKgCharge: {},
       }));
     }
   };
 
-  const handleSubmit = async () => {
-    const newErrors: any = {};
-    if (!formData.partnerId) newErrors.partnerId = "Partner is required";
-    if (!formData.kind) newErrors.kind = "Kind is required";
-    if (!formData.base) newErrors.base = "Base is required";
+  const toggleMilestone = (milestoneId: string) => {
+    setFormData((prev: any) => {
+      const selected: string[] = prev.selectedMilestones;
+      if (selected.includes(milestoneId)) {
+        const newSelected = selected.filter((id: string) => id !== milestoneId);
+        const newPerKg = { ...prev.milestonePerKg };
+        const newPerKgCharge = { ...prev.milestonePerKgCharge };
+        delete newPerKg[milestoneId];
+        delete newPerKgCharge[milestoneId];
+        return {
+          ...prev,
+          selectedMilestones: newSelected,
+          milestonePerKg: newPerKg,
+          milestonePerKgCharge: newPerKgCharge,
+        };
+      }
+      return { ...prev, selectedMilestones: [...selected, milestoneId] };
+    });
+  };
 
-    if (formData.kind === "PARTNER_CHARGES_TYPE" && !formData.chargesTypeId)
-      newErrors.chargesTypeId = "Charge type is required";
-    if (formData.kind === "GEOLOGICAL" && !formData.pincodeTypeId)
-      newErrors.pincodeTypeId = "Pincode type is required";
+  const validate = () => {
+    const e: any = {};
+    if (!formData.partnerId) e.partnerId = "Partner is required";
+    if (!formData.base) e.base = "Base is required";
+    if (!formData.minValue && formData.minValue !== 0)
+      e.minValue = "Min Value is required";
 
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
-
-    const payload: CreateChargeRuleRequest = {
-      partnerId: formData.partnerId,
-      kind: formData.kind as ChargeRuleKind,
-      base: formData.base as ChargeRuleBase,
-      isActive: formData.isActive,
-    };
-
-    if (formData.kind === "PARTNER_CHARGES_TYPE")
-      payload.chargesTypeId = formData.chargesTypeId;
-    if (formData.kind === "GEOLOGICAL")
-      payload.pincodeTypeId = formData.pincodeTypeId;
-
-    if (formData.base === "INVOICE_VALUE") {
-      payload.fromAmount = parseFloat(formData.fromAmount) || 0;
-      payload.toAmount = parseFloat(formData.toAmount) || 0;
-      payload.charge = parseFloat(formData.charge) || 0;
-      payload.calcType = formData.calcType as ChargeCalcType;
+    if (formData.base === "INVOICE_VALUE" || formData.base === "WEIGHT") {
+      if (!formData.typeMode) e.typeMode = "Select a type category";
+      if (formData.typeMode === "CHARGES_TYPE" && !formData.chargesTypeId)
+        e.chargesTypeId = "Charges Type is required";
+      if (formData.typeMode === "PINCODE_TYPE" && !formData.pincodeTypeId)
+        e.pincodeTypeId = "Pincode Type is required";
     }
 
-    if (formData.base === "WEIGHT") {
-      payload.minKg = parseFloat(formData.minKg) || 0;
-      payload.maxKg = parseFloat(formData.maxKg) || 0;
-      payload.charge = parseFloat(formData.charge) || 0;
-      payload.calcType = formData.calcType as ChargeCalcType;
+    if (formData.base === "INVOICE_VALUE") {
+      if (!formData.percentageValue) e.percentageValue = "Required";
+    }
+
+    if (formData.base === "WEIGHT" || formData.base === "ZONE_TO_ZONE_WEIGHT") {
+      if (!formData.perKg) e.perKg = "Per KG is required";
+      if (!formData.perKgCharge) e.perKgCharge = "Per KG Charge is required";
     }
 
     if (formData.base === "ZONE_TO_ZONE_WEIGHT") {
-      payload.fromZoneId = formData.fromZoneId;
-      payload.toZoneId = formData.toZoneId;
-      payload.minWeightKg = parseFloat(formData.minWeightKg) || 0;
-      payload.addonWeightKg = parseFloat(formData.addonWeightKg) || 0;
-      payload.weightCharge = parseFloat(formData.weightCharge) || 0;
-      payload.addonCharge = parseFloat(formData.addonCharge) || 0;
+      if (!formData.fromZoneId) e.fromZoneId = "From Zone is required";
+      if (!formData.toZoneId) e.toZoneId = "To Zone is required";
     }
 
     if (formData.base === "DISTANCE_BASE_WEIGHT") {
-      payload.division = formData.division;
-      payload.fromKm = parseInt(formData.fromKm) || 0;
-      payload.toKm = parseInt(formData.toKm) || 0;
-      payload.minWeightKg = parseFloat(formData.minWeightKg) || 0;
-      payload.addonWeightKg = parseFloat(formData.addonWeightKg) || 0;
-      payload.weightCharge = parseFloat(formData.weightCharge) || 0;
-      payload.addonCharge = parseFloat(formData.addonCharge) || 0;
+      if (formData.selectedMilestones.length === 0)
+        e.milestones = "Select at least one distance slab";
     }
 
+    return e;
+  };
+
+  const handleSubmit = async () => {
+    const newErrors = validate();
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+
+    const basePayload: Partial<CreateChargeRuleRequest> = {
+      partnerId: formData.partnerId,
+      base: formData.base as ChargeRuleBase,
+      minValue: parseFloat(formData.minValue) || 0,
+      isActive: formData.isActive,
+    };
+
+    if (formData.typeMode === "CHARGES_TYPE")
+      basePayload.chargesTypeId = formData.chargesTypeId;
+    if (formData.typeMode === "PINCODE_TYPE")
+      basePayload.pincodeTypeId = formData.pincodeTypeId;
+
     try {
-      await createRule(payload).unwrap();
+      if (formData.base === "INVOICE_VALUE") {
+        await createRule({
+          ...(basePayload as CreateChargeRuleRequest),
+          percentageValue: parseFloat(formData.percentageValue) || 0,
+        }).unwrap();
+      } else if (formData.base === "WEIGHT") {
+        await createRule({
+          ...(basePayload as CreateChargeRuleRequest),
+          perKg: parseFloat(formData.perKg) || 1,
+          perKgCharge: parseFloat(formData.perKgCharge) || 0,
+        }).unwrap();
+      } else if (formData.base === "ZONE_TO_ZONE_WEIGHT") {
+        await createRule({
+          ...(basePayload as CreateChargeRuleRequest),
+          fromZoneId: formData.fromZoneId,
+          toZoneId: formData.toZoneId,
+          perKg: parseFloat(formData.perKg) || 1,
+          perKgCharge: parseFloat(formData.perKgCharge) || 0,
+        }).unwrap();
+      } else if (formData.base === "DISTANCE_BASE_WEIGHT") {
+        // Create one rule per selected milestone
+        await Promise.all(
+          formData.selectedMilestones.map((msId: string) =>
+            createRule({
+              ...(basePayload as CreateChargeRuleRequest),
+              zoneMilestoneId: msId,
+              perKg: parseFloat(formData.milestonePerKg[msId] || "1") || 1,
+              perKgCharge:
+                parseFloat(formData.milestonePerKgCharge[msId] || "0") || 0,
+            }).unwrap(),
+          ),
+        );
+      }
       onClose();
     } catch (err: any) {
       setErrors({
@@ -334,9 +450,9 @@ function CreateChargeRuleModal({
         </DialogHeader>
 
         <div className="space-y-5 py-4">
-          {/* Partner Selection */}
+          {/* Partner */}
           <div className="space-y-2">
-            <Label>Select Partner *</Label>
+            <Label>Partner *</Label>
             <Select
               value={formData.partnerId}
               onValueChange={(v) => handleChange("partnerId", v)}
@@ -344,10 +460,10 @@ function CreateChargeRuleModal({
               <SelectTrigger
                 className={errors.partnerId ? "border-red-500" : ""}
               >
-                <SelectValue placeholder="Search and select partner..." />
+                <SelectValue placeholder="Select partner..." />
               </SelectTrigger>
               <SelectContent>
-                {partners.map((p) => (
+                {partners.map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.displayName || p.name}
                   </SelectItem>
@@ -359,86 +475,7 @@ function CreateChargeRuleModal({
             )}
           </div>
 
-          {/* Kind Selection */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Charge Kind *</Label>
-              <Select
-                value={formData.kind}
-                onValueChange={(v) => handleChange("kind", v)}
-              >
-                <SelectTrigger className={errors.kind ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PARTNER_CHARGES_TYPE">
-                    Partner Charge Type
-                  </SelectItem>
-                  <SelectItem value="GEOLOGICAL">Geological Charges</SelectItem>
-                  <SelectItem value="ADDON">Addon Charges</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.kind && (
-                <p className="text-red-500 text-sm">{errors.kind}</p>
-              )}
-            </div>
-
-            {/* Charges Type (when kind = PARTNER_CHARGES_TYPE) */}
-            {formData.kind === "PARTNER_CHARGES_TYPE" && formData.partnerId && (
-              <div className="space-y-2">
-                <Label>Charges Type *</Label>
-                <Select
-                  value={formData.chargesTypeId}
-                  onValueChange={(v) => handleChange("chargesTypeId", v)}
-                >
-                  <SelectTrigger
-                    className={errors.chargesTypeId ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select charges type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {chargesTypes.map((ct: any) => (
-                      <SelectItem key={ct.id} value={ct.id}>
-                        {ct.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.chargesTypeId && (
-                  <p className="text-red-500 text-sm">{errors.chargesTypeId}</p>
-                )}
-              </div>
-            )}
-
-            {/* Pincode Type (when kind = GEOLOGICAL) */}
-            {formData.kind === "GEOLOGICAL" && (
-              <div className="space-y-2">
-                <Label>Pincode Type *</Label>
-                <Select
-                  value={formData.pincodeTypeId}
-                  onValueChange={(v) => handleChange("pincodeTypeId", v)}
-                >
-                  <SelectTrigger
-                    className={errors.pincodeTypeId ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select pincode type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pincodeTypes.map((pt: any) => (
-                      <SelectItem key={pt.id} value={pt.id}>
-                        {pt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.pincodeTypeId && (
-                  <p className="text-red-500 text-sm">{errors.pincodeTypeId}</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Base Selection */}
+          {/* Charges Base */}
           <div className="space-y-2">
             <Label>Charges Base *</Label>
             <Select
@@ -452,10 +489,10 @@ function CreateChargeRuleModal({
                 <SelectItem value="INVOICE_VALUE">Invoice Value</SelectItem>
                 <SelectItem value="WEIGHT">Weight</SelectItem>
                 <SelectItem value="ZONE_TO_ZONE_WEIGHT">
-                  Weight (Zone to Zone)
+                  Weight Zone-to-Zone
                 </SelectItem>
                 <SelectItem value="DISTANCE_BASE_WEIGHT">
-                  Weight (Distance Based)
+                  Weight Distance Based
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -464,323 +501,320 @@ function CreateChargeRuleModal({
             )}
           </div>
 
-          {/* Conditional Fields */}
+          {/* Type selector for INVOICE_VALUE and WEIGHT */}
+          {(formData.base === "INVOICE_VALUE" ||
+            formData.base === "WEIGHT") && (
+            <div className="p-4 bg-muted/40 rounded-lg space-y-3">
+              <TypeSelector
+                partnerId={formData.partnerId}
+                typeMode={formData.typeMode}
+                chargesTypeId={formData.chargesTypeId}
+                pincodeTypeId={formData.pincodeTypeId}
+                onTypeModeChange={(v) => handleChange("typeMode", v)}
+                onChargesTypeChange={(v) =>
+                  setFormData((p: any) => ({ ...p, chargesTypeId: v }))
+                }
+                onPincodeTypeChange={(v) =>
+                  setFormData((p: any) => ({ ...p, pincodeTypeId: v }))
+                }
+                errors={errors}
+              />
+            </div>
+          )}
+
+          {/* Shared: Min Value */}
+          {formData.base && (
+            <div className="space-y-2">
+              <Label>Min Value (₹) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                value={formData.minValue}
+                onChange={(e) => handleChange("minValue", e.target.value)}
+                className={errors.minValue ? "border-red-500" : ""}
+              />
+              {errors.minValue && (
+                <p className="text-red-500 text-sm">{errors.minValue}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                final = max(minValue, computed)
+              </p>
+            </div>
+          )}
+
+          {/* INVOICE_VALUE specific */}
           {formData.base === "INVOICE_VALUE" && (
-            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+            <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-muted-foreground">
-                Invoice Value Slab
+                Invoice Value formula: max(minValue, percentage% × invoiceValue)
               </p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>From Amount (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0"
-                    value={formData.fromAmount}
-                    onChange={(e) => handleChange("fromAmount", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>To Amount (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="10000"
-                    value={formData.toAmount}
-                    onChange={(e) => handleChange("toAmount", e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Charge</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="50"
-                    value={formData.charge}
-                    onChange={(e) => handleChange("charge", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Calc Type</Label>
-                  <Select
-                    value={formData.calcType}
-                    onValueChange={(v) => handleChange("calcType", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FLAT">Flat (₹)</SelectItem>
-                      <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-1">
+                <Label>Percentage Value (%) *</Label>
+                <Input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  placeholder="2.5"
+                  value={formData.percentageValue}
+                  onChange={(e) =>
+                    handleChange("percentageValue", e.target.value)
+                  }
+                  className={errors.percentageValue ? "border-red-500" : ""}
+                />
+                {errors.percentageValue && (
+                  <p className="text-red-500 text-sm">
+                    {errors.percentageValue}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
+          {/* WEIGHT specific */}
           {formData.base === "WEIGHT" && (
-            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+            <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-muted-foreground">
-                Weight Slab
+                Formula: max(minValue, ceil(weight / perKg) × perKgCharge)
               </p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Min Kg</Label>
+                  <Label>Per KG (kg) *</Label>
                   <Input
                     type="number"
                     step="0.001"
-                    min="0"
-                    placeholder="0"
-                    value={formData.minKg}
-                    onChange={(e) => handleChange("minKg", e.target.value)}
+                    min="0.001"
+                    placeholder="1"
+                    value={formData.perKg}
+                    onChange={(e) => handleChange("perKg", e.target.value)}
+                    className={errors.perKg ? "border-red-500" : ""}
                   />
+                  {errors.perKg && (
+                    <p className="text-red-500 text-sm">{errors.perKg}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label>Max Kg</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    placeholder="5"
-                    value={formData.maxKg}
-                    onChange={(e) => handleChange("maxKg", e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Charge</Label>
+                  <Label>Per KG Charge (₹) *</Label>
                   <Input
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="100"
-                    value={formData.charge}
-                    onChange={(e) => handleChange("charge", e.target.value)}
+                    placeholder="30"
+                    value={formData.perKgCharge}
+                    onChange={(e) =>
+                      handleChange("perKgCharge", e.target.value)
+                    }
+                    className={errors.perKgCharge ? "border-red-500" : ""}
                   />
-                </div>
-                <div className="space-y-1">
-                  <Label>Calc Type</Label>
-                  <Select
-                    value={formData.calcType}
-                    onValueChange={(v) => handleChange("calcType", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FLAT">Flat (₹)</SelectItem>
-                      <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {errors.perKgCharge && (
+                    <p className="text-red-500 text-sm">{errors.perKgCharge}</p>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* ZONE_TO_ZONE_WEIGHT specific */}
           {formData.base === "ZONE_TO_ZONE_WEIGHT" && (
-            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+            <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-muted-foreground">
-                Zone to Zone Weight
+                Zone-to-Zone: Formula: max(minValue, ceil(weight / perKg) ×
+                perKgCharge)
               </p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>From Zone</Label>
+                  <Label>From Zone *</Label>
                   <Select
                     value={formData.fromZoneId}
                     onValueChange={(v) => handleChange("fromZoneId", v)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={errors.fromZoneId ? "border-red-500" : ""}
+                    >
                       <SelectValue placeholder="Select zone..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {zones.map((z: any) => (
+                      {geoZones.map((z: any) => (
                         <SelectItem key={z.id} value={z.id}>
                           {z.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.fromZoneId && (
+                    <p className="text-red-500 text-sm">{errors.fromZoneId}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label>To Zone</Label>
+                  <Label>To Zone *</Label>
                   <Select
                     value={formData.toZoneId}
                     onValueChange={(v) => handleChange("toZoneId", v)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={errors.toZoneId ? "border-red-500" : ""}
+                    >
                       <SelectValue placeholder="Select zone..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {zones.map((z: any) => (
+                      {geoZones.map((z: any) => (
                         <SelectItem key={z.id} value={z.id}>
                           {z.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.toZoneId && (
+                    <p className="text-red-500 text-sm">{errors.toZoneId}</p>
+                  )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Minimum Weight (kg)</Label>
+                  <Label>Per KG (kg) *</Label>
                   <Input
                     type="number"
                     step="0.001"
-                    min="0"
-                    value={formData.minWeightKg}
-                    onChange={(e) =>
-                      handleChange("minWeightKg", e.target.value)
-                    }
+                    min="0.001"
+                    placeholder="1"
+                    value={formData.perKg}
+                    onChange={(e) => handleChange("perKg", e.target.value)}
+                    className={errors.perKg ? "border-red-500" : ""}
                   />
+                  {errors.perKg && (
+                    <p className="text-red-500 text-sm">{errors.perKg}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label>Addon Weight (kg)</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={formData.addonWeightKg}
-                    onChange={(e) =>
-                      handleChange("addonWeightKg", e.target.value)
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Weight Charge (₹)</Label>
+                  <Label>Per KG Charge (₹) *</Label>
                   <Input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={formData.weightCharge}
+                    placeholder="30"
+                    value={formData.perKgCharge}
                     onChange={(e) =>
-                      handleChange("weightCharge", e.target.value)
+                      handleChange("perKgCharge", e.target.value)
                     }
+                    className={errors.perKgCharge ? "border-red-500" : ""}
                   />
-                </div>
-                <div className="space-y-1">
-                  <Label>Addon Charge (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.addonCharge}
-                    onChange={(e) =>
-                      handleChange("addonCharge", e.target.value)
-                    }
-                  />
+                  {errors.perKgCharge && (
+                    <p className="text-red-500 text-sm">{errors.perKgCharge}</p>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* DISTANCE_BASE_WEIGHT specific */}
           {formData.base === "DISTANCE_BASE_WEIGHT" && (
-            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+            <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-muted-foreground">
-                Distance Based Weight
+                Distance Slabs — select milestones and set perKg/charge per
+                slab. One rule will be created per selected milestone.
               </p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <Label>Division</Label>
-                  <Input
-                    placeholder="e.g., A"
-                    value={formData.division}
-                    onChange={(e) => handleChange("division", e.target.value)}
-                  />
+              {errors.milestones && (
+                <p className="text-red-500 text-sm">{errors.milestones}</p>
+              )}
+              {allMilestones.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">
+                  No distance zone milestones found for this partner. Create a
+                  DISTANCE zone first.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {allMilestones.map((ms: any) => {
+                    const selected = formData.selectedMilestones.includes(
+                      ms.id,
+                    );
+                    return (
+                      <div
+                        key={ms.id}
+                        className={`border rounded-lg p-3 space-y-2 cursor-pointer transition-colors ${selected ? "border-primary bg-primary/5" : "border-border"}`}
+                        onClick={() => toggleMilestone(ms.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            readOnly
+                            className="h-4 w-4 pointer-events-none"
+                          />
+                          <span className="font-medium text-sm">
+                            {ms.zoneName} — {ms.minKm}-{ms.maxKm} km (
+                            {ms.suffix})
+                          </span>
+                        </div>
+                        {selected && (
+                          <div
+                            className="grid grid-cols-2 gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="space-y-1">
+                              <Label className="text-xs">Per KG (kg)</Label>
+                              <Input
+                                type="number"
+                                step="0.001"
+                                min="0.001"
+                                placeholder="1"
+                                value={formData.milestonePerKg[ms.id] || ""}
+                                onChange={(e) =>
+                                  setFormData((p: any) => ({
+                                    ...p,
+                                    milestonePerKg: {
+                                      ...p.milestonePerKg,
+                                      [ms.id]: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">
+                                Per KG Charge (₹)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0"
+                                value={
+                                  formData.milestonePerKgCharge[ms.id] || ""
+                                }
+                                onChange={(e) =>
+                                  setFormData((p: any) => ({
+                                    ...p,
+                                    milestonePerKgCharge: {
+                                      ...p.milestonePerKgCharge,
+                                      [ms.id]: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="space-y-1">
-                  <Label>From KM</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.fromKm}
-                    onChange={(e) => handleChange("fromKm", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>To KM</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.toKm}
-                    onChange={(e) => handleChange("toKm", e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Minimum Weight (kg)</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={formData.minWeightKg}
-                    onChange={(e) =>
-                      handleChange("minWeightKg", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Addon Weight (kg)</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={formData.addonWeightKg}
-                    onChange={(e) =>
-                      handleChange("addonWeightKg", e.target.value)
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Weight Charge (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.weightCharge}
-                    onChange={(e) =>
-                      handleChange("weightCharge", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Addon Charge (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.addonCharge}
-                    onChange={(e) =>
-                      handleChange("addonCharge", e.target.value)
-                    }
-                  />
-                </div>
-              </div>
+              )}
             </div>
           )}
 
-          {/* Status */}
-          <div className="flex items-center gap-3">
-            <Label>Active</Label>
-            <input
-              type="checkbox"
-              checked={formData.isActive}
-              onChange={(e) => handleChange("isActive", e.target.checked)}
-              className="h-4 w-4"
-            />
-          </div>
+          {/* Active toggle */}
+          {formData.base && (
+            <div className="flex items-center gap-3">
+              <Label>Active</Label>
+              <input
+                type="checkbox"
+                checked={formData.isActive}
+                onChange={(e) => handleChange("isActive", e.target.checked)}
+                className="h-4 w-4"
+              />
+            </div>
+          )}
 
           {errors.submit && (
             <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
@@ -841,19 +875,10 @@ function ViewEditChargeRuleModal({
   useEffect(() => {
     if (rule) {
       setFormData({
-        fromAmount: rule.fromAmount?.toString() || "",
-        toAmount: rule.toAmount?.toString() || "",
-        charge: rule.charge?.toString() || "",
-        calcType: rule.calcType || "FLAT",
-        minKg: rule.minKg?.toString() || "",
-        maxKg: rule.maxKg?.toString() || "",
-        minWeightKg: rule.minWeightKg?.toString() || "",
-        addonWeightKg: rule.addonWeightKg?.toString() || "",
-        weightCharge: rule.weightCharge?.toString() || "",
-        addonCharge: rule.addonCharge?.toString() || "",
-        division: rule.division || "",
-        fromKm: rule.fromKm?.toString() || "",
-        toKm: rule.toKm?.toString() || "",
+        minValue: rule.minValue?.toString() || "",
+        percentageValue: rule.percentageValue?.toString() || "",
+        perKg: rule.perKg?.toString() || "",
+        perKgCharge: rule.perKgCharge?.toString() || "",
         isActive: rule.isActive,
       });
     }
@@ -873,41 +898,22 @@ function ViewEditChargeRuleModal({
 
   const handleSave = async () => {
     if (!ruleId || !rule) return;
-
-    const payload: any = {};
+    const payload: any = {
+      minValue: parseFloat(formData.minValue) || 0,
+      isActive: formData.isActive,
+    };
 
     if (rule.base === "INVOICE_VALUE") {
-      payload.fromAmount = parseFloat(formData.fromAmount) || 0;
-      payload.toAmount = parseFloat(formData.toAmount) || 0;
-      payload.charge = parseFloat(formData.charge) || 0;
-      payload.calcType = formData.calcType;
+      payload.percentageValue = parseFloat(formData.percentageValue) || 0;
     }
-
-    if (rule.base === "WEIGHT") {
-      payload.minKg = parseFloat(formData.minKg) || 0;
-      payload.maxKg = parseFloat(formData.maxKg) || 0;
-      payload.charge = parseFloat(formData.charge) || 0;
-      payload.calcType = formData.calcType;
+    if (
+      rule.base === "WEIGHT" ||
+      rule.base === "ZONE_TO_ZONE_WEIGHT" ||
+      rule.base === "DISTANCE_BASE_WEIGHT"
+    ) {
+      payload.perKg = parseFloat(formData.perKg) || 1;
+      payload.perKgCharge = parseFloat(formData.perKgCharge) || 0;
     }
-
-    if (rule.base === "ZONE_TO_ZONE_WEIGHT") {
-      payload.minWeightKg = parseFloat(formData.minWeightKg) || 0;
-      payload.addonWeightKg = parseFloat(formData.addonWeightKg) || 0;
-      payload.weightCharge = parseFloat(formData.weightCharge) || 0;
-      payload.addonCharge = parseFloat(formData.addonCharge) || 0;
-    }
-
-    if (rule.base === "DISTANCE_BASE_WEIGHT") {
-      payload.division = formData.division;
-      payload.fromKm = parseInt(formData.fromKm) || 0;
-      payload.toKm = parseInt(formData.toKm) || 0;
-      payload.minWeightKg = parseFloat(formData.minWeightKg) || 0;
-      payload.addonWeightKg = parseFloat(formData.addonWeightKg) || 0;
-      payload.weightCharge = parseFloat(formData.weightCharge) || 0;
-      payload.addonCharge = parseFloat(formData.addonCharge) || 0;
-    }
-
-    payload.isActive = formData.isActive;
 
     try {
       await updateRule({ id: ruleId, data: payload }).unwrap();
@@ -962,7 +968,7 @@ function ViewEditChargeRuleModal({
           </DialogTitle>
           <DialogDescription>
             {rule.partner?.displayName || rule.partner?.name} &bull;{" "}
-            {KIND_LABELS[rule.kind]} &bull; {BASE_LABELS[rule.base]}
+            {BASE_LABELS[rule.base]}
           </DialogDescription>
         </DialogHeader>
 
@@ -1007,19 +1013,15 @@ function ViewEditChargeRuleModal({
             </Button>
           </div>
 
-          {/* Meta Info */}
+          {/* Meta info */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-muted-foreground text-xs">Kind</Label>
-              <Badge className={getKindColor(rule.kind)}>
-                {KIND_LABELS[rule.kind]}
-              </Badge>
-            </div>
-            <div>
               <Label className="text-muted-foreground text-xs">Base</Label>
-              <Badge className={getBaseColor(rule.base)}>
-                {BASE_LABELS[rule.base]}
-              </Badge>
+              <div>
+                <Badge className={getBaseColor(rule.base)}>
+                  {BASE_LABELS[rule.base]}
+                </Badge>
+              </div>
             </div>
             {rule.chargesType && (
               <div>
@@ -1037,285 +1039,112 @@ function ViewEditChargeRuleModal({
                 <p className="font-medium text-sm">{rule.pincodeType.name}</p>
               </div>
             )}
+            {rule.zoneMilestone && (
+              <div>
+                <Label className="text-muted-foreground text-xs">
+                  Distance Slab
+                </Label>
+                <p className="font-medium text-sm">
+                  {rule.zoneMilestone.minKm}-{rule.zoneMilestone.maxKm} km (
+                  {rule.zoneMilestone.suffix})
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* View / Edit fields based on base type */}
+          {/* View/Edit fields */}
           {mode === "view" ? (
-            <div className="p-4 bg-muted/30 rounded-lg space-y-2">
-              <p className="text-sm font-medium">{getRuleSummary(rule)}</p>
-              {rule.base === "INVOICE_VALUE" && (
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">From:</span>{" "}
-                    {formatCurrency(rule.fromAmount)}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">To:</span>{" "}
-                    {formatCurrency(rule.toAmount)}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Charge:</span>{" "}
-                    {rule.calcType === "PERCENTAGE"
-                      ? `${rule.charge}%`
-                      : formatCurrency(rule.charge)}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>{" "}
-                    {rule.calcType}
-                  </div>
+            <div className="p-4 bg-muted/30 rounded-lg space-y-2 text-sm">
+              <p className="font-medium">{getRuleSummary(rule)}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-muted-foreground">Min Value:</span>{" "}
+                  {formatCurrency(rule.minValue)}
                 </div>
-              )}
-              {rule.base === "WEIGHT" && (
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                {rule.base === "INVOICE_VALUE" && (
                   <div>
-                    <span className="text-muted-foreground">Min:</span>{" "}
-                    {rule.minKg}kg
+                    <span className="text-muted-foreground">Percentage:</span>{" "}
+                    {rule.percentageValue}%
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Max:</span>{" "}
-                    {rule.maxKg}kg
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Charge:</span>{" "}
-                    {rule.calcType === "PERCENTAGE"
-                      ? `${rule.charge}%`
-                      : formatCurrency(rule.charge)}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>{" "}
-                    {rule.calcType}
-                  </div>
-                </div>
-              )}
-              {(rule.base === "ZONE_TO_ZONE_WEIGHT" ||
-                rule.base === "DISTANCE_BASE_WEIGHT") && (
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {rule.base === "DISTANCE_BASE_WEIGHT" && (
-                    <>
-                      <div>
-                        <span className="text-muted-foreground">Division:</span>{" "}
-                        {rule.division || "-"}
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">KM Range:</span>{" "}
-                        {rule.fromKm}-{rule.toKm}km
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground">Min Weight:</span>{" "}
-                    {rule.minWeightKg}kg
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Addon Weight:</span>{" "}
-                    {rule.addonWeightKg}kg
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">
-                      Weight Charge:
-                    </span>{" "}
-                    {formatCurrency(rule.weightCharge)}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Addon Charge:</span>{" "}
-                    {formatCurrency(rule.addonCharge)}
-                  </div>
-                </div>
-              )}
+                )}
+                {rule.base !== "INVOICE_VALUE" && (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Per KG:</span>{" "}
+                      {rule.perKg} kg
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">
+                        Per KG Charge:
+                      </span>{" "}
+                      {formatCurrency(rule.perKgCharge)}
+                    </div>
+                  </>
+                )}
+                {rule.base === "ZONE_TO_ZONE_WEIGHT" && (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">From Zone:</span>{" "}
+                      {rule.fromZoneId?.slice(0, 8)}...
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">To Zone:</span>{" "}
+                      {rule.toZoneId?.slice(0, 8)}...
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+              <div className="space-y-1">
+                <Label>Min Value (₹)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.minValue}
+                  onChange={(e) => handleChange("minValue", e.target.value)}
+                />
+              </div>
               {rule.base === "INVOICE_VALUE" && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>From Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.fromAmount}
-                        onChange={(e) =>
-                          handleChange("fromAmount", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>To Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.toAmount}
-                        onChange={(e) =>
-                          handleChange("toAmount", e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Charge</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.charge}
-                        onChange={(e) => handleChange("charge", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Calc Type</Label>
-                      <Select
-                        value={formData.calcType}
-                        onValueChange={(v) => handleChange("calcType", v)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="FLAT">Flat</SelectItem>
-                          <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </>
+                <div className="space-y-1">
+                  <Label>Percentage Value (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    value={formData.percentageValue}
+                    onChange={(e) =>
+                      handleChange("percentageValue", e.target.value)
+                    }
+                  />
+                </div>
               )}
-
-              {rule.base === "WEIGHT" && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Min Kg</Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        value={formData.minKg}
-                        onChange={(e) => handleChange("minKg", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Max Kg</Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        value={formData.maxKg}
-                        onChange={(e) => handleChange("maxKg", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Charge</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.charge}
-                        onChange={(e) => handleChange("charge", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Calc Type</Label>
-                      <Select
-                        value={formData.calcType}
-                        onValueChange={(v) => handleChange("calcType", v)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="FLAT">Flat</SelectItem>
-                          <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {(rule.base === "ZONE_TO_ZONE_WEIGHT" ||
+              {(rule.base === "WEIGHT" ||
+                rule.base === "ZONE_TO_ZONE_WEIGHT" ||
                 rule.base === "DISTANCE_BASE_WEIGHT") && (
-                <>
-                  {rule.base === "DISTANCE_BASE_WEIGHT" && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <Label>Division</Label>
-                        <Input
-                          value={formData.division}
-                          onChange={(e) =>
-                            handleChange("division", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>From KM</Label>
-                        <Input
-                          type="number"
-                          value={formData.fromKm}
-                          onChange={(e) =>
-                            handleChange("fromKm", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>To KM</Label>
-                        <Input
-                          type="number"
-                          value={formData.toKm}
-                          onChange={(e) => handleChange("toKm", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Min Weight (kg)</Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        value={formData.minWeightKg}
-                        onChange={(e) =>
-                          handleChange("minWeightKg", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Addon Weight (kg)</Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        value={formData.addonWeightKg}
-                        onChange={(e) =>
-                          handleChange("addonWeightKg", e.target.value)
-                        }
-                      />
-                    </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Per KG (kg)</Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={formData.perKg}
+                      onChange={(e) => handleChange("perKg", e.target.value)}
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Weight Charge</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.weightCharge}
-                        onChange={(e) =>
-                          handleChange("weightCharge", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Addon Charge</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.addonCharge}
-                        onChange={(e) =>
-                          handleChange("addonCharge", e.target.value)
-                        }
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <Label>Per KG Charge (₹)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.perKgCharge}
+                      onChange={(e) =>
+                        handleChange("perKgCharge", e.target.value)
+                      }
+                    />
                   </div>
-                </>
+                </div>
               )}
-
               {errors.submit && (
                 <p className="text-red-600 text-sm">{errors.submit}</p>
               )}
@@ -1361,7 +1190,6 @@ function ViewEditChargeRuleModal({
 // ============================================
 export default function ChargesPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterKind, setFilterKind] = useState("all");
   const [filterBase, setFilterBase] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPartner, setFilterPartner] = useState("all");
@@ -1382,7 +1210,6 @@ export default function ChargesPage() {
   } = useGetChargeRulesQuery({
     page,
     limit,
-    ...(filterKind !== "all" && { kind: filterKind as ChargeRuleKind }),
     ...(filterBase !== "all" && { base: filterBase as ChargeRuleBase }),
     ...(filterStatus !== "all" && { isActive: filterStatus === "active" }),
     ...(filterPartner !== "all" && { partnerId: filterPartner }),
@@ -1424,7 +1251,11 @@ export default function ChargesPage() {
   };
 
   const handleDelete = async (ruleId: string) => {
-    if (confirm("Are you sure you want to disable this charge rule?")) {
+    if (
+      confirm(
+        "Are you sure you want to permanently delete this charge rule? This cannot be undone.",
+      )
+    ) {
       try {
         await deleteRule(ruleId).unwrap();
       } catch (err) {
@@ -1481,7 +1312,7 @@ export default function ChargesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Invoice/Weight
+                Invoice / Weight
               </CardTitle>
               <DollarSign className="h-4 w-4 text-green-600" />
             </CardHeader>
@@ -1499,7 +1330,7 @@ export default function ChargesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Zone/Distance
+                Zone / Distance
               </CardTitle>
               <MapPin className="h-4 w-4 text-orange-600" />
             </CardHeader>
@@ -1552,19 +1383,6 @@ export default function ChargesPage() {
                       {p.displayName || p.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterKind} onValueChange={setFilterKind}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Kinds" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Kinds</SelectItem>
-                  <SelectItem value="PARTNER_CHARGES_TYPE">
-                    Partner Type
-                  </SelectItem>
-                  <SelectItem value="GEOLOGICAL">Geological</SelectItem>
-                  <SelectItem value="ADDON">Addon</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterBase} onValueChange={setFilterBase}>
@@ -1640,9 +1458,6 @@ export default function ChargesPage() {
                         Partner
                       </th>
                       <th className="py-3 px-4 text-left font-medium text-muted-foreground">
-                        Kind
-                      </th>
-                      <th className="py-3 px-4 text-left font-medium text-muted-foreground">
                         Type / Detail
                       </th>
                       <th className="py-3 px-4 text-left font-medium text-muted-foreground">
@@ -1675,15 +1490,12 @@ export default function ChargesPage() {
                               "-"}
                           </button>
                         </td>
-                        <td className="py-3 px-4">
-                          <Badge className={getKindColor(rule.kind)}>
-                            {KIND_LABELS[rule.kind] || rule.kind}
-                          </Badge>
-                        </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground">
                           {rule.chargesType?.name ||
                             rule.pincodeType?.name ||
-                            "-"}
+                            (rule.zoneMilestone
+                              ? `${rule.zoneMilestone.minKm}-${rule.zoneMilestone.maxKm}km`
+                              : "-")}
                         </td>
                         <td className="py-3 px-4">
                           <Badge

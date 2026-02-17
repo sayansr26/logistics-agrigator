@@ -72,9 +72,6 @@ async function getGeoZoneIds(partnerId, pincode) {
       pincode,
     );
     if (!result.success || !result.zones) return [];
-    // Filter to only GEOLOGICAL type zones
-    // The zone model has zoneType field, but getZonesByPincode doesn't expose it.
-    // We need to query zones directly.
     const zoneIds = result.zones.map((z) => z.id);
     if (zoneIds.length === 0) return [];
 
@@ -93,6 +90,48 @@ async function getGeoZoneIds(partnerId, pincode) {
       error: error.message,
     });
     return [];
+  }
+}
+
+/**
+ * Build a map of { [pincodeTypeId]: valueString } for a partner + pincode.
+ * Returns {} if the pincode is not assigned to this partner.
+ */
+async function getPincodeTypeValues(partnerId, pincodeCode) {
+  try {
+    const pincode = await prisma.pincode.findUnique({
+      where: { code: pincodeCode },
+      select: { id: true },
+    });
+    if (!pincode) return {};
+
+    const assign = await prisma.partnerPincodeAssign.findFirst({
+      where: {
+        partnerId,
+        pincodeId: pincode.id,
+        isActive: true,
+      },
+      include: {
+        pincodeTypeValues: {
+          select: { pincodeTypeId: true, value: true },
+        },
+      },
+    });
+
+    if (!assign) return {};
+
+    const map = {};
+    for (const v of assign.pincodeTypeValues) {
+      map[v.pincodeTypeId] = v.value;
+    }
+    return map;
+  } catch (error) {
+    logger.debug("Error getting pincode type values", {
+      partnerId,
+      pincodeCode,
+      error: error.message,
+    });
+    return {};
   }
 }
 
@@ -286,20 +325,28 @@ async function calculateRates(params) {
           };
         }
 
-        // Resolve GEOLOGICAL zone IDs for pickup and delivery
-        const [pickupGeoZoneIds, deliveryGeoZoneIds] = await Promise.all([
+        // Resolve GEOLOGICAL zone IDs and pincode-type values for both sides
+        const [
+          pickupGeoZoneIds,
+          deliveryGeoZoneIds,
+          pickupPincodeTypeValues,
+          deliveryPincodeTypeValues,
+        ] = await Promise.all([
           getGeoZoneIds(partner.id, fromPincode),
           getGeoZoneIds(partner.id, toPincode),
+          getPincodeTypeValues(partner.id, fromPincode),
+          getPincodeTypeValues(partner.id, toPincode),
         ]);
 
-        // Build shipment context for the new charges rule engine
+        // Build shipment context for the charge rule engine
         const chargeContext = {
           effectiveWeight,
           invoiceValue: declaredValue,
-          distanceKm: zoneResult.distanceKm,
-          divisionSuffix: zoneResult.zoneSuffix,
+          distanceMilestoneId: zoneResult.milestone?.id || null,
           pickupGeoZoneIds,
           deliveryGeoZoneIds,
+          pickupPincodeTypeValues,
+          deliveryPincodeTypeValues,
         };
 
         // Calculate charges using the new charge rule engine

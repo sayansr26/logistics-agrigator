@@ -52,7 +52,9 @@
       "Bash(grep:*)",
       "Bash(npx prisma generate:*)",
       "Bash(SHELL=/bin/bash bash:*)",
-      "Bash(pnpm run secure:build:*)"
+      "Bash(pnpm run secure:build:*)",
+      "Bash(npx --yes prisma migrate dev:*)",
+      "Bash(shasum:*)"
     ]
   },
   "sandbox": {
