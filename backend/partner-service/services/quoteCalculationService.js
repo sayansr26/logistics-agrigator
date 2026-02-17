@@ -18,6 +18,8 @@ const { getRedisClient } = require("../config/redis");
 let _distanceZoneService = null;
 let _chargesRuleCalcService = null;
 let _zoneCoverageValidationService = null;
+let _chargeDiscountPackageService = null;
+let _outletContextService = null;
 
 const getDistanceZoneService = () => {
   if (!_distanceZoneService) {
@@ -40,6 +42,20 @@ const getZoneCoverageValidationService = () => {
     _zoneCoverageValidationService = new ZoneCoverageValidationService();
   }
   return _zoneCoverageValidationService;
+};
+
+const getChargeDiscountPackageService = () => {
+  if (!_chargeDiscountPackageService) {
+    _chargeDiscountPackageService = require("./chargeDiscountPackageService");
+  }
+  return _chargeDiscountPackageService;
+};
+
+const getOutletContextService = () => {
+  if (!_outletContextService) {
+    _outletContextService = require("./outletContextService");
+  }
+  return _outletContextService;
 };
 
 // ==========================================
@@ -136,6 +152,174 @@ async function getPincodeTypeValues(partnerId, pincodeCode) {
 }
 
 // ==========================================
+// BADGE-BASED DISCOUNT APPLICATION
+// ==========================================
+
+/**
+ * Apply charge discount package to a breakdown.
+ *
+ * Walks each breakdown entry and applies the matching discount config.
+ * For non-PT entries: uses top-level ruleId.
+ * For PT entries: matches pickup.ruleId and delivery.ruleId independently.
+ *
+ * Returns enriched breakdown with originalCharge/discount/finalCharge fields.
+ *
+ * @param {Array} breakdown - chargesResult.breakdown
+ * @param {Object} discountPackage - package with items array
+ * @returns {{ breakdown: Array, totalDiscount: number, originalTotal: number, finalTotal: number }}
+ */
+function applyDiscountsToBreakdown(breakdown, discountPackage) {
+  if (
+    !discountPackage ||
+    !discountPackage.items ||
+    discountPackage.items.length === 0
+  ) {
+    return {
+      breakdown,
+      totalDiscount: 0,
+      originalTotal: breakdown.reduce(
+        (sum, b) => sum + (b.totalCharge || 0),
+        0,
+      ),
+      finalTotal: breakdown.reduce((sum, b) => sum + (b.totalCharge || 0), 0),
+    };
+  }
+
+  // Build lookup map: chargeRuleId → { discountType, discountValue }
+  const discountMap = new Map();
+  for (const item of discountPackage.items) {
+    discountMap.set(item.chargeRuleId, {
+      discountType: item.discountType,
+      discountValue: parseFloat(item.discountValue),
+    });
+  }
+
+  let totalDiscount = 0;
+  let originalTotal = 0;
+  let finalTotal = 0;
+
+  const enrichedBreakdown = breakdown.map((entry) => {
+    const isPincodeType = entry.category && entry.category.startsWith("PT:");
+
+    if (isPincodeType) {
+      // Handle pickup and delivery sides independently
+      let entryDiscount = 0;
+      const enrichedEntry = { ...entry };
+
+      if (entry.pickup && entry.pickup.ruleId) {
+        const config = discountMap.get(entry.pickup.ruleId);
+        if (config) {
+          const originalCharge = entry.pickup.totalCharge || 0;
+          const discountAmount = computeDiscountAmount(config, originalCharge);
+          const finalCharge = Math.max(0, originalCharge - discountAmount);
+          enrichedEntry.pickup = {
+            ...entry.pickup,
+            originalCharge,
+            discount: {
+              type: config.discountType,
+              value: config.discountValue,
+              amount: discountAmount,
+              packageId: discountPackage.id,
+              packageName: discountPackage.name,
+            },
+            finalCharge,
+          };
+          entryDiscount += discountAmount;
+        }
+      }
+
+      if (entry.delivery && entry.delivery.ruleId) {
+        const config = discountMap.get(entry.delivery.ruleId);
+        if (config) {
+          const originalCharge = entry.delivery.totalCharge || 0;
+          const discountAmount = computeDiscountAmount(config, originalCharge);
+          const finalCharge = Math.max(0, originalCharge - discountAmount);
+          enrichedEntry.delivery = {
+            ...entry.delivery,
+            originalCharge,
+            discount: {
+              type: config.discountType,
+              value: config.discountValue,
+              amount: discountAmount,
+              packageId: discountPackage.id,
+              packageName: discountPackage.name,
+            },
+            finalCharge,
+          };
+          entryDiscount += discountAmount;
+        }
+      }
+
+      const originalCharge = entry.totalCharge || 0;
+      const finalCharge = Math.max(0, originalCharge - entryDiscount);
+      enrichedEntry.originalCharge = originalCharge;
+      enrichedEntry.totalCharge = Math.round(finalCharge * 100) / 100;
+      enrichedEntry.discountAmount = Math.round(entryDiscount * 100) / 100;
+
+      totalDiscount += entryDiscount;
+      originalTotal += originalCharge;
+      finalTotal += finalCharge;
+
+      return enrichedEntry;
+    } else {
+      // Non-PT: use top-level ruleId
+      const ruleId = entry.ruleId;
+      const config = ruleId ? discountMap.get(ruleId) : null;
+      const originalCharge = entry.totalCharge || 0;
+
+      if (config) {
+        const discountAmount = computeDiscountAmount(config, originalCharge);
+        const finalCharge = Math.max(0, originalCharge - discountAmount);
+
+        totalDiscount += discountAmount;
+        originalTotal += originalCharge;
+        finalTotal += finalCharge;
+
+        return {
+          ...entry,
+          originalCharge,
+          discount: {
+            type: config.discountType,
+            value: config.discountValue,
+            amount: Math.round(discountAmount * 100) / 100,
+            packageId: discountPackage.id,
+            packageName: discountPackage.name,
+          },
+          totalCharge: Math.round(finalCharge * 100) / 100,
+          discountAmount: Math.round(discountAmount * 100) / 100,
+        };
+      }
+
+      originalTotal += originalCharge;
+      finalTotal += originalCharge;
+      return entry;
+    }
+  });
+
+  return {
+    breakdown: enrichedBreakdown,
+    totalDiscount: Math.round(totalDiscount * 100) / 100,
+    originalTotal: Math.round(originalTotal * 100) / 100,
+    finalTotal: Math.round(finalTotal * 100) / 100,
+  };
+}
+
+/**
+ * Compute discount amount given config and original charge.
+ * FLAT: min(value, originalCharge)
+ * PERCENTAGE: originalCharge * value / 100
+ */
+function computeDiscountAmount(config, originalCharge) {
+  if (config.discountType === "FLAT") {
+    return Math.min(config.discountValue, originalCharge);
+  }
+  if (config.discountType === "PERCENTAGE") {
+    return (originalCharge * config.discountValue) / 100;
+  }
+  return 0;
+}
+
+// ==========================================
 // MAIN QUOTE CALCULATION
 // ==========================================
 
@@ -229,6 +413,9 @@ async function checkServiceability(params) {
  * @param {number} [params.declaredValue] - Declared value of shipment
  * @param {string} [params.partnerId] - Calculate for specific partner only
  * @param {string} [params.sortBy='cheapest'] - Sort order (cheapest, highest)
+ * @param {Object} [params.userContext] - Authenticated user context for badge discounts
+ * @param {string} [params.userContext.userId] - User ID
+ * @param {string} [params.userContext.role] - User role (e.g. "outlet")
  * @returns {Promise<Object>} Rate calculation results with breakdown
  */
 async function calculateRates(params) {
@@ -242,6 +429,7 @@ async function calculateRates(params) {
     declaredValue = 0,
     partnerId,
     sortBy = "cheapest",
+    userContext,
   } = params;
 
   logger.info("Calculating rates", {
@@ -252,7 +440,34 @@ async function calculateRates(params) {
     partnerId,
   });
 
-  // Check cache
+  // Resolve outlet badge if user is an outlet user
+  let outletBadge = null;
+  const isOutletUser = userContext && userContext.role === "outlet";
+
+  if (isOutletUser && userContext.userId) {
+    try {
+      const outletContextService = getOutletContextService();
+      const outletData = await outletContextService.resolveOutletBadge(
+        userContext.userId,
+      );
+      if (outletData && outletData.badge) {
+        outletBadge = outletData.badge;
+        logger.debug("Outlet badge resolved for quote", {
+          userId: userContext.userId,
+          badge: outletBadge,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        "Failed to resolve outlet badge, continuing without discounts",
+        {
+          error: error.message,
+        },
+      );
+    }
+  }
+
+  // Check cache - skip when badge-based discounts apply
   const cacheKey = generateCacheKey({
     fromPincode,
     toPincode,
@@ -260,8 +475,9 @@ async function calculateRates(params) {
     paymentType,
   });
   const redis = getRedisClient();
+  const skipCache = !!outletBadge;
 
-  if (redis && !partnerId) {
+  if (redis && !partnerId && !skipCache) {
     try {
       const cached = await redis.get(cacheKey);
       if (cached) {
@@ -355,7 +571,57 @@ async function calculateRates(params) {
           chargeContext,
         );
 
-        const totalRate = chargesResult.totalCharge;
+        let totalRate = chargesResult.totalCharge;
+        let breakdownToUse = chargesResult.breakdown;
+        let discountInfo = null;
+
+        // Apply badge-based discounts if applicable
+        if (outletBadge) {
+          try {
+            const discountPackageService = getChargeDiscountPackageService();
+            const discountPackage =
+              await discountPackageService.getActivePackageForBadge(
+                partner.id,
+                outletBadge,
+              );
+
+            if (discountPackage) {
+              const discountResult = applyDiscountsToBreakdown(
+                chargesResult.breakdown,
+                discountPackage,
+              );
+
+              breakdownToUse = discountResult.breakdown;
+              totalRate = discountResult.finalTotal;
+
+              discountInfo = {
+                packageId: discountPackage.id,
+                packageName: discountPackage.name,
+                badge: outletBadge,
+                originalTotal: discountResult.originalTotal,
+                totalDiscount: discountResult.totalDiscount,
+                finalTotal: discountResult.finalTotal,
+              };
+
+              logger.debug("Badge discount applied", {
+                partnerId: partner.id,
+                badge: outletBadge,
+                originalTotal: discountResult.originalTotal,
+                discount: discountResult.totalDiscount,
+                finalTotal: discountResult.finalTotal,
+              });
+            }
+          } catch (discountError) {
+            logger.warn(
+              "Failed to apply badge discount, using undiscounted rate",
+              {
+                partnerId: partner.id,
+                badge: outletBadge,
+                error: discountError.message,
+              },
+            );
+          }
+        }
 
         return {
           partnerId: partner.id,
@@ -365,10 +631,13 @@ async function calculateRates(params) {
           zoneSuffix: zoneResult.zoneSuffix,
           zoneName: zoneResult.zone?.name,
           estimatedDays: partner.defaultDeliveryDays,
-          chargesBreakdown: chargesResult.breakdown,
+          chargesBreakdown: breakdownToUse,
           rulesEvaluated: chargesResult.rulesEvaluated,
           categoriesMatched: chargesResult.categoriesMatched,
           totalRate,
+          baseRate: totalRate,
+          breakdown: breakdownToUse,
+          ...(discountInfo && { discount: discountInfo }),
         };
       } catch (error) {
         logger.warn("Rate calculation failed for partner", {
@@ -435,8 +704,8 @@ async function calculateRates(params) {
     timestamp: new Date().toISOString(),
   };
 
-  // Cache the result
-  if (redis && !partnerId && serviceableRates.length > 0) {
+  // Cache the result (skip when badge discounts are applied)
+  if (redis && !partnerId && !skipCache && serviceableRates.length > 0) {
     try {
       await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
     } catch (error) {

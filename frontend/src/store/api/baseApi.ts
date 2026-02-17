@@ -78,6 +78,7 @@ export const baseApi = createApi({
     "ServiceConfiguration",
     "AuditLog",
     "RuntimeLog",
+    "ChargeDiscountPackage",
   ],
 
   // Define endpoints in separate API slices

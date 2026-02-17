@@ -290,7 +290,7 @@ async function deletePartner(id, req = {}) {
  * @param {Object} params - Rate calculation parameters
  * @returns {Promise<Object>} Calculated rates with breakdown
  */
-async function calculateRates(params) {
+async function calculateRates(params, userContext = null) {
   const {
     fromPincode,
     toPincode,
@@ -328,6 +328,7 @@ async function calculateRates(params) {
       declaredValue: shipmentValue ? parseFloat(shipmentValue) : 0,
       partnerId,
       sortBy: sortBy || "cheapest",
+      userContext,
     });
 
     // Transform to expected response format (maintaining backward compatibility)

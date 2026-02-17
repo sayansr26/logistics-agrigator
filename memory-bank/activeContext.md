@@ -42,18 +42,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus              |
-| -------------------- | ---- | ------------- | ---------- | -------------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 92%        | Charges proxy added        |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard         |
-| **User Service**     | 3003 | ✅ Production | 100%       | Outlet module added        |
-| **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations            |
-| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Charges Rule Engine added  |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable                     |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending        |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next               |
-| **Frontend**         | 3000 | ✅ Production | 70%        | Charges Management UI done |
+| Service              | Port | Status        | Completion | Current Focus             |
+| -------------------- | ---- | ------------- | ---------- | ------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 94%        | Discount packages proxy   |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard        |
+| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API |
+| **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations           |
+| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Discount packages added   |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable                    |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending       |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started               |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next              |
+| **Frontend**         | 3000 | ✅ Production | 72%        | Discount Packages UI done |
 
 ## Immediate Priorities
 
@@ -127,6 +127,15 @@ The primary focus is implementing a robust security layer and role-based access 
 ## Recent Changes
 
 ### February 17, 2026
+
+- ✅ **Charge Discount Packages** — Badge-based discount packages per Partner + Outlet tier
+  - Backend: `ChargeDiscountPackage` + `ChargeDiscountPackageItem` models in partner-service
+  - Backend: `outletContextService.js` resolves outlet badge via user-service internal endpoint (Redis-cached)
+  - Backend: Quote engine applies FLAT/PERCENTAGE discounts per charge rule, skips cache for badge users
+  - User-service: `GET /api/v1/internal/outlets/by-user/:userId` endpoint
+  - API Gateway: proxy for `/api/v1/charge-discount-packages`
+  - Frontend: `/charge-discount-packages` CRUD page with charge rule info display
+  - Valid badge tiers for discounts: Bronze, Silver, Gold, Platinum, Diamond (not Basic)
 
 - ✅ **Outlet Badge System** — 6-tier badge system (Basic→Diamond) for outlets
   - Prisma: `OutletBadge` enum + `badge` field on Outlet model with migration
@@ -272,32 +281,39 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Key Reference Files
 
-| Purpose             | Location                                                            |
-| ------------------- | ------------------------------------------------------------------- |
-| Auth patterns       | `backend/auth-service/`                                             |
-| RBAC permissions    | `shared/constants/permissions.js`                                   |
-| Charges routes      | `backend/partner-service/routes/charges.js`                         |
-| Charges controller  | `backend/partner-service/controllers/chargesController.js`          |
-| Charges service     | `backend/partner-service/services/chargesService.js`                |
-| Charges calc engine | `backend/partner-service/services/chargesRuleCalculationService.js` |
-| Quote calc service  | `backend/partner-service/services/quoteCalculationService.js`       |
-| Charges frontend    | `frontend/src/app/charges/page.tsx`                                 |
-| Charges API (RTK)   | `frontend/src/store/api/endpoints/chargesApi.ts`                    |
-| Outlet routes       | `backend/user-service/routes/outlets.js`                            |
-| Outlet controller   | `backend/user-service/controllers/outletController.js`              |
-| Outlet frontend     | `frontend/src/app/outlets/page.tsx`                                 |
-| Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`                     |
-| API response format | `shared/lib/response.js`                                            |
-| Error classes       | `shared/lib/errors.js`                                              |
+| Purpose             | Location                                                                 |
+| ------------------- | ------------------------------------------------------------------------ |
+| Auth patterns       | `backend/auth-service/`                                                  |
+| RBAC permissions    | `shared/constants/permissions.js`                                        |
+| Charges routes      | `backend/partner-service/routes/charges.js`                              |
+| Charges controller  | `backend/partner-service/controllers/chargesController.js`               |
+| Charges service     | `backend/partner-service/services/chargesService.js`                     |
+| Charges calc engine | `backend/partner-service/services/chargesRuleCalculationService.js`      |
+| Quote calc service  | `backend/partner-service/services/quoteCalculationService.js`            |
+| Charges frontend    | `frontend/src/app/charges/page.tsx`                                      |
+| Charges API (RTK)   | `frontend/src/store/api/endpoints/chargesApi.ts`                         |
+| Discount pkg svc    | `backend/partner-service/services/chargeDiscountPackageService.js`       |
+| Discount pkg ctrl   | `backend/partner-service/controllers/chargeDiscountPackageController.js` |
+| Discount pkg routes | `backend/partner-service/routes/chargeDiscountPackages.js`               |
+| Outlet context svc  | `backend/partner-service/services/outletContextService.js`               |
+| Discount pkg UI     | `frontend/src/app/charge-discount-packages/page.tsx`                     |
+| Discount pkg API    | `frontend/src/store/api/endpoints/chargeDiscountPackagesApi.ts`          |
+| Outlet routes       | `backend/user-service/routes/outlets.js`                                 |
+| Outlet controller   | `backend/user-service/controllers/outletController.js`                   |
+| Outlet frontend     | `frontend/src/app/outlets/page.tsx`                                      |
+| Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`                          |
+| API response format | `shared/lib/response.js`                                                 |
+| Error classes       | `shared/lib/errors.js`                                                   |
 
 ## Next Steps
 
 1. ~~Complete Outlet Module~~ ✅ DONE
 2. ~~Charges Management Module~~ ✅ DONE
-3. Build Outlet Portal pages (my-shipments, my-addresses)
-4. Finish License service integration
-5. Begin Shipment bulk operations
-6. Continue Frontend Redux migration
+3. ~~Charge Discount Packages~~ ✅ DONE
+4. Build Outlet Portal pages (my-shipments, my-addresses)
+5. Finish License service integration
+6. Begin Shipment bulk operations
+7. Continue Frontend Redux migration
 
 ---
 

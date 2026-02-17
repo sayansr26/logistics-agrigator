@@ -26,6 +26,7 @@ import {
   MapPin,
   Store,
   ScrollText,
+  Tag,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -122,6 +123,14 @@ const getNavigationSections = () => {
           title: "Charges Management",
           href: "/charges",
           icon: CreditCard,
+          permission: "partner:manage:all",
+          roles: ["superadmin", "admin"],
+          disabled: false,
+        },
+        {
+          title: "Discount Packages",
+          href: "/charge-discount-packages",
+          icon: Tag,
           permission: "partner:manage:all",
           roles: ["superadmin", "admin"],
           disabled: false,

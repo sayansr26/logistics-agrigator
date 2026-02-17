@@ -363,6 +363,14 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     title: "Charges Management",
     description: "Manage charge rules for courier partners",
   },
+  {
+    path: "/charge-discount-packages",
+    public: false,
+    roles: ["superadmin", "admin"],
+    permission: "partner:manage:all",
+    title: "Discount Packages",
+    description: "Manage badge-based discount packages for courier partners",
+  },
 
   // ==================== ZONES ====================
   {

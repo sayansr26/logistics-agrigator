@@ -144,6 +144,12 @@ app.use("/api/v1", require("./routes/partnerChannels"));
 // Charges Rule Management Routes (NEW - replaces legacy charge packages)
 app.use("/api/v1/charges", require("./routes/charges"));
 
+// Charge Discount Package Routes (Badge-based discounts for outlet tiers)
+app.use(
+  "/api/v1/charge-discount-packages",
+  require("./routes/chargeDiscountPackages"),
+);
+
 // Partner Pincode Assignment Routes (NEW - Pincode assignment with type values)
 app.use("/api/v1", require("./routes/partnerPincodes"));
 

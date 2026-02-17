@@ -6,6 +6,7 @@ const router = express.Router();
 
 // Controllers
 const bootstrapController = require("../controllers/bootstrapController");
+const internalOutletController = require("../controllers/internalOutletController");
 
 // Middleware
 const { requireInternalRequest } = require("../middleware/internal");
@@ -175,6 +176,58 @@ router.get(
   "/user-context/:userId",
   requireInternalRequest,
   bootstrapController.getUserContext,
+);
+
+/**
+ * @swagger
+ * /api/v1/internal/outlets/by-user/{userId}:
+ *   get:
+ *     summary: Get outlet badge by user ID
+ *     description: Resolves outlet and badge tier for a given userId. Called by partner-service for discount packages.
+ *     tags: [Internal]
+ *     security:
+ *       - internalAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The auth-service user ID
+ *     responses:
+ *       200:
+ *         description: Outlet badge resolved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     found:
+ *                       type: boolean
+ *                     outletId:
+ *                       type: string
+ *                       format: uuid
+ *                     badge:
+ *                       type: string
+ *                       enum: [BASIC, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND]
+ *                     outletName:
+ *                       type: string
+ *                     isActive:
+ *                       type: boolean
+ *       403:
+ *         description: Unauthorized - missing internal request header
+ */
+router.get(
+  "/outlets/by-user/:userId",
+  requireInternalRequest,
+  internalOutletController.getOutletByUser,
 );
 
 module.exports = router;

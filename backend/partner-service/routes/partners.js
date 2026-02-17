@@ -319,21 +319,44 @@ router.post(
   authMiddleware.requirePermission("partner", "read", "own"),
   async (req, res, next) => {
     try {
-      const rates = await partnerController.calculateRates(req.body);
+      // Pass user context for badge-based discount resolution
+      const userContext = req.user
+        ? { userId: req.user.userId || req.user.id, role: req.user.role }
+        : null;
 
-      const cheapestRate = rates.reduce((prev, current) =>
-        prev.totalAmount < current.totalAmount ? prev : current,
+      const result = await partnerController.calculateRates(
+        req.body,
+        userContext,
       );
 
-      const fastestRate = rates.reduce((prev, current) =>
-        prev.deliveryDays < current.deliveryDays ? prev : current,
-      );
+      // result from the new quote engine has { rates, cheapestRate, fastestRate, summary }
+      const rates = result.rates || result;
+
+      let cheapestRate = result.cheapestRate;
+      let fastestRate = result.fastestRate;
+
+      // Fallback for legacy format (array of rates)
+      if (!cheapestRate && Array.isArray(rates) && rates.length > 0) {
+        cheapestRate = rates.reduce((prev, current) =>
+          (prev.totalAmount || prev.totalRate || 0) <
+          (current.totalAmount || current.totalRate || 0)
+            ? prev
+            : current,
+        );
+        fastestRate = rates.reduce((prev, current) =>
+          (prev.deliveryDays || prev.estimatedDays || 999) <
+          (current.deliveryDays || current.estimatedDays || 999)
+            ? prev
+            : current,
+        );
+      }
 
       res.json(
         APIResponse.success({
           rates,
           cheapestRate,
           fastestRate,
+          summary: result.summary,
         }),
       );
     } catch (error) {

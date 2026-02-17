@@ -85,6 +85,19 @@ Overall Project Progress          [███████████████
   - ✅ Frontend: RTK Query endpoints with `transformResponse` envelope unwrapping
   - ✅ Frontend: Sidebar link (superadmin/admin only), route permissions updated
   - ✅ Audit logging for all charge rule CRUD operations
+- ✅ **Charge Discount Packages** (NEW - February 17, 2026)
+  - ✅ Badge-based discount packages per Partner + Outlet Badge tier (Bronze→Diamond)
+  - ✅ Backend: `ChargeDiscountPackage` + `ChargeDiscountPackageItem` Prisma models, `DiscountType` enum (FLAT/PERCENTAGE)
+  - ✅ Backend: Full CRUD service, controller, Joi validation, routes with auth + rate limiting
+  - ✅ Backend: `outletContextService.js` — resolves outlet badge via user-service internal endpoint with Redis caching
+  - ✅ Backend: Quote engine integration — applies per-rule discounts to breakdown, skips cache for badge users
+  - ✅ User-service: `GET /api/v1/internal/outlets/by-user/:userId` internal endpoint
+  - ✅ API Gateway: `/api/v1/charge-discount-packages` proxy to partner-service
+  - ✅ Frontend: `/charge-discount-packages` CRUD page with partner/badge/status filters
+  - ✅ Frontend: Create/Edit modal with charge rule multi-select showing current charge info per rule
+  - ✅ Frontend: RTK Query endpoints (`chargeDiscountPackagesApi.ts`) + `ChargeDiscountPackage` tag
+  - ✅ Frontend: Sidebar link ("Discount Packages" with Tag icon, superadmin/admin only)
+  - ✅ Audit logging for all discount package CRUD operations
 
 #### Wallet Service (100% Complete)
 
@@ -236,6 +249,18 @@ Overall Project Progress          [███████████████
 
 ### This Week's Progress
 
+- ✅ **Charge Discount Packages (February 17, 2026)**
+  - Full-stack feature: badge-based discount packages per Partner + Outlet Badge tier
+  - Backend (user-service): Internal endpoint `GET /api/v1/internal/outlets/by-user/:userId` for inter-service badge lookup
+  - Backend (partner-service): `ChargeDiscountPackage` + `ChargeDiscountPackageItem` models with `partner` relation
+  - Backend (partner-service): CRUD service/controller/routes/validation, `outletContextService.js` (Redis-cached badge resolver)
+  - Backend (partner-service): Quote engine enriched with per-rule FLAT/PERCENTAGE discounts; cache skip for badge users
+  - API Gateway: proxy for `/api/v1/charge-discount-packages`
+  - Frontend: `/charge-discount-packages` page with full CRUD, charge rule info display, RTK Query
+  - Frontend: Sidebar link, route permissions, `ChargeDiscountPackage` tag in baseApi
+  - **Key fix**: Prisma schema needed explicit `partner Partner @relation(...)` on `ChargeDiscountPackage` — raw `partnerId` alone doesn't enable `include: { partner }`. Also needed `discountPackages ChargeDiscountPackage[]` on `Partner`.
+  - **Key fix**: Charges API validation caps `limit` at 100 — frontend was sending `limit: 200`
+
 - ✅ **Outlet Badge System (February 17, 2026)**
   - Backend: Added `OutletBadge` enum (BASIC, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND) to user-service Prisma schema
   - Backend: Added `badge` field to Outlet model with `@default(BASIC)`
@@ -369,6 +394,30 @@ Overall Project Progress          [███████████████
 ### February 2026
 
 ```
+[2026-02-17] Charge Discount Packages - COMPLETE
+  Backend (user-service):
+  - Created internalOutletController.js with getOutletByUser function
+  - Added GET /api/v1/internal/outlets/by-user/:userId route
+
+  Backend (partner-service):
+  - Prisma: DiscountType enum, ChargeDiscountPackage model (@@unique partnerId+badge), ChargeDiscountPackageItem model
+  - Prisma: Added partner relation on ChargeDiscountPackage + discountPackages on Partner
+  - Created chargeDiscountPackageService.js (CRUD + getActivePackageForBadge)
+  - Created chargeDiscountPackageController.js, chargeDiscountPackageSchemas.js, chargeDiscountPackages.js (routes)
+  - Created outletContextService.js (resolves outlet badge via user-service, Redis-cached 5min TTL)
+  - Modified quoteCalculationService.js: outlet badge resolution, per-rule discounts (FLAT/PERCENTAGE), cache skip for badge users
+  - Valid badges: BRONZE, SILVER, GOLD, PLATINUM, DIAMOND (no BASIC — no discounts for base tier)
+
+  API Gateway:
+  - Added /api/v1/charge-discount-packages proxy to partner-service
+
+  Frontend:
+  - Created chargeDiscountPackagesApi.ts RTK Query endpoints (5 endpoints)
+  - Added ChargeDiscountPackage tag to baseApi.ts
+  - Created /charge-discount-packages page with CRUD modals + charge rule info display
+  - Added sidebar link (Tag icon, superadmin/admin) and route permission
+  - Fixed: limit capped at 100 to match backend validation
+
 [2026-02-14] Charges Management Module (Hard Replace) - COMPLETE
   Backend (partner-service):
   - Created ChargeRule Prisma model with 3 enums (ChargeRuleKind, ChargeRuleBase, ChargeCalcType)

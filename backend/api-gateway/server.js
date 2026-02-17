@@ -351,6 +351,13 @@ const services = {
       "^/api/v1/charges-types": "/api/v1/charges-types", // Charges types → /api/v1/charges-types/*
     },
   },
+  // Charge Discount Package Management (Badge-based discounts for outlet tiers)
+  "charge-discount-packages": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/charge-discount-packages": "/api/v1/charge-discount-packages",
+    },
+  },
   // Charges Rule Management (NEW - replaces legacy charge packages)
   charges: {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
