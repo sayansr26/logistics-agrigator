@@ -141,31 +141,17 @@ deploy_migrations() {
         return 1
     fi
 
-    # Deploy committed migrations only (never generate new migrations in init script).
-    local migrate_output
-    migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
-    local migrate_exit=$?
-
-    if [ $migrate_exit -eq 0 ]; then
-        print_success "✅ Migrations deployed for $service"
-        return 0
-    fi
-
-    # P3005: DB has tables but no _prisma_migrations history (created via db push / first deploy).
-    # Baseline: mark all existing migrations as applied so migrate deploy can track future ones.
-    if echo "$migrate_output" | grep -q "P3005"; then
-        print_warning "⚠️  $service: database has schema but no migration history. Baselining..."
-
+    # Helper: baseline all migrations in the migrations_dir as applied
+    baseline_all() {
         local migration_names
-        migration_names=$(dc exec -T "$service" sh -c "ls '$migrations_dir'" 2>/dev/null | grep -E '^[0-9]{14}')
+        # Match any folder starting with digits (handles both YYYYMMDDHHMMSS and YYYYMMDD prefixes)
+        migration_names=$(dc exec -T "$service" sh -c "ls '$migrations_dir'" 2>/dev/null | grep -E '^[0-9]')
 
         if [ -z "$migration_names" ]; then
             print_error "❌ No migrations found to baseline for $service"
-            echo "$migrate_output" | tail -10
             return 1
         fi
 
-        local baseline_ok=1
         for migration in $migration_names; do
             if dc exec -T "$service" npx prisma migrate resolve --applied "$migration" --schema="$schema_path" > /dev/null 2>&1; then
                 print_status "  Baselined: $migration"
@@ -173,13 +159,51 @@ deploy_migrations() {
                 print_warning "  ⚠️  Could not baseline $migration (may already be recorded)"
             fi
         done
+        return 0
+    }
 
-        # Re-run deploy after baselining (no-op for baselined migrations, applies any new ones)
+    # Deploy committed migrations only (never generate new migrations in init script).
+    local migrate_output migrate_exit
+    migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
+    migrate_exit=$?
+
+    if [ $migrate_exit -eq 0 ]; then
+        print_success "✅ Migrations deployed for $service"
+        return 0
+    fi
+
+    # P3005: DB has tables but no _prisma_migrations history (created via db push / first deploy).
+    # Baseline all migrations then re-deploy.
+    if echo "$migrate_output" | grep -q "P3005"; then
+        print_warning "⚠️  $service: database has schema but no migration history. Baselining..."
+        baseline_all || { echo "$migrate_output" | tail -10; return 1; }
+
         migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
         migrate_exit=$?
         if [ $migrate_exit -eq 0 ]; then
             print_success "✅ Migrations deployed for $service (baselined)"
             return 0
+        fi
+    fi
+
+    # P3018: a previous migration is in failed state (e.g. schema already exists from db push).
+    # Resolve it as applied, then re-deploy.
+    if echo "$migrate_output" | grep -q "P3018"; then
+        local failed_migration
+        failed_migration=$(echo "$migrate_output" | grep "Migration name:" | awk '{print $NF}' | tr -d '[:space:]')
+        if [ -n "$failed_migration" ]; then
+            print_warning "⚠️  $service: migration '$failed_migration' in failed state (schema already applied). Resolving..."
+            if dc exec -T "$service" npx prisma migrate resolve --applied "$failed_migration" --schema="$schema_path" > /dev/null 2>&1; then
+                print_status "  Resolved: $failed_migration"
+                migrate_output=$(dc exec -T "$service" npx prisma migrate deploy --schema="$schema_path" 2>&1)
+                migrate_exit=$?
+                if [ $migrate_exit -eq 0 ]; then
+                    print_success "✅ Migrations deployed for $service (P3018 resolved)"
+                    return 0
+                fi
+            else
+                print_error "❌ Could not resolve failed migration $failed_migration"
+            fi
         fi
     fi
 
