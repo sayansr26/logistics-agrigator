@@ -232,35 +232,38 @@ model ClientUser {
 
 // Outlet - Customer/outlet portal users created by clients
 model Outlet {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @unique @map("user_id") @db.Uuid // References auth-service user.id
-  clientId        String?  @map("client_id") @db.Uuid // Optional - for future client feature
-  createdByUserId String   @map("created_by_user_id") @db.Uuid
-  
+  id              String  @id @default(uuid()) @db.Uuid
+  userId          String  @unique @map("user_id") @db.Uuid // References auth-service user.id
+  clientId        String? @map("client_id") @db.Uuid // Optional - for future client feature
+  createdByUserId String  @map("created_by_user_id") @db.Uuid
+
   // Basic info
   name  String @db.VarChar(200)
   email String @unique @db.VarChar(255) // Unique email for outlet
-  phone String @unique @db.VarChar(20)  // Unique phone for outlet
-  
+  phone String @unique @db.VarChar(20) // Unique phone for outlet
+
   // Optional company info
   companyName    String? @map("company_name") @db.VarChar(200)
   category       String? @db.VarChar(100)
   tanPan         String? @map("tan_pan") @db.VarChar(50)
   gst            String? @db.VarChar(50)
   companyAddress Json?   @map("company_address")
-  
+
+  // Badge tier
+  badge OutletBadge @default(BASIC) @map("badge")
+
   // Status
   isActive Boolean @default(true) @map("is_active")
-  
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  
+
   // Relationships
   client    Client?         @relation(fields: [clientId], references: [id])
   addresses OutletAddress[]
   auditLogs AuditLog[]
-  
+
   @@index([userId])
   @@index([clientId])
   @@index([createdByUserId])
@@ -271,35 +274,35 @@ model Outlet {
 model OutletAddress {
   id       String @id @default(uuid()) @db.Uuid
   outletId String @map("outlet_id") @db.Uuid
-  
+
   // Address identification
-  label       String  @db.VarChar(100) // e.g., "Main Warehouse", "Store 1"
-  addressType String  @default("GENERAL") @map("address_type") @db.VarChar(50) // GENERAL, PICKUP, RETURN
-  
+  label       String @db.VarChar(100) // e.g., "Main Warehouse", "Store 1"
+  addressType String @default("GENERAL") @map("address_type") @db.VarChar(50) // GENERAL, PICKUP, RETURN
+
   // Address fields
-  name        String  @db.VarChar(100)
-  phone       String  @db.VarChar(20)
-  email       String? @db.VarChar(255)
-  addressLine1 String @map("address_line1") @db.VarChar(255)
+  name         String  @db.VarChar(100)
+  phone        String  @db.VarChar(20)
+  email        String? @db.VarChar(255)
+  addressLine1 String  @map("address_line1") @db.VarChar(255)
   addressLine2 String? @map("address_line2") @db.VarChar(255)
-  landmark    String? @db.VarChar(100)
-  city        String  @db.VarChar(100)
-  state       String  @db.VarChar(100)
-  pincode     String  @db.VarChar(10)
-  country     String  @default("India") @db.VarChar(100)
-  
+  landmark     String? @db.VarChar(100)
+  city         String  @db.VarChar(100)
+  state        String  @db.VarChar(100)
+  pincode      String  @db.VarChar(10)
+  country      String  @default("India") @db.VarChar(100)
+
   // Defaults
   isDefaultPickup Boolean @default(false) @map("is_default_pickup")
   isDefaultReturn Boolean @default(false) @map("is_default_return")
   isActive        Boolean @default(true) @map("is_active")
-  
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  
+
   // Relationships
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  
+
   @@index([outletId])
   @@index([isDefaultPickup])
   @@index([isDefaultReturn])
@@ -336,4 +339,13 @@ enum LicenseStatus {
   ACTIVE // Currently active
   SUSPENDED // Temporarily suspended
   EXPIRED // License expired
+}
+
+enum OutletBadge {
+  BASIC
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
 }

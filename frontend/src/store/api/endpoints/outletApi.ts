@@ -8,6 +8,18 @@ import { baseApi } from "../baseApi";
  */
 
 // ===========================
+// Types
+// ===========================
+
+type OutletBadge =
+  | "BASIC"
+  | "BRONZE"
+  | "SILVER"
+  | "GOLD"
+  | "PLATINUM"
+  | "DIAMOND";
+
+// ===========================
 // Request/Response Interfaces
 // ===========================
 
@@ -44,6 +56,7 @@ interface UpdateOutletRequest {
     country?: string;
   };
   isActive?: boolean;
+  badge?: OutletBadge;
 }
 
 interface CreateAddressRequest {
@@ -96,6 +109,7 @@ interface Outlet {
   tanPan?: string;
   gst?: string;
   companyAddress?: object;
+  badge?: OutletBadge;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -169,6 +183,7 @@ interface GetOutletsParams {
   limit?: number;
   search?: string;
   isActive?: boolean;
+  badge?: OutletBadge;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
@@ -202,12 +217,15 @@ export const outletApi = baseApi.injectEndpoints({
       query: (params) => {
         const searchParams = new URLSearchParams();
         if (params?.page) searchParams.append("page", params.page.toString());
-        if (params?.limit) searchParams.append("limit", params.limit.toString());
+        if (params?.limit)
+          searchParams.append("limit", params.limit.toString());
         if (params?.search) searchParams.append("search", params.search);
         if (params?.isActive !== undefined)
           searchParams.append("isActive", params.isActive.toString());
+        if (params?.badge) searchParams.append("badge", params.badge);
         if (params?.sortBy) searchParams.append("sortBy", params.sortBy);
-        if (params?.sortOrder) searchParams.append("sortOrder", params.sortOrder);
+        if (params?.sortOrder)
+          searchParams.append("sortOrder", params.sortOrder);
 
         return {
           url: `/api/v1/outlets?${searchParams.toString()}`,
@@ -300,6 +318,25 @@ export const outletApi = baseApi.injectEndpoints({
         url: `/api/v1/outlets/${id}/status`,
         method: "PATCH",
         body: { isActive },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "User", id },
+        { type: "User", id: "LIST" },
+      ],
+    }),
+
+    /**
+     * Update outlet badge
+     * PATCH /api/v1/outlets/:id/badge
+     */
+    updateOutletBadge: builder.mutation<
+      OutletResponse,
+      { id: string; badge: OutletBadge }
+    >({
+      query: ({ id, badge }) => ({
+        url: `/api/v1/outlets/${id}/badge`,
+        method: "PATCH",
+        body: { badge },
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: "User", id },
@@ -465,6 +502,7 @@ export const {
   useUpdateOutletMutation,
   useDeleteOutletMutation,
   useToggleOutletStatusMutation,
+  useUpdateOutletBadgeMutation,
   useResetOutletPasswordMutation,
 
   // Address management
@@ -487,6 +525,7 @@ export type {
   CreateAddressRequest,
   UpdateAddressRequest,
   Outlet,
+  OutletBadge,
   OutletAddress,
   OutletResponse,
   OutletsListResponse,
@@ -494,4 +533,3 @@ export type {
   AddressResponse,
   GetOutletsParams,
 };
-

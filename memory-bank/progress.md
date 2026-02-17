@@ -41,6 +41,11 @@ Overall Project Progress          [███████████████
   - ✅ Activate/Deactivate outlets
   - ✅ Reset outlet passwords
   - ✅ Geo-based address autocomplete
+  - ✅ **Outlet Badge System** (February 17, 2026)
+    - ✅ 6-tier badges: Basic, Bronze, Silver, Gold, Platinum, Diamond
+    - ✅ PATCH /outlets/:id/badge endpoint
+    - ✅ Badge filter on list endpoint
+    - ✅ Frontend: badge column, change badge dialog, edit badge in form
 
 #### Partner Service (100% Complete)
 
@@ -139,6 +144,9 @@ Overall Project Progress          [███████████████
   - ✅ Reset password with confirmation
   - ✅ Address CRUD (add, edit, delete)
   - ✅ Geo-autocomplete for pincode/city/state
+  - ✅ Badge column with color-coded display
+  - ✅ Change badge dialog with tier selection
+  - ✅ Badge editing in edit form (admin/client only)
 
 #### Completed Features (continued)
 
@@ -227,6 +235,19 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Outlet Badge System (February 17, 2026)**
+  - Backend: Added `OutletBadge` enum (BASIC, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND) to user-service Prisma schema
+  - Backend: Added `badge` field to Outlet model with `@default(BASIC)`
+  - Backend: Migration `20260217120000_add_outlet_badge`
+  - Backend: PATCH /outlets/:id/badge endpoint with validation, audit logging
+  - Backend: Badge filter on GET /outlets list endpoint
+  - Backend: Auth-service migration `20260217130000_add_outlet_role` (fix pre-existing missing `outlet` in Role enum)
+  - Frontend: `OutletBadge` type, `updateOutletBadge` RTK Query mutation
+  - Frontend: Badge column in list table with color-coded display
+  - Frontend: Change Badge dialog, badge in view/edit dialogs
+  - **Bug Fix**: Fixed unhandled rejection crash in outletController.js — all 13 catch blocks changed from `throw error` to `res.status().json()` error responses
+  - **Bug Fix**: Improved auth 409 error passthrough — now shows "User with this email already exists" instead of generic "Failed to create outlet user"
 
 - ✅ **Charges Zones Query Fix (February 17, 2026)**
   - Fixed: partnerId rejected as "not allowed" in GET /api/v1/zones validation
@@ -334,12 +355,14 @@ Overall Project Progress          [███████████████
 
 ### Recently Fixed
 
-| ID  | Service      | Issue                        | Fixed Date |
-| --- | ------------ | ---------------------------- | ---------- |
-| #4  | User Service | Outlet module implementation | Jan 2026   |
-| #5  | API Gateway  | Outlet routes added          | Jan 2026   |
-| #6  | Frontend     | Outlet management UI         | Jan 2026   |
-| #7  | Auth         | Outlet role in RBAC          | Jan 2026   |
+| ID  | Service      | Issue                         | Fixed Date |
+| --- | ------------ | ----------------------------- | ---------- |
+| #4  | User Service | Outlet module implementation  | Jan 2026   |
+| #5  | API Gateway  | Outlet routes added           | Jan 2026   |
+| #6  | Frontend     | Outlet management UI          | Jan 2026   |
+| #7  | Auth         | Outlet role in RBAC           | Jan 2026   |
+| #8  | User Service | Outlet badge system           | Feb 2026   |
+| #9  | User Service | Unhandled rejection crash fix | Feb 2026   |
 
 ## Changelog
 

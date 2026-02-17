@@ -6,9 +6,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const APIResponse = require("../shared/lib/response");
 const logger = require("../shared/lib/logger");
-const {
-  UserServiceError,
-} = require("../middleware/errorHandler");
+const { UserServiceError } = require("../middleware/errorHandler");
 
 const prisma = new PrismaClient();
 
@@ -101,12 +99,23 @@ class OutletController {
           email,
         });
       } catch (authError) {
+        const authStatus = authError.response?.status;
+        const authMessage = authError.response?.data?.error?.message;
         logger.error("Failed to create outlet auth user", {
           error: authError.message,
           response: authError.response?.data,
         });
+
+        if (authStatus === 409) {
+          throw new UserServiceError(
+            authMessage || `User with email ${email} already exists`,
+            "OUTLET_EMAIL_EXISTS",
+            409,
+          );
+        }
+
         throw new UserServiceError(
-          "Failed to create outlet user in auth service",
+          authMessage || "Failed to create outlet user in auth service",
           "AUTH_USER_CREATION_FAILED",
           500,
         );
@@ -198,7 +207,11 @@ class OutletController {
         userId: req.user?.userId,
         requestBody: { ...req.body, temporaryPassword: undefined },
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -212,6 +225,7 @@ class OutletController {
         limit = 20,
         search,
         isActive,
+        badge,
         sortBy = "createdAt",
         sortOrder = "desc",
       } = req.query;
@@ -223,6 +237,7 @@ class OutletController {
         ...(isActive !== undefined && {
           isActive: isActive === "true" || isActive === true,
         }),
+        ...(badge && { badge }),
         ...(search && {
           OR: [
             { name: { contains: search, mode: "insensitive" } },
@@ -265,7 +280,11 @@ class OutletController {
         error: error.message,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -299,10 +318,7 @@ class OutletController {
       }
 
       // Check access: outlet can only see own data, client/admin can see all
-      if (
-        req.user.role === "outlet" &&
-        outlet.userId !== userId
-      ) {
+      if (req.user.role === "outlet" && outlet.userId !== userId) {
         throw new UserServiceError(
           "Access denied",
           "OUTLET_ACCESS_DENIED",
@@ -319,7 +335,11 @@ class OutletController {
         outletId: req.params.id,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -350,7 +370,11 @@ class OutletController {
         error: error.message,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -373,10 +397,7 @@ class OutletController {
       }
 
       // Check access
-      if (
-        req.user.role === "outlet" &&
-        existingOutlet.userId !== userId
-      ) {
+      if (req.user.role === "outlet" && existingOutlet.userId !== userId) {
         throw new UserServiceError(
           "Access denied",
           "OUTLET_ACCESS_DENIED",
@@ -445,7 +466,11 @@ class OutletController {
         outletId: req.params.id,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -487,7 +512,11 @@ class OutletController {
         error: error.message,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -579,7 +608,11 @@ class OutletController {
         error: error.message,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -613,7 +646,11 @@ class OutletController {
       });
 
       if (!existingAddress || existingAddress.outletId !== outletId) {
-        throw new UserServiceError("Address not found", "ADDRESS_NOT_FOUND", 404);
+        throw new UserServiceError(
+          "Address not found",
+          "ADDRESS_NOT_FOUND",
+          404,
+        );
       }
 
       const updatedAddress = await prisma.$transaction(async (tx) => {
@@ -681,7 +718,11 @@ class OutletController {
         addressId: req.params.addressId,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -714,7 +755,11 @@ class OutletController {
       });
 
       if (!existingAddress || existingAddress.outletId !== outletId) {
-        throw new UserServiceError("Address not found", "ADDRESS_NOT_FOUND", 404);
+        throw new UserServiceError(
+          "Address not found",
+          "ADDRESS_NOT_FOUND",
+          404,
+        );
       }
 
       await prisma.$transaction(async (tx) => {
@@ -754,7 +799,11 @@ class OutletController {
         addressId: req.params.addressId,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -839,7 +888,11 @@ class OutletController {
         outletId: req.params.id,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -920,7 +973,76 @@ class OutletController {
         outletId: req.params.id,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
+    }
+  }
+
+  /**
+   * Update outlet badge
+   * PATCH /api/outlets/:id/badge
+   */
+  static async updateBadge(req, res) {
+    try {
+      const { id } = req.params;
+      const { badge } = req.body;
+      const userId = req.user.userId || req.user.id;
+
+      const outlet = await prisma.outlet.findUnique({
+        where: { id },
+      });
+
+      if (!outlet) {
+        throw new UserServiceError("Outlet not found", "OUTLET_NOT_FOUND", 404);
+      }
+
+      const updatedOutlet = await prisma.$transaction(async (tx) => {
+        const updated = await tx.outlet.update({
+          where: { id },
+          data: { badge },
+        });
+
+        // Audit log
+        await tx.auditLog.create({
+          data: {
+            userId,
+            outletId: id,
+            action: "UPDATE_OUTLET_BADGE",
+            resource: "Outlet",
+            resourceId: id,
+            changes: { badge: { from: outlet.badge, to: badge } },
+            metadata: {
+              source: "user-service",
+              changedBy: req.user.role,
+            },
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+          },
+        });
+
+        return updated;
+      });
+
+      res.json(
+        APIResponse.success({
+          outlet: updatedOutlet,
+          message: `Outlet badge updated to ${badge} successfully`,
+        }),
+      );
+    } catch (error) {
+      logger.error("Update outlet badge error", {
+        error: error.message,
+        outletId: req.params.id,
+        userId: req.user?.userId,
+      });
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 
@@ -991,7 +1113,8 @@ class OutletController {
       res.json(
         APIResponse.success({
           temporaryPassword: newPassword,
-          message: "Password reset successfully. Please save this password - it will not be shown again.",
+          message:
+            "Password reset successfully. Please save this password - it will not be shown again.",
         }),
       );
     } catch (error) {
@@ -1000,10 +1123,13 @@ class OutletController {
         outletId: req.params.id,
         userId: req.user?.userId,
       });
-      throw error;
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
     }
   }
 }
 
 module.exports = OutletController;
-

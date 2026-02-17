@@ -40,18 +40,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useListOutletsQuery,
   useCreateOutletMutation,
   useGetOutletQuery,
   useUpdateOutletMutation,
   useDeleteOutletMutation,
   useToggleOutletStatusMutation,
+  useUpdateOutletBadgeMutation,
   useResetOutletPasswordMutation,
   useGetOutletAddressesQuery,
   useCreateOutletAddressMutation,
   useUpdateOutletAddressMutation,
   useDeleteOutletAddressMutation,
 } from "@/store/api/endpoints/outletApi";
+import type { OutletBadge } from "@/store/api/endpoints/outletApi";
 import {
   useGetStatesQuery,
   useGetCitiesQuery,
@@ -91,7 +100,35 @@ import {
   Hash,
   Power,
   KeyRound,
+  Award,
 } from "lucide-react";
+
+const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
+  BASIC: {
+    label: "Basic",
+    className: "bg-gray-100 text-gray-700 border-gray-300",
+  },
+  BRONZE: {
+    label: "Bronze",
+    className: "bg-amber-100 text-amber-800 border-amber-300",
+  },
+  SILVER: {
+    label: "Silver",
+    className: "bg-slate-200 text-slate-700 border-slate-400",
+  },
+  GOLD: {
+    label: "Gold",
+    className: "bg-yellow-100 text-yellow-800 border-yellow-500",
+  },
+  PLATINUM: {
+    label: "Platinum",
+    className: "bg-violet-100 text-violet-800 border-violet-300",
+  },
+  DIAMOND: {
+    label: "Diamond",
+    className: "bg-cyan-100 text-cyan-800 border-cyan-400",
+  },
+};
 
 export default function OutletsPage() {
   const customBreadcrumbs = [
@@ -135,6 +172,7 @@ export default function OutletsPage() {
     category: "",
     tanPan: "",
     gst: "",
+    badge: "BASIC" as string,
     isActive: true,
   });
 
@@ -145,6 +183,11 @@ export default function OutletsPage() {
   const [outletToDelete, setOutletToDelete] = useState<any>(null);
   const [outletToResetPassword, setOutletToResetPassword] = useState<any>(null);
   const [outletToToggleStatus, setOutletToToggleStatus] = useState<any>(null);
+
+  // Badge management state
+  const [showBadgeDialog, setShowBadgeDialog] = useState(false);
+  const [outletToUpdateBadge, setOutletToUpdateBadge] = useState<any>(null);
+  const [selectedBadge, setSelectedBadge] = useState<string>("BASIC");
 
   // Address management state
   const [showAddAddressDialog, setShowAddAddressDialog] = useState(false);
@@ -190,12 +233,10 @@ export default function OutletsPage() {
   const [createOutlet, { isLoading: isCreating }] = useCreateOutletMutation();
 
   // RTK Query - Get single outlet for view/edit
-  const {
-    data: selectedOutletData,
-    isLoading: isLoadingOutlet,
-  } = useGetOutletQuery(selectedOutletId!, {
-    skip: !selectedOutletId,
-  });
+  const { data: selectedOutletData, isLoading: isLoadingOutlet } =
+    useGetOutletQuery(selectedOutletId!, {
+      skip: !selectedOutletId,
+    });
 
   // RTK Query - Get outlet addresses
   const { data: addressesData, isLoading: isLoadingAddresses } =
@@ -207,28 +248,39 @@ export default function OutletsPage() {
   const { data: statesData } = useGetStatesQuery();
   const { data: citiesData } = useGetCitiesQuery(
     { stateId: selectedStateId! },
-    { skip: !selectedStateId }
+    { skip: !selectedStateId },
   );
-  const { data: pincodeDetailsData } = useGetPincodeDetailsQuery(pincodeSearch, {
-    skip: !pincodeSearch || pincodeSearch.length !== 6,
-  });
+  const { data: pincodeDetailsData } = useGetPincodeDetailsQuery(
+    pincodeSearch,
+    {
+      skip: !pincodeSearch || pincodeSearch.length !== 6,
+    },
+  );
   const { data: pincodesSearchData } = useSearchPincodesQuery(
     { code: pincodeSearch },
-    { skip: !pincodeSearch || pincodeSearch.length < 3 }
+    { skip: !pincodeSearch || pincodeSearch.length < 3 },
   );
 
   // RTK Query - Update outlet mutation
   const [updateOutlet, { isLoading: isUpdating }] = useUpdateOutletMutation();
 
   // RTK Query - Address mutations
-  const [createAddress, { isLoading: isCreatingAddress }] = useCreateOutletAddressMutation();
-  const [updateAddress, { isLoading: isUpdatingAddress }] = useUpdateOutletAddressMutation();
-  const [deleteAddress, { isLoading: isDeletingAddress }] = useDeleteOutletAddressMutation();
+  const [createAddress, { isLoading: isCreatingAddress }] =
+    useCreateOutletAddressMutation();
+  const [updateAddress, { isLoading: isUpdatingAddress }] =
+    useUpdateOutletAddressMutation();
+  const [deleteAddress, { isLoading: isDeletingAddress }] =
+    useDeleteOutletAddressMutation();
 
   // RTK Query - Outlet action mutations
-  const [deleteOutlet, { isLoading: isDeletingOutlet }] = useDeleteOutletMutation();
-  const [toggleOutletStatus, { isLoading: isTogglingStatus }] = useToggleOutletStatusMutation();
-  const [resetOutletPassword, { isLoading: isResettingPassword }] = useResetOutletPasswordMutation();
+  const [deleteOutlet, { isLoading: isDeletingOutlet }] =
+    useDeleteOutletMutation();
+  const [toggleOutletStatus, { isLoading: isTogglingStatus }] =
+    useToggleOutletStatusMutation();
+  const [updateOutletBadge, { isLoading: isUpdatingBadge }] =
+    useUpdateOutletBadgeMutation();
+  const [resetOutletPassword, { isLoading: isResettingPassword }] =
+    useResetOutletPasswordMutation();
 
   const outlets = outletsData?.data?.outlets || [];
   const pagination = outletsData?.data?.pagination;
@@ -251,6 +303,7 @@ export default function OutletsPage() {
         category: selectedOutlet.category || "",
         tanPan: selectedOutlet.tanPan || "",
         gst: selectedOutlet.gst || "",
+        badge: selectedOutlet.badge || "BASIC",
         isActive: selectedOutlet.isActive ?? true,
       });
     }
@@ -272,7 +325,8 @@ export default function OutletsPage() {
         state: selectedAddress.state || "",
         pincode: selectedAddress.pincode || "",
         country: selectedAddress.country || "India",
-        isDefault: selectedAddress.isDefaultPickup || selectedAddress.isDefault || false,
+        isDefault:
+          selectedAddress.isDefaultPickup || selectedAddress.isDefault || false,
       });
       // Set pincode search for potential lookup
       setPincodeSearch(selectedAddress.pincode || "");
@@ -286,8 +340,12 @@ export default function OutletsPage() {
       // Get state name from hierarchy
       const stateName = hierarchy?.state?.name || "";
       // Get city name from hierarchy or pincode district
-      const cityName = hierarchy?.city?.name || pincodeInfo?.district || pincodeInfo?.areaName || "";
-      
+      const cityName =
+        hierarchy?.city?.name ||
+        pincodeInfo?.district ||
+        pincodeInfo?.areaName ||
+        "";
+
       if (stateName || cityName) {
         setAddressFormData((prev) => ({
           ...prev,
@@ -367,6 +425,7 @@ export default function OutletsPage() {
           category: editFormData.category || undefined,
           tanPan: editFormData.tanPan || undefined,
           gst: editFormData.gst || undefined,
+          badge: editFormData.badge as OutletBadge,
           isActive: editFormData.isActive,
         },
       }).unwrap();
@@ -477,6 +536,30 @@ export default function OutletsPage() {
     }
   };
 
+  // Handle change badge click
+  const handleChangeBadgeClick = (outlet: any) => {
+    setOutletToUpdateBadge(outlet);
+    setSelectedBadge(outlet.badge || "BASIC");
+    setShowBadgeDialog(true);
+  };
+
+  // Handle confirm update badge
+  const handleConfirmUpdateBadge = async () => {
+    if (!outletToUpdateBadge || !selectedBadge) return;
+
+    try {
+      await updateOutletBadge({
+        id: outletToUpdateBadge.id,
+        badge: selectedBadge as OutletBadge,
+      }).unwrap();
+      setShowBadgeDialog(false);
+      setOutletToUpdateBadge(null);
+      refetch();
+    } catch (err) {
+      console.error("Failed to update outlet badge:", err);
+    }
+  };
+
   // Handle reset password click
   const handleResetPasswordClick = (outlet: any) => {
     setOutletToResetPassword(outlet);
@@ -488,7 +571,9 @@ export default function OutletsPage() {
     if (!outletToResetPassword) return;
 
     try {
-      const result = await resetOutletPassword(outletToResetPassword.id).unwrap();
+      const result = await resetOutletPassword(
+        outletToResetPassword.id,
+      ).unwrap();
       setTemporaryPassword(result.data.temporaryPassword);
       setCreatedOutletEmail(outletToResetPassword.email);
       setShowResetPasswordDialog(false);
@@ -514,7 +599,13 @@ export default function OutletsPage() {
         outletId: selectedOutletId,
         data: {
           label: addressFormData.label,
-          addressType: addressFormData.addressType as "HOME" | "WORK" | "OTHER" | "GENERAL" | "PICKUP" | "RETURN",
+          addressType: addressFormData.addressType as
+            | "HOME"
+            | "WORK"
+            | "OTHER"
+            | "GENERAL"
+            | "PICKUP"
+            | "RETURN",
           name: addressFormData.name,
           phone: addressFormData.phone,
           email: addressFormData.email || undefined,
@@ -546,7 +637,13 @@ export default function OutletsPage() {
         addressId: selectedAddress.id,
         data: {
           label: addressFormData.label,
-          addressType: addressFormData.addressType as "HOME" | "WORK" | "OTHER" | "GENERAL" | "PICKUP" | "RETURN",
+          addressType: addressFormData.addressType as
+            | "HOME"
+            | "WORK"
+            | "OTHER"
+            | "GENERAL"
+            | "PICKUP"
+            | "RETURN",
           name: addressFormData.name,
           phone: addressFormData.phone,
           email: addressFormData.email || undefined,
@@ -633,10 +730,7 @@ export default function OutletsPage() {
             </p>
           </div>
           {canCreateOutlet && (
-            <Button
-              onClick={() => setShowCreateDialog(true)}
-              className="gap-2"
-            >
+            <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               Create Outlet
             </Button>
@@ -647,7 +741,9 @@ export default function OutletsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Outlets</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Outlets
+              </CardTitle>
               <Store className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -711,7 +807,11 @@ export default function OutletsPage() {
               <div className="flex flex-col items-center justify-center py-12 text-red-500">
                 <AlertCircle className="h-8 w-8 mb-2" />
                 <p>Failed to load outlets</p>
-                <Button variant="outline" onClick={() => refetch()} className="mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => refetch()}
+                  className="mt-4"
+                >
                   Retry
                 </Button>
               </div>
@@ -719,7 +819,9 @@ export default function OutletsPage() {
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Store className="h-12 w-12 mb-4 opacity-50" />
                 <p className="text-lg font-medium">No outlets found</p>
-                <p className="text-sm">Create your first outlet to get started</p>
+                <p className="text-sm">
+                  Create your first outlet to get started
+                </p>
                 <Button
                   onClick={() => setShowCreateDialog(true)}
                   className="mt-4"
@@ -737,6 +839,7 @@ export default function OutletsPage() {
                       <TableHead>Contact</TableHead>
                       <TableHead>Company</TableHead>
                       <TableHead>Addresses</TableHead>
+                      <TableHead>Badge</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
@@ -779,6 +882,17 @@ export default function OutletsPage() {
                             <MapPin className="h-3 w-3" />
                             {outlet._count?.addresses || 0}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              BADGE_CONFIG[outlet.badge || "BASIC"]?.className
+                            }
+                          >
+                            {BADGE_CONFIG[outlet.badge || "BASIC"]?.label ||
+                              "Basic"}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -826,6 +940,12 @@ export default function OutletsPage() {
                                 <KeyRound className="h-4 w-4 mr-2" />
                                 Reset Password
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleChangeBadgeClick(outlet)}
+                              >
+                                <Award className="h-4 w-4 mr-2" />
+                                Change Badge
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => handleDeleteOutletClick(outlet)}
@@ -852,7 +972,9 @@ export default function OutletsPage() {
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
                         disabled={currentPage === 1}
                       >
                         <ChevronLeft className="h-4 w-4" />
@@ -860,7 +982,9 @@ export default function OutletsPage() {
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        onClick={() =>
+                          setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        }
                         disabled={currentPage === totalPages}
                       >
                         <ChevronRight className="h-4 w-4" />
@@ -883,7 +1007,8 @@ export default function OutletsPage() {
               Create New Outlet
             </DialogTitle>
             <DialogDescription>
-              Add a new outlet portal user. A temporary password will be generated.
+              Add a new outlet portal user. A temporary password will be
+              generated.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -962,12 +1087,20 @@ export default function OutletsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateDialog(false)}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleCreateOutlet}
-              disabled={isCreating || !formData.name || !formData.email || !formData.phone}
+              disabled={
+                isCreating ||
+                !formData.name ||
+                !formData.email ||
+                !formData.phone
+              }
             >
               {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Outlet
@@ -994,13 +1127,28 @@ export default function OutletsPage() {
               {/* Basic Info */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg">{selectedOutlet.name}</h3>
-                  <Badge
-                    variant={selectedOutlet.isActive ? "default" : "secondary"}
-                    className={selectedOutlet.isActive ? "bg-green-500" : ""}
-                  >
-                    {selectedOutlet.isActive ? "Active" : "Inactive"}
-                  </Badge>
+                  <h3 className="font-semibold text-lg">
+                    {selectedOutlet.name}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={
+                        BADGE_CONFIG[selectedOutlet.badge || "BASIC"]?.className
+                      }
+                    >
+                      {BADGE_CONFIG[selectedOutlet.badge || "BASIC"]?.label ||
+                        "Basic"}
+                    </Badge>
+                    <Badge
+                      variant={
+                        selectedOutlet.isActive ? "default" : "secondary"
+                      }
+                      className={selectedOutlet.isActive ? "bg-green-500" : ""}
+                    >
+                      {selectedOutlet.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1026,11 +1174,15 @@ export default function OutletsPage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Company Name</span>
-                    <p className="font-medium">{selectedOutlet.companyName || "—"}</p>
+                    <p className="font-medium">
+                      {selectedOutlet.companyName || "—"}
+                    </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Category</span>
-                    <p className="font-medium">{selectedOutlet.category || "—"}</p>
+                    <p className="font-medium">
+                      {selectedOutlet.category || "—"}
+                    </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">GST Number</span>
@@ -1038,7 +1190,9 @@ export default function OutletsPage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">TAN/PAN</span>
-                    <p className="font-medium">{selectedOutlet.tanPan || "—"}</p>
+                    <p className="font-medium">
+                      {selectedOutlet.tanPan || "—"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1066,7 +1220,9 @@ export default function OutletsPage() {
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
                 ) : outletAddresses.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No addresses added yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    No addresses added yet
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {outletAddresses.map((addr: any) => (
@@ -1082,7 +1238,9 @@ export default function OutletsPage() {
                             </Badge>
                           </div>
                           {(addr.isDefaultPickup || addr.isDefault) && (
-                            <Badge className="text-xs bg-green-500">Default</Badge>
+                            <Badge className="text-xs bg-green-500">
+                              Default
+                            </Badge>
                           )}
                         </div>
                         <div className="space-y-1">
@@ -1128,7 +1286,9 @@ export default function OutletsPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="h-4 w-4" />
-                  <span>Created: {formatDateTime(selectedOutlet.createdAt)}</span>
+                  <span>
+                    Created: {formatDateTime(selectedOutlet.createdAt)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Hash className="h-4 w-4" />
@@ -1137,7 +1297,9 @@ export default function OutletsPage() {
               </div>
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8">Outlet not found</p>
+            <p className="text-center text-muted-foreground py-8">
+              Outlet not found
+            </p>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={closeViewDialog}>
@@ -1248,6 +1410,28 @@ export default function OutletsPage() {
                   placeholder="GST number"
                 />
               </div>
+              {canCreateOutlet && (
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-badge">Badge Tier</Label>
+                  <Select
+                    value={editFormData.badge}
+                    onValueChange={(value) =>
+                      setEditFormData((prev) => ({ ...prev, badge: value }))
+                    }
+                  >
+                    <SelectTrigger id="edit-badge">
+                      <SelectValue placeholder="Select badge" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(BADGE_CONFIG).map(([key, config]) => (
+                        <SelectItem key={key} value={key}>
+                          {config.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
                   <Label>Active Status</Label>
@@ -1296,11 +1480,14 @@ export default function OutletsPage() {
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-4 space-y-3">
               <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
                 <AlertCircle className="h-5 w-5" />
-                <span className="font-medium">Important: Save this password</span>
+                <span className="font-medium">
+                  Important: Save this password
+                </span>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Email: <span className="font-medium">{createdOutletEmail}</span>
+                  Email:{" "}
+                  <span className="font-medium">{createdOutletEmail}</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono border dark:border-border">
@@ -1321,20 +1508,22 @@ export default function OutletsPage() {
                 </div>
               </div>
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Share this password with the outlet user. They should change it after first login.
+                Share this password with the outlet user. They should change it
+                after first login.
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowPasswordDialog(false)}>
-              Done
-            </Button>
+            <Button onClick={() => setShowPasswordDialog(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Address Dialog */}
-      <Dialog open={showAddAddressDialog} onOpenChange={setShowAddAddressDialog}>
+      <Dialog
+        open={showAddAddressDialog}
+        onOpenChange={setShowAddAddressDialog}
+      >
         <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1363,7 +1552,12 @@ export default function OutletsPage() {
                   id="new-addr-type"
                   name="addressType"
                   value={addressFormData.addressType}
-                  onChange={(e) => setAddressFormData(prev => ({ ...prev, addressType: e.target.value }))}
+                  onChange={(e) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      addressType: e.target.value,
+                    }))
+                  }
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="HOME">Home</option>
@@ -1446,10 +1640,19 @@ export default function OutletsPage() {
                     const value = e.target.value.replace(/\D/g, "").slice(0, 6);
                     setAddressFormData((prev) => ({ ...prev, pincode: value }));
                     setPincodeSearch(value);
-                    setShowPincodeSuggestions(value.length >= 3 && value.length < 6);
+                    setShowPincodeSuggestions(
+                      value.length >= 3 && value.length < 6,
+                    );
                   }}
-                  onFocus={() => setShowPincodeSuggestions(addressFormData.pincode.length >= 3 && addressFormData.pincode.length < 6)}
-                  onBlur={() => setTimeout(() => setShowPincodeSuggestions(false), 200)}
+                  onFocus={() =>
+                    setShowPincodeSuggestions(
+                      addressFormData.pincode.length >= 3 &&
+                        addressFormData.pincode.length < 6,
+                    )
+                  }
+                  onBlur={() =>
+                    setTimeout(() => setShowPincodeSuggestions(false), 200)
+                  }
                   placeholder="XXXXXX"
                   maxLength={6}
                 />
@@ -1461,13 +1664,20 @@ export default function OutletsPage() {
                         type="button"
                         className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                         onClick={() => {
-                          setAddressFormData((prev) => ({ ...prev, pincode: p.code }));
+                          setAddressFormData((prev) => ({
+                            ...prev,
+                            pincode: p.code,
+                          }));
                           setPincodeSearch(p.code);
                           setShowPincodeSuggestions(false);
                         }}
                       >
                         <span className="font-medium">{p.code}</span>
-                        {p.areaName && <span className="text-muted-foreground ml-2">- {p.areaName}</span>}
+                        {p.areaName && (
+                          <span className="text-muted-foreground ml-2">
+                            - {p.areaName}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1480,17 +1690,28 @@ export default function OutletsPage() {
                   name="city"
                   value={addressFormData.city}
                   onChange={(e) => {
-                    setAddressFormData((prev) => ({ ...prev, city: e.target.value }));
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      city: e.target.value,
+                    }));
                     setShowCitySuggestions(true);
                   }}
                   onFocus={() => setShowCitySuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowCitySuggestions(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCitySuggestions(false), 200)
+                  }
                   placeholder="City"
                 />
                 {showCitySuggestions && cities.length > 0 && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
                     {cities
-                      .filter((c: any) => !addressFormData.city || c.name.toLowerCase().includes(addressFormData.city.toLowerCase()))
+                      .filter(
+                        (c: any) =>
+                          !addressFormData.city ||
+                          c.name
+                            .toLowerCase()
+                            .includes(addressFormData.city.toLowerCase()),
+                      )
                       .slice(0, 10)
                       .map((c: any) => (
                         <button
@@ -1498,7 +1719,10 @@ export default function OutletsPage() {
                           type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                           onClick={() => {
-                            setAddressFormData((prev) => ({ ...prev, city: c.name }));
+                            setAddressFormData((prev) => ({
+                              ...prev,
+                              city: c.name,
+                            }));
                             setShowCitySuggestions(false);
                           }}
                         >
@@ -1515,17 +1739,28 @@ export default function OutletsPage() {
                   name="state"
                   value={addressFormData.state}
                   onChange={(e) => {
-                    setAddressFormData((prev) => ({ ...prev, state: e.target.value }));
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      state: e.target.value,
+                    }));
                     setShowStateSuggestions(true);
                   }}
                   onFocus={() => setShowStateSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowStateSuggestions(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowStateSuggestions(false), 200)
+                  }
                   placeholder="State"
                 />
                 {showStateSuggestions && states.length > 0 && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
                     {states
-                      .filter((s: any) => !addressFormData.state || s.name.toLowerCase().includes(addressFormData.state.toLowerCase()))
+                      .filter(
+                        (s: any) =>
+                          !addressFormData.state ||
+                          s.name
+                            .toLowerCase()
+                            .includes(addressFormData.state.toLowerCase()),
+                      )
                       .slice(0, 10)
                       .map((s: any) => (
                         <button
@@ -1533,7 +1768,10 @@ export default function OutletsPage() {
                           type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                           onClick={() => {
-                            setAddressFormData((prev) => ({ ...prev, state: s.name }));
+                            setAddressFormData((prev) => ({
+                              ...prev,
+                              state: s.name,
+                            }));
                             setSelectedStateId(s.id);
                             setShowStateSuggestions(false);
                           }}
@@ -1550,7 +1788,10 @@ export default function OutletsPage() {
                 id="new-addr-default"
                 checked={addressFormData.isDefault}
                 onCheckedChange={(checked) =>
-                  setAddressFormData((prev) => ({ ...prev, isDefault: checked }))
+                  setAddressFormData((prev) => ({
+                    ...prev,
+                    isDefault: checked,
+                  }))
                 }
               />
               <Label htmlFor="new-addr-default" className="text-sm">
@@ -1559,7 +1800,10 @@ export default function OutletsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddAddressDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddAddressDialog(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -1575,7 +1819,9 @@ export default function OutletsPage() {
                 !addressFormData.pincode
               }
             >
-              {isCreatingAddress && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isCreatingAddress && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Add Address
             </Button>
           </DialogFooter>
@@ -1583,7 +1829,10 @@ export default function OutletsPage() {
       </Dialog>
 
       {/* Edit Address Dialog */}
-      <Dialog open={showEditAddressDialog} onOpenChange={closeEditAddressDialog}>
+      <Dialog
+        open={showEditAddressDialog}
+        onOpenChange={closeEditAddressDialog}
+      >
         <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1612,7 +1861,12 @@ export default function OutletsPage() {
                   id="addr-type"
                   name="addressType"
                   value={addressFormData.addressType}
-                  onChange={(e) => setAddressFormData(prev => ({ ...prev, addressType: e.target.value }))}
+                  onChange={(e) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      addressType: e.target.value,
+                    }))
+                  }
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="HOME">Home</option>
@@ -1695,10 +1949,19 @@ export default function OutletsPage() {
                     const value = e.target.value.replace(/\D/g, "").slice(0, 6);
                     setAddressFormData((prev) => ({ ...prev, pincode: value }));
                     setPincodeSearch(value);
-                    setShowPincodeSuggestions(value.length >= 3 && value.length < 6);
+                    setShowPincodeSuggestions(
+                      value.length >= 3 && value.length < 6,
+                    );
                   }}
-                  onFocus={() => setShowPincodeSuggestions(addressFormData.pincode.length >= 3 && addressFormData.pincode.length < 6)}
-                  onBlur={() => setTimeout(() => setShowPincodeSuggestions(false), 200)}
+                  onFocus={() =>
+                    setShowPincodeSuggestions(
+                      addressFormData.pincode.length >= 3 &&
+                        addressFormData.pincode.length < 6,
+                    )
+                  }
+                  onBlur={() =>
+                    setTimeout(() => setShowPincodeSuggestions(false), 200)
+                  }
                   placeholder="XXXXXX"
                   maxLength={6}
                 />
@@ -1710,13 +1973,20 @@ export default function OutletsPage() {
                         type="button"
                         className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                         onClick={() => {
-                          setAddressFormData((prev) => ({ ...prev, pincode: p.code }));
+                          setAddressFormData((prev) => ({
+                            ...prev,
+                            pincode: p.code,
+                          }));
                           setPincodeSearch(p.code);
                           setShowPincodeSuggestions(false);
                         }}
                       >
                         <span className="font-medium">{p.code}</span>
-                        {p.areaName && <span className="text-muted-foreground ml-2">- {p.areaName}</span>}
+                        {p.areaName && (
+                          <span className="text-muted-foreground ml-2">
+                            - {p.areaName}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1729,17 +1999,28 @@ export default function OutletsPage() {
                   name="city"
                   value={addressFormData.city}
                   onChange={(e) => {
-                    setAddressFormData((prev) => ({ ...prev, city: e.target.value }));
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      city: e.target.value,
+                    }));
                     setShowCitySuggestions(true);
                   }}
                   onFocus={() => setShowCitySuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowCitySuggestions(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCitySuggestions(false), 200)
+                  }
                   placeholder="City"
                 />
                 {showCitySuggestions && cities.length > 0 && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
                     {cities
-                      .filter((c: any) => !addressFormData.city || c.name.toLowerCase().includes(addressFormData.city.toLowerCase()))
+                      .filter(
+                        (c: any) =>
+                          !addressFormData.city ||
+                          c.name
+                            .toLowerCase()
+                            .includes(addressFormData.city.toLowerCase()),
+                      )
                       .slice(0, 10)
                       .map((c: any) => (
                         <button
@@ -1747,7 +2028,10 @@ export default function OutletsPage() {
                           type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                           onClick={() => {
-                            setAddressFormData((prev) => ({ ...prev, city: c.name }));
+                            setAddressFormData((prev) => ({
+                              ...prev,
+                              city: c.name,
+                            }));
                             setShowCitySuggestions(false);
                           }}
                         >
@@ -1764,17 +2048,28 @@ export default function OutletsPage() {
                   name="state"
                   value={addressFormData.state}
                   onChange={(e) => {
-                    setAddressFormData((prev) => ({ ...prev, state: e.target.value }));
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      state: e.target.value,
+                    }));
                     setShowStateSuggestions(true);
                   }}
                   onFocus={() => setShowStateSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowStateSuggestions(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowStateSuggestions(false), 200)
+                  }
                   placeholder="State"
                 />
                 {showStateSuggestions && states.length > 0 && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
                     {states
-                      .filter((s: any) => !addressFormData.state || s.name.toLowerCase().includes(addressFormData.state.toLowerCase()))
+                      .filter(
+                        (s: any) =>
+                          !addressFormData.state ||
+                          s.name
+                            .toLowerCase()
+                            .includes(addressFormData.state.toLowerCase()),
+                      )
                       .slice(0, 10)
                       .map((s: any) => (
                         <button
@@ -1782,7 +2077,10 @@ export default function OutletsPage() {
                           type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                           onClick={() => {
-                            setAddressFormData((prev) => ({ ...prev, state: s.name }));
+                            setAddressFormData((prev) => ({
+                              ...prev,
+                              state: s.name,
+                            }));
                             setSelectedStateId(s.id);
                             setShowStateSuggestions(false);
                           }}
@@ -1799,7 +2097,10 @@ export default function OutletsPage() {
                 id="addr-default"
                 checked={addressFormData.isDefault}
                 onCheckedChange={(checked) =>
-                  setAddressFormData((prev) => ({ ...prev, isDefault: checked }))
+                  setAddressFormData((prev) => ({
+                    ...prev,
+                    isDefault: checked,
+                  }))
                 }
               />
               <Label htmlFor="addr-default" className="text-sm">
@@ -1824,7 +2125,9 @@ export default function OutletsPage() {
                 !addressFormData.pincode
               }
             >
-              {isUpdatingAddress && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isUpdatingAddress && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Save Changes
             </Button>
           </DialogFooter>
@@ -1832,13 +2135,16 @@ export default function OutletsPage() {
       </Dialog>
 
       {/* Delete Address Confirmation */}
-      <AlertDialog open={showDeleteAddressDialog} onOpenChange={setShowDeleteAddressDialog}>
+      <AlertDialog
+        open={showDeleteAddressDialog}
+        onOpenChange={setShowDeleteAddressDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Address</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the address "{selectedAddress?.label}"? 
-              This action cannot be undone.
+              Are you sure you want to delete the address "
+              {selectedAddress?.label}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1848,7 +2154,9 @@ export default function OutletsPage() {
               className="bg-red-600 hover:bg-red-700"
               disabled={isDeletingAddress}
             >
-              {isDeletingAddress && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isDeletingAddress && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1856,7 +2164,10 @@ export default function OutletsPage() {
       </AlertDialog>
 
       {/* Delete Outlet Confirmation */}
-      <AlertDialog open={showDeleteOutletDialog} onOpenChange={setShowDeleteOutletDialog}>
+      <AlertDialog
+        open={showDeleteOutletDialog}
+        onOpenChange={setShowDeleteOutletDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-red-600">
@@ -1864,8 +2175,8 @@ export default function OutletsPage() {
               Delete Outlet
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the outlet "{outletToDelete?.name}"?
-              This will deactivate the outlet and all associated addresses.
+              Are you sure you want to delete the outlet "{outletToDelete?.name}
+              "? This will deactivate the outlet and all associated addresses.
               The outlet user will no longer be able to log in.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1876,7 +2187,9 @@ export default function OutletsPage() {
               className="bg-red-600 hover:bg-red-700"
               disabled={isDeletingOutlet}
             >
-              {isDeletingOutlet && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isDeletingOutlet && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Delete Outlet
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1884,7 +2197,10 @@ export default function OutletsPage() {
       </AlertDialog>
 
       {/* Reset Password Confirmation */}
-      <AlertDialog open={showResetPasswordDialog} onOpenChange={setShowResetPasswordDialog}>
+      <AlertDialog
+        open={showResetPasswordDialog}
+        onOpenChange={setShowResetPasswordDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -1892,9 +2208,10 @@ export default function OutletsPage() {
               Reset Password
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to reset the password for "{outletToResetPassword?.name}"?
-              A new temporary password will be generated and shown to you.
-              The outlet user will need to use this new password to log in.
+              Are you sure you want to reset the password for "
+              {outletToResetPassword?.name}"? A new temporary password will be
+              generated and shown to you. The outlet user will need to use this
+              new password to log in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1903,7 +2220,9 @@ export default function OutletsPage() {
               onClick={handleConfirmResetPassword}
               disabled={isResettingPassword}
             >
-              {isResettingPassword && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isResettingPassword && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Reset Password
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1911,23 +2230,29 @@ export default function OutletsPage() {
       </AlertDialog>
 
       {/* Toggle Status Confirmation */}
-      <AlertDialog open={showToggleStatusDialog} onOpenChange={setShowToggleStatusDialog}>
+      <AlertDialog
+        open={showToggleStatusDialog}
+        onOpenChange={setShowToggleStatusDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Power className="h-5 w-5" />
-              {outletToToggleStatus?.isActive ? "Deactivate" : "Activate"} Outlet
+              {outletToToggleStatus?.isActive ? "Deactivate" : "Activate"}{" "}
+              Outlet
             </AlertDialogTitle>
             <AlertDialogDescription>
               {outletToToggleStatus?.isActive ? (
                 <>
-                  Are you sure you want to deactivate "{outletToToggleStatus?.name}"?
-                  The outlet user will not be able to log in until reactivated.
+                  Are you sure you want to deactivate "
+                  {outletToToggleStatus?.name}"? The outlet user will not be
+                  able to log in until reactivated.
                 </>
               ) : (
                 <>
-                  Are you sure you want to activate "{outletToToggleStatus?.name}"?
-                  The outlet user will be able to log in and access the portal.
+                  Are you sure you want to activate "
+                  {outletToToggleStatus?.name}"? The outlet user will be able to
+                  log in and access the portal.
                 </>
               )}
             </AlertDialogDescription>
@@ -1937,14 +2262,85 @@ export default function OutletsPage() {
             <AlertDialogAction
               onClick={handleConfirmToggleStatus}
               disabled={isTogglingStatus}
-              className={outletToToggleStatus?.isActive ? "bg-orange-600 hover:bg-orange-700" : "bg-green-600 hover:bg-green-700"}
+              className={
+                outletToToggleStatus?.isActive
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-green-600 hover:bg-green-700"
+              }
             >
-              {isTogglingStatus && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isTogglingStatus && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               {outletToToggleStatus?.isActive ? "Deactivate" : "Activate"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Change Badge Dialog */}
+      <Dialog open={showBadgeDialog} onOpenChange={setShowBadgeDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5" />
+              Change Outlet Badge
+            </DialogTitle>
+            <DialogDescription>
+              Select a new badge tier for &quot;{outletToUpdateBadge?.name}
+              &quot;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="grid gap-2">
+              <Label>Badge Tier</Label>
+              <Select value={selectedBadge} onValueChange={setSelectedBadge}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select badge" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(BADGE_CONFIG).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        {config.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedBadge && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-sm text-muted-foreground">
+                    Preview:
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={BADGE_CONFIG[selectedBadge]?.className}
+                  >
+                    {BADGE_CONFIG[selectedBadge]?.label}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBadgeDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmUpdateBadge}
+              disabled={
+                isUpdatingBadge ||
+                selectedBadge === (outletToUpdateBadge?.badge || "BASIC")
+              }
+            >
+              {isUpdatingBadge && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Update Badge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

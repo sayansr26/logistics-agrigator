@@ -17,6 +17,13 @@ The Outlet/Customer Portal module has been successfully implemented, allowing cl
 - ✅ Activate/Deactivate outlet status
 - ✅ Frontend management UI with modals
 - ✅ RTK Query integration
+- ✅ **Outlet Badge System** (February 17, 2026)
+  - 6-tier badges: Basic (default), Bronze, Silver, Gold, Platinum, Diamond
+  - PATCH /outlets/:id/badge with audit logging
+  - Badge filter on list endpoint
+  - Frontend: color-coded badge column, change badge dialog, badge in edit form
+  - Fixed: unhandled rejection crash in all 13 outletController catch blocks
+  - Fixed: auth 409 error passthrough for duplicate emails
 
 ### 🔒 API Gateway Security & 11-Role RBAC Implementation (P0 - Critical)
 
@@ -102,6 +109,7 @@ The primary focus is implementing a robust security layer and role-based access 
 3. **Address types**: HOME, WORK, OTHER (not PICKUP/RETURN)
 4. **Single default address**: Instead of separate pickup/return defaults
 5. **Geo-autocomplete**: Pincode lookup auto-fills city and state
+6. **Badge tiers**: Basic (default), Bronze, Silver, Gold, Platinum, Diamond
 
 ### Technical Decisions
 
@@ -119,6 +127,14 @@ The primary focus is implementing a robust security layer and role-based access 
 ## Recent Changes
 
 ### February 17, 2026
+
+- ✅ **Outlet Badge System** — 6-tier badge system (Basic→Diamond) for outlets
+  - Prisma: `OutletBadge` enum + `badge` field on Outlet model with migration
+  - Backend: PATCH /outlets/:id/badge endpoint + badge filter on list
+  - Frontend: badge column, change badge dialog, badge in edit form
+  - Auth-service: migration to add missing `outlet` value to Role enum
+  - **Critical Bug Fix**: All 13 catch blocks in outletController.js replaced `throw error` with proper `res.status().json()` responses — unhandled rejections were crashing nodemon
+  - **Bug Fix**: Auth 409 errors now pass through actual message instead of generic "Failed to create outlet user"
 
 - ✅ **Charges Zones Query Fix** — partnerId was rejected by Joi validation in GET /api/v1/zones
   - Root cause: Frontend charges page passed `partnerId` as query param but backend `listZones` schema didn't allow it

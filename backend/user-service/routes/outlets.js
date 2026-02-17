@@ -15,6 +15,7 @@ const OutletController = require("../controllers/outletController");
 const {
   createOutletSchema,
   updateOutletSchema,
+  updateBadgeSchema,
   createAddressSchema,
   updateAddressSchema,
   listOutletsQuerySchema,
@@ -295,6 +296,51 @@ router.patch(
   authMiddleware.authenticate,
   authMiddleware.requirePermission("user", "update", "parent"),
   OutletController.toggleOutletStatus,
+);
+
+/**
+ * @swagger
+ * /api/outlets/{id}/badge:
+ *   patch:
+ *     tags: [Outlets]
+ *     summary: Update outlet badge
+ *     description: Assign or change an outlet's badge tier (admin/client only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [badge]
+ *             properties:
+ *               badge:
+ *                 type: string
+ *                 enum: [BASIC, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND]
+ *     responses:
+ *       200:
+ *         description: Badge updated successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Outlet not found
+ */
+router.patch(
+  "/outlets/:id/badge",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("user", "update", "parent"),
+  validate(updateBadgeSchema),
+  OutletController.updateBadge,
 );
 
 /**
@@ -615,4 +661,3 @@ router.delete(
 );
 
 module.exports = router;
-

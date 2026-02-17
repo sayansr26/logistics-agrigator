@@ -3,6 +3,15 @@
 
 const Joi = require("joi");
 
+const VALID_BADGES = [
+  "BASIC",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "DIAMOND",
+];
+
 // Create outlet schema
 const createOutletSchema = Joi.object({
   // Basic info (required)
@@ -77,6 +86,16 @@ const updateOutletSchema = Joi.object({
     .optional()
     .allow(null),
   isActive: Joi.boolean().optional(),
+  badge: Joi.string()
+    .valid(...VALID_BADGES)
+    .optional(),
+});
+
+// Update badge schema
+const updateBadgeSchema = Joi.object({
+  badge: Joi.string()
+    .valid(...VALID_BADGES)
+    .required(),
 });
 
 // Create address schema
@@ -136,13 +155,17 @@ const listOutletsQuerySchema = Joi.object({
     .valid("createdAt", "updatedAt", "name", "email")
     .default("createdAt"),
   sortOrder: Joi.string().valid("asc", "desc").default("desc"),
+  badge: Joi.string()
+    .valid(...VALID_BADGES)
+    .optional(),
 });
 
 module.exports = {
   createOutletSchema,
   updateOutletSchema,
+  updateBadgeSchema,
   createAddressSchema,
   updateAddressSchema,
   listOutletsQuerySchema,
+  VALID_BADGES,
 };
-
