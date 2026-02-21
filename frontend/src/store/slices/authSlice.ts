@@ -14,6 +14,7 @@ interface User {
   accessLevel?: string;
   commissionRate?: number;
   commissionType?: string;
+  permissions?: string[];
   isActive: boolean;
   createdAt?: string;
 }

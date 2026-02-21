@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useAppDispatch } from "@/store/hooks";
 import { hydrate } from "@/store/slices/authSlice";
+import { setPermissions } from "@/store/slices/permissionSlice";
 
 /**
  * AuthHydration Component
@@ -34,6 +35,16 @@ export function AuthHydration() {
         document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
         document.cookie = `userRole=${user.role}; path=/; max-age=86400; SameSite=Lax`;
         console.log("[AuthHydration] ✅ Cookies set for middleware");
+
+        // Hydrate permissions into Redux permission slice
+        if (user.permissions && Array.isArray(user.permissions)) {
+          dispatch(setPermissions(user.permissions));
+          console.log(
+            "[AuthHydration] ✅ Permissions hydrated:",
+            user.permissions.length,
+            "permissions",
+          );
+        }
       } catch (error) {
         console.error("[AuthHydration] Error parsing user:", error);
       }

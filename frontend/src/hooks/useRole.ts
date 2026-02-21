@@ -15,6 +15,9 @@ export enum SystemRole {
   SALES = "sales",
   SUPPORT = "support",
 
+  // Outlet Level (Sub-users under client)
+  OUTLET = "outlet",
+
   // Partner Level
   AFFILIATE = "affiliate",
 }
@@ -30,6 +33,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
   accounts: 60,
   sales: 60,
   support: 60,
+  outlet: 40,
   affiliate: 20,
 };
 
@@ -39,6 +43,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
 const ROLE_GROUPS = {
   system: ["superadmin", "admin"],
   client_level: ["client", "accounts", "sales", "support"],
+  outlet_level: ["outlet"],
   finance: ["accounts"],
   sales_team: ["sales"],
   support_team: ["support"],
@@ -209,6 +214,7 @@ export function useRole() {
         accounts: "Accounts Team",
         sales: "Sales Team",
         support: "Support Team",
+        outlet: "Outlet",
         affiliate: "Affiliate Partner",
       };
 
@@ -233,6 +239,7 @@ export function useRole() {
         accounts: "bg-yellow-100 text-yellow-800",
         sales: "bg-orange-100 text-orange-800",
         support: "bg-indigo-100 text-indigo-800",
+        outlet: "bg-teal-100 text-teal-800",
         affiliate: "bg-pink-100 text-pink-800",
       };
 

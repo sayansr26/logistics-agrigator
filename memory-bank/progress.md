@@ -201,10 +201,10 @@ Overall Project Progress          [███████████████
 
 ### High Priority
 
-1. **Outlet Portal Pages**
-   - `/my-shipments` page for outlet users
-   - `/my-addresses` page for outlet users
-   - Outlet-specific dashboard
+1. ~~**Outlet Portal Pages**~~ ✅ DONE (February 21, 2026)
+   - ✅ Outlet-specific dashboard with quick actions
+   - ✅ Sidebar permissions fixed for outlet role
+   - ✅ Existing `/shipments` and `/addresses` pages accessible
 
 2. **Shipment Bulk Operations**
    - CSV upload and parsing
@@ -253,6 +253,15 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Outlet User Login & Dashboard Fix (February 21, 2026)**
+  - Fixed outlet users seeing admin dashboard (called partners/zones/charges APIs → 403 errors)
+  - Fixed sidebar missing Shipments and My Addresses for outlet role
+  - Root cause: permissions from login response never stored in Redux → sidebar permission checks failed
+  - Split dashboard into AdminDashboard and OutletDashboard components
+  - Added `dispatch(setPermissions())` on login and on page hydration from localStorage
+  - Added `outlet` role to useRole hook (SystemRole enum, hierarchy, groups, display names)
+  - Files: dashboard/page.jsx, useAuth.ts, AuthHydration.tsx, authSlice.ts, useRole.ts
 
 - ✅ **Wallet Module Overhaul — Stateless External Proxy (February 21, 2026)**
   - Wallet service rewritten as stateless proxy to external wallet API (`wapi.websiteduniya.com`)
@@ -412,6 +421,25 @@ Overall Project Progress          [███████████████
 ### February 2026
 
 ```
+[2026-02-21] Outlet User Login & Dashboard Fix - COMPLETE
+  Problem:
+  - Outlet users saw admin dashboard → 403 errors on /partners, /zones, /charges-types APIs
+  - Sidebar only showed Dashboard — Shipments and My Addresses missing
+
+  Root Cause:
+  - Dashboard page called admin API hooks for all users regardless of role
+  - Permissions from login response never dispatched to Redux permission slice
+  - AuthHydration didn't restore permissions from localStorage on page reload
+  - useRole hook missing 'outlet' role entirely
+
+  Fixes:
+  - dashboard/page.jsx: Split into AdminDashboard + OutletDashboard (role-based rendering)
+  - useAuth.ts: dispatch(setPermissions()) after login with user.permissions from response
+  - AuthHydration.tsx: hydrate permissions from localStorage user.permissions on mount
+  - authSlice.ts: added permissions field to User interface
+  - useRole.ts: added outlet to SystemRole enum, ROLE_HIERARCHY (40), ROLE_GROUPS, display names, badge colors
+  - useAuth.ts: added outlet to canAccess map (dashboard, shipments, addresses)
+
 [2026-02-21] Wallet Module Overhaul (Stateless External Proxy) - COMPLETE
   Backend (wallet-service):
   - Rewritten as stateless service — no local database, all data proxied from external wallet API
@@ -703,7 +731,7 @@ Overall Project Progress          [███████████████
 | --------------------------- | ----------- | -------------- |
 | Outlet Module Complete      | Jan 2026    | ✅ Complete    |
 | Charges Management Module   | Feb 2026    | ✅ Complete    |
-| Outlet Portal Pages         | Feb 2026    | 📋 Planned     |
+| Outlet Portal Pages         | Feb 2026    | ✅ Complete    |
 | License Service Integration | Feb 2026    | 🔄 In Progress |
 | Shipment Bulk Operations    | Feb 2026    | 📋 Planned     |
 | Support Service MVP         | Mar 2026    | 📋 Planned     |

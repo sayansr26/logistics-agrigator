@@ -91,9 +91,9 @@ export function useAuth() {
           }),
         );
 
-        // Fetch and store user permissions
-        if (response.data.user.id) {
-          // Permissions will be fetched automatically by useGetUserPermissionsQuery
+        // Store permissions from login response into Redux permission slice
+        if (response.data.user.permissions) {
+          dispatch(setPermissions(response.data.user.permissions));
         }
 
         return response;
@@ -199,16 +199,17 @@ export function useAuth() {
       if (!user?.role) return false;
 
       const accessMap: Record<string, string[]> = {
-        dashboard: ["superadmin", "admin", "client"],
+        dashboard: ["superadmin", "admin", "client", "outlet"],
         users: ["superadmin", "admin"],
         clients: ["superadmin", "admin"],
         billing: ["superadmin", "admin", "accounts"],
-        shipments: ["superadmin", "admin", "client", "sales"],
+        shipments: ["superadmin", "admin", "client", "sales", "outlet"],
         partners: ["superadmin", "admin"],
         wallet: ["superadmin", "admin", "client", "accounts"],
         support: ["superadmin", "admin", "support"],
         analytics: ["superadmin", "admin", "client", "accounts"],
         settings: ["superadmin", "admin", "client"],
+        addresses: ["outlet"],
       };
 
       return accessMap[resource]?.includes(user.role) || false;

@@ -76,10 +76,10 @@ The primary focus is implementing a robust security layer and role-based access 
    - Bulk AWB generation
    - Error handling and reporting
 
-2. **Outlet Portal Pages**
-   - `/my-shipments` - Outlet's own shipments
-   - `/my-addresses` - Outlet's address management
-   - Dashboard view for outlet users
+2. **~~Outlet Portal Pages~~** ✅ DONE (February 21, 2026)
+   - ✅ Outlet-specific dashboard with quick actions
+   - ✅ Sidebar shows Shipments and My Addresses for outlet role
+   - ✅ Permissions hydrated from login response into Redux
 
 ### P2 - Medium Priority (Following Weeks)
 
@@ -127,6 +127,18 @@ The primary focus is implementing a robust security layer and role-based access 
 ## Recent Changes
 
 ### February 21, 2026
+
+- ✅ **Outlet User Login & Dashboard Fix**
+  - **Problem**: Outlet users logged in successfully but saw the admin dashboard, which called APIs (`/partners`, `/zones`, `/charges-types`) they don't have permission for — causing 403 errors. Sidebar only showed "Dashboard" — missing "Shipments" and "My Addresses".
+  - **Root Cause 1 (Dashboard)**: Single dashboard page called admin-only API hooks regardless of role
+  - **Root Cause 2 (Sidebar)**: Permissions from login response were never stored in Redux — `usePermission` hook found empty permissions → `canAccessResource()` returned false → sidebar items hidden
+  - **Fixes Applied**:
+    - `frontend/src/app/dashboard/page.jsx` — Split into `AdminDashboard` (partners/zones/charges) and `OutletDashboard` (create shipment, my shipments, my addresses). Renders based on `user.role === "outlet"`.
+    - `frontend/src/hooks/useAuth.ts` — Added `dispatch(setPermissions(response.data.user.permissions))` after login
+    - `frontend/src/components/AuthHydration.tsx` — Added permissions hydration from localStorage on page reload
+    - `frontend/src/store/slices/authSlice.ts` — Added `permissions?: string[]` to User interface
+    - `frontend/src/hooks/useRole.ts` — Added missing `outlet` role to `SystemRole` enum, `ROLE_HIERARCHY` (level 40), `ROLE_GROUPS`, display names, badge colors
+    - `frontend/src/hooks/useAuth.ts` — Added `outlet` to `canAccess` map for dashboard, shipments, addresses
 
 - ✅ **Wallet Module Overhaul — Stateless External Proxy Architecture**
   - **Backend (wallet-service):**
@@ -343,7 +355,7 @@ The primary focus is implementing a robust security layer and role-based access 
 1. ~~Complete Outlet Module~~ ✅ DONE
 2. ~~Charges Management Module~~ ✅ DONE
 3. ~~Charge Discount Packages~~ ✅ DONE
-4. Build Outlet Portal pages (my-shipments, my-addresses)
+4. ~~Build Outlet Portal pages~~ ✅ DONE (dashboard, sidebar permissions)
 5. Finish License service integration
 6. Begin Shipment bulk operations
 7. Continue Frontend Redux migration
