@@ -748,6 +748,62 @@ class ExternalWalletClient {
   }
 
   /**
+   * Get user transaction history from external wallet API
+   * Calls: GET /transactions/users/{userId}/history
+   * @param {string} userId - User ID (phone number)
+   * @param {Object} query - Query params (page, size)
+   * @returns {Promise<Object>} Paginated transaction history
+   */
+  async getUserTransactionHistory(userId, query = {}) {
+    logger.info("Getting user transaction history", { userId, query });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `transactions/users/${userId}/history`,
+        params: {
+          page: query.page || 0,
+          size: query.size || 20,
+          ...query,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to get user transaction history", {
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get user transaction statistics from external wallet API
+   * Calls: GET /transactions/users/{userId}/statistics
+   * @param {string} userId - User ID (phone number)
+   * @returns {Promise<Object>} Transaction statistics
+   */
+  async getUserTransactionStatistics(userId) {
+    logger.info("Getting user transaction statistics", { userId });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `transactions/users/${userId}/statistics`,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to get user transaction statistics", {
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Get transaction history from external system
    * @param {string} externalWalletId - External wallet ID
    * @param {Object} options - Query options (page, limit, type, etc.)

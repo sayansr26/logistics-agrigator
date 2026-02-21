@@ -146,6 +146,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "shipment:list:own",
     "user:read:own",
     "user:update:own",
+    "wallet:read:own",
   ],
 
   affiliate: [

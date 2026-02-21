@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +52,10 @@ import {
   ChevronRight,
   X,
   Shuffle,
+  IndianRupee,
+  ArrowUpRight,
+  ArrowDownRight,
+  CalendarDays,
 } from "lucide-react";
 import {
   useGetClientWalletsQuery,
@@ -56,8 +66,12 @@ import {
   useUpdateWalletUserStatusMutation,
   useLazyGetOrCreateWalletQuery,
   useSyncWalletsMutation,
+  useGetMyWalletInfoQuery,
+  useGetMyTransactionsQuery,
+  useGetMyStatisticsQuery,
 } from "@/store/api/endpoints/walletApi";
 import { useListOutletsQuery } from "@/store/api/endpoints/outletApi";
+import { useAuth } from "@/hooks/useAuth";
 
 const formatCurrency = (amount) => {
   if (amount == null) return "₹0.00";
@@ -772,7 +786,369 @@ function SyncWalletsModal({ open, onClose, onSuccess }) {
   );
 }
 
-export default function WalletPage() {
+// ===========================
+// Outlet Wallet View (Read-only: stats + transactions)
+// ===========================
+
+function OutletWalletView() {
+  const [page, setPage] = useState(0);
+  const pageSize = 10;
+
+  // Fetch outlet's own wallet data
+  const {
+    data: walletInfo,
+    isLoading: walletLoading,
+    error: walletError,
+  } = useGetMyWalletInfoQuery();
+
+  const { data: statsData, isLoading: statsLoading } =
+    useGetMyStatisticsQuery();
+
+  const { data: txData, isLoading: txLoading } = useGetMyTransactionsQuery({
+    page,
+    size: pageSize,
+  });
+
+  const wallet = walletInfo?.data?.wallet || walletInfo?.wallet;
+  const stats = statsData?.statistics || statsData;
+  const transactions = txData?.data || [];
+  const pagination = txData?.pagination;
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6 p-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">My Wallet</h1>
+            <p className="text-sm text-muted-foreground">
+              Balance, transactions & activity overview
+            </p>
+          </div>
+          {wallet && (
+            <Badge
+              className={`${getStatusColor(wallet.status)} border px-3 py-1 text-xs font-semibold`}
+              variant="outline"
+            >
+              {wallet.status}
+            </Badge>
+          )}
+        </div>
+
+        {/* Error State */}
+        {walletError && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="flex items-center gap-3 py-4">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <p className="text-sm text-destructive">
+                Failed to load wallet information. Please try again later.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Balance + Quick Stats Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {/* Balance — spans 2 cols */}
+          <Card className="lg:col-span-2 bg-gradient-to-br from-primary/5 via-transparent to-transparent border-primary/20">
+            <CardContent className="pt-6 pb-5">
+              {walletLoading ? (
+                <div className="flex items-center gap-2 h-[72px]">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="text-muted-foreground text-sm">
+                    Loading balance...
+                  </span>
+                </div>
+              ) : wallet ? (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 rounded-md bg-primary/10">
+                      <Wallet className="h-4 w-4 text-primary" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Available Balance
+                    </p>
+                  </div>
+                  <p className="text-4xl font-bold tracking-tight">
+                    {formatCurrency(wallet.balance)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {wallet.currency || "INR"} &middot; Updated{" "}
+                    {formatDate(wallet.updatedAt)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4">
+                  No wallet found. Contact your administrator.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Top-ups */}
+          <Card>
+            <CardContent className="pt-6 pb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 rounded-md bg-emerald-500/10">
+                  <ArrowUpRight className="h-4 w-4 text-emerald-600" />
+                </div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Top-ups
+                </p>
+              </div>
+              <p className="text-2xl font-bold text-emerald-600">
+                {formatCurrency(stats?.top_up_stats?.total_amount || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats?.top_up_stats?.count || 0} transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Debits */}
+          <Card>
+            <CardContent className="pt-6 pb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 rounded-md bg-red-500/10">
+                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                </div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Debits
+                </p>
+              </div>
+              <p className="text-2xl font-bold text-red-600">
+                {formatCurrency(stats?.debit_stats?.total_amount || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats?.debit_stats?.count || 0} transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Refunds */}
+          <Card>
+            <CardContent className="pt-6 pb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 rounded-md bg-purple-500/10">
+                  <RotateCcw className="h-4 w-4 text-purple-600" />
+                </div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Refunds
+                </p>
+              </div>
+              <p className="text-2xl font-bold text-purple-600">
+                {formatCurrency(stats?.refund_stats?.total_amount || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats?.refund_stats?.count || 0} transactions
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Last 30 Days Summary — compact inline bar */}
+        {stats?.last_30_days && (
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Last 30 Days</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({formatDate(stats.last_30_days.period_start)} –{" "}
+                    {formatDate(stats.last_30_days.period_end)})
+                  </span>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-lg font-bold">
+                      {stats.last_30_days.total_transactions}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Txns
+                    </p>
+                  </div>
+                  <div className="h-8 w-px bg-border" />
+                  <div className="text-center">
+                    <p className="text-lg font-bold">
+                      {formatCurrency(stats.last_30_days.total_amount)}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Volume
+                    </p>
+                  </div>
+                  {stats.last_30_days.breakdown_by_type &&
+                    Object.entries(stats.last_30_days.breakdown_by_type).map(
+                      ([type, info]) => {
+                        const isCredit = type === "TOP_UP" || type === "REFUND";
+                        return (
+                          <React.Fragment key={type}>
+                            <div className="h-8 w-px bg-border" />
+                            <div className="text-center">
+                              <p
+                                className={`text-lg font-bold ${isCredit ? "text-emerald-600" : "text-red-600"}`}
+                              >
+                                {formatCurrency(info.total_amount)}
+                              </p>
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                {type.replace("_", " ")} ({info.count})
+                              </p>
+                            </div>
+                          </React.Fragment>
+                        );
+                      },
+                    )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Transaction History */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Transaction History</CardTitle>
+              {pagination && (
+                <span className="text-xs text-muted-foreground">
+                  {pagination.total_elements} total transactions
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            {txLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin mr-2 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Loading transactions...
+                </span>
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-12">
+                <CreditCard className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No transactions yet
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="pl-6">Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right">Before</TableHead>
+                        <TableHead className="text-right">After</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead className="pr-6">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((tx) => {
+                        const isCredit =
+                          tx.type === "TOP_UP" || tx.type === "REFUND";
+                        const badge = getTransactionTypeBadge(tx.type);
+                        return (
+                          <TableRow key={tx.id}>
+                            <TableCell className="pl-6 whitespace-nowrap text-sm text-muted-foreground">
+                              {formatDate(tx.createdAt)}
+                            </TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badge.className}`}
+                              >
+                                {badge.icon === "up" && (
+                                  <ArrowUpRight className="h-3 w-3" />
+                                )}
+                                {badge.icon === "down" && (
+                                  <ArrowDownRight className="h-3 w-3" />
+                                )}
+                                {badge.icon === "return" && (
+                                  <RotateCcw className="h-3 w-3" />
+                                )}
+                                {badge.label}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              <span
+                                className={
+                                  isCredit ? "text-emerald-600" : "text-red-600"
+                                }
+                              >
+                                {isCredit ? "+" : "-"}
+                                {formatCurrency(tx.amount)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
+                              {formatCurrency(tx.balanceBefore)}
+                            </TableCell>
+                            <TableCell className="text-right text-sm tabular-nums font-medium">
+                              {formatCurrency(tx.balanceAfter)}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground max-w-[140px] truncate">
+                              {tx.referenceId || "—"}
+                            </TableCell>
+                            <TableCell className="pr-6">
+                              <Badge
+                                className={`${getStatusColor(tx.status)} border text-[10px] font-medium`}
+                                variant="outline"
+                              >
+                                {tx.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination */}
+                {pagination && pagination.total_pages > 1 && (
+                  <div className="flex items-center justify-between px-6 py-3 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      Page {pagination.current_page + 1} of{" "}
+                      {pagination.total_pages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!pagination.has_previous}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!pagination.has_next}
+                        onClick={() => setPage((p) => p + 1)}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// ===========================
+// Admin Wallet Page (existing)
+// ===========================
+
+function AdminWalletPage() {
   const [activeTab, setActiveTab] = useState("wallets");
 
   // Wallet tab state
@@ -1623,4 +1999,26 @@ export default function WalletPage() {
       </div>
     </DashboardLayout>
   );
+}
+
+// ===========================
+// Default Export - Route between Outlet and Admin views
+// ===========================
+
+export default function WalletPage() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (user.role === "outlet") {
+    return <OutletWalletView />;
+  }
+
+  return <AdminWalletPage />;
 }

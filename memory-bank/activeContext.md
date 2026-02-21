@@ -49,7 +49,7 @@ The primary focus is implementing a robust security layer and role-based access 
 | **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API |
 | **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations           |
 | **Partner Service**  | 3005 | ✅ Complete   | 100%       | Discount packages added   |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stateless external proxy  |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Outlet wallet view added  |
 | **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending       |
 | **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started               |
 | **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next              |
@@ -127,6 +127,14 @@ The primary focus is implementing a robust security layer and role-based access 
 ## Recent Changes
 
 ### February 21, 2026
+
+- ✅ **Outlet Wallet Page**
+  - Outlet users can now access `/wallet` to view their balance, stats, and transaction history
+  - Backend: 3 new `/my/*` endpoints in wallet-service using `req.user.phone` as wallet user ID
+  - Backend fixes: shared Redis init, Redis v4 `setEx`, JWT permission fallback, phone in JWT payload
+  - Frontend: `OutletWalletView` — gradient balance card, stat cards (topups/debits/refunds), 30-day summary bar, paginated transaction table
+  - Role-based routing with loading guard prevents admin API leaks for outlet users
+  - Key files: `outletWalletController.js`, `externalWalletClient.js`, `wallet/page.jsx`, `walletApi.ts`, `shared/lib/auth.js`, `shared/constants/permissions.js`
 
 - ✅ **Outlet User Login & Dashboard Fix**
   - **Problem**: Outlet users logged in successfully but saw the admin dashboard, which called APIs (`/partners`, `/zones`, `/charges-types`) they don't have permission for — causing 403 errors. Sidebar only showed "Dashboard" — missing "Shipments" and "My Addresses".
@@ -337,6 +345,7 @@ The primary focus is implementing a robust security layer and role-based access 
 | Discount pkg UI     | `frontend/src/app/charge-discount-packages/page.tsx`                     |
 | Discount pkg API    | `frontend/src/store/api/endpoints/chargeDiscountPackagesApi.ts`          |
 | Wallet admin ctrl   | `backend/wallet-service/controllers/adminWalletController.js`            |
+| Wallet outlet ctrl  | `backend/wallet-service/controllers/outletWalletController.js`           |
 | Wallet routes       | `backend/wallet-service/routes/wallet.js`                                |
 | Wallet ext client   | `backend/wallet-service/services/externalWalletClient.js`                |
 | Wallet schemas      | `backend/wallet-service/validation/walletSchema.js`                      |
@@ -356,9 +365,10 @@ The primary focus is implementing a robust security layer and role-based access 
 2. ~~Charges Management Module~~ ✅ DONE
 3. ~~Charge Discount Packages~~ ✅ DONE
 4. ~~Build Outlet Portal pages~~ ✅ DONE (dashboard, sidebar permissions)
-5. Finish License service integration
-6. Begin Shipment bulk operations
-7. Continue Frontend Redux migration
+5. ~~Outlet Wallet Page~~ ✅ DONE (balance, stats, transactions for outlet role)
+6. Finish License service integration
+7. Begin Shipment bulk operations
+8. Continue Frontend Redux migration
 
 ---
 

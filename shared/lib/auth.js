@@ -94,7 +94,7 @@ const authUtils = {
       );
 
       // Cache result for 5 minutes
-      await redisClient.setex(cacheKey, 300, hasPermission ? "true" : "false");
+      await redisClient.setEx(cacheKey, 300, hasPermission ? "true" : "false");
 
       return hasPermission;
     } catch (error) {
@@ -137,7 +137,7 @@ const authUtils = {
         const effectivePermissions = response.data.data || [];
 
         // Cache for 5 minutes
-        await redisClient.setex(
+        await redisClient.setEx(
           cacheKey,
           300,
           JSON.stringify(effectivePermissions),
@@ -150,13 +150,27 @@ const authUtils = {
           httpError.message,
         );
 
-        // Fallback: return empty array (fail secure)
-        // In production, you might want to return basic permissions based on role
+        // Fallback: use JWT-embedded permissions (set during login)
+        if (user.permissions && Array.isArray(user.permissions)) {
+          return user.permissions.map((p) => {
+            const [module, action, scope] = p.split(":");
+            return { module, action, scope };
+          });
+        }
+
         return [];
       }
     } catch (error) {
       console.error("Error getting effective permissions:", error);
-      // Fail secure - return empty permissions on error
+
+      // Fallback: use JWT-embedded permissions
+      if (user.permissions && Array.isArray(user.permissions)) {
+        return user.permissions.map((p) => {
+          const [module, action, scope] = p.split(":");
+          return { module, action, scope };
+        });
+      }
+
       return [];
     }
   },

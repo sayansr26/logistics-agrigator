@@ -251,6 +251,7 @@ class AuthController {
         userId: user.id,
         clientId: user.clientId,
         role: user.role,
+        phone: user.phone || null,
         permissions,
         // Include auth-service RBAC fields
         accessLevel: user.accessLevel || null,

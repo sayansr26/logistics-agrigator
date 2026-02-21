@@ -1,34 +1,49 @@
-const redis = require("redis");
+// Use shared Redis utilities (same pattern as user-service)
+const { createClient, getClient } = require("../shared/lib/redis");
 
-let client;
+let redisClient = null;
 
 const connectRedis = async () => {
   try {
-    client = redis.createClient({
-      url: process.env.REDIS_URL,
-    });
-
-    client.on("error", (err) => {
-      console.error("Redis Client Error:", err);
-    });
-
-    await client.connect();
-    console.log("Redis connected");
-    return client;
+    if (!redisClient) {
+      const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
+      redisClient = await createClient(redisUrl);
+      console.log("Wallet Service: Redis client connected");
+    }
+    return redisClient;
   } catch (error) {
-    console.error("Redis connection failed:", error);
+    console.error("Wallet Service: Redis connection failed:", error);
     throw error;
   }
 };
 
 const getRedisClient = () => {
-  if (!client) {
-    throw new Error("Redis client not initialized");
+  if (!redisClient) {
+    try {
+      return getClient();
+    } catch (error) {
+      throw new Error(
+        "Redis client not initialized. Call connectRedis() first.",
+      );
+    }
   }
-  return client;
+  return redisClient;
+};
+
+const disconnectRedis = async () => {
+  try {
+    if (redisClient) {
+      await redisClient.quit();
+      redisClient = null;
+      console.log("Wallet Service: Redis disconnected");
+    }
+  } catch (error) {
+    console.error("Wallet Service: Error disconnecting from Redis:", error);
+  }
 };
 
 module.exports = {
   connectRedis,
   getRedisClient,
+  disconnectRedis,
 };

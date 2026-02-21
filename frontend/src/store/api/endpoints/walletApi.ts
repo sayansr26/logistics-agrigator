@@ -138,6 +138,74 @@ interface UpdateUserStatusRequest {
   clientCode?: string;
 }
 
+// ===========================
+// Outlet (My) Wallet Interfaces
+// ===========================
+
+interface GetMyTransactionsParams {
+  page?: number;
+  size?: number;
+}
+
+interface MyWalletInfoResponse {
+  success: boolean;
+  data: {
+    createdAt: string;
+    wallet: {
+      updatedAt: string;
+      createdAt: string;
+      currency: string;
+      balance: number;
+      id: number;
+      status: string;
+    };
+    clientName: string;
+    clientCode: string;
+    id: number;
+    userId: string;
+    status: string;
+    updatedAt: string;
+  };
+}
+
+interface TypeStat {
+  total_amount: number;
+  percentage: number;
+  count: number;
+}
+
+interface Last30Days {
+  period_end: string;
+  period_start: string;
+  total_amount: number;
+  breakdown_by_type: Record<string, { total_amount: number; count: number }>;
+  generated_at: string;
+  total_transactions: number;
+}
+
+interface MyStatisticsData {
+  user_id: string;
+  success: boolean;
+  statistics: {
+    fee_stats: TypeStat;
+    generated_at: string;
+    total_transactions: number;
+    last_30_days: Last30Days;
+    transfer_out_stats: TypeStat;
+    debit_stats: TypeStat;
+    top_up_stats: TypeStat;
+    transfer_in_stats: TypeStat;
+    refund_stats: TypeStat;
+  };
+}
+
+interface MyTransactionsResponse {
+  pagination: Pagination;
+  data: TransactionData[];
+  success: boolean;
+  filters: Record<string, string>;
+}
+
 interface SyncWalletsRequest {
   userIds: string[];
   clientCode?: string;
@@ -278,6 +346,43 @@ export const walletApi = baseApi.injectEndpoints({
       transformResponse: (response: any) => response.data || response,
       invalidatesTags: [{ type: "Wallet", id: "LIST" }],
     }),
+
+    // ===========================
+    // Outlet (My) Wallet Endpoints
+    // ===========================
+
+    /**
+     * Get My Wallet Info - Outlet user's own wallet info
+     */
+    getMyWalletInfo: builder.query<MyWalletInfoResponse, void>({
+      query: () => "/api/v1/wallet/my/wallet-info",
+      transformResponse: (response: any) => response.data || response,
+      providesTags: [{ type: "Wallet", id: "MY_WALLET" }],
+    }),
+
+    /**
+     * Get My Transactions - Outlet user's own transaction history
+     */
+    getMyTransactions: builder.query<
+      MyTransactionsResponse,
+      GetMyTransactionsParams | void
+    >({
+      query: (params = {}) => ({
+        url: "/api/v1/wallet/my/transactions",
+        params,
+      }),
+      transformResponse: (response: any) => response.data || response,
+      providesTags: [{ type: "Wallet", id: "MY_TRANSACTIONS" }],
+    }),
+
+    /**
+     * Get My Statistics - Outlet user's own transaction statistics
+     */
+    getMyStatistics: builder.query<MyStatisticsData, void>({
+      query: () => "/api/v1/wallet/my/statistics",
+      transformResponse: (response: any) => response.data || response,
+      providesTags: [{ type: "Wallet", id: "MY_STATS" }],
+    }),
   }),
 });
 
@@ -295,6 +400,10 @@ export const {
   useUpdateWalletUserStatusMutation,
   useSyncWalletsMutation,
   useLazyGetOrCreateWalletQuery,
+  // Outlet (My) wallet hooks
+  useGetMyWalletInfoQuery,
+  useGetMyTransactionsQuery,
+  useGetMyStatisticsQuery,
 } = walletApi;
 
 // ===========================
@@ -316,4 +425,11 @@ export type {
   UpdateUserStatusRequest,
   SyncWalletsRequest,
   SyncWalletsResponse,
+  // Outlet (My) wallet types
+  GetMyTransactionsParams,
+  MyWalletInfoResponse,
+  MyStatisticsData,
+  MyTransactionsResponse,
+  TypeStat,
+  Last30Days,
 };

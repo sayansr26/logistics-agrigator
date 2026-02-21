@@ -175,7 +175,7 @@ const getNavigationSections = () => {
           title: "Wallet",
           href: "/wallet",
           icon: Wallet,
-          roles: ["superadmin", "admin", "accounts", "client"],
+          roles: ["superadmin", "admin", "accounts", "client", "outlet"],
           disabled: false,
         },
       ].filter(canSeeMenuItem),

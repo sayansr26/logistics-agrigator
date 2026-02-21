@@ -471,3 +471,118 @@ Response:
   }
 }
 ```
+
+2.2 Users transaction history
+
+```curl
+curl --location 'https://wapi.websiteduniya.com/api/v1/transactions/users/9876543211/history?page=0&size=20' \
+--header 'Accept: */*'
+```
+
+Response :
+
+```json
+{
+  "pagination": {
+    "current_page": 0,
+    "total_elements": 1,
+    "page_size": 20,
+    "has_next": false,
+    "has_previous": false,
+    "total_pages": 1
+  },
+  "filters": {},
+  "data": [
+    {
+      "id": 2,
+      "type": "TOP_UP",
+      "amount": 10000.0,
+      "balanceBefore": 0.0,
+      "balanceAfter": 10000.0,
+      "currency": "INR",
+      "referenceId": "121211111111111111111111",
+      "clientCode": "TEST",
+      "description": "deserunt voluptate in",
+      "metadata": null,
+      "remarks": "{\"Lorem37c\": {}, \"currency\": \"INR\", \"dolor_754\": {}, \"tempor4b3\": {}, \"clientCode\": \"TEST\", \"clientContext\": true}",
+      "status": "COMPLETED",
+      "createdAt": "2026-02-20T12:31:51.578558",
+      "wallet_id": 1,
+      "walletId": 1,
+      "remarksAsMap": {
+        "Lorem37c": {},
+        "currency": "INR",
+        "dolor_754": {},
+        "tempor4b3": {},
+        "clientCode": "TEST",
+        "clientContext": true
+      },
+      "userId": "9876543211"
+    }
+  ],
+  "success": true
+}
+```
+
+2.3 Transaction stats for user
+
+```bash
+curl --location 'https://wapi.websiteduniya.com/api/v1/transactions/users/ex nulla in/statistics' \
+--header 'Accept: */*'
+```
+
+Response:
+
+```json
+{
+  "user_id": "9876543211",
+  "success": true,
+  "statistics": {
+    "fee_stats": {
+      "total_amount": 0,
+      "percentage": 0.0,
+      "count": 0
+    },
+    "generated_at": "2026-02-21T13:13:44.502009368",
+    "total_transactions": 1,
+    "last_30_days": {
+      "period_end": "2026-02-21T13:13:44.480148116",
+      "period_start": "2026-01-22T13:13:44.480077534",
+      "total_amount": 10000.0,
+      "breakdown_by_type": {
+        "TOP_UP": {
+          "total_amount": 10000.0,
+          "count": 1
+        }
+      },
+      "generated_at": "2026-02-21T13:13:44.496719325",
+      "total_transactions": 1
+    },
+    "transfer_out_stats": {
+      "total_amount": 0,
+      "percentage": 0.0,
+      "count": 0
+    },
+    "debit_stats": {
+      "total_amount": 0,
+      "percentage": 0.0,
+      "count": 0
+    },
+    "top_up_stats": {
+      "total_amount": 10000.0,
+      "percentage": 100.0,
+      "count": 1
+    },
+    "transfer_in_stats": {
+      "total_amount": 0,
+      "percentage": 0.0,
+      "count": 0
+    },
+    "refund_stats": {
+      "total_amount": 0,
+      "percentage": 0.0,
+      "count": 0
+    }
+  }
+}
+```

@@ -52,6 +52,11 @@ const {
   refundWallet,
   syncWallets,
 } = require("../controllers/adminWalletController");
+const {
+  getMyTransactionHistory,
+  getMyTransactionStatistics,
+  getMyWalletInfo,
+} = require("../controllers/outletWalletController");
 
 const router = express.Router();
 
@@ -190,6 +195,44 @@ router.get(
   strictLimiter,
   validateQuery(adminTransactionsQuerySchema),
   getAllTransactions,
+);
+
+// -------------------------------------------------------------------------
+// Outlet (my) routes — authenticated user's own wallet data
+// MUST be defined BEFORE /:userId catch-all routes
+// -------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/wallet/my/wallet-info
+ * Get wallet info for the authenticated outlet user
+ */
+router.get(
+  "/my/wallet-info",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  getMyWalletInfo,
+);
+
+/**
+ * GET /api/v1/wallet/my/transactions
+ * Get transaction history for the authenticated outlet user
+ */
+router.get(
+  "/my/transactions",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  getMyTransactionHistory,
+);
+
+/**
+ * GET /api/v1/wallet/my/statistics
+ * Get transaction statistics for the authenticated outlet user
+ */
+router.get(
+  "/my/statistics",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  getMyTransactionStatistics,
 );
 
 // -------------------------------------------------------------------------

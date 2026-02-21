@@ -112,6 +112,19 @@ Overall Project Progress          [███████████████
 - ✅ Frontend: Create Wallet & Sync Wallets modals
 - ✅ Frontend: RTK Query `walletApi.ts` with 8 endpoints
 - ✅ Frontend: polished UI with grouped header buttons, transaction type badges with icons
+- ✅ **Outlet Wallet View** (February 21, 2026)
+  - Backend: `outletWalletController.js` with 3 endpoints (`/my/wallet-info`, `/my/transactions`, `/my/statistics`)
+  - Backend: `externalWalletClient.js` added `getUserTransactionHistory()` and `getUserTransactionStatistics()`
+  - Backend: Uses `req.user.phone` as wallet userId (phone added to JWT payload in auth-service)
+  - Backend: Permission `wallet:read:own` added to outlet role in `shared/constants/permissions.js`
+  - Backend: Fixed shared Redis initialization in wallet-service (`config/redis.js` now uses shared Redis client)
+  - Backend: Fixed `setex` → `setEx` (Redis v4) in `shared/lib/auth.js`
+  - Backend: Fixed `getEffectivePermissions` fallback to use JWT-embedded permissions
+  - Frontend: `OutletWalletView` component with balance card (gradient), stats row, 30-day summary bar, paginated transaction table
+  - Frontend: RTK Query endpoints (`getMyWalletInfo`, `getMyTransactions`, `getMyStatistics`)
+  - Frontend: Role-based routing with loading guard (prevents admin API calls for outlet users)
+  - Frontend: `phone` field added to User interface in authSlice and authApi
+  - Sidebar: `outlet` role added to wallet nav item
 
 #### Shipment Service (90% Complete)
 
@@ -253,6 +266,15 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Outlet Wallet Page (February 21, 2026)**
+  - Outlet users can now view their wallet balance, transaction statistics, and transaction history at `/wallet`
+  - Backend: 3 new `/my/*` routes in wallet-service with `wallet:read:own` permission
+  - Backend: `outletWalletController.js` uses `req.user.phone` as wallet user ID
+  - Backend fixes: shared Redis initialization, Redis v4 API (`setEx`), JWT permission fallback, `phone` in JWT payload
+  - Frontend: `OutletWalletView` — balance card with gradient, 3 stat cards (topups/debits/refunds), 30-day summary bar, paginated transaction table
+  - Frontend: role-based view routing with loading guard to prevent admin API leaks
+  - Files: `outletWalletController.js` (new), `externalWalletClient.js`, `wallet.js` (routes), `wallet/page.jsx`, `walletApi.ts`, `authSlice.ts`, `authApi.ts`, `sidebar.jsx`, `shared/constants/permissions.js`, `shared/lib/auth.js`, `wallet-service/config/redis.js`, `auth-service/controllers/authController.js`
 
 - ✅ **Outlet User Login & Dashboard Fix (February 21, 2026)**
   - Fixed outlet users seeing admin dashboard (called partners/zones/charges APIs → 403 errors)
@@ -421,6 +443,30 @@ Overall Project Progress          [███████████████
 ### February 2026
 
 ```
+[2026-02-21] Outlet Wallet Page - COMPLETE
+  Backend (wallet-service):
+  - New outletWalletController.js: getMyWalletInfo, getMyTransactionHistory, getMyTransactionStatistics
+  - externalWalletClient.js: added getUserTransactionHistory(), getUserTransactionStatistics()
+  - routes/wallet.js: added /my/wallet-info, /my/transactions, /my/statistics (wallet:read:own permission)
+  - Uses req.user.phone as wallet userId (phone number = external wallet user ID)
+  - Fixes: shared Redis init in config/redis.js, setex→setEx (Redis v4), getEffectivePermissions JWT fallback
+
+  Backend (auth-service):
+  - Added phone: user.phone to JWT tokenPayload in authController.js login endpoint
+
+  Backend (shared):
+  - shared/constants/permissions.js: added wallet:read:own to outlet role
+  - shared/lib/auth.js: fixed setex→setEx (Redis v4), added JWT permission fallback in getEffectivePermissions
+
+  Frontend:
+  - wallet/page.jsx: added OutletWalletView component with balance card (gradient), stats row
+    (topups/debits/refunds), 30-day summary bar, paginated transaction table with type badges
+  - Role-based routing: WalletPage checks user.role, renders OutletWalletView or AdminWalletPage
+  - Loading guard (isLoading || !user) prevents AdminWalletPage from mounting for outlet users
+  - walletApi.ts: 3 new RTK Query endpoints (getMyWalletInfo, getMyTransactions, getMyStatistics)
+  - authSlice.ts + authApi.ts: added phone field to User interface
+  - sidebar.jsx: added outlet to wallet nav item roles
+
 [2026-02-21] Outlet User Login & Dashboard Fix - COMPLETE
   Problem:
   - Outlet users saw admin dashboard → 403 errors on /partners, /zones, /charges-types APIs
