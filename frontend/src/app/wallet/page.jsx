@@ -1,24 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -29,722 +25,1604 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import {
-  mockTransactions,
-  mockInvoices,
-  getInvoiceStatusColor,
-  formatCurrency,
-  formatDate,
-} from "@/lib/mock-data.ts";
-import {
-  CreditCard,
   Wallet,
+  CreditCard,
+  TrendingUp,
   TrendingDown,
-  Clock,
-  Download,
   RefreshCw,
   Plus,
-  MoreHorizontal,
-  Eye,
-  Search,
-  Filter,
-  FileText,
+  Minus,
+  RotateCcw,
+  Settings,
+  Loader2,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   X,
-  Calendar,
+  Shuffle,
 } from "lucide-react";
+import {
+  useGetClientWalletsQuery,
+  useGetClientTransactionsQuery,
+  useTopupWalletMutation,
+  useDebitWalletMutation,
+  useRefundWalletMutation,
+  useUpdateWalletUserStatusMutation,
+  useLazyGetOrCreateWalletQuery,
+  useSyncWalletsMutation,
+} from "@/store/api/endpoints/walletApi";
+import { useListOutletsQuery } from "@/store/api/endpoints/outletApi";
+
+const formatCurrency = (amount) => {
+  if (amount == null) return "₹0.00";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+  }).format(amount);
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const getStatusColor = (status) => {
+  switch (status?.toUpperCase()) {
+    case "ACTIVE":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "SUSPENDED":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "BLOCKED":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "CLOSED":
+      return "bg-gray-100 text-gray-800 border-gray-200";
+    case "COMPLETED":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "PENDING":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "FAILED":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "CANCELLED":
+      return "bg-gray-100 text-gray-800 border-gray-200";
+    default:
+      return "bg-blue-100 text-blue-800 border-blue-200";
+  }
+};
+
+const getTransactionTypeBadge = (type) => {
+  switch (type?.toUpperCase()) {
+    case "TOP_UP":
+    case "TOPUP":
+      return {
+        label: "Topup",
+        icon: "up",
+        className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      };
+    case "DEBIT":
+      return {
+        label: "Debit",
+        icon: "down",
+        className: "bg-red-500/10 text-red-500 border-red-500/20",
+      };
+    case "REFUND":
+      return {
+        label: "Refund",
+        icon: "return",
+        className: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+      };
+    default:
+      return {
+        label: type || "Unknown",
+        icon: null,
+        className: "bg-muted text-muted-foreground border-border",
+      };
+  }
+};
+
+// Dynamic key-value remarks builder
+function RemarksBuilder({ remarks, onChange }) {
+  const entries = Object.entries(remarks || {});
+
+  const addRow = () => {
+    const newKey = `key${entries.length + 1}`;
+    onChange({ ...remarks, [newKey]: "" });
+  };
+
+  const removeRow = (key) => {
+    const updated = { ...remarks };
+    delete updated[key];
+    onChange(updated);
+  };
+
+  const updateKey = (oldKey, newKey) => {
+    if (oldKey === newKey) return;
+    const updated = {};
+    for (const [k, v] of Object.entries(remarks)) {
+      if (k === oldKey) {
+        updated[newKey] = v;
+      } else {
+        updated[k] = v;
+      }
+    }
+    onChange(updated);
+  };
+
+  const updateValue = (key, value) => {
+    onChange({ ...remarks, [key]: value });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Remarks (Key-Value)</Label>
+      {entries.map(([key, value]) => (
+        <div key={key} className="flex gap-2 items-center">
+          <Input
+            placeholder="Key"
+            defaultValue={key}
+            onBlur={(e) => updateKey(key, e.target.value)}
+            className="flex-1"
+          />
+          <Input
+            placeholder="Value"
+            value={value}
+            onChange={(e) => updateValue(key, e.target.value)}
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => removeRow(key)}
+            className="shrink-0 text-red-500 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={addRow}
+        className="w-full"
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Add Remark
+      </Button>
+    </div>
+  );
+}
+
+// Generate a unique reference ID
+function generateReferenceId() {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).substring(2, 9);
+  return `ref_${ts}_${rand}`;
+}
+
+// Transaction Modal (Topup / Debit / Refund)
+function TransactionModal({
+  open,
+  onClose,
+  type,
+  prefilledUserId,
+  onSubmit,
+  isLoading,
+}) {
+  const { data: outletsData } = useListOutletsQuery({ limit: 100 });
+  const outlets = outletsData?.data?.outlets || outletsData?.outlets || [];
+
+  // Fetch transactions for refund dropdown (only when type is refund and user is selected)
+  const [selectedUserId, setSelectedUserId] = useState(prefilledUserId || "");
+  const { data: txData } = useGetClientTransactionsQuery(
+    { userId: selectedUserId, size: 100 },
+    { skip: type !== "refund" || !selectedUserId },
+  );
+  const transactions = txData?.data || [];
+
+  const [form, setForm] = useState({
+    userId: prefilledUserId || "",
+    amount: "",
+    reference_id: "",
+    description: "",
+    metadata: "",
+    transaction_id: "",
+    remarks: {},
+  });
+
+  const handleOutletChange = (v) => {
+    setSelectedUserId(v);
+    setForm({ ...form, userId: v, transaction_id: "", amount: "" });
+  };
+
+  const handleTransactionSelect = (txId) => {
+    const tx = transactions.find((t) => String(t.id) === txId);
+    if (tx) {
+      setForm({
+        ...form,
+        transaction_id: txId,
+        amount: String(tx.amount),
+      });
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = {
+      userId: form.userId,
+      amount: parseFloat(form.amount),
+      currency: "INR",
+      reference_id: form.reference_id,
+    };
+    if (form.description) payload.description = form.description;
+    if (form.metadata) {
+      try {
+        payload.metadata = JSON.parse(form.metadata);
+      } catch {
+        payload.metadata = { note: form.metadata };
+      }
+    }
+    if (Object.keys(form.remarks).length > 0) payload.remarks = form.remarks;
+    if (type === "refund" && form.transaction_id) {
+      payload.transaction_id = parseInt(form.transaction_id);
+    }
+    onSubmit(payload);
+  };
+
+  const title =
+    type === "topup"
+      ? "Topup Wallet"
+      : type === "debit"
+        ? "Debit Wallet"
+        : "Refund Wallet";
+
+  const description =
+    type === "topup"
+      ? "Add funds to the user's wallet"
+      : type === "debit"
+        ? "Deduct funds from the user's wallet"
+        : "Refund a transaction to the user's wallet";
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Outlet *</Label>
+            <Select
+              value={form.userId}
+              onValueChange={handleOutletChange}
+              required
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select outlet" />
+              </SelectTrigger>
+              <SelectContent>
+                {outlets.map((outlet) => (
+                  <SelectItem key={outlet.id} value={outlet.phone}>
+                    {outlet.name} ({outlet.phone})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {type === "refund" && (
+            <div className="space-y-2">
+              <Label>Transaction to Refund *</Label>
+              <Select
+                value={form.transaction_id}
+                onValueChange={handleTransactionSelect}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      selectedUserId
+                        ? "Select transaction"
+                        : "Select outlet first"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {transactions
+                    .filter((tx) => tx.type === "DEBIT")
+                    .map((tx) => (
+                      <SelectItem key={tx.id} value={String(tx.id)}>
+                        #{tx.id} - {tx.type} - {formatCurrency(tx.amount)} (
+                        {new Date(tx.createdAt).toLocaleDateString()})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>Amount *</Label>
+            <Input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="Enter amount"
+              readOnly={type === "refund" && !!form.transaction_id}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Reference ID *</Label>
+            <div className="flex gap-2">
+              <Input
+                required
+                value={form.reference_id}
+                onChange={(e) =>
+                  setForm({ ...form, reference_id: e.target.value })
+                }
+                placeholder="Unique reference ID"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setForm({ ...form, reference_id: generateReferenceId() })
+                }
+                title="Generate Reference ID"
+              >
+                <Shuffle className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Input
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              placeholder="Optional description"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Metadata</Label>
+            <Input
+              value={form.metadata}
+              onChange={(e) => setForm({ ...form, metadata: e.target.value })}
+              placeholder='e.g. {"orderId":"123"} or plain text'
+            />
+          </div>
+          <RemarksBuilder
+            remarks={form.remarks}
+            onChange={(remarks) => setForm({ ...form, remarks })}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {title}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Update Status Modal
+function UpdateStatusModal({
+  open,
+  onClose,
+  prefilledUserId,
+  onSubmit,
+  isLoading,
+}) {
+  const { data: outletsData } = useListOutletsQuery({ limit: 100 });
+  const outlets = outletsData?.data?.outlets || outletsData?.outlets || [];
+
+  const [form, setForm] = useState({
+    userId: prefilledUserId || "",
+    status: "ACTIVE",
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = { userId: form.userId, status: form.status };
+    onSubmit(payload);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Update Wallet Status</DialogTitle>
+          <DialogDescription>
+            Change the wallet status for a user
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Outlet *</Label>
+            <Select
+              value={form.userId}
+              onValueChange={(v) => setForm({ ...form, userId: v })}
+              required
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select outlet" />
+              </SelectTrigger>
+              <SelectContent>
+                {outlets.map((outlet) => (
+                  <SelectItem key={outlet.id} value={outlet.phone}>
+                    {outlet.name} ({outlet.phone})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Status *</Label>
+            <Select
+              value={form.status}
+              onValueChange={(v) => setForm({ ...form, status: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                <SelectItem value="BLOCKED">Blocked</SelectItem>
+                <SelectItem value="CLOSED">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Status
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Create Wallet Modal
+function CreateWalletModal({ open, onClose, onSuccess }) {
+  const { data: outletsData } = useListOutletsQuery(
+    { limit: 100 },
+    { skip: !open },
+  );
+  const allOutlets = outletsData?.data?.outlets || outletsData?.outlets || [];
+
+  // Fetch existing wallets to filter out outlets that already have wallets
+  const { data: walletsData } = useGetClientWalletsQuery(
+    { page: 0, size: 100 },
+    { skip: !open },
+  );
+  const existingUserIds = new Set(
+    (walletsData?.data || []).map((w) => w.user_id),
+  );
+  const outlets = allOutlets.filter((o) => !existingUserIds.has(o.phone));
+
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [triggerGetOrCreate, { isLoading }] = useLazyGetOrCreateWalletQuery();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setResult(null);
+    try {
+      const data = await triggerGetOrCreate({
+        userId: selectedUserId,
+      }).unwrap();
+      setResult(data);
+    } catch (err) {
+      setError(err?.data?.message || err?.message || "Failed to create wallet");
+    }
+  };
+
+  const handleClose = () => {
+    if (result) onSuccess?.();
+    setSelectedUserId("");
+    setResult(null);
+    setError("");
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Wallet</DialogTitle>
+          <DialogDescription>
+            Create a new wallet for an outlet. If a wallet already exists, it
+            will be returned.
+          </DialogDescription>
+        </DialogHeader>
+        {result ? (
+          <div className="space-y-3">
+            <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm">
+              Wallet ready for{" "}
+              <span className="font-mono font-semibold">{selectedUserId}</span>
+              {result?.balance != null && (
+                <span> — Balance: {formatCurrency(result.balance)}</span>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={handleClose}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Outlet *</Label>
+              <Select
+                value={selectedUserId}
+                onValueChange={(v) => setSelectedUserId(v)}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select outlet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outlets.map((outlet) => (
+                    <SelectItem key={outlet.id} value={outlet.phone}>
+                      {outlet.name} ({outlet.phone})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading || !selectedUserId}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Wallet
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Sync Wallets Modal
+function SyncWalletsModal({ open, onClose, onSuccess }) {
+  const { data: outletsData, isLoading: outletsLoading } = useListOutletsQuery(
+    { limit: 100 },
+    { skip: !open },
+  );
+  const outlets = outletsData?.data?.outlets || outletsData?.outlets || [];
+
+  const { data: walletsData, isLoading: walletsLoading } =
+    useGetClientWalletsQuery({ page: 0, size: 100 }, { skip: !open });
+  const wallets = walletsData?.data || [];
+
+  const [syncWallets, { isLoading: syncing }] = useSyncWalletsMutation();
+  const [result, setResult] = useState(null);
+
+  const existingUserIds = new Set(wallets.map((w) => w.user_id));
+  const missingOutlets = outlets.filter((o) => !existingUserIds.has(o.phone));
+
+  const loading = outletsLoading || walletsLoading;
+
+  const handleSync = async () => {
+    if (missingOutlets.length === 0) return;
+    setResult(null);
+    try {
+      const res = await syncWallets({
+        userIds: missingOutlets.map((o) => o.phone),
+      }).unwrap();
+      setResult(res);
+    } catch (err) {
+      setResult({ error: err?.data?.message || "Sync failed" });
+    }
+  };
+
+  const handleClose = () => {
+    if (result && !result.error) onSuccess?.();
+    setResult(null);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Sync Wallets</DialogTitle>
+          <DialogDescription>
+            Create wallets for all outlets that don't have one yet. Processed in
+            batches to avoid overloading the system.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
+            <span className="text-sm text-muted-foreground">
+              Loading outlets & wallets...
+            </span>
+          </div>
+        ) : result ? (
+          <div className="space-y-3">
+            {result.error ? (
+              <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
+                {result.error}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-sm space-y-1">
+                  <p className="font-medium text-green-800">Sync Complete</p>
+                  <p>
+                    Total processed: <strong>{result.total}</strong>
+                  </p>
+                  <p className="text-green-700">
+                    Created: <strong>{result.created}</strong>
+                  </p>
+                  <p className="text-blue-700">
+                    Already existed: <strong>{result.existing}</strong>
+                  </p>
+                  {result.failed > 0 && (
+                    <p className="text-red-700">
+                      Failed: <strong>{result.failed}</strong>
+                    </p>
+                  )}
+                </div>
+                {result.details?.failed?.length > 0 && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs">
+                    <p className="font-medium text-red-800 mb-1">
+                      Failed items:
+                    </p>
+                    {result.details.failed.map((f, i) => (
+                      <p key={i} className="text-red-700">
+                        {f.userId}: {f.error}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={handleClose}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-muted text-center">
+                <p className="text-xs text-muted-foreground">Total Outlets</p>
+                <p className="text-xl font-bold">{outlets.length}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted text-center">
+                <p className="text-xs text-muted-foreground">Have Wallet</p>
+                <p className="text-xl font-bold text-green-600">
+                  {outlets.length - missingOutlets.length}
+                </p>
+              </div>
+            </div>
+
+            {missingOutlets.length === 0 ? (
+              <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm text-center">
+                All outlets already have wallets!
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  <strong>{missingOutlets.length}</strong> outlet(s) without a
+                  wallet:
+                </p>
+                <div className="max-h-40 overflow-y-auto border rounded p-2 space-y-1">
+                  {missingOutlets.map((o) => (
+                    <div key={o.id} className="text-xs flex justify-between">
+                      <span>{o.name}</span>
+                      <span className="font-mono text-muted-foreground">
+                        {o.phone}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSync}
+                disabled={syncing || missingOutlets.length === 0}
+              >
+                {syncing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {syncing
+                  ? "Syncing..."
+                  : `Sync ${missingOutlets.length} Wallet(s)`}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function WalletPage() {
-  const [activeTab, setActiveTab] = useState("transactions");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [activeTab, setActiveTab] = useState("wallets");
 
-  // Filter states
-  const [accountFilter, setAccountFilter] = useState("all");
-  const [transactionTypeFilter, setTransactionTypeFilter] = useState("all");
-  const [zoneFilter, setZoneFilter] = useState("all");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Wallet tab state
+  const [walletPage, setWalletPage] = useState(0);
+  const [walletFilters, setWalletFilters] = useState({
+    userId: "",
+    status: "",
+    minBalance: "",
+    maxBalance: "",
+  });
+
+  // Transaction tab state
+  const [txPage, setTxPage] = useState(0);
+  const [txFilters, setTxFilters] = useState({
+    type: "",
+    status: "",
+    userId: "",
+  });
+
+  // Modal state
+  const [modal, setModal] = useState({ open: false, type: null, userId: "" });
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+
+  // RTK Query
+  const {
+    data: walletsData,
+    isLoading: walletsLoading,
+    error: walletsError,
+    refetch: refetchWallets,
+  } = useGetClientWalletsQuery({
+    page: walletPage,
+    size: 10,
+    ...(walletFilters.userId && { userId: walletFilters.userId }),
+    ...(walletFilters.status && { status: walletFilters.status }),
+    ...(walletFilters.minBalance && {
+      minBalance: parseFloat(walletFilters.minBalance),
+    }),
+    ...(walletFilters.maxBalance && {
+      maxBalance: parseFloat(walletFilters.maxBalance),
+    }),
+  });
+
+  const {
+    data: txData,
+    isLoading: txLoading,
+    error: txError,
+    refetch: refetchTx,
+  } = useGetClientTransactionsQuery({
+    page: txPage,
+    size: 10,
+    ...(txFilters.type && { type: txFilters.type }),
+    ...(txFilters.status && { status: txFilters.status }),
+    ...(txFilters.userId && { userId: txFilters.userId }),
+  });
+
+  const [topupWallet, { isLoading: toppingUp }] = useTopupWalletMutation();
+  const [debitWallet, { isLoading: debiting }] = useDebitWalletMutation();
+  const [refundWallet, { isLoading: refunding }] = useRefundWalletMutation();
+  const [updateStatus, { isLoading: updatingStatus }] =
+    useUpdateWalletUserStatusMutation();
+
+  const wallets = walletsData?.data || [];
+  const walletStats = walletsData?.stats || {};
+  const walletPagination = walletsData?.pagination || {};
+
+  const transactions = txData?.data || [];
+  const txStats = txData?.stats || {};
+  const txPagination = txData?.pagination || {};
+
+  // Outlet phone → name lookup
+  const { data: outletsData } = useListOutletsQuery({ limit: 100 });
+  const outletMap = useMemo(() => {
+    const outlets = outletsData?.data?.outlets || outletsData?.outlets || [];
+    const map = {};
+    outlets.forEach((o) => {
+      map[o.phone] = o.name;
+    });
+    return map;
+  }, [outletsData]);
+
+  const openModal = (type, userId = "") => {
+    setModal({ open: true, type, userId });
+  };
+
+  const closeModal = () => {
+    setModal({ open: false, type: null, userId: "" });
+  };
+
+  const handleTransaction = async (payload) => {
+    try {
+      if (modal.type === "topup") {
+        await topupWallet(payload).unwrap();
+      } else if (modal.type === "debit") {
+        await debitWallet(payload).unwrap();
+      } else if (modal.type === "refund") {
+        await refundWallet(payload).unwrap();
+      }
+      closeModal();
+    } catch (err) {
+      console.error("Transaction failed:", err);
+    }
+  };
+
+  const handleUpdateStatus = async (payload) => {
+    try {
+      await updateStatus(payload).unwrap();
+      closeModal();
+    } catch (err) {
+      console.error("Status update failed:", err);
+    }
+  };
 
   const customBreadcrumbs = [
     { title: "Dashboard", href: "/dashboard" },
-    { title: "Wallet & Billing" },
+    { title: "Wallet Management" },
   ];
 
-  // Get unique accounts, zones, and transaction types for filters
-  const uniqueAccounts = Array.from(
-    new Set(mockTransactions.map((t) => t.accountDetails.accountNumber)),
-  );
-  const uniqueZones = Array.from(
-    new Set(
-      mockTransactions.map((t) => t.weightZone.zone).filter((zone) => zone),
-    ),
-  );
-  // const uniqueTransactionTypes = ["credit", "debit", "both"];
-
-  // Filter transactions based on all filters
-  const filteredTransactions = mockTransactions.filter((transaction) => {
-    // Search term filter
-    const matchesSearch =
-      transaction.transactionDetails.reference
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      transaction.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.awbLrn.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Account filter
-    const matchesAccount =
-      accountFilter === "all" ||
-      transaction.accountDetails.accountNumber === accountFilter;
-
-    // Transaction type filter
-    const matchesTransactionType = (() => {
-      if (transactionTypeFilter === "all") return true;
-      if (transactionTypeFilter === "credit") return transaction.credit > 0;
-      if (transactionTypeFilter === "debit") return transaction.debit > 0;
-      if (transactionTypeFilter === "both")
-        return transaction.credit > 0 && transaction.debit > 0;
-      return true;
-    })();
-
-    // Zone filter
-    const matchesZone =
-      zoneFilter === "all" || transaction.weightZone.zone === zoneFilter;
-
-    // Date range filter
-    const transactionDate = new Date(transaction.transactionDetails.date);
-    const matchesDateRange = (() => {
-      if (!startDate && !endDate) return true;
-      if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        return transactionDate >= start && transactionDate <= end;
-      }
-      if (startDate) {
-        const start = new Date(startDate);
-        return transactionDate >= start;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        return transactionDate <= end;
-      }
-      return true;
-    })();
-
-    return (
-      matchesSearch &&
-      matchesAccount &&
-      matchesTransactionType &&
-      matchesZone &&
-      matchesDateRange
-    );
-  });
-
-  // Filter invoices based on search term
-  const filteredInvoices = mockInvoices.filter(
-    (invoice) =>
-      invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  // Calculate wallet statistics
-  const walletBalance = 2450.75;
-  const monthlySpent = mockTransactions
-    .filter((t) => t.debit > 0 && t.transactionDetails.status === "completed")
-    .reduce((sum, t) => sum + t.debit, 0);
-  const pendingAmount = mockTransactions
-    .filter((t) => t.transactionDetails.status === "pending")
-    .reduce((sum, t) => sum + (t.credit > 0 ? t.credit : -t.debit), 0);
-
-  // Calculate closing account balance (current balance + pending transactions)
-  const closingAccountBalance = walletBalance + pendingAmount;
-
-  // Calculate running balance for each transaction
-  const calculateRunningBalance = (transactions) => {
-    let runningBalance = walletBalance;
-    return transactions
-      .map((transaction, _index) => {
-        // For display purposes, we'll calculate backwards from current balance
-        // This gives a more realistic view of the balance at each point in time
-        const transactionImpact = transaction.credit - transaction.debit;
-        runningBalance -= transactionImpact; // Subtract because we're going backwards
-        return {
-          ...transaction,
-          runningBalance: runningBalance,
-        };
-      })
-      .reverse(); // Reverse to show chronological order with correct balances
-  };
-
-  const transactionsWithBalance = calculateRunningBalance(filteredTransactions);
-
-  // Clear all filters
-  const clearFilters = () => {
-    setAccountFilter("all");
-    setTransactionTypeFilter("all");
-    setZoneFilter("all");
-    setStartDate("");
-    setEndDate("");
-  };
-
-  // Check if any filters are active
-  const hasActiveFilters =
-    accountFilter !== "all" ||
-    transactionTypeFilter !== "all" ||
-    zoneFilter !== "all" ||
-    startDate ||
-    endDate;
+  const isTransactionModal =
+    modal.type === "topup" || modal.type === "debit" || modal.type === "refund";
+  const isStatusModal = modal.type === "status";
+  const transactionLoading = toppingUp || debiting || refunding;
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center space-x-2">
-              <Wallet className="h-8 w-8 text-logistics-600" />
-              <span>Wallet & Billing</span>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2.5">
+              <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-blue-50 text-blue-600">
+                <Wallet className="h-5 w-5" />
+              </div>
+              Wallet Management
             </h1>
-            <p className="text-muted-foreground mt-2">
-              Manage your wallet balance, transactions, and billing information
+            <p className="text-sm text-muted-foreground">
+              Manage client wallets and transactions
             </p>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Money
-            </Button>
+
+          <div className="flex items-center gap-2">
+            {/* Utility actions */}
+            <div className="flex items-center gap-1.5 border-r pr-3 mr-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  activeTab === "wallets" ? refetchWallets() : refetchTx()
+                }
+                title="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setSyncModalOpen(true)}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Sync
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setCreateModalOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                New Wallet
+              </Button>
+            </div>
+
+            {/* Primary transaction actions */}
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                onClick={() => openModal("topup")}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Topup
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                onClick={() => openModal("debit")}
+              >
+                <Minus className="h-3.5 w-3.5 mr-1.5" />
+                Debit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+                onClick={() => openModal("refund")}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                Refund
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center justify-between">
-          <div className="flex space-x-4">
-            <Button
-              variant={activeTab === "transactions" ? "default" : "outline"}
-              onClick={() => setActiveTab("transactions")}
-              className="flex items-center space-x-2"
-            >
-              <CreditCard className="h-4 w-4" />
-              <span>Transactions</span>
-            </Button>
-            <Button
-              variant={activeTab === "invoices" ? "default" : "outline"}
-              onClick={() => setActiveTab("invoices")}
-              className="flex items-center space-x-2"
-            >
-              <FileText className="h-4 w-4" />
-              <span>Invoices</span>
-            </Button>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={`Search ${activeTab}...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
-              />
-            </div>
-            <Button
-              variant={showFilters ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
-                  {
-                    [
-                      accountFilter,
-                      transactionTypeFilter,
-                      zoneFilter,
-                      startDate,
-                      endDate,
-                    ].filter((f) => f !== "all" && f).length
-                  }
-                </Badge>
-              )}
-            </Button>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="flex space-x-2 border-b">
+          <button
+            onClick={() => setActiveTab("wallets")}
+            className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "wallets"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Wallet className="inline h-4 w-4 mr-1.5" />
+            Wallets
+          </button>
+          <button
+            onClick={() => setActiveTab("transactions")}
+            className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "transactions"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <CreditCard className="inline h-4 w-4 mr-1.5" />
+            Transactions
+          </button>
         </div>
 
-        {/* Filters Section */}
-        {showFilters && activeTab === "transactions" && (
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Filters</CardTitle>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    <X className="h-4 w-4 mr-2" />
-                    Clear All
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {/* Account Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Account</label>
-                  <Select
-                    value={accountFilter}
-                    onValueChange={setAccountFilter}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Accounts</SelectItem>
-                      {uniqueAccounts.map((account) => (
-                        <SelectItem key={account} value={account}>
-                          {account}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Transaction Type Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Transaction Type
-                  </label>
-                  <Select
-                    value={transactionTypeFilter}
-                    onValueChange={setTransactionTypeFilter}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="credit">Credit Only</SelectItem>
-                      <SelectItem value="debit">Debit Only</SelectItem>
-                      <SelectItem value="both">Credit & Debit</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Zone Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Zone</label>
-                  <Select value={zoneFilter} onValueChange={setZoneFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select zone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Zones</SelectItem>
-                      {uniqueZones.map((zone) => (
-                        <SelectItem key={zone} value={zone}>
-                          Zone {zone}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Start Date */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Start Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                {/* End Date */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">End Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Wallet Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-          {/* Wallet Balance */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <Wallet className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Wallet Balance
+        {/* WALLETS TAB */}
+        {activeTab === "wallets" && (
+          <>
+            {/* Wallet Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Total Wallets</p>
+                  <p className="text-2xl font-bold">
+                    {walletStats.total_wallets ?? "-"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Active Wallets
                   </p>
                   <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency(walletBalance)}
+                    {walletStats.active_wallets ?? "-"}
                   </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Closing Account Balance */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Wallet className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Closing Account
-                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Total Balance</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(closingAccountBalance)}
+                    {walletStats.total_balance != null
+                      ? formatCurrency(walletStats.total_balance)
+                      : "-"}
                   </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Monthly Spent */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <TrendingDown className="h-6 w-6 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Monthly Spent
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Average Balance
                   </p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {formatCurrency(monthlySpent)}
+                  <p className="text-2xl font-bold">
+                    {walletStats.average_balance != null
+                      ? formatCurrency(walletStats.average_balance)
+                      : "-"}
                   </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pending Amount */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pending Amount
-                  </p>
-                  <p className="text-2xl font-bold text-yellow-600">
-                    {formatCurrency(Math.abs(pendingAmount))}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pending Invoices */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pending Invoices
-                  </p>
-                  <p className="text-2xl font-bold text-purple-600">
-                    {mockInvoices.filter((i) => i.status !== "paid").length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Content Card */}
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle className="flex items-center space-x-2">
-                {activeTab === "transactions" ? (
-                  <>
-                    <CreditCard className="h-5 w-5" />
-                    <span>Transaction History</span>
-                    {hasActiveFilters && (
-                      <Badge variant="secondary" className="ml-2">
-                        {filteredTransactions.length} results
-                      </Badge>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-5 w-5" />
-                    <span>Invoices & Billing</span>
-                  </>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {activeTab === "transactions"
-                  ? "View all your wallet transactions and payments"
-                  : "Manage your invoices and billing information"}
-              </CardDescription>
+                </CardContent>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            {activeTab === "transactions" ? (
-              <Table>
-                <TableCaption>
-                  {searchTerm || hasActiveFilters
-                    ? `Filtered transactions${searchTerm ? ` for "${searchTerm}"` : ""}`
-                    : "Recent wallet transactions"}
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Transcation</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Order ID / Reference</TableHead>
-                    <TableHead>AWB / LRN</TableHead>
-                    <TableHead>Weight & Zone</TableHead>
-                    <TableHead>Credit</TableHead>
-                    <TableHead>Debit</TableHead>
-                    <TableHead>Closing Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactionsWithBalance.map((transaction) => (
-                    <TableRow
-                      key={transaction.id}
-                      className="cursor-pointer hover:bg-gray-50"
-                      onClick={() =>
-                        (window.location.href = `/wallet/transactions/${transaction.id}`)
+
+            {/* Wallet Filters */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Filters</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">User ID</Label>
+                    <Input
+                      placeholder="Filter by user ID"
+                      value={walletFilters.userId}
+                      onChange={(e) =>
+                        setWalletFilters({
+                          ...walletFilters,
+                          userId: e.target.value,
+                        })
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Status</Label>
+                    <Select
+                      value={walletFilters.status || "all"}
+                      onValueChange={(v) =>
+                        setWalletFilters({
+                          ...walletFilters,
+                          status: v === "all" ? "" : v,
+                        })
                       }
                     >
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="font-medium">
-                            {transaction.transactionDetails.date}
-                          </div>
-                          <div className="text-muted-foreground">
-                            {transaction.transactionDetails.time}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="font-medium">
-                            {transaction.accountDetails.accountNumber}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {transaction.orderId ||
-                          transaction.transactionDetails.reference ||
-                          "-"}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {transaction.awbLrn || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {transaction.weightZone.weight > 0 ? (
-                            <>
-                              <div className="font-medium">
-                                {transaction.weightZone.weight} kg
-                              </div>
-                              <div className="text-muted-foreground">
-                                Zone {transaction.weightZone.zone}
-                              </div>
-                            </>
-                          ) : (
-                            "-"
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {transaction.credit > 0 ? (
-                          <div className="font-medium text-green-600">
-                            {formatCurrency(transaction.credit)}
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {transaction.debit > 0 ? (
-                          <div className="font-medium text-red-600">
-                            {formatCurrency(transaction.debit)}
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-gray-900">
-                          {formatCurrency(transaction.runningBalance)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.location.href = `/wallet/transactions/${transaction.id}`;
-                              }}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Download className="mr-2 h-4 w-4" />
-                              Download Receipt
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <Table>
-                <TableCaption>
-                  {searchTerm
-                    ? `Filtered invoices for "${searchTerm}"`
-                    : "Your billing invoices"}
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <TableRow
-                      key={invoice.id}
-                      className="cursor-pointer hover:bg-gray-50"
-                      onClick={() =>
-                        (window.location.href = `/wallet/invoices/${invoice.id}`)
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                        <SelectItem value="BLOCKED">Blocked</SelectItem>
+                        <SelectItem value="CLOSED">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Min Balance</Label>
+                    <Input
+                      type="number"
+                      placeholder="Min balance"
+                      value={walletFilters.minBalance}
+                      onChange={(e) =>
+                        setWalletFilters({
+                          ...walletFilters,
+                          minBalance: e.target.value,
+                        })
                       }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Max Balance</Label>
+                    <Input
+                      type="number"
+                      placeholder="Max balance"
+                      value={walletFilters.maxBalance}
+                      onChange={(e) =>
+                        setWalletFilters({
+                          ...walletFilters,
+                          maxBalance: e.target.value,
+                        })
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Wallets Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <Wallet className="h-4 w-4" />
+                  <span>Client Wallets</span>
+                  {walletPagination.total_elements != null && (
+                    <Badge variant="secondary" className="ml-2">
+                      {walletPagination.total_elements} total
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {walletsLoading ? (
+                  <div className="flex items-center justify-center h-48">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  </div>
+                ) : walletsError ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-center p-4">
+                    <AlertCircle className="h-10 w-10 text-red-500 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Failed to load wallets
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={refetchWallets}
                     >
-                      <TableCell className="font-medium">
-                        {invoice.invoiceNumber}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {invoice.description}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Issued: {formatDate(invoice.issuedDate)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {formatCurrency(invoice.amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className={getInvoiceStatusColor(invoice.status)}
-                        >
-                          {invoice.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatDate(invoice.dueDate)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.location.href = `/wallet/invoices/${invoice.id}`;
-                              }}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Invoice
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Download className="mr-2 h-4 w-4" />
-                              Download PDF
-                            </DropdownMenuItem>
-                            {invoice.status !== "paid" && (
-                              <DropdownMenuItem
-                                onClick={(e) => e.stopPropagation()}
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Retry
+                    </Button>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Outlet</TableHead>
+                        <TableHead>Balance</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Updated</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {wallets.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center text-muted-foreground py-10"
+                          >
+                            No wallets found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        wallets.map((wallet) => (
+                          <TableRow key={wallet.id}>
+                            <TableCell>
+                              {outletMap[wallet.user_id] && (
+                                <div className="text-sm font-medium">
+                                  {outletMap[wallet.user_id]}
+                                </div>
+                              )}
+                              <div className="font-mono text-xs text-muted-foreground">
+                                {wallet.user_id}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              {formatCurrency(wallet.balance)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                className={`text-xs border ${getStatusColor(wallet.status)}`}
                               >
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                Pay Now
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                                {wallet.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {formatDate(wallet.created_at)}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {formatDate(wallet.updated_at)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() =>
+                                    openModal("status", wallet.user_id)
+                                  }
+                                  title="Update Status"
+                                >
+                                  <Settings className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-green-600"
+                                  onClick={() =>
+                                    openModal("topup", wallet.user_id)
+                                  }
+                                  title="Topup"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-red-600"
+                                  onClick={() =>
+                                    openModal("debit", wallet.user_id)
+                                  }
+                                  title="Debit"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-blue-600"
+                                  onClick={() =>
+                                    openModal("refund", wallet.user_id)
+                                  }
+                                  title="Refund"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+
+                {/* Wallet Pagination */}
+                {walletPagination.total_pages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      Page {walletPagination.current_page + 1} of{" "}
+                      {walletPagination.total_pages} (
+                      {walletPagination.total_elements} total)
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setWalletPage((p) => Math.max(0, p - 1))}
+                        disabled={!walletPagination.has_previous}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setWalletPage((p) => p + 1)}
+                        disabled={!walletPagination.has_next}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* TRANSACTIONS TAB */}
+        {activeTab === "transactions" && (
+          <>
+            {/* Transaction Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Total Transactions
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {txStats.total_transactions ?? "-"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-start space-x-2">
+                  <TrendingUp className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Topup</p>
+                    <p className="text-xl font-bold text-green-600">
+                      {txStats.total_topup_amount != null
+                        ? formatCurrency(txStats.total_topup_amount)
+                        : "-"}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-start space-x-2">
+                  <TrendingDown className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Debit</p>
+                    <p className="text-xl font-bold text-red-600">
+                      {txStats.total_debit_amount != null
+                        ? formatCurrency(txStats.total_debit_amount)
+                        : "-"}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Total Refund</p>
+                  <p className="text-xl font-bold text-blue-600">
+                    {txStats.total_refund_amount != null
+                      ? formatCurrency(txStats.total_refund_amount)
+                      : "-"}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Transaction Filters */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Filters</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">User ID</Label>
+                    <Input
+                      placeholder="Filter by user ID"
+                      value={txFilters.userId}
+                      onChange={(e) =>
+                        setTxFilters({ ...txFilters, userId: e.target.value })
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Type</Label>
+                    <Select
+                      value={txFilters.type || "all"}
+                      onValueChange={(v) =>
+                        setTxFilters({
+                          ...txFilters,
+                          type: v === "all" ? "" : v,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="All types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="TOPUP">Topup</SelectItem>
+                        <SelectItem value="DEBIT">Debit</SelectItem>
+                        <SelectItem value="REFUND">Refund</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Status</Label>
+                    <Select
+                      value={txFilters.status || "all"}
+                      onValueChange={(v) =>
+                        setTxFilters({
+                          ...txFilters,
+                          status: v === "all" ? "" : v,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="COMPLETED">Completed</SelectItem>
+                        <SelectItem value="PENDING">Pending</SelectItem>
+                        <SelectItem value="FAILED">Failed</SelectItem>
+                        <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Transactions Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <CreditCard className="h-4 w-4" />
+                  <span>Client Transactions</span>
+                  {txPagination.total_elements != null && (
+                    <Badge variant="secondary" className="ml-2">
+                      {txPagination.total_elements} total
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {txLoading ? (
+                  <div className="flex items-center justify-center h-48">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  </div>
+                ) : txError ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-center p-4">
+                    <AlertCircle className="h-10 w-10 text-red-500 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Failed to load transactions
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={refetchTx}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Retry
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Outlet</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Balance Before</TableHead>
+                          <TableHead>Balance After</TableHead>
+                          <TableHead>Reference ID</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={9}
+                              className="text-center text-muted-foreground py-10"
+                            >
+                              No transactions found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          transactions.map((tx) => (
+                            <TableRow key={tx.id}>
+                              <TableCell className="text-xs font-mono">
+                                {tx.id}
+                              </TableCell>
+                              <TableCell>
+                                {outletMap[tx.userId] && (
+                                  <div className="text-sm font-medium">
+                                    {outletMap[tx.userId]}
+                                  </div>
+                                )}
+                                <div className="font-mono text-xs text-muted-foreground">
+                                  {tx.userId}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {(() => {
+                                  const badge = getTransactionTypeBadge(
+                                    tx.type,
+                                  );
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${badge.className}`}
+                                    >
+                                      {badge.icon === "up" && (
+                                        <TrendingUp className="h-3 w-3" />
+                                      )}
+                                      {badge.icon === "down" && (
+                                        <TrendingDown className="h-3 w-3" />
+                                      )}
+                                      {badge.icon === "return" && (
+                                        <RotateCcw className="h-3 w-3" />
+                                      )}
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell className="font-semibold">
+                                {formatCurrency(tx.amount)}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatCurrency(tx.balanceBefore)}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatCurrency(tx.balanceAfter)}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs max-w-[140px] truncate">
+                                {tx.referenceId || "-"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={`text-xs border ${getStatusColor(tx.status)}`}
+                                >
+                                  {tx.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {formatDate(tx.createdAt)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* Transaction Pagination */}
+                {txPagination.total_pages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      Page {txPagination.current_page + 1} of{" "}
+                      {txPagination.total_pages} ({txPagination.total_elements}{" "}
+                      total)
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTxPage((p) => Math.max(0, p - 1))}
+                        disabled={!txPagination.has_previous}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTxPage((p) => p + 1)}
+                        disabled={!txPagination.has_next}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Transaction Modal */}
+        {isTransactionModal && (
+          <TransactionModal
+            open={modal.open}
+            onClose={closeModal}
+            type={modal.type}
+            prefilledUserId={modal.userId}
+            onSubmit={handleTransaction}
+            isLoading={transactionLoading}
+          />
+        )}
+
+        {/* Update Status Modal */}
+        {isStatusModal && (
+          <UpdateStatusModal
+            open={modal.open}
+            onClose={closeModal}
+            prefilledUserId={modal.userId}
+            onSubmit={handleUpdateStatus}
+            isLoading={updatingStatus}
+          />
+        )}
+
+        {/* Create Wallet Modal */}
+        <CreateWalletModal
+          open={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onSuccess={refetchWallets}
+        />
+
+        {/* Sync Wallets Modal */}
+        <SyncWalletsModal
+          open={syncModalOpen}
+          onClose={() => setSyncModalOpen(false)}
+          onSuccess={refetchWallets}
+        />
       </div>
     </DashboardLayout>
   );

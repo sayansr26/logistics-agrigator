@@ -261,6 +261,86 @@ const clientCodeSchema = Joi.string()
     "string.max": "Client code cannot exceed 50 characters",
   });
 
+// Admin wallet proxy - query schema for listing client wallets
+const adminClientWalletsQuerySchema = Joi.object({
+  clientCode: Joi.string().max(50).trim().optional(),
+  page: Joi.number().integer().min(0).default(0),
+  size: Joi.number().integer().min(1).max(100).default(20),
+  sortBy: Joi.string().max(50).optional(),
+  sortDir: Joi.string().valid("asc", "desc").optional(),
+  status: Joi.string().optional(),
+}).options({ allowUnknown: true });
+
+// Admin wallet proxy - query schema for listing client transactions
+const adminClientTransactionsQuerySchema = Joi.object({
+  clientCode: Joi.string().max(50).trim().optional(),
+  page: Joi.number().integer().min(0).default(0),
+  size: Joi.number().integer().min(1).max(100).default(20),
+  sortBy: Joi.string().max(50).optional(),
+  sortDir: Joi.string().valid("asc", "desc").optional(),
+  type: Joi.string().optional(),
+  status: Joi.string().optional(),
+  userId: Joi.string().max(255).optional(),
+}).options({ allowUnknown: true });
+
+// Admin wallet proxy - get wallet query schema
+const adminGetWalletQuerySchema = Joi.object({
+  userId: Joi.string().min(1).max(255).required().messages({
+    "any.required": "userId query parameter is required",
+  }),
+  clientCode: Joi.string().max(50).trim().optional(),
+}).options({ allowUnknown: true });
+
+// Admin wallet proxy - topup/debit/refund body schema
+const adminWalletTransactionSchema = Joi.object({
+  userId: Joi.string().min(1).max(255).required().messages({
+    "any.required": "userId is required",
+  }),
+  clientCode: Joi.string().max(50).trim().optional(),
+  amount: Joi.number().positive().required().messages({
+    "number.positive": "Amount must be positive",
+    "any.required": "Amount is required",
+  }),
+  currency: Joi.string().max(10).optional().default("INR"),
+  reference_id: Joi.string().max(255).trim().optional(),
+  transaction_id: Joi.number().integer().optional(),
+  description: Joi.string().max(500).trim().optional(),
+  metadata: Joi.object().optional(),
+  remarks: Joi.object().optional(),
+}).messages({
+  "object.unknown": "Unknown field '{#label}' is not allowed",
+});
+
+// Admin wallet proxy - update user status body schema
+const adminUpdateUserStatusSchema = Joi.object({
+  userId: Joi.string().min(1).max(255).required().messages({
+    "any.required": "userId is required",
+  }),
+  status: Joi.string().min(1).max(50).required().messages({
+    "any.required": "status is required",
+  }),
+  clientCode: Joi.string().max(50).trim().optional(),
+}).messages({
+  "object.unknown": "Unknown field '{#label}' is not allowed",
+});
+
+// Admin wallet proxy - sync wallets body schema
+const adminSyncWalletsSchema = Joi.object({
+  userIds: Joi.array()
+    .items(Joi.string().min(1).max(255))
+    .min(1)
+    .max(100)
+    .required()
+    .messages({
+      "array.min": "At least one userId is required",
+      "array.max": "Maximum 100 userIds per sync request",
+      "any.required": "userIds array is required",
+    }),
+  clientCode: Joi.string().max(50).trim().optional(),
+}).messages({
+  "object.unknown": "Unknown field '{#label}' is not allowed",
+});
+
 module.exports = {
   // Parameter schemas
   userIdParamsSchema,
@@ -286,4 +366,12 @@ module.exports = {
   referenceSchema,
   descriptionSchema,
   clientCodeSchema,
+
+  // Admin wallet proxy schemas
+  adminClientWalletsQuerySchema,
+  adminClientTransactionsQuerySchema,
+  adminGetWalletQuerySchema,
+  adminWalletTransactionSchema,
+  adminUpdateUserStatusSchema,
+  adminSyncWalletsSchema,
 };

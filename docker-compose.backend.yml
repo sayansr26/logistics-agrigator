@@ -241,7 +241,7 @@ services:
       # External Wallet API Configuration
       - EXTERNAL_WALLET_API_URL=https://wapi.websiteduniya.com/api/v1
       - EXTERNAL_WALLET_SECRET_KEY=production-hmac-secret-key-256-bit-minimum-ultra-secure-change-me
-      - EXTERNAL_WALLET_USER_ID=wallet-service
+      - EXTERNAL_WALLET_USER_ID=
       - EXTERNAL_WALLET_JWT_TOKEN=
       # JWT Configuration
       - JWT_EXPIRES_IN=8h

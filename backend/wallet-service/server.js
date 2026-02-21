@@ -182,25 +182,12 @@ app.get("/health", async (req, res) => {
 
   let isHealthy = true;
 
-  try {
-    // Check PostgreSQL connection
-    const pgStart = Date.now();
-    await prisma.$queryRaw`SELECT 1`;
-    const pgTime = Date.now() - pgStart;
-
-    healthStatus.database = "connected";
-    healthStatus.dependencies.postgres = {
-      status: "healthy",
-      responseTime: pgTime,
-    };
-  } catch (error) {
-    isHealthy = false;
-    healthStatus.database = "disconnected";
-    healthStatus.dependencies.postgres = {
-      status: "unhealthy",
-      error: error.message,
-    };
-  }
+  // Database is disabled - wallet-service is stateless (proxies external wallet API)
+  healthStatus.database = "stateless/disabled";
+  healthStatus.dependencies.postgres = {
+    status: "stateless",
+    note: "wallet-service operates without a local database; all data is proxied from the external wallet API",
+  };
 
   try {
     // Check Redis connection
@@ -324,22 +311,22 @@ app.use(errorHandler);
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nReceived SIGINT, shutting down gracefully...");
-  await prisma.$disconnect();
+  // No prisma disconnect needed - wallet-service is stateless
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nReceived SIGTERM, shutting down gracefully...");
-  await prisma.$disconnect();
+  // No prisma disconnect needed - wallet-service is stateless
   process.exit(0);
 });
 
 // Start server
 async function startServer() {
   try {
-    // Connect to database
-    await connectDB();
-    logger.info("Database connected via Prisma");
+    // Database connection skipped - wallet-service is stateless
+    // connectDB() intentionally not called; service proxies external wallet API
+    logger.info("Wallet service running in stateless mode (no local DB)");
 
     // Connect to Redis
     await connectRedis();

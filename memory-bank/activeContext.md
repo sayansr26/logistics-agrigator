@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: February 17, 2026
+> Current work focus and priorities | Last Updated: February 21, 2026
 
 ## Current Sprint Focus
 
@@ -49,11 +49,11 @@ The primary focus is implementing a robust security layer and role-based access 
 | **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API |
 | **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations           |
 | **Partner Service**  | 3005 | ✅ Complete   | 100%       | Discount packages added   |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stable                    |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Stateless external proxy  |
 | **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending       |
 | **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started               |
 | **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next              |
-| **Frontend**         | 3000 | ✅ Production | 72%        | Discount Packages UI done |
+| **Frontend**         | 3000 | ✅ Production | 75%        | Wallet Management UI done |
 
 ## Immediate Priorities
 
@@ -125,6 +125,29 @@ The primary focus is implementing a robust security layer and role-based access 
 1. **None currently identified**
 
 ## Recent Changes
+
+### February 21, 2026
+
+- ✅ **Wallet Module Overhaul — Stateless External Proxy Architecture**
+  - **Backend (wallet-service):**
+    - Wallet service now operates in **stateless mode** — no local database; all data proxied from external wallet API (`wapi.websiteduniya.com`)
+    - New `adminWalletController.js` with 8 admin endpoints: list wallets, list transactions, get/create wallet, topup, debit, refund, update user status, sync wallets
+    - `externalWalletClient.js` — HMAC SHA-256 authenticated HTTP client with circuit breaker, Redis caching, request/response interceptors
+    - **Critical Route Fix**: Moved all `/admin/*` routes before `/:userId/*` wildcard routes in `routes/wallet.js` — Express was matching `admin` as a userId parameter, causing UUID validation errors
+    - `walletSchema.js` — Added admin proxy schemas: `adminWalletTransactionSchema` (with `transaction_id` for refunds, `remarks` as object), `adminClientWalletsQuerySchema`, `adminClientTransactionsQuerySchema`, etc.
+    - Batch wallet sync endpoint — processes in batches of 3 with 500ms delays to avoid overwhelming external API
+  - **Frontend:**
+    - Complete wallet management page rewrite (`frontend/src/app/wallet/page.jsx`)
+    - RTK Query `walletApi.ts` with 8 endpoints (list wallets, list transactions, get/create wallet, topup, debit, refund, update status, sync)
+    - Wallet & Transaction tabs with stats cards, filters, pagination
+    - Transaction modals: Topup, Debit, Refund (only shows DEBIT transactions for refund selection), Update Status
+    - Create Wallet & Sync Wallets modals with outlet selection
+    - Key-value remarks builder component
+    - Polished header: grouped utility/transaction buttons with visual hierarchy, divider separator
+    - Transaction type badges with icons (TrendingUp/TrendingDown/RotateCcw) and opacity-based dark-mode colors
+    - Fixed metadata field to send as JSON object (not string) to backend
+    - Sidebar wallet link added
+  - **Docker**: Updated `docker-compose.yml`, `docker-compose.backend.yml`, `docker-compose.production.yml` for wallet-service config
 
 ### February 17, 2026
 
@@ -298,6 +321,13 @@ The primary focus is implementing a robust security layer and role-based access 
 | Outlet context svc  | `backend/partner-service/services/outletContextService.js`               |
 | Discount pkg UI     | `frontend/src/app/charge-discount-packages/page.tsx`                     |
 | Discount pkg API    | `frontend/src/store/api/endpoints/chargeDiscountPackagesApi.ts`          |
+| Wallet admin ctrl   | `backend/wallet-service/controllers/adminWalletController.js`            |
+| Wallet routes       | `backend/wallet-service/routes/wallet.js`                                |
+| Wallet ext client   | `backend/wallet-service/services/externalWalletClient.js`                |
+| Wallet schemas      | `backend/wallet-service/validation/walletSchema.js`                      |
+| Wallet frontend     | `frontend/src/app/wallet/page.jsx`                                       |
+| Wallet API (RTK)    | `frontend/src/store/api/endpoints/walletApi.ts`                          |
+| Wallet ext API docs | `wallet_doc.md`                                                          |
 | Outlet routes       | `backend/user-service/routes/outlets.js`                                 |
 | Outlet controller   | `backend/user-service/controllers/outletController.js`                   |
 | Outlet frontend     | `frontend/src/app/outlets/page.tsx`                                      |

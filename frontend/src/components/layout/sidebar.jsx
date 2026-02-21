@@ -27,6 +27,7 @@ import {
   Store,
   ScrollText,
   Tag,
+  Wallet,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -168,6 +169,13 @@ const getNavigationSections = () => {
           href: "/audit-logs",
           icon: ScrollText,
           roles: ["superadmin", "admin", "client"],
+          disabled: false,
+        },
+        {
+          title: "Wallet",
+          href: "/wallet",
+          icon: Wallet,
+          roles: ["superadmin", "admin", "accounts", "client"],
           disabled: false,
         },
       ].filter(canSeeMenuItem),

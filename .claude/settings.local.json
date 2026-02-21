@@ -54,7 +54,11 @@
       "Bash(SHELL=/bin/bash bash:*)",
       "Bash(pnpm run secure:build:*)",
       "Bash(npx --yes prisma migrate dev:*)",
-      "Bash(shasum:*)"
+      "Bash(shasum:*)",
+      "Bash(git -C /Volumes/S3TECH/WebProjects/logistics-agrigator log --oneline -10)",
+      "Bash(tail:*)",
+      "Bash(curl -s http://localhost:3006/health | python3 -m json.tool 2>&1)",
+      "Bash(git:*)"
     ]
   },
   "sandbox": {

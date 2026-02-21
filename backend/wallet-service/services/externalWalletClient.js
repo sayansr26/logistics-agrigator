@@ -13,17 +13,18 @@ class ExternalWalletClient {
     this.secretKey =
       process.env.EXTERNAL_WALLET_SECRET_KEY ||
       "production-hmac-secret-key-256-bit-minimum-ultra-secure-change-me";
-    this.userId = process.env.EXTERNAL_WALLET_USER_ID || "wallet-service";
-    this.jwtToken = process.env.EXTERNAL_WALLET_JWT_TOKEN || "";
+    // NOTE: These must be empty strings to match Postman behavior.
+    // Sending a non-empty X-User-ID (e.g. "wallet-service") causes the
+    // external API's UserAuthorizationServiceImpl to crash with NPE.
+    this.userId = (process.env.EXTERNAL_WALLET_USER_ID || "").trim();
+    this.jwtToken = (process.env.EXTERNAL_WALLET_JWT_TOKEN || "").trim();
 
     // HTTP client configuration
+    // NOTE: Do NOT set Content-Type or Authorization as defaults.
+    // Match Postman behavior exactly - only send HMAC auth headers.
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: 30000,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
     });
 
     // Circuit breaker configuration
@@ -140,25 +141,22 @@ class ExternalWalletClient {
       // Formatted signature: t=timestamp,v1=signature
       const formattedSignature = `t=${timestamp},v1=${signature}`;
 
-      // Prepare headers
+      // Prepare headers — match Postman exactly:
+      // Only send X-Wallet-Signature, X-Timestamp, X-Request-ID, and X-User-ID (empty).
+      // Do NOT send Authorization header (causes external API NPE).
       const headers = {
         "X-Wallet-Signature": formattedSignature,
         "X-Timestamp": String(timestamp),
         "X-Request-ID": requestId,
-        "X-User-ID": this.userId,
+        "X-User-ID": this.userId || "",
       };
 
-      // Add Authorization header if JWT token is available
-      if (this.jwtToken) {
-        headers["Authorization"] = `Bearer ${this.jwtToken}`;
-      }
-
-      logger.debug("✅ HMAC Signature Generated", {
+      logger.debug("HMAC Signature Generated", {
         method,
         path,
         timestamp,
         signedPayload,
-        signature: signature.slice(0, 32) + "...",
+        signature: signature.slice(0, 16) + "...",
         requestId,
       });
 
@@ -183,16 +181,16 @@ class ExternalWalletClient {
     try {
       const { method = "GET", url, data = null, params = {} } = config;
 
-      // Parse URL to get path
-      let path = url;
+      // Build the full path for HMAC signing
+      // baseURL = 'https://wapi.websiteduniya.com/api/v1', url = 'wallets/client/TEST'
+      // HMAC path must be '/api/v1/wallets/client/TEST'
+      let path;
       try {
-        const urlObj = new URL(url, this.baseURL);
-        path = urlObj.pathname;
+        const basePathname = new URL(this.baseURL).pathname.replace(/\/+$/, "");
+        const relUrl = url.startsWith("/") ? url : "/" + url;
+        path = basePathname + relUrl;
       } catch (err) {
-        // If url is already a path, use it as is
-        if (!url.startsWith("/")) {
-          path = "/" + url;
-        }
+        path = url.startsWith("/") ? url : "/" + url;
       }
 
       // Prepare request body
@@ -205,16 +203,28 @@ class ExternalWalletClient {
         rawBody,
       );
 
+      // Only set Content-Type for requests with a body (POST/PUT/PATCH)
+      const requestHeaders = { ...authHeaders, ...config.headers };
+      if (data) {
+        requestHeaders["Content-Type"] = "application/json";
+      }
+
+      // Log request details
+      const fullUrl = `${this.baseURL.replace(/\/+$/, "")}/${url.replace(/^\/+/, "")}`;
+      logger.info("External API Request", {
+        method: method.toUpperCase(),
+        url: fullUrl,
+        headers: Object.keys(requestHeaders),
+        hasBody: !!data,
+      });
+
       // Make the request with HMAC headers
       const response = await this.client({
         method,
         url,
-        data,
+        data: data || undefined,
         params,
-        headers: {
-          ...authHeaders,
-          ...config.headers,
-        },
+        headers: requestHeaders,
       });
 
       return response.data;
@@ -226,6 +236,7 @@ class ExternalWalletClient {
           status: error.response.status,
           statusText: error.response.statusText,
           message: errorMessage,
+          responseBody: JSON.stringify(error.response.data),
           url: config.url,
         });
 
@@ -488,6 +499,243 @@ class ExternalWalletClient {
         externalWalletId,
         amount,
         reference,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * List all wallets for a client
+   * @param {string} clientCode - Client code
+   * @param {Object} query - Query params (page, size, sortBy, sortDir, etc.)
+   * @returns {Promise<Object>} Paginated wallet list with stats
+   */
+  async listClientWallets(clientCode, query = {}) {
+    logger.info("Listing client wallets", { clientCode, query });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `wallets/client/${clientCode}`,
+        params: {
+          page: query.page || 0,
+          size: query.size || 20,
+          sortBy: query.sortBy || "createdAt",
+          sortDir: query.sortDir || "desc",
+          ...query,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to list client wallets", {
+        clientCode,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get or create wallet for a user under a client
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Wallet info
+   */
+  async getOrCreateWallet(clientCode, userId) {
+    logger.info("Getting or creating wallet", { clientCode, userId });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `wallets/client/${clientCode}/user/${userId}`,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to get or create wallet", {
+        clientCode,
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Top up a user's wallet
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @param {Object} body - Topup body (amount, currency, reference_id, description, metadata, remarks)
+   * @returns {Promise<Object>} Transaction response
+   */
+  async topup(clientCode, userId, body) {
+    logger.info("Topping up wallet", {
+      clientCode,
+      userId,
+      amount: body.amount,
+    });
+
+    try {
+      const response = await this.makeRequest({
+        method: "POST",
+        url: `wallets/client/${clientCode}/user/${userId}/topup`,
+        data: body,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to topup wallet", {
+        clientCode,
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Debit a user's wallet
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @param {Object} body - Debit body (amount, currency, reference_id, description, metadata, remarks)
+   * @returns {Promise<Object>} Transaction response
+   */
+  async debit(clientCode, userId, body) {
+    logger.info("Debiting wallet", { clientCode, userId, amount: body.amount });
+
+    try {
+      const response = await this.makeRequest({
+        method: "POST",
+        url: `wallets/client/${clientCode}/user/${userId}/debit`,
+        data: body,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to debit wallet", {
+        clientCode,
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Refund a user's wallet
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @param {Object} body - Refund body (amount, currency, reference_id, description, metadata, remarks)
+   * @returns {Promise<Object>} Refund response
+   */
+  async refund(clientCode, userId, body) {
+    logger.info("Refunding wallet", {
+      clientCode,
+      userId,
+      amount: body.amount,
+    });
+
+    try {
+      const response = await this.makeRequest({
+        method: "POST",
+        url: `wallets/client/${clientCode}/user/${userId}/refund`,
+        data: body,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to refund wallet", {
+        clientCode,
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed wallet info for a user under a client
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} User wallet info
+   */
+  async getUserWalletInfo(clientCode, userId) {
+    logger.info("Getting user wallet info", { clientCode, userId });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `users/${clientCode}/${userId}/wallet`,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to get user wallet info", {
+        clientCode,
+        userId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Update user status under a client
+   * @param {string} clientCode - Client code
+   * @param {string} userId - User ID
+   * @param {string} status - New status
+   * @returns {Promise<Object>} Update response
+   */
+  async updateUserStatus(clientCode, userId, status) {
+    logger.info("Updating user status", { clientCode, userId, status });
+
+    try {
+      const response = await this.makeRequest({
+        method: "PATCH",
+        url: `users/${clientCode}/${userId}/status`,
+        params: { status },
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to update user status", {
+        clientCode,
+        userId,
+        status,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * List all transactions for a client
+   * @param {string} clientCode - Client code
+   * @param {Object} query - Query params (page, size, sortBy, sortDir, etc.)
+   * @returns {Promise<Object>} Paginated transaction list with stats
+   */
+  async listClientTransactions(clientCode, query = {}) {
+    logger.info("Listing client transactions", { clientCode, query });
+
+    try {
+      const response = await this.makeRequest({
+        method: "GET",
+        url: `transactions/client/${clientCode}`,
+        params: {
+          page: query.page || 0,
+          size: query.size || 20,
+          sortBy: query.sortBy || "createdAt",
+          sortDir: query.sortDir || "desc",
+          ...query,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      logger.error("Failed to list client transactions", {
+        clientCode,
         error: error.message,
       });
       throw error;

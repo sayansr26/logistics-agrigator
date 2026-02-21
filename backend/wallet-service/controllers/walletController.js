@@ -418,25 +418,11 @@ async function getDetailedHealth(req, res) {
       dependencies: {},
     };
 
-    let isHealthy = true;
-
-    // Check database connectivity
-    try {
-      const pgStart = Date.now();
-      await prisma.$queryRaw`SELECT 1`;
-      const pgTime = Date.now() - pgStart;
-
-      healthStatus.dependencies.postgres = {
-        status: "healthy",
-        responseTime: pgTime,
-      };
-    } catch (error) {
-      isHealthy = false;
-      healthStatus.dependencies.postgres = {
-        status: "unhealthy",
-        error: error.message,
-      };
-    }
+    // Database check skipped - wallet-service is stateless
+    healthStatus.dependencies.postgres = {
+      status: "stateless",
+      note: "wallet-service operates without a local database; all data is proxied from the external wallet API",
+    };
 
     // Check external wallet API
     try {
@@ -455,13 +441,6 @@ async function getDetailedHealth(req, res) {
     }
 
     healthStatus.responseTime = Date.now() - startTime;
-
-    if (!isHealthy) {
-      healthStatus.status = "degraded";
-      return res
-        .status(503)
-        .json(APIResponse.error("Service is degraded", 503, healthStatus));
-    }
 
     res.json(
       APIResponse.success(healthStatus, "Detailed health check completed"),

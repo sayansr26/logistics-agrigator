@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: February 17, 2026
+> Development status and changelog | Last Updated: February 21, 2026
 
 ## Overall Project Status
 
@@ -99,14 +99,19 @@ Overall Project Progress          [███████████████
   - ✅ Frontend: Sidebar link ("Discount Packages" with Tag icon, superadmin/admin only)
   - ✅ Audit logging for all discount package CRUD operations
 
-#### Wallet Service (100% Complete)
+#### Wallet Service (100% Complete — Stateless External Proxy)
 
-- ✅ Balance management
-- ✅ Credit/debit operations
-- ✅ Transaction history
-- ✅ COD remittance tracking
-- ✅ Ledger reporting
-- ✅ HMAC authentication
+- ✅ **Stateless architecture** — no local DB; all data proxied from external wallet API
+- ✅ HMAC SHA-256 authentication with circuit breaker
+- ✅ Admin endpoints: list wallets, list transactions, topup, debit, refund, sync wallets, update user status, get/create wallet
+- ✅ Batch wallet sync (batches of 3, 500ms delay)
+- ✅ Joi validation schemas for all admin proxy operations
+- ✅ **Route ordering fix** — `/admin/*` routes before `/:userId/*` to prevent Express wildcard collision
+- ✅ Frontend: complete wallet management page with tabs, stats, filters, pagination
+- ✅ Frontend: transaction modals (Topup, Debit, Refund with debit-only selection)
+- ✅ Frontend: Create Wallet & Sync Wallets modals
+- ✅ Frontend: RTK Query `walletApi.ts` with 8 endpoints
+- ✅ Frontend: polished UI with grouped header buttons, transaction type badges with icons
 
 #### Shipment Service (90% Complete)
 
@@ -248,6 +253,19 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Wallet Module Overhaul — Stateless External Proxy (February 21, 2026)**
+  - Wallet service rewritten as stateless proxy to external wallet API (`wapi.websiteduniya.com`)
+  - Backend: `adminWalletController.js` (8 endpoints), `externalWalletClient.js` (HMAC + circuit breaker), admin validation schemas
+  - Critical fix: Express route ordering — `/admin/*` routes moved before `/:userId/*` wildcard routes
+  - Validation fixes: added `transaction_id` (integer) for refunds, changed `remarks` from string to object
+  - Frontend: complete wallet management UI with Wallets/Transactions tabs, stats cards, filters, pagination
+  - Frontend: Topup/Debit/Refund/UpdateStatus/CreateWallet/SyncWallets modals
+  - Frontend: RTK Query `walletApi.ts` (8 endpoints), outlet name resolution via `outletMap`
+  - UI polish: header button grouping with divider, transaction type badges (icon + tinted pill), dark-mode colors
+  - Metadata field sends as JSON object (with plain-text fallback wrapping)
+  - Refund modal only shows DEBIT transactions (not TOP_UP)
+  - Docker compose files updated for wallet-service configuration
 
 - ✅ **Charge Discount Packages (February 17, 2026)**
   - Full-stack feature: badge-based discount packages per Partner + Outlet Badge tier
@@ -394,6 +412,38 @@ Overall Project Progress          [███████████████
 ### February 2026
 
 ```
+[2026-02-21] Wallet Module Overhaul (Stateless External Proxy) - COMPLETE
+  Backend (wallet-service):
+  - Rewritten as stateless service — no local database, all data proxied from external wallet API
+  - New adminWalletController.js: getClientWallets, getClientTransactions, getWallet,
+    topupWallet, debitWallet, refundWallet, updateUserStatus, syncWallets
+  - externalWalletClient.js: HMAC SHA-256 auth, circuit breaker (opossum), Redis caching,
+    axios interceptors, 14 methods (listClientWallets, topup, debit, refund, etc.)
+  - walletSchema.js: Added adminWalletTransactionSchema (with transaction_id for refunds,
+    remarks as Joi.object()), adminClientWalletsQuerySchema, adminClientTransactionsQuerySchema,
+    adminGetWalletQuerySchema, adminUpdateUserStatusSchema, adminSyncWalletsSchema
+  - routes/wallet.js: CRITICAL FIX — moved /admin/* routes before /:userId/* routes
+    (Express matched "admin" as userId param, causing UUID validation errors)
+  - Batch sync: processes userIds in batches of 3 with 500ms delay between batches
+
+  Frontend:
+  - New walletApi.ts RTK Query: 8 endpoints (getClientWallets, getClientTransactions,
+    getOrCreateWallet, topupWallet, debitWallet, refundWallet, updateWalletUserStatus, syncWallets)
+  - wallet/page.jsx: Complete rewrite with Wallets/Transactions tabs
+  - Stats cards, filter panels, paginated tables for both tabs
+  - Modals: Topup, Debit, Refund (debit-only tx selection), UpdateStatus, CreateWallet, SyncWallets
+  - RemarksBuilder component for dynamic key-value remarks
+  - Outlet name resolution via outletMap (phone → name lookup)
+  - UI polish: header buttons grouped (utility | transactions) with divider
+  - Transaction type badges: pill-shaped with icons (TrendingUp/TrendingDown/RotateCcw)
+  - Dark-mode friendly: opacity-based colors (emerald-500/10, red-500/10, blue-500/10)
+  - Fixed: metadata sent as JSON object (with plain-text fallback { note: "..." })
+  - Fixed: refund dropdown only shows DEBIT transactions (removed TOP_UP)
+  - Sidebar: wallet link added
+
+  Docker:
+  - Updated docker-compose.yml, docker-compose.backend.yml, docker-compose.production.yml
+
 [2026-02-17] Charge Discount Packages - COMPLETE
   Backend (user-service):
   - Created internalOutletController.js with getOutletByUser function
@@ -680,6 +730,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: February 17, 2026
+**Last Updated**: February 21, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

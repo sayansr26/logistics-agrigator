@@ -35,9 +35,200 @@ const {
   adminTransactionsQuerySchema,
   paymentGatewayInitiateSchema,
   paymentGatewayWebhookSchema,
+  adminClientWalletsQuerySchema,
+  adminClientTransactionsQuerySchema,
+  adminGetWalletQuerySchema,
+  adminWalletTransactionSchema,
+  adminUpdateUserStatusSchema,
+  adminSyncWalletsSchema,
 } = require("../validation/walletSchema");
+const {
+  getClientWallets,
+  getClientTransactions,
+  getWallet: getAdminWallet,
+  updateUserStatus,
+  topupWallet,
+  debitWallet: adminDebitWallet,
+  refundWallet,
+  syncWallets,
+} = require("../controllers/adminWalletController");
 
 const router = express.Router();
+
+// -------------------------------------------------------------------------
+// IMPORTANT: /admin/* routes MUST be defined BEFORE /:userId/* routes
+// otherwise Express matches "admin" as a userId parameter
+// -------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/wallet/admin/client-wallets
+ * List all wallets for a client from external wallet API
+ */
+router.get(
+  "/admin/client-wallets",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateQuery(adminClientWalletsQuerySchema),
+  getClientWallets,
+);
+
+/**
+ * GET /api/v1/wallet/admin/client-transactions
+ * List all transactions for a client from external wallet API
+ */
+router.get(
+  "/admin/client-transactions",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateQuery(adminClientTransactionsQuerySchema),
+  getClientTransactions,
+);
+
+/**
+ * GET /api/v1/wallet/admin/wallet
+ * Get or create wallet for a specific user (userId in query)
+ */
+router.get(
+  "/admin/wallet",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateQuery(adminGetWalletQuerySchema),
+  getAdminWallet,
+);
+
+/**
+ * PATCH /api/v1/wallet/admin/user-status
+ * Update user status under a client
+ */
+router.patch(
+  "/admin/user-status",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateBody(adminUpdateUserStatusSchema),
+  updateUserStatus,
+);
+
+/**
+ * POST /api/v1/wallet/admin/topup
+ * Top up a user's wallet via external wallet API
+ */
+router.post(
+  "/admin/topup",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateBody(adminWalletTransactionSchema),
+  topupWallet,
+);
+
+/**
+ * POST /api/v1/wallet/admin/debit
+ * Debit a user's wallet via external wallet API
+ */
+router.post(
+  "/admin/debit",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateBody(adminWalletTransactionSchema),
+  adminDebitWallet,
+);
+
+/**
+ * POST /api/v1/wallet/admin/refund
+ * Refund to a user's wallet via external wallet API
+ */
+router.post(
+  "/admin/refund",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateBody(adminWalletTransactionSchema),
+  refundWallet,
+);
+
+/**
+ * POST /api/v1/wallet/admin/sync-wallets
+ * Batch create wallets for multiple users (rate-limited)
+ */
+router.post(
+  "/admin/sync-wallets",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  validateBody(adminSyncWalletsSchema),
+  syncWallets,
+);
+
+// -------------------------------------------------------------------------
+// Admin local DB routes (all-wallets, transactions)
+// -------------------------------------------------------------------------
+
+/**
+ * @swagger
+ * /api/v1/wallet/admin/all-wallets:
+ *   get:
+ *     tags: [Admin Operations]
+ *     summary: Get all wallets (Admin only)
+ */
+router.get(
+  "/admin/all-wallets",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  strictLimiter,
+  validateQuery(adminWalletsQuerySchema),
+  getAllWallets,
+);
+
+/**
+ * @swagger
+ * /api/v1/wallet/admin/transactions:
+ *   get:
+ *     tags: [Admin Operations]
+ *     summary: Get all transactions (Admin only)
+ */
+router.get(
+  "/admin/transactions",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "manage", "all"),
+  strictLimiter,
+  validateQuery(adminTransactionsQuerySchema),
+  getAllTransactions,
+);
+
+// -------------------------------------------------------------------------
+// Health check
+// -------------------------------------------------------------------------
+
+router.get("/health", authMiddleware.authenticate, getDetailedHealth);
+
+// -------------------------------------------------------------------------
+// Payment gateway routes (future)
+// -------------------------------------------------------------------------
+
+router.post(
+  "/payment-gateway/initiate",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "create", "own"),
+  transactionLimiter,
+  validateBody(paymentGatewayInitiateSchema),
+  initiatePayment,
+);
+
+router.post(
+  "/payment-gateway/webhook",
+  validateBody(paymentGatewayWebhookSchema),
+  handlePaymentWebhook,
+);
+
+router.get(
+  "/payment-gateway/status/:paymentId",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  balanceLimiter,
+  validateParams(paymentIdParamsSchema),
+  getPaymentStatus,
+);
+
+// -------------------------------------------------------------------------
+// User-specific routes (/:userId must be LAST - catches everything)
+// -------------------------------------------------------------------------
 
 /**
  * @swagger
@@ -536,361 +727,5 @@ router.get(
   validateQuery(transactionHistoryQuerySchema),
   getTransactions,
 );
-
-/**
- * @swagger
- * /api/v1/wallet/admin/all-wallets:
- *   get:
- *     tags: [Admin Operations]
- *     summary: Get all wallets (Admin only)
- *     description: |
- *       Retrieves paginated list of all wallets in the system. Administrative operation
- *       that requires admin role authorization. Supports filtering and searching.
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *         description: Page number for pagination
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 50
- *         description: Number of wallets per page
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [ACTIVE, INACTIVE, SUSPENDED, BLOCKED]
- *         description: Filter by wallet status
- *       - in: query
- *         name: clientCode
- *         schema:
- *           type: string
- *           maxLength: 50
- *         description: Filter by client code
- *       - in: query
- *         name: searchUserId
- *         schema:
- *           type: string
- *           maxLength: 255
- *         description: Search by user ID (partial match)
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: All wallets retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         $ref: '#/components/responses/ForbiddenError'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.get(
-  "/admin/all-wallets",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "manage", "all"),
-  strictLimiter,
-  validateQuery(adminWalletsQuerySchema),
-  getAllWallets,
-);
-
-/**
- * @swagger
- * /api/v1/wallet/admin/transactions:
- *   get:
- *     tags: [Admin Operations]
- *     summary: Get all transactions (Admin only)
- *     description: |
- *       Retrieves paginated list of all transactions in the system. Administrative operation
- *       that requires admin role authorization. Supports comprehensive filtering.
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *         description: Page number for pagination
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 50
- *         description: Number of transactions per page
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [DEBIT, CREDIT, REFUND, LOAD_BALANCE, ADJUSTMENT]
- *         description: Filter by transaction type
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [PENDING, COMPLETED, FAILED, CANCELLED, PROCESSING]
- *         description: Filter by transaction status
- *       - in: query
- *         name: userId
- *         schema:
- *           type: string
- *           maxLength: 255
- *         description: Filter by user ID (partial match)
- *       - in: query
- *         name: reference
- *         schema:
- *           type: string
- *           maxLength: 255
- *         description: Filter by reference (partial match)
- *       - in: query
- *         name: startDate
- *         schema:
- *           type: string
- *           format: date-time
- *         description: Start date for date range filter
- *       - in: query
- *         name: endDate
- *         schema:
- *           type: string
- *           format: date-time
- *         description: End date for date range filter
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: All transactions retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         $ref: '#/components/responses/ForbiddenError'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.get(
-  "/admin/transactions",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "manage", "all"),
-  strictLimiter,
-  validateQuery(adminTransactionsQuerySchema),
-  getAllTransactions,
-);
-
-/**
- * @swagger
- * /api/v1/wallet/payment-gateway/initiate:
- *   post:
- *     tags: [Payment Gateway]
- *     summary: Initiate payment gateway transaction (Future)
- *     description: |
- *       Initiates a payment gateway transaction for wallet top-up. This is a future feature
- *       placeholder for payment gateway integration (Razorpay, PayU, etc.).
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - amount
- *               - provider
- *             properties:
- *               amount:
- *                 type: number
- *                 format: decimal
- *                 minimum: 0.01
- *                 maximum: 999999.99
- *                 example: 500.00
- *                 description: Amount to load via payment gateway
- *               provider:
- *                 type: string
- *                 enum: [razorpay, payu, stripe, cashfree]
- *                 example: razorpay
- *                 description: Payment gateway provider
- *               metadata:
- *                 type: object
- *                 description: Additional payment metadata
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Payment initiation prepared (future feature)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.post(
-  "/payment-gateway/initiate",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "create", "own"),
-  transactionLimiter,
-  validateBody(paymentGatewayInitiateSchema),
-  initiatePayment,
-);
-
-/**
- * @swagger
- * /api/v1/wallet/payment-gateway/webhook:
- *   post:
- *     tags: [Payment Gateway]
- *     summary: Handle payment gateway webhook (Future)
- *     description: |
- *       Handles payment gateway webhook notifications for payment status updates.
- *       This is a future feature placeholder for payment gateway webhook handling.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - paymentId
- *               - status
- *             properties:
- *               paymentId:
- *                 type: string
- *                 maxLength: 255
- *                 example: "pay_123456789"
- *                 description: Payment gateway payment ID
- *               status:
- *                 type: string
- *                 enum: [COMPLETED, FAILED, CANCELLED, REFUNDED]
- *                 example: COMPLETED
- *                 description: Payment status from gateway
- *               gatewayData:
- *                 type: object
- *                 description: Gateway-specific webhook data
- *     responses:
- *       200:
- *         description: Payment webhook received (future feature)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.post(
-  "/payment-gateway/webhook",
-  validateBody(paymentGatewayWebhookSchema),
-  handlePaymentWebhook,
-);
-
-/**
- * @swagger
- * /api/v1/wallet/payment-gateway/status/{paymentId}:
- *   get:
- *     tags: [Payment Gateway]
- *     summary: Check payment status (Future)
- *     description: |
- *       Retrieves payment status from payment gateway. This is a future feature
- *       placeholder for payment gateway status checking.
- *     parameters:
- *       - in: path
- *         name: paymentId
- *         required: true
- *         schema:
- *           type: string
- *           maxLength: 255
- *         description: Payment gateway payment ID
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Payment status retrieved (future feature)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       404:
- *         $ref: '#/components/responses/NotFoundError'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.get(
-  "/payment-gateway/status/:paymentId",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "read", "own"),
-  balanceLimiter,
-  validateParams(paymentIdParamsSchema),
-  getPaymentStatus,
-);
-
-/**
- * @swagger
- * /api/v1/wallet/health:
- *   get:
- *     tags: [Health]
- *     summary: Detailed health check with external service monitoring
- *     description: |
- *       Comprehensive health check that includes database, Redis, external wallet API status,
- *       and basic wallet service metrics. Provides detailed service health information.
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Detailed health check completed
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *             example:
- *               status: success
- *               message: Detailed health check completed
- *               data:
- *                 service: "wallet-service"
- *                 status: "ok"
- *                 timestamp: "2024-01-01T12:00:00.000Z"
- *                 checks:
- *                   database: "healthy"
- *                   redis: "healthy"
- *                   externalWalletAPI: "healthy"
- *                 metrics:
- *                   totalWallets: 150
- *                   totalTransactions: 1250
- *                   totalBalance: 125000.50
- *                 responseTime: 45
- *       503:
- *         description: Service health check failed
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         $ref: '#/components/responses/InternalError'
- */
-router.get("/health", authMiddleware.authenticate, getDetailedHealth);
 
 module.exports = router;
