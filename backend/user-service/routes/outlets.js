@@ -458,7 +458,7 @@ router.post(
 router.get(
   "/outlets/:outletId/addresses",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("user", "read", "parent"),
+  authMiddleware.requirePermission("user", "read", "all"),
   OutletController.getAddresses,
 );
 
@@ -497,7 +497,7 @@ router.get(
 router.post(
   "/outlets/:outletId/addresses",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("user", "create", "own"),
+  authMiddleware.requirePermission("user", "create", "all"),
   validate(createAddressSchema),
   OutletController.createAddress,
 );
@@ -585,7 +585,7 @@ router.put(
 router.put(
   "/outlets/:outletId/addresses/:addressId",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("user", "update", "own"),
+  authMiddleware.requirePermission("user", "update", "all"),
   validate(updateAddressSchema),
   OutletController.updateAddress,
 );
@@ -656,7 +656,7 @@ router.delete(
 router.delete(
   "/outlets/:outletId/addresses/:addressId",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("user", "delete", "own"),
+  authMiddleware.requirePermission("user", "delete", "all"),
   OutletController.deleteAddress,
 );
 

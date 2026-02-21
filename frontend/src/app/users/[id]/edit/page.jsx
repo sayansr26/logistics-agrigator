@@ -161,7 +161,7 @@ export default function EditUserPage() {
   }, [user, profile]);
 
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "User Management", href: "/users" },
     { title: user?.email || "User", href: `/users/${userId}` },
     { title: "Edit User" },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,9 +133,11 @@ const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
 
 export default function OutletsPage() {
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "Outlet Management" },
   ];
+
+  const router = useRouter();
 
   // Get current user from auth state
   const { user } = useAppSelector((state) => state.auth);
@@ -945,6 +948,16 @@ export default function OutletsPage() {
                               >
                                 <Award className="h-4 w-4 mr-2" />
                                 Change Badge
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/addresses?outletId=${outlet.id}`,
+                                  )
+                                }
+                              >
+                                <MapPin className="h-4 w-4 mr-2" />
+                                Manage Addresses
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem

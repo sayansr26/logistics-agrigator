@@ -437,8 +437,12 @@ Overall Project Progress          [███████████████
   - UI polish: header buttons grouped (utility | transactions) with divider
   - Transaction type badges: pill-shaped with icons (TrendingUp/TrendingDown/RotateCcw)
   - Dark-mode friendly: opacity-based colors (emerald-500/10, red-500/10, blue-500/10)
-  - Fixed: metadata sent as JSON object (with plain-text fallback { note: "..." })
+  - Fixed: metadata now sent as plain string (external API expects string, not object)
   - Fixed: refund dropdown only shows DEBIT transactions (removed TOP_UP)
+  - Fixed: amount max 10,000 per transaction (external API limit) — added max="10000" on frontend input
+  - Fixed: externalWalletClient.js now surfaces actual validation_errors from external API response
+    instead of generic "Invalid request parameters" message
+  - Fixed: walletSchema.js metadata field accepts both string and object (Joi.alternatives)
   - Sidebar: wallet link added
 
   Docker:

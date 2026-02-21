@@ -92,7 +92,7 @@ export default function ManagePermissionsPage() {
   }, [user]);
 
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "User Management", href: "/users" },
     { title: user?.email || "User", href: `/users/${userId}` },
     { title: "Manage Permissions" },

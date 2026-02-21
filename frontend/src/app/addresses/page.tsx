@@ -1,16 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,8 +30,24 @@ import {
   useCreateMyAddressMutation,
   useUpdateMyAddressMutation,
   useDeleteMyAddressMutation,
+  useGetOutletQuery,
+  useGetOutletAddressesQuery,
+  useCreateOutletAddressMutation,
+  useUpdateOutletAddressMutation,
+  useDeleteOutletAddressMutation,
 } from "@/store/api/endpoints/outletApi";
-import type { OutletAddress, CreateAddressRequest, UpdateAddressRequest } from "@/store/api/endpoints/outletApi";
+import type {
+  OutletAddress,
+  CreateAddressRequest,
+  UpdateAddressRequest,
+} from "@/store/api/endpoints/outletApi";
+import {
+  useGetStatesQuery,
+  useGetCitiesQuery,
+  useSearchPincodesQuery,
+  useGetPincodeDetailsQuery,
+} from "@/store/api/endpoints/geoApi";
+import { selectUser } from "@/store/slices/authSlice";
 import {
   MapPin,
   Plus,
@@ -42,7 +55,6 @@ import {
   Trash2,
   Loader2,
   AlertCircle,
-  CheckCircle,
   Phone,
   Mail,
   Home,
@@ -50,17 +62,40 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-export default function AddressesPage() {
-  const customBreadcrumbs = [
-    { title: "Home", href: "/" },
-    { title: "My Addresses" },
-  ];
+function AddressesPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const user = useSelector(selectUser);
+  const role = user?.role || "";
+
+  const isAdmin = role === "admin" || role === "superadmin";
+  const outletId = searchParams.get("outletId") || "";
+
+  // Outlet info query (admin only) — must be before breadcrumbs
+  const { data: outletData } = useGetOutletQuery(outletId, {
+    skip: !isAdmin || !outletId,
+  });
+  const outletName = outletData?.data?.outlet?.name || outletId;
+
+  // Breadcrumbs
+  const customBreadcrumbs = isAdmin
+    ? [
+        { title: "Dashboard", href: "/dashboard" },
+        { title: "Outlets", href: "/outlets" },
+        ...(outletName && outletName !== outletId
+          ? [{ title: outletName }]
+          : []),
+        { title: "Addresses" },
+      ]
+    : [{ title: "Dashboard", href: "/dashboard" }, { title: "My Addresses" }];
 
   // State management
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [selectedAddress, setSelectedAddress] = useState<OutletAddress | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<OutletAddress | null>(
+    null,
+  );
 
   // Form state
   const [formData, setFormData] = useState<CreateAddressRequest>({
@@ -80,12 +115,97 @@ export default function AddressesPage() {
     isDefaultReturn: false,
   });
 
-  // RTK Query hooks
-  const { data: addressesData, isLoading, isError, refetch } = useGetMyAddressesQuery();
-  const [createAddress, { isLoading: isCreating }] = useCreateMyAddressMutation();
-  const [updateAddress, { isLoading: isUpdating }] = useUpdateMyAddressMutation();
-  const [deleteAddress, { isLoading: isDeleting }] = useDeleteMyAddressMutation();
+  // Geo autocomplete state
+  const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
+  const [pincodeSearch, setPincodeSearch] = useState("");
+  const [showStateSuggestions, setShowStateSuggestions] = useState(false);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [showPincodeSuggestions, setShowPincodeSuggestions] = useState(false);
 
+  // Geo autocomplete hooks
+  const { data: statesData } = useGetStatesQuery();
+  const { data: citiesData } = useGetCitiesQuery(
+    { stateId: selectedStateId! },
+    { skip: !selectedStateId },
+  );
+  const { data: pincodeDetailsData } = useGetPincodeDetailsQuery(
+    pincodeSearch,
+    { skip: !pincodeSearch || pincodeSearch.length !== 6 },
+  );
+  const { data: pincodesSearchData } = useSearchPincodesQuery(
+    { code: pincodeSearch },
+    { skip: !pincodeSearch || pincodeSearch.length < 3 },
+  );
+
+  const states = statesData?.data || [];
+  const cities = citiesData?.data || [];
+  const pincodeSuggestions = pincodesSearchData?.data || [];
+
+  // Auto-fill city/state when 6-digit pincode resolves
+  useEffect(() => {
+    if (pincodeDetailsData?.data) {
+      const { pincode: pincodeInfo, hierarchy } = pincodeDetailsData.data;
+      const stateName = hierarchy?.state?.name || "";
+      const cityName =
+        hierarchy?.city?.name ||
+        pincodeInfo?.district ||
+        pincodeInfo?.areaName ||
+        "";
+
+      if (stateName || cityName) {
+        setFormData((prev) => ({
+          ...prev,
+          state: stateName || prev.state,
+          city: cityName || prev.city,
+        }));
+        const stateId = hierarchy?.state?.id || pincodeInfo?.stateId;
+        if (stateId) setSelectedStateId(stateId);
+      }
+      setShowPincodeSuggestions(false);
+    }
+  }, [pincodeDetailsData]);
+
+  // --- Admin hooks ---
+  const {
+    data: adminAddressesData,
+    isLoading: adminLoading,
+    isError: adminError,
+    refetch: adminRefetch,
+  } = useGetOutletAddressesQuery(outletId, {
+    skip: !isAdmin || !outletId,
+  });
+  const [createOutletAddress, { isLoading: isAdminCreating }] =
+    useCreateOutletAddressMutation();
+  const [updateOutletAddress, { isLoading: isAdminUpdating }] =
+    useUpdateOutletAddressMutation();
+  const [deleteOutletAddress, { isLoading: isAdminDeleting }] =
+    useDeleteOutletAddressMutation();
+
+  // --- Outlet hooks ---
+  const {
+    data: outletAddressesData,
+    isLoading: outletLoading,
+    isError: outletError,
+    refetch: outletRefetch,
+  } = useGetMyAddressesQuery(undefined, {
+    skip: isAdmin,
+  });
+  const [createMyAddress, { isLoading: isOutletCreating }] =
+    useCreateMyAddressMutation();
+  const [updateMyAddress, { isLoading: isOutletUpdating }] =
+    useUpdateMyAddressMutation();
+  const [deleteMyAddress, { isLoading: isOutletDeleting }] =
+    useDeleteMyAddressMutation();
+
+  // Resolved values
+  const isLoading = isAdmin ? adminLoading : outletLoading;
+  const isError = isAdmin ? adminError : outletError;
+  const refetch = isAdmin ? adminRefetch : outletRefetch;
+  const isCreating = isAdmin ? isAdminCreating : isOutletCreating;
+  const isUpdating = isAdmin ? isAdminUpdating : isOutletUpdating;
+  const isDeleting = isAdmin ? isAdminDeleting : isOutletDeleting;
+
+  const addressesData = isAdmin ? adminAddressesData : outletAddressesData;
   const addresses = addressesData?.data?.addresses || [];
 
   // Reset form
@@ -106,6 +226,11 @@ export default function AddressesPage() {
       isDefaultPickup: false,
       isDefaultReturn: false,
     });
+    setPincodeSearch("");
+    setSelectedStateId(null);
+    setShowPincodeSuggestions(false);
+    setShowCitySuggestions(false);
+    setShowStateSuggestions(false);
   };
 
   // Handle input change
@@ -120,7 +245,11 @@ export default function AddressesPage() {
   // Handle create
   const handleCreate = async () => {
     try {
-      await createAddress(formData).unwrap();
+      if (isAdmin) {
+        await createOutletAddress({ outletId, data: formData }).unwrap();
+      } else {
+        await createMyAddress(formData).unwrap();
+      }
       setShowCreateDialog(false);
       resetForm();
       refetch();
@@ -155,10 +284,18 @@ export default function AddressesPage() {
   const handleUpdate = async () => {
     if (!selectedAddress) return;
     try {
-      await updateAddress({
-        addressId: selectedAddress.id,
-        data: formData as UpdateAddressRequest,
-      }).unwrap();
+      if (isAdmin) {
+        await updateOutletAddress({
+          outletId,
+          addressId: selectedAddress.id,
+          data: formData as UpdateAddressRequest,
+        }).unwrap();
+      } else {
+        await updateMyAddress({
+          addressId: selectedAddress.id,
+          data: formData as UpdateAddressRequest,
+        }).unwrap();
+      }
       setShowEditDialog(false);
       setSelectedAddress(null);
       resetForm();
@@ -178,7 +315,14 @@ export default function AddressesPage() {
   const handleDeleteConfirm = async () => {
     if (!selectedAddress) return;
     try {
-      await deleteAddress(selectedAddress.id).unwrap();
+      if (isAdmin) {
+        await deleteOutletAddress({
+          outletId,
+          addressId: selectedAddress.id,
+        }).unwrap();
+      } else {
+        await deleteMyAddress(selectedAddress.id).unwrap();
+      }
       setShowDeleteDialog(false);
       setSelectedAddress(null);
       refetch();
@@ -199,6 +343,47 @@ export default function AddressesPage() {
     }
   };
 
+  // Admin with no outletId — show empty state
+  if (isAdmin && !outletId) {
+    return (
+      <DashboardLayout
+        breadcrumbs={[
+          { title: "Dashboard", href: "/dashboard" },
+          { title: "Outlets", href: "/outlets" },
+          { title: "Addresses" },
+        ]}
+      >
+        <div className="space-y-6">
+          <div className="flex flex-col items-center justify-center py-16">
+            <Card className="w-full max-w-md">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <MapPin className="h-12 w-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium">Select an outlet first</p>
+                <p className="text-sm text-center mt-1">
+                  You must select an outlet to manage its addresses.
+                </p>
+                <Button
+                  onClick={() => router.push("/outlets")}
+                  className="mt-6 gap-2"
+                >
+                  Go to Outlets
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const pageTitle = isAdmin
+    ? `Manage Addresses for ${outletName}`
+    : "My Addresses";
+
+  const pageDescription = isAdmin
+    ? `Viewing pickup and delivery addresses for this outlet`
+    : "Manage your pickup and delivery addresses";
+
   return (
     <DashboardLayout breadcrumbs={customBreadcrumbs}>
       <div className="space-y-6">
@@ -207,11 +392,9 @@ export default function AddressesPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <MapPin className="h-6 w-6 text-primary" />
-              My Addresses
+              {pageTitle}
             </h1>
-            <p className="text-muted-foreground">
-              Manage your pickup and delivery addresses
-            </p>
+            <p className="text-muted-foreground">{pageDescription}</p>
           </div>
           <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
             <Plus className="h-4 w-4" />
@@ -229,7 +412,11 @@ export default function AddressesPage() {
             <CardContent className="flex flex-col items-center justify-center py-12 text-red-500">
               <AlertCircle className="h-8 w-8 mb-2" />
               <p>Failed to load addresses</p>
-              <Button variant="outline" onClick={() => refetch()} className="mt-4">
+              <Button
+                variant="outline"
+                onClick={() => refetch()}
+                className="mt-4"
+              >
                 Retry
               </Button>
             </CardContent>
@@ -239,8 +426,11 @@ export default function AddressesPage() {
             <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <MapPin className="h-12 w-12 mb-4 opacity-50" />
               <p className="text-lg font-medium">No addresses found</p>
-              <p className="text-sm">Add your first address to get started</p>
-              <Button onClick={() => setShowCreateDialog(true)} className="mt-4">
+              <p className="text-sm">Add the first address to get started</p>
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                className="mt-4"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Address
               </Button>
@@ -299,7 +489,9 @@ export default function AddressesPage() {
                     {address.addressLine2 && `, ${address.addressLine2}`}
                   </p>
                   {address.landmark && (
-                    <p className="text-muted-foreground">Near: {address.landmark}</p>
+                    <p className="text-muted-foreground">
+                      Near: {address.landmark}
+                    </p>
                   )}
                   <p className="text-muted-foreground">
                     {address.city}, {address.state} - {address.pincode}
@@ -451,36 +643,144 @@ export default function AddressesPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="city">City *</Label>
-                <Input
-                  id="city"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleInputChange}
-                  placeholder="City"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="state">State *</Label>
-                <Input
-                  id="state"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleInputChange}
-                  placeholder="State"
-                />
-              </div>
-              <div className="grid gap-2">
+              {/* Pincode with autocomplete */}
+              <div className="grid gap-2 relative">
                 <Label htmlFor="pincode">Pincode *</Label>
                 <Input
                   id="pincode"
-                  name="pincode"
                   value={formData.pincode}
-                  onChange={handleInputChange}
-                  placeholder="6-digit"
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setFormData((prev) => ({ ...prev, pincode: value }));
+                    setPincodeSearch(value);
+                    setShowPincodeSuggestions(
+                      value.length >= 3 && value.length < 6,
+                    );
+                  }}
+                  onFocus={() =>
+                    setShowPincodeSuggestions(
+                      formData.pincode.length >= 3 &&
+                        formData.pincode.length < 6,
+                    )
+                  }
+                  onBlur={() =>
+                    setTimeout(() => setShowPincodeSuggestions(false), 200)
+                  }
+                  placeholder="XXXXXX"
                   maxLength={6}
                 />
+                {showPincodeSuggestions && pincodeSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+                    {pincodeSuggestions.map((p: any) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => {
+                          setFormData((prev) => ({ ...prev, pincode: p.code }));
+                          setPincodeSearch(p.code);
+                          setShowPincodeSuggestions(false);
+                        }}
+                      >
+                        <span className="font-medium">{p.code}</span>
+                        {p.areaName && (
+                          <span className="text-muted-foreground ml-2">
+                            - {p.areaName}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* City with autocomplete */}
+              <div className="grid gap-2 relative">
+                <Label htmlFor="city">City *</Label>
+                <Input
+                  id="city"
+                  value={formData.city}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, city: e.target.value }));
+                    setShowCitySuggestions(true);
+                  }}
+                  onFocus={() => setShowCitySuggestions(true)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCitySuggestions(false), 200)
+                  }
+                  placeholder="City"
+                />
+                {showCitySuggestions && cities.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+                    {cities
+                      .filter(
+                        (c: any) =>
+                          !formData.city ||
+                          c.name
+                            .toLowerCase()
+                            .includes(formData.city.toLowerCase()),
+                      )
+                      .slice(0, 10)
+                      .map((c: any) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, city: c.name }));
+                            setShowCitySuggestions(false);
+                          }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* State with autocomplete */}
+              <div className="grid gap-2 relative">
+                <Label htmlFor="state">State *</Label>
+                <Input
+                  id="state"
+                  value={formData.state}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, state: e.target.value }));
+                    setShowStateSuggestions(true);
+                  }}
+                  onFocus={() => setShowStateSuggestions(true)}
+                  onBlur={() =>
+                    setTimeout(() => setShowStateSuggestions(false), 200)
+                  }
+                  placeholder="State"
+                />
+                {showStateSuggestions && states.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+                    {states
+                      .filter(
+                        (s: any) =>
+                          !formData.state ||
+                          s.name
+                            .toLowerCase()
+                            .includes(formData.state.toLowerCase()),
+                      )
+                      .slice(0, 10)
+                      .map((s: any) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, state: s.name }));
+                            setSelectedStateId(s.id);
+                            setShowStateSuggestions(false);
+                          }}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -551,12 +851,15 @@ export default function AddressesPage() {
               Delete Address
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{selectedAddress?.label}&quot;? This
-              action cannot be undone.
+              Are you sure you want to delete &quot;{selectedAddress?.label}
+              &quot;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -574,3 +877,16 @@ export default function AddressesPage() {
   );
 }
 
+export default function AddressesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <AddressesPageContent />
+    </Suspense>
+  );
+}

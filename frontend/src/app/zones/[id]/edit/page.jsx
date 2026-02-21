@@ -148,7 +148,7 @@ export default function EditZonePage() {
     return (
       <DashboardLayout
         customBreadcrumbs={[
-          { title: "Home", href: "/" },
+          { title: "Dashboard", href: "/dashboard" },
           { title: "Zone Management", href: "/zones" },
           { title: "Edit Zone" },
         ]}
@@ -170,7 +170,7 @@ export default function EditZonePage() {
     return (
       <DashboardLayout
         customBreadcrumbs={[
-          { title: "Home", href: "/" },
+          { title: "Dashboard", href: "/dashboard" },
           { title: "Zone Management", href: "/zones" },
           { title: "Edit Zone" },
         ]}
@@ -205,7 +205,7 @@ export default function EditZonePage() {
     return (
       <DashboardLayout
         customBreadcrumbs={[
-          { title: "Home", href: "/" },
+          { title: "Dashboard", href: "/dashboard" },
           { title: "Zone Management", href: "/zones" },
           { title: "Edit Zone" },
         ]}
@@ -235,7 +235,7 @@ export default function EditZonePage() {
   return (
     <DashboardLayout
       customBreadcrumbs={[
-        { title: "Home", href: "/" },
+        { title: "Dashboard", href: "/dashboard" },
         { title: "Zone Management", href: "/zones" },
         { title: zone.name, href: `/zones/${zoneId}` },
         { title: "Edit" },

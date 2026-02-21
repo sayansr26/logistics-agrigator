@@ -59,6 +59,23 @@ memory-bank/
 | **Platform Service** | 3008 | `backend/platform-service/` | ❌ Pending    | 0%         | Shopify next        |
 | **Frontend**         | 3000 | `frontend/`                 | 🔄 Migrating  | 40%        | Redux/RTK Query     |
 
+## Shell Rules (CRITICAL)
+
+**`builtin cd`**: The shell uses zoxide which overrides `cd`. Always use `builtin cd` when changing directories in Bash commands.
+
+**`builtin` is ONLY for `cd`**: NEVER prefix any other command with `builtin`. Commands like `pnpm`, `docker-compose`, `node`, `npm`, etc. must be run directly without `builtin`.
+
+```bash
+# ✅ CORRECT
+builtin cd /path/to/dir
+pnpm run build
+docker restart logistics-frontend
+
+# ❌ WRONG — will fail with "no such builtin"
+builtin pnpm run build
+builtin docker restart logistics-frontend
+```
+
 ## Quick Start Commands
 
 ```bash

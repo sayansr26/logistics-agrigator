@@ -763,10 +763,9 @@ class OutletController {
       }
 
       await prisma.$transaction(async (tx) => {
-        // Soft delete
-        await tx.outletAddress.update({
+        // Hard delete
+        await tx.outletAddress.delete({
           where: { id: addressId },
-          data: { isActive: false },
         });
 
         // Audit log

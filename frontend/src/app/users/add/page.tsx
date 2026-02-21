@@ -132,12 +132,15 @@ export default function AddUserPage() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "User Management", href: "/users" },
     { title: "Add New User" },
   ];
 
-  const handleInputChange = (field: keyof FormData, value: string | string[]) => {
+  const handleInputChange = (
+    field: keyof FormData,
+    value: string | string[],
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
 
     // Auto-assign default permissions when role changes

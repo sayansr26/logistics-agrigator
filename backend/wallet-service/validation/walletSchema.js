@@ -305,7 +305,9 @@ const adminWalletTransactionSchema = Joi.object({
   reference_id: Joi.string().max(255).trim().optional(),
   transaction_id: Joi.number().integer().optional(),
   description: Joi.string().max(500).trim().optional(),
-  metadata: Joi.object().optional(),
+  metadata: Joi.alternatives()
+    .try(Joi.string().max(1000).trim(), Joi.object())
+    .optional(),
   remarks: Joi.object().optional(),
 }).messages({
   "object.unknown": "Unknown field '{#label}' is not allowed",

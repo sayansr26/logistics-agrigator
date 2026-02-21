@@ -231,12 +231,17 @@ class ExternalWalletClient {
     } catch (error) {
       if (error.response) {
         // HTTP error response
-        const errorMessage = error.response.data?.message || error.message;
+        const responseData = error.response.data;
+        const validationErrors = responseData?.validation_errors;
+        let errorMessage = responseData?.message || error.message;
+        if (validationErrors && validationErrors.length > 0) {
+          errorMessage = validationErrors.map((e) => e.message).join("; ");
+        }
         logger.error("External Wallet API HTTP Error", {
           status: error.response.status,
           statusText: error.response.statusText,
           message: errorMessage,
-          responseBody: JSON.stringify(error.response.data),
+          responseBody: JSON.stringify(responseData),
           url: config.url,
         });
 

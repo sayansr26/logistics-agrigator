@@ -157,7 +157,7 @@ export default function PartnerPincodesPage() {
 
   // Custom breadcrumbs
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "Courier Partners", href: "/partners" },
     { title: partner?.name || "Partner" },
     { title: "Pincode Assign" },

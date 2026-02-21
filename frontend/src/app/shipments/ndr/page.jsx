@@ -50,7 +50,7 @@ export default function NDRPage() {
   const itemsPerPage = 5;
 
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "Shipments", href: "/shipments" },
     { title: "Non-Delivery Reports" },
   ];

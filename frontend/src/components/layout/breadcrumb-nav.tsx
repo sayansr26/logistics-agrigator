@@ -59,8 +59,8 @@ function generateBreadcrumbs(pathname: string): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   const breadcrumbs: Crumb[] = [];
 
-  // Always start with home
-  breadcrumbs.push({ title: "Home", href: "/" });
+  // Always start with Dashboard
+  breadcrumbs.push({ title: "Dashboard", href: "/dashboard" });
 
   // Build breadcrumbs from path segments
   let currentPath = "";

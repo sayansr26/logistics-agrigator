@@ -145,7 +145,10 @@ The primary focus is implementing a robust security layer and role-based access 
     - Key-value remarks builder component
     - Polished header: grouped utility/transaction buttons with visual hierarchy, divider separator
     - Transaction type badges with icons (TrendingUp/TrendingDown/RotateCcw) and opacity-based dark-mode colors
-    - Fixed metadata field to send as JSON object (not string) to backend
+    - Fixed metadata field to send as plain string (external API expects string, not JSON object)
+    - Fixed: external wallet API has max 10,000 per transaction — added frontend validation
+    - Fixed: `externalWalletClient.js` now extracts `validation_errors` array from external API 400 responses and surfaces actual error messages (e.g., "Amount cannot exceed 10000.00") instead of generic "Invalid request parameters"
+    - Fixed: `walletSchema.js` metadata accepts both string and object via `Joi.alternatives()`
     - Sidebar wallet link added
   - **Docker**: Updated `docker-compose.yml`, `docker-compose.backend.yml`, `docker-compose.production.yml` for wallet-service config
 

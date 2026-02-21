@@ -375,6 +375,7 @@ const authMiddleware = {
       req.user = {
         ...decoded,
         id: decoded.userId || decoded.id, // Normalize userId to id for backward compatibility
+        token, // Attach bearer token so getEffectivePermissions() can call auth-service
       };
       next();
     } catch (error) {

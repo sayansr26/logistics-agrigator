@@ -269,11 +269,7 @@ function TransactionModal({
     };
     if (form.description) payload.description = form.description;
     if (form.metadata) {
-      try {
-        payload.metadata = JSON.parse(form.metadata);
-      } catch {
-        payload.metadata = { note: form.metadata };
-      }
+      payload.metadata = form.metadata;
     }
     if (Object.keys(form.remarks).length > 0) payload.remarks = form.remarks;
     if (type === "refund" && form.transaction_id) {
@@ -358,10 +354,11 @@ function TransactionModal({
               required
               type="number"
               min="0.01"
+              max="10000"
               step="0.01"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="Enter amount"
+              placeholder="Enter amount (max 10,000)"
               readOnly={type === "refund" && !!form.transaction_id}
             />
           </div>

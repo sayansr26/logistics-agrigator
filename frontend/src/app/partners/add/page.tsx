@@ -104,7 +104,7 @@ export default function AddPartnerPage() {
   });
 
   const customBreadcrumbs = [
-    { title: "Home", href: "/" },
+    { title: "Dashboard", href: "/dashboard" },
     { title: "Partners", href: "/partners" },
     { title: "Add New" },
   ];

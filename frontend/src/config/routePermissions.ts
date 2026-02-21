@@ -243,7 +243,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/addresses/create",
     public: false,
-    roles: ["outlet"],
+    roles: ["superadmin", "admin", "outlet"],
     permission: "user:create:own",
     title: "Add Address",
     description: "Add new address",
@@ -251,7 +251,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/addresses/:id/edit",
     public: false,
-    roles: ["outlet"],
+    roles: ["superadmin", "admin", "outlet"],
     permission: "user:update:own",
     title: "Edit Address",
     description: "Edit address details",
@@ -259,9 +259,9 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: "/addresses",
     public: false,
-    roles: ["outlet"],
+    roles: ["superadmin", "admin", "outlet"],
     permission: "user:read:own",
-    title: "My Addresses",
+    title: "Addresses",
     description: "Manage outlet addresses",
   },
 
