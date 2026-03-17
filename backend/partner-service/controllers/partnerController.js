@@ -108,7 +108,7 @@ async function getPartnerById(id) {
  */
 async function createPartner(data, req = {}) {
   // Validate required fields
-  const requiredFields = ["name", "code", "displayName", "apiUrl"];
+  const requiredFields = ["name", "code", "displayName"];
   const missingFields = requiredFields.filter((field) => !data[field]);
 
   if (missingFields.length > 0) {
@@ -301,6 +301,9 @@ async function calculateRates(params, userContext = null) {
     dimensions,
     paymentMode,
     shipmentValue,
+    declaredValue,
+    isFragile,
+    outletId,
     sortBy,
   } = params;
 
@@ -316,6 +319,9 @@ async function calculateRates(params, userContext = null) {
     paymentMode?.toUpperCase() ||
     (codAmount && codAmount > 0 ? "COD" : "PREPAID");
 
+  // Support both declaredValue and shipmentValue as aliases
+  const effectiveDeclaredValue = declaredValue || shipmentValue || 0;
+
   try {
     // Use new Zone System v2 quote calculation
     const quoteResult = await quoteCalculationService.calculateRates({
@@ -325,7 +331,9 @@ async function calculateRates(params, userContext = null) {
       dimensions,
       paymentType,
       codAmount: codAmount ? parseFloat(codAmount) : 0,
-      declaredValue: shipmentValue ? parseFloat(shipmentValue) : 0,
+      declaredValue: parseFloat(effectiveDeclaredValue) || 0,
+      isFragile: isFragile || false,
+      outletId: outletId || null,
       partnerId,
       sortBy: sortBy || "cheapest",
       userContext,
@@ -338,14 +346,14 @@ async function calculateRates(params, userContext = null) {
       serviceable: rate.serviceable,
       rate: rate.baseRate,
       totalRate: rate.totalRate,
-      totalAmount: rate.totalRate, // Alias for backward compatibility
+      totalAmount: rate.totalRate,
       deliveryDays: rate.estimatedDays,
       estimatedDays: rate.estimatedDays,
       distanceKm: rate.distanceKm,
       zoneSuffix: rate.zoneSuffix,
       zoneName: rate.zoneName,
       breakdown: rate.breakdown,
-      // Legacy fields for compatibility
+      ...(rate.discount && { discount: rate.discount }),
       serviceType: serviceType || "standard",
       isServiceable: rate.serviceable,
     }));

@@ -353,7 +353,7 @@ class ExternalWalletClient {
       });
 
       // Cache result for 1 hour
-      await redis.setex(cacheKey, 3600, JSON.stringify(response));
+      await redis.setEx(cacheKey, 3600, JSON.stringify(response));
 
       logger.info("External wallet created successfully", {
         userId,
@@ -394,7 +394,7 @@ class ExternalWalletClient {
       });
 
       // Cache balance for 5 minutes
-      await redis.setex(cacheKey, 300, JSON.stringify(response));
+      await redis.setEx(cacheKey, 300, JSON.stringify(response));
 
       return response;
     } catch (error) {
@@ -832,7 +832,7 @@ class ExternalWalletClient {
       });
 
       // Cache transaction history for 1 minute
-      await redis.setex(cacheKey, 60, JSON.stringify(response));
+      await redis.setEx(cacheKey, 60, JSON.stringify(response));
 
       return response;
     } catch (error) {

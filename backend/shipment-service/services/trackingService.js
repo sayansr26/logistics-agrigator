@@ -285,7 +285,7 @@ async function getTrackingEvents(shipmentId, includeShipmentDetails = false) {
 
     // Cache the result (5 minutes TTL)
     try {
-      await redis.setex(cacheKey, 300, JSON.stringify(result));
+      await redis.setEx(cacheKey, 300, JSON.stringify(result));
     } catch (cacheError) {
       logger.warn("Failed to cache tracking data", {
         error: cacheError.message,
@@ -389,7 +389,7 @@ async function trackByAwbNumber(awbNumber) {
 
     // Cache the result (10 minutes TTL for public tracking)
     try {
-      await redis.setex(cacheKey, 600, JSON.stringify(publicTrackingData));
+      await redis.setEx(cacheKey, 600, JSON.stringify(publicTrackingData));
     } catch (cacheError) {
       logger.warn("Failed to cache AWB tracking data", {
         error: cacheError.message,

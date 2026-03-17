@@ -624,7 +624,9 @@ class PickupSchedulingService {
   }
 
   /**
-   * Coordinate with partner for pickup (stub implementation)
+   * Coordinate with partner for pickup
+   * Attempts to schedule pickup via courier API through partner-service.
+   * Falls back to local scheduling if courier API fails.
    */
   async coordinateWithPartner(pickupSchedule) {
     try {
@@ -633,10 +635,38 @@ class PickupSchedulingService {
         partnerId: pickupSchedule.partnerId,
       });
 
-      // This would integrate with partner APIs for pickup scheduling
-      // For now, we'll simulate the coordination
+      // Try to schedule via courier API through partner-service
+      let courierResult = null;
+      try {
+        courierResult = await partnerIntegrationService.requestCourierPickup(
+          pickupSchedule.partnerId,
+          {
+            pickupAddress: {
+              name: pickupSchedule.pickupName,
+              phone: pickupSchedule.pickupPhone,
+              address: pickupSchedule.pickupLine1,
+              city: pickupSchedule.pickupCity,
+              state: pickupSchedule.pickupState,
+              pincode: pickupSchedule.pickupPincode,
+            },
+            pickupDate: pickupSchedule.scheduledDate,
+            packageCount: pickupSchedule.totalShipments,
+            pickupTime: pickupSchedule.timeSlot?.split("-")[0] || "10:00",
+          },
+        );
+      } catch (courierError) {
+        logger.warn(
+          "Courier API pickup scheduling failed - using local scheduling",
+          {
+            pickupScheduleId: pickupSchedule.id,
+            error: courierError.message,
+          },
+        );
+      }
 
-      const partnerRequestId = `REQ${Date.now()}${Math.random().toString(36).substring(7).toUpperCase()}`;
+      const partnerRequestId =
+        courierResult?.courierResponse?.pickupId ||
+        `REQ${Date.now()}${Math.random().toString(36).substring(7).toUpperCase()}`;
       const confirmationCode = `PU${Math.random().toString(36).substring(7).toUpperCase()}`;
 
       // Update pickup schedule with partner response
@@ -648,9 +678,9 @@ class PickupSchedulingService {
           partnerResponse: {
             requestId: partnerRequestId,
             confirmationCode,
-            status: "ACCEPTED",
+            status: courierResult ? "ACCEPTED" : "LOCAL_ONLY",
             estimatedPickupTime: pickupSchedule.scheduledDate,
-            partnerNotes: "Pickup request accepted",
+            courierResponse: courierResult || null,
           },
           status: "CONFIRMED",
         },
@@ -661,7 +691,10 @@ class PickupSchedulingService {
         partnerRequestId,
         confirmationCode,
         status: "CONFIRMED",
-        message: "Pickup request confirmed by partner",
+        courierBooked: !!courierResult,
+        message: courierResult
+          ? "Pickup request confirmed by courier partner"
+          : "Pickup scheduled locally (courier API unavailable)",
       };
     } catch (error) {
       logger.error("Partner coordination error", {

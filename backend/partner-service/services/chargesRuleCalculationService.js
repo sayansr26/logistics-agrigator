@@ -202,6 +202,7 @@ async function calculateCharges(partnerId, context) {
   const {
     effectiveWeight = 0,
     invoiceValue = 0,
+    isFragile = false,
     distanceMilestoneId = null,
     pickupGeoZoneIds = [],
     deliveryGeoZoneIds = [],
@@ -209,7 +210,7 @@ async function calculateCharges(partnerId, context) {
     deliveryPincodeTypeValues = {},
   } = context;
 
-  const rules = await prisma.chargeRule.findMany({
+  let rules = await prisma.chargeRule.findMany({
     where: { partnerId, isActive: true },
     include: {
       chargesType: { select: { id: true, name: true } },
@@ -220,6 +221,12 @@ async function calculateCharges(partnerId, context) {
     },
     orderBy: [{ base: "asc" }],
   });
+
+  if (!isFragile) {
+    rules = rules.filter(
+      (rule) => !rule.chargesType?.name?.toLowerCase().includes("fragile"),
+    );
+  }
 
   if (rules.length === 0) {
     return {

@@ -11,6 +11,23 @@ import { baseApi } from "../baseApi";
 // Request/Response Interfaces
 // ===========================
 
+export type AggregatorType = string;
+
+export interface DelhiveryConfig {
+  [key: string]: any;
+}
+
+export interface BlueDartConfig {
+  licenseKey?: string;
+  loginId?: string;
+  customerCode?: string;
+}
+
+export type AggregatorConfig =
+  | DelhiveryConfig
+  | BlueDartConfig
+  | Record<string, any>;
+
 export interface ChannelConfig {
   id?: string;
   channelName: string;
@@ -19,6 +36,9 @@ export interface ChannelConfig {
   isActive: boolean;
   isPrimary: boolean;
   priority: number;
+  aggregatorType?: AggregatorType;
+  aggregatorConfig?: AggregatorConfig;
+  webhookSecret?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -39,19 +59,6 @@ export interface ChannelResponse {
 export interface ActiveChannelResponse {
   status: "success" | "error";
   data: ChannelConfig & { mode?: "SINGLE" | "MULTI" };
-}
-
-export interface SwitchModeRequest {
-  mode: "SINGLE" | "MULTI";
-  migrateConfig?: boolean;
-}
-
-export interface SwitchModeResponse {
-  status: "success" | "error";
-  data: {
-    message?: string;
-    partner?: any;
-  };
 }
 
 // ===========================
@@ -116,46 +123,33 @@ export const partnerChannelApi = baseApi.injectEndpoints({
      */
     updateChannel: builder.mutation<
       ChannelResponse,
-      { channelId: string; updates: Partial<ChannelConfig> }
+      { partnerId: string; channelId: string; updates: Partial<ChannelConfig> }
     >({
       query: ({ channelId, updates }) => ({
         url: `/api/v1/channels/${channelId}`,
         method: "PUT",
         body: updates,
       }),
-      invalidatesTags: (result, error, { channelId }) => [
+      invalidatesTags: (result, error, { partnerId, channelId }) => [
         { type: "PartnerChannel" as const, id: channelId },
+        { type: "PartnerChannel" as const, id: `LIST-${partnerId}` },
+        { type: "PartnerChannel" as const, id: `active-${partnerId}` },
       ],
     }),
 
     /**
      * Delete a channel
      */
-    deleteChannel: builder.mutation<void, string>({
-      query: (channelId) => ({
+    deleteChannel: builder.mutation<
+      void,
+      { partnerId: string; channelId: string }
+    >({
+      query: ({ channelId }) => ({
         url: `/api/v1/channels/${channelId}`,
         method: "DELETE",
       }),
-      invalidatesTags: (result, error, channelId) => [
+      invalidatesTags: (result, error, { partnerId, channelId }) => [
         { type: "PartnerChannel" as const, id: channelId },
-        { type: "PartnerChannel" as const, id: "LIST" },
-      ],
-    }),
-
-    /**
-     * Switch channel mode for a partner
-     * Converts between SINGLE and MULTI channel modes
-     */
-    switchChannelMode: builder.mutation<
-      SwitchModeResponse,
-      { partnerId: string; mode: "SINGLE" | "MULTI"; migrateConfig?: boolean }
-    >({
-      query: ({ partnerId, mode, migrateConfig }) => ({
-        url: `/api/v1/partners/${partnerId}/channel-mode`,
-        method: "PATCH",
-        body: { mode, migrateConfig },
-      }),
-      invalidatesTags: (result, error, { partnerId }) => [
         { type: "PartnerChannel" as const, id: `LIST-${partnerId}` },
         { type: "PartnerChannel" as const, id: `active-${partnerId}` },
         { type: "Partner" as const, id: partnerId },
@@ -171,5 +165,4 @@ export const {
   useCreateChannelsMutation,
   useUpdateChannelMutation,
   useDeleteChannelMutation,
-  useSwitchChannelModeMutation,
 } = partnerChannelApi;

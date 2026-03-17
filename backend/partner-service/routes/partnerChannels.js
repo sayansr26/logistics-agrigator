@@ -21,7 +21,6 @@ const { partnerManagementLimiter } = require("../middleware/rateLimiter");
 const {
   createChannelSchema,
   updateChannelSchema,
-  switchChannelModeSchema,
 } = require("../validation/partnerChannelSchemas");
 
 // Apply authentication to all channel routes
@@ -100,24 +99,5 @@ router.put(
  * @access  Private (Admin, Operations)
  */
 router.delete("/channels/:channelId", partnerChannelController.deleteChannel);
-
-// ==========================================
-// CHANNEL MODE SWITCHING
-// ==========================================
-
-/**
- * @route   PATCH /api/v1/partners/:partnerId/channel-mode
- * @desc    Switch channel mode (SINGLE <-> MULTI)
- * @access  Private (Admin, Operations)
- * @body    {
- *           mode: "SINGLE" | "MULTI",
- *           migrateConfig?: boolean
- *         }
- */
-router.patch(
-  "/partners/:partnerId/channel-mode",
-  validate(switchChannelModeSchema, "body"),
-  partnerChannelController.switchChannelMode,
-);
 
 module.exports = router;

@@ -40,6 +40,8 @@ class PaymentProcessingService {
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "shipment-service/1.0.0",
+        "X-Internal-Request":
+          process.env.INTERNAL_SECRET || "internal-service-secret",
       },
     });
 
@@ -237,28 +239,24 @@ class PaymentProcessingService {
   }
 
   /**
-   * Get or create wallet for user (AUTO WALLET CREATION)
+   * Get wallet info via admin endpoint (uses external wallet API with phone-based userId)
    */
-  async getUserWallet(userId, clientCode = "DEFAULT", authToken) {
-    logger.info("Getting user wallet", {
+  async getUserWallet(userId, clientCode, authToken) {
+    const resolvedClientCode =
+      clientCode || process.env.DEFAULT_CLIENT_CODE || "LOGISTICS";
+    logger.info("Getting user wallet via admin endpoint", {
       userId,
-      clientCode,
+      clientCode: resolvedClientCode,
       service: "payment-processing-service",
     });
 
-    const cacheKey = `wallet:${userId}:${clientCode}`;
+    const cacheKey = `wallet:${userId}:${resolvedClientCode}`;
     const redis = getRedisClient();
 
     try {
-      // Try cache first (5 minute TTL for wallet data)
       const cached = await redis.get(cacheKey);
       if (cached) {
-        const wallet = JSON.parse(cached);
-        logger.debug("Wallet retrieved from cache", {
-          userId,
-          service: "payment-processing-service",
-        });
-        return wallet;
+        return JSON.parse(cached);
       }
     } catch (cacheError) {
       logger.warn("Redis cache error, proceeding without cache", {
@@ -266,29 +264,26 @@ class PaymentProcessingService {
       });
     }
 
-    // Call Wallet Service
     const response = await this.makeRequest(
       {
         method: "GET",
-        url: `/api/v1/wallet/${userId}`,
-        params: { clientCode },
+        url: `/api/v1/wallet/admin/wallet`,
+        params: { userId, clientCode: resolvedClientCode },
       },
       authToken,
     );
 
     const wallet = response.data;
 
-    // Cache the wallet data (5 minutes TTL)
     try {
-      await redis.setex(cacheKey, 300, JSON.stringify(wallet));
+      await redis.setEx(cacheKey, 300, JSON.stringify(wallet));
     } catch (cacheError) {
       logger.warn("Failed to cache wallet data", { error: cacheError.message });
     }
 
     logger.info("Wallet retrieved successfully", {
       userId,
-      walletId: wallet.id,
-      balance: wallet.balance,
+      balance: wallet?.wallet?.balance || wallet?.balance,
       service: "payment-processing-service",
     });
 
@@ -296,10 +291,10 @@ class PaymentProcessingService {
   }
 
   /**
-   * Get wallet balance
+   * Get wallet balance via admin endpoint
    */
   async getWalletBalance(userId, authToken) {
-    logger.debug("Getting wallet balance", {
+    logger.debug("Getting wallet balance via admin endpoint", {
       userId,
       service: "payment-processing-service",
     });
@@ -308,15 +303,9 @@ class PaymentProcessingService {
     const redis = getRedisClient();
 
     try {
-      // Try cache first (1 minute TTL for balance)
       const cached = await redis.get(cacheKey);
       if (cached) {
-        const balanceInfo = JSON.parse(cached);
-        logger.debug("Balance retrieved from cache", {
-          userId,
-          service: "payment-processing-service",
-        });
-        return balanceInfo;
+        return JSON.parse(cached);
       }
     } catch (cacheError) {
       logger.warn("Redis cache error, proceeding without cache", {
@@ -324,19 +313,19 @@ class PaymentProcessingService {
       });
     }
 
-    const response = await this.makeRequest(
-      {
-        method: "GET",
-        url: `/api/v1/wallet/${userId}/balance`,
-      },
-      authToken,
-    );
+    const walletInfo = await this.getUserWallet(userId, null, authToken);
+    const balance = walletInfo?.wallet?.balance ?? walletInfo?.balance ?? 0;
 
-    const balanceInfo = response.data;
+    const balanceInfo = {
+      userId,
+      balance: parseFloat(balance),
+      currency: "INR",
+      walletStatus:
+        walletInfo?.wallet?.status || walletInfo?.status || "ACTIVE",
+    };
 
-    // Cache the balance (1 minute TTL)
     try {
-      await redis.setex(cacheKey, 60, JSON.stringify(balanceInfo));
+      await redis.setEx(cacheKey, 60, JSON.stringify(balanceInfo));
     } catch (cacheError) {
       logger.warn("Failed to cache balance data", {
         error: cacheError.message,
@@ -357,7 +346,7 @@ class PaymentProcessingService {
     });
 
     const balanceInfo = await this.getWalletBalance(userId, authToken);
-    const availableBalance = balanceInfo.balance;
+    const availableBalance = parseFloat(balanceInfo.balance);
 
     if (availableBalance < requiredAmount) {
       logger.warn("Insufficient balance", {
@@ -393,7 +382,7 @@ class PaymentProcessingService {
   }
 
   /**
-   * Debit wallet for shipment charges
+   * Debit wallet for shipment charges via admin endpoint
    */
   async debitWalletForShipment(
     userId,
@@ -402,20 +391,24 @@ class PaymentProcessingService {
     description,
     authToken,
   ) {
-    logger.info("Debiting wallet for shipment", {
+    logger.info("Debiting wallet for shipment via admin endpoint", {
       userId,
       amount,
       shipmentId,
       service: "payment-processing-service",
     });
 
+    const clientCode = process.env.DEFAULT_CLIENT_CODE || "LOGISTICS";
+
     const response = await this.makeRequest(
       {
         method: "POST",
-        url: `/api/v1/wallet/${userId}/debit`,
+        url: `/api/v1/wallet/admin/debit`,
         data: {
+          userId,
+          clientCode,
           amount,
-          reference: `SHIPMENT_${shipmentId}`,
+          reference_id: `SHIPMENT_${shipmentId}`,
           description: description || `Shipment charge for order ${shipmentId}`,
         },
       },
@@ -424,11 +417,10 @@ class PaymentProcessingService {
 
     const transaction = response.data;
 
-    // Clear balance cache after transaction
     const redis = getRedisClient();
     try {
       await redis.del(`balance:${userId}`);
-      await redis.del(`wallet:${userId}:DEFAULT`);
+      await redis.del(`wallet:${userId}:${clientCode}`);
     } catch (cacheError) {
       logger.warn("Failed to clear wallet cache after debit", {
         error: cacheError.message,
@@ -438,8 +430,7 @@ class PaymentProcessingService {
     logger.info("Wallet debited successfully", {
       userId,
       amount,
-      transactionId: transaction.id,
-      newBalance: transaction.wallet?.balance,
+      transactionId: transaction?.id || transaction?.transaction_id,
       service: "payment-processing-service",
     });
 
@@ -447,7 +438,7 @@ class PaymentProcessingService {
   }
 
   /**
-   * Credit wallet for refunds
+   * Credit wallet for refunds via admin endpoint
    */
   async creditWalletForRefund(
     userId,
@@ -456,20 +447,24 @@ class PaymentProcessingService {
     description,
     authToken,
   ) {
-    logger.info("Crediting wallet for refund", {
+    logger.info("Crediting wallet for refund via admin endpoint", {
       userId,
       amount,
       shipmentId,
       service: "payment-processing-service",
     });
 
+    const clientCode = process.env.DEFAULT_CLIENT_CODE || "LOGISTICS";
+
     const response = await this.makeRequest(
       {
         method: "POST",
-        url: `/api/v1/wallet/${userId}/credit`,
+        url: `/api/v1/wallet/admin/refund`,
         data: {
+          userId,
+          clientCode,
           amount,
-          reference: `REFUND_${shipmentId}`,
+          reference_id: `REFUND_${shipmentId}`,
           description:
             description || `Refund for cancelled shipment ${shipmentId}`,
         },
@@ -479,11 +474,10 @@ class PaymentProcessingService {
 
     const transaction = response.data;
 
-    // Clear balance cache after transaction
     const redis = getRedisClient();
     try {
       await redis.del(`balance:${userId}`);
-      await redis.del(`wallet:${userId}:DEFAULT`);
+      await redis.del(`wallet:${userId}:${clientCode}`);
     } catch (cacheError) {
       logger.warn("Failed to clear wallet cache after credit", {
         error: cacheError.message,
@@ -493,8 +487,7 @@ class PaymentProcessingService {
     logger.info("Wallet credited successfully", {
       userId,
       amount,
-      transactionId: transaction.id,
-      newBalance: transaction.wallet?.balance,
+      transactionId: transaction?.id || transaction?.transaction_id,
       service: "payment-processing-service",
     });
 

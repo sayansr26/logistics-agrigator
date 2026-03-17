@@ -66,31 +66,27 @@ const addressSchema = Joi.object({
 
 // Package dimensions validation schema
 const dimensionsSchema = Joi.object({
-  length: Joi.number().positive().precision(2).max(200).required().messages({
+  length: Joi.number().positive().precision(2).required().messages({
     "number.base": "Length must be a valid number",
     "number.positive": "Length must be positive",
-    "number.max": "Length cannot exceed 200 cm",
   }),
 
-  width: Joi.number().positive().precision(2).max(200).required().messages({
+  width: Joi.number().positive().precision(2).required().messages({
     "number.base": "Width must be a valid number",
     "number.positive": "Width must be positive",
-    "number.max": "Width cannot exceed 200 cm",
   }),
 
-  height: Joi.number().positive().precision(2).max(200).required().messages({
+  height: Joi.number().positive().precision(2).required().messages({
     "number.base": "Height must be a valid number",
     "number.positive": "Height must be positive",
-    "number.max": "Height cannot exceed 200 cm",
   }),
 });
 
 // Package details validation schema
 const packageSchema = Joi.object({
-  weight: Joi.number().positive().precision(3).max(50).required().messages({
+  weight: Joi.number().positive().precision(3).required().messages({
     "number.base": "Weight must be a valid number",
     "number.positive": "Weight must be positive",
-    "number.max": "Weight cannot exceed 50 kg",
   }),
 
   dimensions: dimensionsSchema.required(),
@@ -121,6 +117,58 @@ const packageSchema = Joi.object({
   }),
 });
 
+// Invoice schema for B2B shipments
+const invoiceItemSchema = Joi.object({
+  eWayBillNo: Joi.string().trim().max(50).optional().allow(null, ""),
+  invoiceNo: Joi.string().trim().max(100).required().messages({
+    "string.empty": "Invoice number is required",
+  }),
+  invoiceAmt: Joi.number()
+    .positive()
+    .precision(2)
+    .max(10000000)
+    .required()
+    .messages({
+      "number.base": "Invoice amount must be a valid number",
+      "number.positive": "Invoice amount must be positive",
+    }),
+  invoiceDate: Joi.date().iso().required().messages({
+    "date.base": "Invoice date is required",
+  }),
+  attachmentUrl: Joi.string().trim().max(500).optional().allow(null, ""),
+});
+
+// Box dimensions schema for multi-box B2B shipments
+const boxItemSchema = Joi.object({
+  boxNumber: Joi.number().integer().min(1).required(),
+  length: Joi.number().positive().precision(2).required().messages({
+    "number.positive": "Length must be positive",
+  }),
+  width: Joi.number().positive().precision(2).required().messages({
+    "number.positive": "Width must be positive",
+  }),
+  height: Joi.number().positive().precision(2).required().messages({
+    "number.positive": "Height must be positive",
+  }),
+});
+
+// RTO address schema (optional, only when rtoSameAsPickup is false)
+const rtoAddressSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(100).required(),
+  phone: Joi.string()
+    .pattern(/^\+91[0-9]{10}$/)
+    .required(),
+  addressLine1: Joi.string().trim().min(5).max(255).required(),
+  addressLine2: Joi.string().trim().max(255).optional().allow(null, ""),
+  landmark: Joi.string().trim().max(100).optional().allow(null, ""),
+  city: Joi.string().trim().min(2).max(50).required(),
+  state: Joi.string().trim().min(2).max(50).required(),
+  pincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required(),
+  country: Joi.string().trim().default("India"),
+});
+
 // Create shipment validation schema
 const createShipmentSchema = Joi.object({
   orderId: Joi.string().trim().min(3).max(100).required().messages({
@@ -129,11 +177,81 @@ const createShipmentSchema = Joi.object({
     "string.max": "Order ID cannot exceed 100 characters",
   }),
 
+  shipmentType: Joi.string().valid("B2B", "B2C").default("B2C").messages({
+    "any.only": "Shipment type must be either B2B or B2C",
+  }),
+
+  shipmentDirection: Joi.string()
+    .valid("FORWARD", "REVERSE")
+    .default("FORWARD")
+    .messages({
+      "any.only": "Shipment direction must be either FORWARD or REVERSE",
+    }),
+
+  outletId: Joi.string().uuid().optional().allow(null).messages({
+    "string.guid": "Outlet ID must be a valid UUID",
+  }),
+
+  outletUserId: Joi.string().optional().allow(null, "").messages({
+    "string.base": "Outlet User ID must be a string",
+  }),
+
+  pickupAddressId: Joi.string().uuid().optional().allow(null).messages({
+    "string.guid": "Pickup address ID must be a valid UUID",
+  }),
+
   pickupAddress: addressSchema.required(),
 
   deliveryAddress: addressSchema.required(),
 
+  rtoSameAsPickup: Joi.boolean().default(true),
+
+  rtoAddress: Joi.when("rtoSameAsPickup", {
+    is: false,
+    then: rtoAddressSchema.required().messages({
+      "any.required": "RTO address is required when not same as pickup",
+    }),
+    otherwise: Joi.optional().allow(null),
+  }),
+
+  productDescription: Joi.string()
+    .trim()
+    .max(1000)
+    .optional()
+    .allow(null, "")
+    .messages({
+      "string.max": "Product description cannot exceed 1000 characters",
+    }),
+
+  hsnCode: Joi.string().trim().max(20).optional().allow(null, ""),
+
+  gstPercentage: Joi.number()
+    .min(0)
+    .max(100)
+    .precision(2)
+    .optional()
+    .allow(null),
+
   packageDetails: packageSchema.required(),
+
+  numberOfBoxes: Joi.number().integer().min(1).max(100).default(1).messages({
+    "number.base": "Number of boxes must be a valid number",
+    "number.integer": "Number of boxes must be an integer",
+    "number.min": "Number of boxes must be at least 1",
+    "number.max": "Number of boxes cannot exceed 100",
+  }),
+
+  boxes: Joi.array().items(boxItemSchema).optional().allow(null).messages({
+    "array.base": "Boxes must be an array",
+  }),
+
+  invoices: Joi.array()
+    .items(invoiceItemSchema)
+    .optional()
+    .allow(null)
+    .messages({
+      "array.base": "Invoices must be an array",
+    }),
 
   paymentType: Joi.string()
     .valid("PREPAID", "COD")
@@ -150,9 +268,7 @@ const createShipmentSchema = Joi.object({
       "number.max": "COD amount cannot exceed ₹1,00,000",
       "any.required": "COD amount is required when payment type is COD",
     }),
-    otherwise: Joi.forbidden().messages({
-      "any.unknown": "COD amount should not be provided for prepaid shipments",
-    }),
+    otherwise: Joi.number().optional().allow(null, 0),
   }),
 
   serviceType: Joi.string()
@@ -170,7 +286,118 @@ const createShipmentSchema = Joi.object({
     .messages({
       "string.max": "Special instructions cannot exceed 500 characters",
     }),
+
+  selectedPartnerId: Joi.string().optional().allow(null).messages({
+    "string.base": "Selected partner ID must be a string",
+  }),
+
+  quoteSnapshot: Joi.object().optional().allow(null),
 });
+
+// Quote request for staged shipment creation
+const shipmentQuoteSchema = Joi.object({
+  fromPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "From pincode is required",
+      "string.pattern.base": "From pincode must be exactly 6 digits",
+    }),
+
+  toPincode: Joi.string()
+    .pattern(/^[0-9]{6}$/)
+    .required()
+    .messages({
+      "string.empty": "To pincode is required",
+      "string.pattern.base": "To pincode must be exactly 6 digits",
+    }),
+
+  weight: Joi.number().positive().precision(3).required().messages({
+    "number.base": "Weight must be a valid number",
+    "number.positive": "Weight must be positive",
+  }),
+
+  numberOfBoxes: Joi.number().integer().min(1).max(100).default(1).messages({
+    "number.base": "Number of boxes must be a valid number",
+    "number.integer": "Number of boxes must be an integer",
+    "number.min": "Number of boxes must be at least 1",
+    "number.max": "Number of boxes cannot exceed 100",
+  }),
+
+  dimensions: dimensionsSchema.required(),
+
+  serviceType: Joi.string()
+    .valid("STANDARD", "EXPRESS", "ECONOMY")
+    .default("STANDARD")
+    .messages({
+      "any.only": "Service type must be STANDARD, EXPRESS, or ECONOMY",
+    }),
+
+  paymentType: Joi.string()
+    .valid("PREPAID", "COD")
+    .default("PREPAID")
+    .messages({
+      "any.only": "Payment type must be PREPAID or COD",
+    }),
+
+  codAmount: Joi.number()
+    .positive()
+    .precision(2)
+    .max(100000)
+    .optional()
+    .allow(null)
+    .messages({
+      "number.base": "COD amount must be a valid number",
+      "number.positive": "COD amount must be positive",
+      "number.max": "COD amount cannot exceed ₹1,00,000",
+    }),
+
+  shipmentType: Joi.string().valid("B2B", "B2C").default("B2C"),
+
+  declaredValue: Joi.number()
+    .min(0)
+    .precision(2)
+    .max(10000000)
+    .optional()
+    .messages({
+      "number.base": "Declared value must be a valid number",
+      "number.min": "Declared value cannot be negative",
+      "number.max": "Declared value cannot exceed ₹1,00,00,000",
+    }),
+
+  shipmentValue: Joi.number().min(0).precision(2).max(10000000).optional(),
+
+  isFragile: Joi.boolean().optional().default(false),
+
+  outletId: Joi.string().optional().allow("", null),
+
+  sortBy: Joi.string().valid("cheapest", "highest").default("cheapest"),
+});
+
+// Dispute re-rate schema
+const rerateShipmentSchema = Joi.object({
+  disputedWeight: Joi.number().positive().precision(3).optional().messages({
+    "number.positive": "Disputed weight must be positive",
+  }),
+
+  disputedLength: Joi.number().positive().precision(2).optional().messages({
+    "number.positive": "Disputed length must be positive",
+  }),
+
+  disputedWidth: Joi.number().positive().precision(2).optional().messages({
+    "number.positive": "Disputed width must be positive",
+  }),
+
+  disputedHeight: Joi.number().positive().precision(2).optional().messages({
+    "number.positive": "Disputed height must be positive",
+  }),
+
+  reason: Joi.string().trim().min(5).max(500).required().messages({
+    "string.empty": "Reason is required",
+    "string.min": "Reason must be at least 5 characters",
+    "string.max": "Reason cannot exceed 500 characters",
+  }),
+}).min(2);
 
 // Update shipment validation schema
 const updateShipmentSchema = Joi.object({
@@ -184,6 +411,7 @@ const updateShipmentSchema = Joi.object({
       "DELIVERED",
       "CANCELLED",
       "RTO",
+      "HOLD",
     )
     .optional()
     .messages({
@@ -302,10 +530,9 @@ const rateCalculationSchema = Joi.object({
       "string.pattern.base": "To pincode must be exactly 6 digits",
     }),
 
-  weight: Joi.number().positive().precision(3).max(50).required().messages({
+  weight: Joi.number().positive().precision(3).required().messages({
     "number.base": "Weight must be a valid number",
     "number.positive": "Weight must be positive",
-    "number.max": "Weight cannot exceed 50 kg",
   }),
 
   serviceType: Joi.string()
@@ -352,10 +579,9 @@ const partnerSelectionSchema = Joi.object({
       "string.pattern.base": "To pincode must be exactly 6 digits",
     }),
 
-  weight: Joi.number().positive().precision(3).max(50).required().messages({
+  weight: Joi.number().positive().precision(3).required().messages({
     "number.base": "Weight must be a valid number",
     "number.positive": "Weight must be positive",
-    "number.max": "Weight cannot exceed 50 kg",
   }),
 
   serviceType: Joi.string()
@@ -625,6 +851,8 @@ module.exports = {
   rateCalculationSchema,
   partnerSelectionSchema,
   serviceabilitySchema,
+  shipmentQuoteSchema,
+  rerateShipmentSchema,
   addressSchema,
   packageSchema,
   dimensionsSchema,

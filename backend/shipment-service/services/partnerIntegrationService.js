@@ -181,7 +181,7 @@ class PartnerIntegrationService {
   }
 
   /**
-   * Create cache key for rate calculation
+   * Create cache key for rate calculation with all pricing inputs
    */
   createRateCalculationCacheKey(rateParams) {
     const keyData = {
@@ -190,6 +190,12 @@ class PartnerIntegrationService {
       weight: rateParams.weight,
       serviceType: rateParams.serviceType,
       dimensions: rateParams.dimensions,
+      declaredValue: rateParams.declaredValue || 0,
+      codAmount: rateParams.codAmount || 0,
+      paymentMode: rateParams.paymentMode || "PREPAID",
+      isFragile: rateParams.isFragile || false,
+      outletId: rateParams.outletId || null,
+      sortBy: rateParams.sortBy || "cheapest",
     };
 
     const hash = crypto
@@ -248,14 +254,19 @@ class PartnerIntegrationService {
         return JSON.parse(cached);
       }
 
-      // Prepare Partner Service request
+      // Prepare Partner Service request with all pricing inputs
       const partnerRequest = {
         fromPincode: rateParams.fromPincode,
         toPincode: rateParams.toPincode,
         weight: rateParams.weight,
         serviceType: rateParams.serviceType || "STANDARD",
-        dimensions: rateParams.dimensions,
-        codAmount: rateParams.codAmount || null,
+        dimensions: rateParams.dimensions || undefined,
+        codAmount: rateParams.codAmount || undefined,
+        declaredValue: rateParams.declaredValue || undefined,
+        paymentMode: rateParams.paymentMode || "PREPAID",
+        isFragile: rateParams.isFragile || false,
+        outletId: rateParams.outletId || undefined,
+        sortBy: rateParams.sortBy || "cheapest",
       };
 
       logger.info("Calling Partner Service for rate calculation", {
@@ -281,7 +292,7 @@ class PartnerIntegrationService {
             const rateData = response.data.data;
 
             // Cache the successful response
-            await redis.setex(
+            await redis.setEx(
               cacheKey,
               this.cacheTTL.rateCalculation,
               JSON.stringify(rateData),
@@ -384,22 +395,27 @@ class PartnerIntegrationService {
       );
 
       if (response.data && response.data.status === "success") {
-        const serviceabilityData = response.data.data.serviceability;
+        const rawData = response.data.data.serviceability || response.data.data;
+        const serviceabilityList = Array.isArray(rawData)
+          ? rawData
+          : Array.isArray(rawData.serviceability)
+            ? rawData.serviceability
+            : [];
 
         // Cache the successful response
-        await redis.setex(
+        await redis.setEx(
           cacheKey,
           this.cacheTTL.serviceability,
-          JSON.stringify(serviceabilityData),
+          JSON.stringify(serviceabilityList),
         );
 
         logger.info("Serviceability check successful", {
           service: "shipment-service",
-          serviceable: serviceabilityData.filter((s) => s.serviceable).length,
-          totalPartners: serviceabilityData.length,
+          serviceable: serviceabilityList.filter((s) => s.serviceable).length,
+          totalPartners: serviceabilityList.length,
         });
 
-        return serviceabilityData;
+        return serviceabilityList;
       } else {
         throw new APIError("Invalid response format from Partner Service");
       }
@@ -520,8 +536,8 @@ class PartnerIntegrationService {
     }
 
     // Validate weight
-    if (params.weight <= 0 || params.weight > 50) {
-      throw new ValidationError("Weight must be between 0 and 50 kg");
+    if (params.weight <= 0) {
+      throw new ValidationError("Weight must be greater than 0");
     }
   }
 
@@ -543,6 +559,277 @@ class PartnerIntegrationService {
     }
     if (!pincodeRegex.test(params.toPincode)) {
       throw new ValidationError("Invalid toPincode format");
+    }
+  }
+
+  // ==========================================
+  // COURIER OPERATION METHODS
+  // Inter-service calls to partner-service courier operations
+  // ==========================================
+
+  /**
+   * Book a shipment with a courier via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {Object} shipmentData - Shipment booking data
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Booking result with AWB number
+   */
+  async bookWithCourier(partnerId, shipmentData, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service to book courier shipment", {
+        service: "shipment-service",
+        partnerId,
+        orderId: shipmentData.orderId,
+      });
+
+      const response = await this.client.post(
+        "/api/v1/courier-operations/book",
+        { partnerId, ...shipmentData },
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier booking");
+    } catch (error) {
+      logger.error("Courier booking error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a courier shipment via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {string} awbNumber - AWB number
+   * @param {string} reason - Cancellation reason
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Cancellation result
+   */
+  async cancelWithCourier(partnerId, awbNumber, reason, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service to cancel courier shipment", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+      });
+
+      const response = await this.client.post(
+        "/api/v1/courier-operations/cancel",
+        { partnerId, awbNumber, reason },
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier cancellation");
+    } catch (error) {
+      logger.error("Courier cancellation error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Track a courier shipment via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {string} awbNumber - AWB number
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Tracking data with normalized events
+   */
+  async trackWithCourier(partnerId, awbNumber, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service to track courier shipment", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+      });
+
+      const response = await this.client.get(
+        `/api/v1/courier-operations/track/${partnerId}/${awbNumber}`,
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier tracking");
+    } catch (error) {
+      logger.error("Courier tracking error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Request pickup from courier via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {Object} pickupData - Pickup request data
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Pickup request result
+   */
+  async requestCourierPickup(partnerId, pickupData, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service to request courier pickup", {
+        service: "shipment-service",
+        partnerId,
+      });
+
+      const response = await this.client.post(
+        "/api/v1/courier-operations/pickup",
+        { partnerId, ...pickupData },
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier pickup request");
+    } catch (error) {
+      logger.error("Courier pickup request error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get courier shipping label via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {string} awbNumber - AWB number
+   * @param {string} [format='pdf'] - Label format
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Label data
+   */
+  async getCourierLabel(
+    partnerId,
+    awbNumber,
+    format = "pdf",
+    authToken = null,
+  ) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = { params: { format } };
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service for courier label", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+        format,
+      });
+
+      const response = await this.client.get(
+        `/api/v1/courier-operations/label/${partnerId}/${awbNumber}`,
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier label request");
+    } catch (error) {
+      logger.error("Courier label error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        awbNumber,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Generate courier manifest via partner-service
+   * @param {string} partnerId - Partner ID
+   * @param {string[]} awbNumbers - AWB numbers
+   * @param {string} [authToken] - Authorization token to forward
+   * @returns {Object} Manifest result
+   */
+  async generateCourierManifest(partnerId, awbNumbers, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = { Authorization: authToken };
+      }
+
+      logger.info("Calling partner-service to generate courier manifest", {
+        service: "shipment-service",
+        partnerId,
+        awbCount: awbNumbers.length,
+      });
+
+      const response = await this.client.post(
+        "/api/v1/courier-operations/manifest",
+        { partnerId, awbNumbers },
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from courier manifest request");
+    } catch (error) {
+      logger.error("Courier manifest error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        error: error.message,
+      });
+      throw error;
     }
   }
 

@@ -140,6 +140,7 @@ app.use("/api/v1/charges-types", require("./routes/chargesTypes"));
 
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));
+app.use("/api", require("./routes/partnerChannels")); // Also mount at /api for gateway compatibility
 
 // Charges Rule Management Routes (NEW - replaces legacy charge packages)
 app.use("/api/v1/charges", require("./routes/charges"));
@@ -183,6 +184,9 @@ app.all(
   "/api/v1/partner-assignment",
   deprecated("/api/v1/partners/serviceability", "2024-12-26"),
 );
+
+// Courier Operations Routes (NEW - Delhivery, BlueDart, future courier integrations)
+app.use("/api/v1/courier-operations", require("./routes/courierOperations"));
 
 // Partner Data - Still active but uses external API (keeping for backward compatibility)
 app.use("/api", require("./routes/partnerData"));
@@ -369,6 +373,9 @@ app.get("/", (req, res) => {
 
       // Charges Rule Management (NEW - replaces legacy charge packages)
       charges: "/api/v1/charges",
+
+      // Courier Operations (NEW - Delhivery, BlueDart integrations)
+      courierOperations: "/api/v1/courier-operations",
 
       // Geography
       geography: "/api/v1/geography",

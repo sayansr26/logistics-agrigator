@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: February 21, 2026
+> Current work focus and priorities | Last Updated: March 17, 2026
 
 ## Current Sprint Focus
 
@@ -42,18 +42,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus             |
-| -------------------- | ---- | ------------- | ---------- | ------------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 94%        | Discount packages proxy   |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard        |
-| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API |
-| **Shipment Service** | 3004 | 🔄 Active     | 90%        | Bulk operations           |
-| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Discount packages added   |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Outlet wallet view added  |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending       |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started               |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next              |
-| **Frontend**         | 3000 | ✅ Production | 75%        | Wallet Management UI done |
+| Service              | Port | Status        | Completion | Current Focus                     |
+| -------------------- | ---- | ------------- | ---------- | --------------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 94%        | Discount packages proxy           |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                |
+| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API         |
+| **Shipment Service** | 3004 | 🔄 Active     | 85%        | Shipment creation flow complete   |
+| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Quote engine + discounts complete |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending               |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                       |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                      |
+| **Frontend**         | 3000 | ✅ Production | 80%        | Shipment creation UI complete     |
 
 ## Immediate Priorities
 
@@ -119,12 +119,65 @@ The primary focus is implementing a robust security layer and role-based access 
 4. **HMAC for External APIs**: Partner and Wallet service auth
 5. **Canonical pincode search endpoint**: Use `GET /api/v1/geography/pincodes/search` for all search/autocomplete flows
 6. **Deprecated endpoint window**: `GET /api/v1/pincodes/search` remains temporary with deprecation headers and sunset date `2026-06-30T00:00:00.000Z`
+7. **External wallet uses phone as user ID**: The external wallet API (`wapi.websiteduniya.com`) identifies users by phone number, NOT by auth UUID. All inter-service wallet calls must use outlet phone.
+8. **Inter-service auth**: Services calling other services over Docker network must include `X-Internal-Request` header with `INTERNAL_SECRET` to bypass direct-access guards
+9. **Redis v4 API**: All Redis calls must use `setEx()` (camelCase) not `setex()` (lowercase) — Redis v4+ breaking change
 
 ## Current Blockers
 
 1. **None currently identified**
 
 ## Recent Changes
+
+### March 17, 2026
+
+- ✅ **End-to-End Shipment Creation Flow — COMPLETE**
+  - **Multi-step creation wizard**: Docket → Dimensions → Delivery → Invoice → Review & Book
+  - **B2B/B2C support**: Single box for B2C, multiple boxes + invoices for B2B
+  - **Outlet context**: Admin/Superadmin select outlet for shipment; outlet users create directly
+  - **Quote engine integration**: Live partner quotes with charge breakdown and discount display
+  - **Fragile item handling**: Optional fragile checkbox on docket page; fragile charges conditionally applied
+  - **Badge-based discounts**: GOLD/PLATINUM/DIAMOND outlets see discounts applied to quotes
+  - **Wallet payment**: Automatic debit from outlet wallet on PREPAID shipments
+  - **Shipment detail page**: Shows charge breakdown + discount from stored `quoteSnapshot`
+
+- ✅ **Wallet Payment Integration for Shipments — CRITICAL FIX**
+  - **Problem 1 (Direct access blocked)**: `paymentProcessingService` called wallet service directly but lacked `X-Internal-Request` header → 403 "Direct access attempt blocked"
+  - **Fix**: Added `X-Internal-Request: process.env.INTERNAL_SECRET` header to axios client
+  - **Problem 2 (Wrong wallet userId)**: System used outlet's auth UUID as wallet userId, but external wallet API uses **phone number** as user identifier
+  - **Fix**: Rewrote `paymentProcessingService` to call wallet admin endpoints (`/admin/wallet`, `/admin/debit`, `/admin/refund`) which use `clientCode + phone` to interact with external wallet API (`wapi.websiteduniya.com`)
+  - **Problem 3 (Admin creating for outlet)**: `resolveOutletContext` needed outlet phone for wallet, not UUID
+  - **Fix**: Frontend stores `outlet.phone` as `outletUserId` when admin selects outlet; outlet role uses `req.user.phone` from JWT
+  - **Problem 4 (Redis v4 compatibility)**: `redis.setex()` → `redis.setEx()` in wallet-service and shipment-service
+  - Key files: `paymentProcessingService.js`, `shipmentController.js` (`resolveOutletContext`), `walletService.js`, `externalWalletClient.js`, `trackingService.js`
+
+- ✅ **Quote Charge Calculation Fixes**
+  - Fixed quotes returning 0 — zone system v2 with distance milestones now working
+  - Fixed charges only showing flat 100 — charge rule engine properly evaluates all rule categories
+  - Fixed fragile charge applied unconditionally — now filtered based on `isFragile` flag
+  - Fixed badge-based discounts not applied for admin-created shipments — added `outletId` resolution via new internal endpoint `GET /api/v1/internal/outlets/:outletId/badge`
+  - Fixed discount data dropped from API responses — explicitly forwarded through partner and shipment controllers
+  - Added `outletId` and `isFragile` to rate calculation cache keys for cache correctness
+
+- ✅ **Shipment Form Store & Frontend**
+  - `shipment-form-store.ts`: Added `outletUserId`, `isFragile` fields
+  - `docket/page.tsx`: Outlet selection stores phone as `outletUserId`; fragile checkbox added
+  - `review/page.tsx`: Sends `outletUserId`, `isFragile`, `outletId` in quote and creation payloads; displays discount info
+  - `shipmentApi.ts`: Updated `CreateShipmentRequest` and `PartnerQuote` interfaces
+  - `shipments/[id]/page.tsx`: Enhanced Charges Summary with invoice-style breakdown, discount display, "You saved" line
+
+### March 7, 2026
+
+- ✅ **Partner Channel System Cleanup & Polish**
+  - **Database extensibility**: Converted `AggregatorType` from Prisma enum to `String @db.VarChar(50)` — adding new aggregators no longer requires DB reset
+  - **Channel mode auto-sync**: `channelMode` now auto-computes (1 channel=SINGLE, 2+=MULTI) via `_syncChannelMode()` in `partnerChannelService.js`. Removed manual `switchChannelMode` endpoint/UI
+  - **Aggregator type required**: Only DELHIVERY and BLUEDART options in UI; backend validates with `ALLOWED_AGGREGATOR_TYPES`; removed NONE/CUSTOM
+  - **Partner detail page polish**: Removed legacy "API Config" tab, channel mode badge, API endpoint/version/token fields. Replaced with "Channels" tab. Single Edit button + one `⋮` dropdown with grouped actions (Manage/Status/Danger). Removed back button (breadcrumbs handle navigation)
+  - **Manage Channels page polish**: Removed back button, hover-reveal `⋮` dropdown for Edit/Delete on channel cards, credential status with color-coded Key icon
+  - **RTK Query fix (too many requests)**: Removed redundant `refetch()` calls from partner detail page — RTK Query tag invalidation handles auto-refetch. Fixed `updateChannel`/`deleteChannel` to pass `partnerId` for proper tag invalidation
+  - **Dead page cleanup**: Deleted `partners/add/page.tsx` and `partners/[id]/edit/page.tsx`. Updated dashboard links and route permissions
+  - **Shared component fix**: Made `backHref` optional in `DetailHeader` component (wraps `<Link>` in conditional)
+  - Key files: `schema.prisma`, `partnerChannelService.js`, `partnerChannelSchemas.js`, `partnerSchema.js`, `partnerChannelController.js`, `partnerChannels.js` (routes), `partnerChannelApi.ts`, `partnersApi.ts`, `baseApi.ts`, `partners/[id]/page.tsx`, `partners/[id]/channels/page.tsx`, `detail-page.tsx`, `routePermissions.ts`, `dashboard/page.jsx`
 
 ### February 21, 2026
 
@@ -336,6 +389,13 @@ The primary focus is implementing a robust security layer and role-based access 
 | Charges service     | `backend/partner-service/services/chargesService.js`                     |
 | Charges calc engine | `backend/partner-service/services/chargesRuleCalculationService.js`      |
 | Quote calc service  | `backend/partner-service/services/quoteCalculationService.js`            |
+| Payment processing  | `backend/shipment-service/services/paymentProcessingService.js`          |
+| Shipment controller | `backend/shipment-service/controllers/shipmentController.js`             |
+| Shipment schemas    | `backend/shipment-service/validation/shipmentSchemas.js`                 |
+| Shipment form store | `frontend/src/store/shipment-form-store.ts`                              |
+| Shipment create UI  | `frontend/src/app/shipments/create/`                                     |
+| Shipment detail UI  | `frontend/src/app/shipments/[id]/page.tsx`                               |
+| Shipment API (RTK)  | `frontend/src/store/api/endpoints/shipmentApi.ts`                        |
 | Charges frontend    | `frontend/src/app/charges/page.tsx`                                      |
 | Charges API (RTK)   | `frontend/src/store/api/endpoints/chargesApi.ts`                         |
 | Discount pkg svc    | `backend/partner-service/services/chargeDiscountPackageService.js`       |
@@ -366,12 +426,16 @@ The primary focus is implementing a robust security layer and role-based access 
 3. ~~Charge Discount Packages~~ ✅ DONE
 4. ~~Build Outlet Portal pages~~ ✅ DONE (dashboard, sidebar permissions)
 5. ~~Outlet Wallet Page~~ ✅ DONE (balance, stats, transactions for outlet role)
-6. Finish License service integration
-7. Begin Shipment bulk operations
-8. Continue Frontend Redux migration
+6. ~~Partner Channel Cleanup~~ ✅ DONE (aggregator extensibility, mode auto-sync, UI polish)
+7. ~~Shipment Creation Flow~~ ✅ DONE (multi-step wizard, quote calculation, wallet payment, detail page)
+8. Finish License service integration
+9. Begin Shipment bulk operations (CSV upload, bulk AWB generation)
+10. Continue Frontend Redux migration
+11. Shipment list filtering/search enhancements
+12. Label generation and pickup scheduling UI
 
 ---
 
-**Sprint**: Charges Management + License Service Integration
+**Sprint**: Shipment Flow Complete → License Service + Bulk Operations
 **Week**: Active Development
 **Next Review**: Weekly

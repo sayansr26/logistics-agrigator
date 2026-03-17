@@ -117,7 +117,7 @@ function AdminDashboard() {
     {
       title: "Add Partner",
       description: "Create a new courier partner",
-      href: "/partners/add",
+      href: "/partners",
       icon: Plus,
       color: "text-blue-600",
     },
@@ -151,7 +151,7 @@ function AdminDashboard() {
         description="Platform overview and quick actions"
         primaryAction={{
           label: "Add Partner",
-          href: "/partners/add",
+          href: "/partners",
         }}
       />
 
@@ -204,7 +204,7 @@ function AdminDashboard() {
             }
             emptyAction={
               <Button asChild>
-                <Link href="/partners/add">
+                <Link href="/partners">
                   <Plus className="mr-2 h-4 w-4" />
                   Add First Partner
                 </Link>

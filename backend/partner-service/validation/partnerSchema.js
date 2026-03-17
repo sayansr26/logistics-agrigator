@@ -7,44 +7,13 @@ const partnerSchema = {
     displayName: Joi.string().required().trim().max(100),
     isActive: Joi.boolean().default(true),
 
-    // Channel Mode (Single/Multi API endpoints)
-    channelMode: Joi.string().valid("SINGLE", "MULTI").default("SINGLE"),
-
     // API Configuration - Support both field names
-    apiUrl: Joi.string().uri().when("channelMode", {
-      is: "SINGLE",
-      then: Joi.required(),
-      otherwise: Joi.optional(),
-    }),
+    // apiUrl is optional — channels are managed separately via Manage Channels page
+    apiUrl: Joi.string().uri().allow("", null).optional(),
     apiEndpoint: Joi.string().uri(), // Alias for apiUrl (frontend compatibility)
     apiToken: Joi.string().trim().allow("", null),
     apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
     apiVersion: Joi.string().trim().allow("", null),
-
-    // Multi-channel configuration (only for MULTI mode)
-    channelConfigs: Joi.when("channelMode", {
-      is: "MULTI",
-      then: Joi.array()
-        .items(
-          Joi.object({
-            channelName: Joi.string().trim().min(1).max(100).required(),
-            apiUrl: Joi.string().uri().required(),
-            apiKey: Joi.string()
-              .trim()
-              .min(1)
-              .max(500)
-              .allow("", null)
-              .optional(),
-            isActive: Joi.boolean().default(true),
-            isPrimary: Joi.boolean().default(false),
-            priority: Joi.number().integer().min(1).max(100).default(1),
-          }),
-        )
-        .min(1)
-        .max(20)
-        .required(),
-      otherwise: Joi.array().max(0).optional(),
-    }),
 
     // Service Configuration
     supportsCOD: Joi.boolean().default(false),
@@ -75,37 +44,12 @@ const partnerSchema = {
     displayName: Joi.string().trim().max(100),
     isActive: Joi.boolean(),
 
-    // Channel Mode (Single/Multi API endpoints)
-    channelMode: Joi.string().valid("SINGLE", "MULTI"),
-
     // API Configuration - Support both field names
     apiUrl: Joi.string().uri(),
     apiEndpoint: Joi.string().uri(), // Alias for apiUrl
     apiToken: Joi.string().trim().allow("", null),
     apiKey: Joi.string().trim().allow("", null), // Alias for apiToken
     apiVersion: Joi.string().trim().allow("", null),
-
-    // Multi-channel configuration (only for MULTI mode)
-    channelConfigs: Joi.array()
-      .items(
-        Joi.object({
-          id: Joi.string().uuid().optional(),
-          channelName: Joi.string().trim().min(1).max(100).required(),
-          apiUrl: Joi.string().uri().required(),
-          apiKey: Joi.string()
-            .trim()
-            .min(1)
-            .max(500)
-            .allow("", null)
-            .optional(),
-          isActive: Joi.boolean().default(true),
-          isPrimary: Joi.boolean().default(false),
-          priority: Joi.number().integer().min(1).max(100).default(1),
-        }),
-      )
-      .min(1)
-      .max(20)
-      .optional(),
 
     // Service Configuration
     supportsCOD: Joi.boolean(),
@@ -138,9 +82,26 @@ const partnerSchema = {
       .pattern(/^\d{6}$/)
       .required(),
     weight: Joi.number().positive().required(),
-    serviceType: Joi.string().valid("SURFACE", "AIR", "EXPRESS"),
+    serviceType: Joi.string().valid(
+      "SURFACE",
+      "AIR",
+      "EXPRESS",
+      "STANDARD",
+      "ECONOMY",
+    ),
     codAmount: Joi.number().min(0),
     partnerId: Joi.string(),
+    declaredValue: Joi.number().min(0),
+    shipmentValue: Joi.number().min(0),
+    paymentMode: Joi.string().valid("PREPAID", "COD", "prepaid", "cod"),
+    dimensions: Joi.object({
+      length: Joi.number().positive().required(),
+      width: Joi.number().positive().required(),
+      height: Joi.number().positive().required(),
+    }),
+    isFragile: Joi.boolean().default(false),
+    outletId: Joi.string().allow("", null),
+    sortBy: Joi.string().valid("cheapest", "highest"),
   }),
 
   checkServiceability: Joi.object({

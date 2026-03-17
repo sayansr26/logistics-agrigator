@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -67,6 +69,7 @@ import {
   Users,
   MapPin,
   IndianRupee,
+  Settings,
 } from "lucide-react";
 
 // RTK Query hooks
@@ -74,6 +77,8 @@ import {
   useGetPartnersQuery,
   useDeletePartnerMutation,
   useUpdatePartnerStatusMutation,
+  useCreatePartnerMutation,
+  useUpdatePartnerMutation,
   type Partner,
 } from "@/store/api/endpoints/partnersApi";
 
@@ -113,6 +118,17 @@ export default function PartnersPage() {
   >(null);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
 
+  // Create/Edit modal state
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
+  const [partnerForm, setPartnerForm] = useState({
+    name: "",
+    displayName: "",
+    code: "",
+    isActive: true,
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
   // RTK Query
   const {
     data: partnersData,
@@ -132,6 +148,9 @@ export default function PartnersPage() {
   const [deletePartner, { isLoading: isDeleting }] = useDeletePartnerMutation();
   const [updatePartnerStatus, { isLoading: isUpdatingStatus }] =
     useUpdatePartnerStatusMutation();
+  const [updatePartner, { isLoading: isUpdatingPartner }] =
+    useUpdatePartnerMutation();
+  const [createPartner, { isLoading: isCreating }] = useCreatePartnerMutation();
 
   // Calculate statistics
   const partners = partnersData?.data?.partners || [];
@@ -188,6 +207,77 @@ export default function PartnersPage() {
       setShowConfirmDialog(false);
       setConfirmAction(null);
       setSelectedPartner(null);
+    }
+  };
+
+  // Generate partner code from name
+  const generatePartnerCode = (name: string) => {
+    if (name) {
+      const prefix = name.substring(0, 3).toUpperCase();
+      const suffix = Math.floor(100 + Math.random() * 900);
+      return `${prefix}${suffix}`;
+    }
+    return "";
+  };
+
+  // Open create modal
+  const openCreateModal = () => {
+    setEditingPartner(null);
+    setPartnerForm({ name: "", displayName: "", code: "", isActive: true });
+    setFormErrors({});
+    setShowPartnerModal(true);
+  };
+
+  // Open edit modal
+  const openEditModal = (partner: Partner) => {
+    setEditingPartner(partner);
+    setPartnerForm({
+      name: partner.name,
+      displayName: partner.displayName || "",
+      code: partner.code,
+      isActive: partner.isActive,
+    });
+    setFormErrors({});
+    setShowPartnerModal(true);
+  };
+
+  // Validate and submit partner form
+  const handlePartnerSubmit = async () => {
+    const errors: Record<string, string> = {};
+    if (!partnerForm.name.trim()) errors.name = "Partner name is required";
+    if (!partnerForm.displayName.trim())
+      errors.displayName = "Display name is required";
+    if (!partnerForm.code.trim()) errors.code = "Partner code is required";
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    try {
+      if (editingPartner) {
+        await updatePartner({
+          partnerId: editingPartner.id,
+          partnerData: {
+            name: partnerForm.name,
+            displayName: partnerForm.displayName,
+            code: partnerForm.code,
+            isActive: partnerForm.isActive,
+          },
+        }).unwrap();
+        setSuccessMessage("Partner updated successfully!");
+      } else {
+        await createPartner({
+          name: partnerForm.name,
+          displayName: partnerForm.displayName,
+          code: partnerForm.code,
+          isActive: partnerForm.isActive,
+        }).unwrap();
+        setSuccessMessage("Partner created successfully!");
+      }
+      setShowPartnerModal(false);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 5000);
+      refetch();
+    } catch (error) {
+      console.error("Failed to save partner:", error);
     }
   };
 
@@ -256,7 +346,7 @@ export default function PartnersPage() {
           description="Manage your courier service providers and their configurations"
           primaryAction={
             canCreatePartner
-              ? { label: "Add Partner", href: "/partners/add" }
+              ? { label: "Add Partner", onClick: openCreateModal }
               : undefined
           }
         />
@@ -409,10 +499,7 @@ export default function PartnersPage() {
                           No partners found
                         </p>
                         {canCreatePartner && (
-                          <Button
-                            className="mt-4"
-                            onClick={() => router.push("/partners/add")}
-                          >
+                          <Button className="mt-4" onClick={openCreateModal}>
                             <Plus className="mr-2 h-4 w-4" />
                             Add First Partner
                           </Button>
@@ -496,9 +583,7 @@ export default function PartnersPage() {
                             </DropdownMenuItem>
                             {canEditPartner && (
                               <DropdownMenuItem
-                                onClick={() =>
-                                  router.push(`/partners/${partner.id}/edit`)
-                                }
+                                onClick={() => openEditModal(partner)}
                               >
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit Partner
@@ -519,6 +604,14 @@ export default function PartnersPage() {
                             >
                               <IndianRupee className="mr-2 h-4 w-4" />
                               Charges Types
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/partners/${partner.id}/channels`)
+                              }
+                            >
+                              <Settings className="mr-2 h-4 w-4" />
+                              Manage Channels
                             </DropdownMenuItem>
                             {canManagePartner && (
                               <>
@@ -648,6 +741,135 @@ export default function PartnersPage() {
                   : confirmAction === "activate"
                     ? "Activate"
                     : "Deactivate"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Create/Edit Partner Modal */}
+        <Dialog open={showPartnerModal} onOpenChange={setShowPartnerModal}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingPartner ? "Edit Partner" : "Add New Partner"}
+              </DialogTitle>
+              <DialogDescription>
+                {editingPartner
+                  ? "Update partner basic information"
+                  : "Create a new courier partner"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="partner-name">Partner Name *</Label>
+                  <Input
+                    id="partner-name"
+                    value={partnerForm.name}
+                    onChange={(e) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g., FedEx India"
+                    className={formErrors.name ? "border-red-500" : ""}
+                  />
+                  {formErrors.name && (
+                    <p className="text-sm text-red-500">{formErrors.name}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partner-displayName">Display Name *</Label>
+                  <Input
+                    id="partner-displayName"
+                    value={partnerForm.displayName}
+                    onChange={(e) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        displayName: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g., FedEx Express"
+                    className={formErrors.displayName ? "border-red-500" : ""}
+                  />
+                  {formErrors.displayName && (
+                    <p className="text-sm text-red-500">
+                      {formErrors.displayName}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partner-code">Partner Code *</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="partner-code"
+                      value={partnerForm.code}
+                      onChange={(e) =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          code: e.target.value.toUpperCase(),
+                        }))
+                      }
+                      placeholder="e.g., FDX001"
+                      className={formErrors.code ? "border-red-500" : ""}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          code: generatePartnerCode(prev.name),
+                        }))
+                      }
+                      disabled={!partnerForm.name}
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                  {formErrors.code && (
+                    <p className="text-sm text-red-500">{formErrors.code}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="partner-active"
+                    checked={partnerForm.isActive}
+                    onCheckedChange={(checked) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        isActive: checked as boolean,
+                      }))
+                    }
+                  />
+                  <Label
+                    htmlFor="partner-active"
+                    className="text-sm font-normal"
+                  >
+                    Active (Partner can be used for shipments)
+                  </Label>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowPartnerModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handlePartnerSubmit}
+                disabled={isCreating || isUpdatingPartner}
+              >
+                {(isCreating || isUpdatingPartner) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {editingPartner ? "Update Partner" : "Create Partner"}
               </Button>
             </DialogFooter>
           </DialogContent>

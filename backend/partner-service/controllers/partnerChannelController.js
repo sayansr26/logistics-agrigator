@@ -220,50 +220,6 @@ class PartnerChannelController {
       });
     }
   }
-
-  /**
-   * Switch channel mode for a partner
-   * Converts between SINGLE and MULTI channel modes
-   */
-  async switchChannelMode(req, res) {
-    try {
-      const { partnerId } = req.params;
-      const { mode, migrateConfig } = req.body;
-      const userId = req.user?.id;
-
-      logger.info("Switch channel mode request", {
-        partnerId,
-        mode,
-        migrateConfig,
-      });
-
-      const result = await partnerChannelService.switchChannelMode({
-        partnerId,
-        mode,
-        migrateConfig,
-        userId,
-      });
-
-      res.status(200).json({
-        status: "success",
-        data: result,
-      });
-    } catch (error) {
-      logger.error("Error in switchChannelMode controller", {
-        error: error.message,
-      });
-
-      const statusCode = error.message.includes("not found") ? 404 : 500;
-
-      res.status(statusCode).json({
-        status: "error",
-        error: {
-          code: "INTERNAL_ERROR",
-          message: error.message,
-        },
-      });
-    }
-  }
 }
 
 module.exports = new PartnerChannelController();

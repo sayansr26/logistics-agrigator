@@ -7,8 +7,6 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -20,6 +18,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +52,6 @@ import {
   Globe,
   Package,
   Truck,
-  Calendar,
   Edit,
   Loader2,
   AlertCircle,
@@ -52,17 +60,17 @@ import {
   MoreVertical,
   Info,
   Settings,
-  Building,
   CheckCircle,
   XCircle,
   Trash2,
-  RefreshCw,
+  Key,
 } from "lucide-react";
 import {
   useGetPartnerByIdQuery,
   useUpdatePartnerMutation,
   useDeletePartnerMutation,
 } from "@/store/api/endpoints/partnersApi";
+import { useListPartnerChannelsQuery } from "@/store/api/endpoints/partnerChannelApi";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDate } from "@/lib/mock-data";
 
@@ -74,6 +82,14 @@ export default function PartnerDetailPage() {
   const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
   const [showActivateDialog, setShowActivateDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    displayName: "",
+    code: "",
+    isActive: true,
+  });
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
   // Permission checks
   const { hasPermission } = usePermission();
@@ -86,12 +102,15 @@ export default function PartnerDetailPage() {
     data: partnerData,
     isLoading,
     error,
-    refetch,
   } = useGetPartnerByIdQuery(partnerId);
   const [updatePartner, { isLoading: isUpdating }] = useUpdatePartnerMutation();
   const [deletePartner, { isLoading: isDeleting }] = useDeletePartnerMutation();
+  const { data: channelsData } = useListPartnerChannelsQuery(partnerId, {
+    skip: !partnerId,
+  });
 
   const partner = partnerData?.data?.partner;
+  const channels = channelsData?.data?.channels || [];
 
   const handleDeactivate = async () => {
     try {
@@ -100,7 +119,6 @@ export default function PartnerDetailPage() {
         partnerData: { isActive: false },
       }).unwrap();
       setShowDeactivateDialog(false);
-      refetch();
     } catch (error) {
       console.error("Error deactivating partner:", error);
     }
@@ -113,7 +131,6 @@ export default function PartnerDetailPage() {
         partnerData: { isActive: true },
       }).unwrap();
       setShowActivateDialog(false);
-      refetch();
     } catch (error) {
       console.error("Error activating partner:", error);
     }
@@ -126,6 +143,43 @@ export default function PartnerDetailPage() {
       router.push("/partners?success=partner-deleted");
     } catch (error) {
       console.error("Error deleting partner:", error);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!partner) return;
+    setEditForm({
+      name: partner.name,
+      displayName: partner.displayName || "",
+      code: partner.code,
+      isActive: partner.isActive,
+    });
+    setEditErrors({});
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async () => {
+    const errors: Record<string, string> = {};
+    if (!editForm.name.trim()) errors.name = "Partner name is required";
+    if (!editForm.displayName.trim())
+      errors.displayName = "Display name is required";
+    if (!editForm.code.trim()) errors.code = "Partner code is required";
+    setEditErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    try {
+      await updatePartner({
+        partnerId,
+        partnerData: {
+          name: editForm.name,
+          displayName: editForm.displayName,
+          code: editForm.code,
+          isActive: editForm.isActive,
+        },
+      }).unwrap();
+      setShowEditModal(false);
+    } catch (error) {
+      console.error("Error updating partner:", error);
     }
   };
 
@@ -171,7 +225,6 @@ export default function PartnerDetailPage() {
         <DetailHeader
           title={partner.displayName}
           description="Partner details and configuration"
-          backHref="/partners"
           badges={[
             partner.isActive ? (
               <Badge key="status" className="bg-green-100 text-green-800">
@@ -189,38 +242,32 @@ export default function PartnerDetailPage() {
               {partner.code}
             </Badge>,
           ]}
+          canEdit={false}
+          canDelete={false}
           actions={
             <div className="flex items-center gap-2">
-              {canManage && partner.isActive ? (
-                <Button
-                  onClick={() => setShowDeactivateDialog(true)}
-                  disabled={isUpdating}
-                  variant="outline"
-                  className="border-red-200 text-red-600 hover:bg-red-50"
-                >
-                  <PowerOff className="h-4 w-4 mr-2" />
-                  Deactivate
+              {canEdit && (
+                <Button onClick={openEditModal} variant="outline" size="sm">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
                 </Button>
-              ) : canManage && !partner.isActive ? (
-                <Button
-                  onClick={() => setShowActivateDialog(true)}
-                  disabled={isUpdating}
-                  variant="outline"
-                  className="border-green-200 text-green-600 hover:bg-green-50"
-                >
-                  <Power className="h-4 w-4 mr-2" />
-                  Activate
-                </Button>
-              ) : null}
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuLabel>Manage</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(`/partners/${partnerId}/channels`)
+                    }
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    Manage Channels
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
                       router.push(`/partners/${partnerId}/pincodes`)
@@ -237,14 +284,30 @@ export default function PartnerDetailPage() {
                     <DollarSign className="h-4 w-4 mr-2" />
                     Charges Types
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {canEdit && (
-                    <DropdownMenuItem
-                      onClick={() => router.push(`/partners/${partnerId}/edit`)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Partner
-                    </DropdownMenuItem>
+                  {canManage && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() =>
+                          partner.isActive
+                            ? setShowDeactivateDialog(true)
+                            : setShowActivateDialog(true)
+                        }
+                        disabled={isUpdating}
+                      >
+                        {partner.isActive ? (
+                          <>
+                            <PowerOff className="h-4 w-4 mr-2" />
+                            Deactivate Partner
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-4 w-4 mr-2" />
+                            Activate Partner
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                    </>
                   )}
                   {canDelete && (
                     <>
@@ -299,9 +362,9 @@ export default function PartnerDetailPage() {
               <Info className="h-4 w-4 mr-2" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="api">
-              <Settings className="h-4 w-4 mr-2" />
-              API Config
+            <TabsTrigger value="channels">
+              <Globe className="h-4 w-4 mr-2" />
+              Channels
             </TabsTrigger>
           </TabsList>
 
@@ -336,85 +399,105 @@ export default function PartnerDetailPage() {
                     label="Last Updated"
                     value={formatDate(partner.updatedAt)}
                   />
-                  <DetailItem
-                    label="Total Shipments"
-                    value={partner._count?.shipments || 0}
-                  />
-                  <DetailItem
-                    label="Integration Status"
-                    value={
-                      <Badge
-                        variant={partner.apiToken ? "default" : "secondary"}
-                      >
-                        {partner.apiToken ? "Connected" : "Not Connected"}
-                      </Badge>
-                    }
-                  />
-                </DetailSection>
-
-                <DetailSection title="Channel Configuration">
-                  <DetailItem
-                    label="Channel Mode"
-                    value={
-                      <Badge variant="outline">
-                        {partner.channelMode || "SINGLE"}
-                      </Badge>
-                    }
-                  />
-                  <DetailItem
-                    label="Channel Configs"
-                    value={`${partner._count?.channelConfigs || 0} configured`}
-                  />
-                  <DetailItem
-                    label="Charges Types"
-                    value={`${partner._count?.chargesTypes || 0} types`}
-                  />
                 </DetailSection>
               </DetailGrid>
             </TabsContent>
 
-            <TabsContent value="api" className="space-y-6">
-              <DetailSection title="API Configuration">
-                <DetailItem
-                  label="Channel Mode"
-                  value={
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {partner.channelMode || "SINGLE"}
-                      </Badge>
-                      {partner.channelMode === "MULTI" && (
-                        <span className="text-sm text-muted-foreground">
-                          ({partner._count?.channelConfigs || 0} channels)
-                        </span>
-                      )}
-                    </div>
-                  }
-                />
-                <Separator />
-                <DetailItem
-                  label="API Endpoint"
-                  value={partner.apiUrl || "Not configured"}
-                  mono
-                />
-                <DetailItem
-                  label="API Version"
-                  value={partner.apiVersion || "Not specified"}
-                />
-                <DetailItem
-                  label="API Token"
-                  value={
-                    partner.apiToken ? "••••••••••••••••" : "Not configured"
-                  }
-                />
-                <DetailItem
-                  label="Authentication Status"
-                  value={
-                    <Badge variant={partner.apiToken ? "default" : "secondary"}>
-                      {partner.apiToken ? "Configured" : "Not Configured"}
-                    </Badge>
-                  }
-                />
-              </DetailSection>
+            <TabsContent value="channels" className="space-y-6">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {channels.length === 0
+                    ? "No channels configured yet."
+                    : `${channels.length} channel${channels.length > 1 ? "s" : ""} configured`}
+                </p>
+                <Button
+                  onClick={() => router.push(`/partners/${partnerId}/channels`)}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Manage Channels
+                </Button>
+              </div>
+
+              {channels.length > 0 && (
+                <div className="space-y-3">
+                  {channels.map((channel: any, index: number) => (
+                    <Card key={channel.id || index}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {channel.channelName}
+                            </span>
+                            {channel.isPrimary && (
+                              <Badge variant="default" className="text-xs">
+                                Primary
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={
+                                channel.isActive ? "default" : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {channel.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={
+                              channel.aggregatorType === "DELHIVERY"
+                                ? "border-blue-300 text-blue-700 bg-blue-50"
+                                : channel.aggregatorType === "BLUEDART"
+                                  ? "border-indigo-300 text-indigo-700 bg-indigo-50"
+                                  : "border-gray-300 text-gray-700"
+                            }
+                          >
+                            <Truck className="h-3 w-3 mr-1" />
+                            {channel.aggregatorType}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Key className="h-3 w-3" />
+                            {channel.aggregatorType === "DELHIVERY" && (
+                              <span>
+                                {channel.apiKey
+                                  ? "API Token configured"
+                                  : "API Token not set"}
+                              </span>
+                            )}
+                            {channel.aggregatorType === "BLUEDART" && (
+                              <span>
+                                {channel.aggregatorConfig?.loginId
+                                  ? `Login: ${channel.aggregatorConfig.loginId}`
+                                  : "Credentials not set"}
+                              </span>
+                            )}
+                            {channel.aggregatorType !== "DELHIVERY" &&
+                              channel.aggregatorType !== "BLUEDART" && (
+                                <span>
+                                  {channel.apiKey
+                                    ? "API Key configured"
+                                    : "No credentials"}
+                                </span>
+                              )}
+                          </div>
+                          {channel.aggregatorType === "BLUEDART" &&
+                            channel.aggregatorConfig?.customerCode && (
+                              <span className="text-sm text-muted-foreground">
+                                Customer:{" "}
+                                {channel.aggregatorConfig.customerCode}
+                              </span>
+                            )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Priority: {channel.priority}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </div>
         </Tabs>
@@ -500,6 +583,102 @@ export default function PartnerDetailPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Edit Partner Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Edit Partner</DialogTitle>
+              <DialogDescription>
+                Update partner basic information
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Partner Name *</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="e.g., FedEx India"
+                  className={editErrors.name ? "border-red-500" : ""}
+                />
+                {editErrors.name && (
+                  <p className="text-sm text-red-500">{editErrors.name}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-displayName">Display Name *</Label>
+                <Input
+                  id="edit-displayName"
+                  value={editForm.displayName}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      displayName: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., FedEx Express"
+                  className={editErrors.displayName ? "border-red-500" : ""}
+                />
+                {editErrors.displayName && (
+                  <p className="text-sm text-red-500">
+                    {editErrors.displayName}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-code">Partner Code *</Label>
+                <Input
+                  id="edit-code"
+                  value={editForm.code}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      code: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  placeholder="e.g., FDX001"
+                  className={editErrors.code ? "border-red-500" : ""}
+                />
+                {editErrors.code && (
+                  <p className="text-sm text-red-500">{editErrors.code}</p>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit-active"
+                  checked={editForm.isActive}
+                  onCheckedChange={(checked) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      isActive: checked as boolean,
+                    }))
+                  }
+                />
+                <Label htmlFor="edit-active" className="text-sm font-normal">
+                  Active (Partner can be used for shipments)
+                </Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubmit} disabled={isUpdating}>
+                {isUpdating && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Update Partner
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </PageContainer>
     </DashboardLayout>
   );

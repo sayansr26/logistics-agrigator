@@ -1,6 +1,6 @@
 # System Patterns - Logistics Aggregator Portal
 
-> Architecture and design patterns | Last Updated: February 14, 2026
+> Architecture and design patterns | Last Updated: March 17, 2026
 
 ## Architecture Overview
 
@@ -568,6 +568,147 @@ getItems: builder.query<{ items: Item[] }, void>({
 **Note:** `fetchBaseQuery` does NOT support `transformResponse` at the `baseQuery` level.
 Each endpoint must define its own `transformResponse` to extract data from the envelope.
 
+### 15. RTK Query Cache Invalidation Pattern (NEW - March 2026)
+
+**Mutations with `invalidatesTags` automatically trigger refetch of queries that `providesTags` with matching tags. Do NOT call `refetch()` manually after mutations — it causes duplicate API calls.**
+
+```typescript
+// ✅ CORRECT: Let tag invalidation handle refetch
+const [updatePartner] = useUpdatePartnerMutation();
+const handleUpdate = async () => {
+  await updatePartner({ partnerId, partnerData }).unwrap();
+  // No refetch() needed — updatePartner invalidates { type: "Partner", id: partnerId }
+  // and getPartnerById provides { type: "Partner", id } → auto-refetch
+};
+
+// ❌ WRONG: Causes double API calls
+const { refetch } = useGetPartnerByIdQuery(partnerId);
+const handleUpdate = async () => {
+  await updatePartner({ partnerId, partnerData }).unwrap();
+  refetch(); // ← Redundant! Tag invalidation already triggers refetch
+};
+```
+
+**Tag ID matching is critical:**
+
+```typescript
+// Query provides tag:
+getPartnerById: builder.query({
+  providesTags: (result, error, id) => [{ type: "Partner", id }],
+});
+
+// Mutation must invalidate the SAME tag ID:
+updatePartner: builder.mutation({
+  invalidatesTags: (result, error, { partnerId }) => [
+    { type: "Partner", id: partnerId }, // ✅ Matches query tag
+    { type: "Partner", id: "LIST" }, // ✅ Also invalidates list
+  ],
+});
+```
+
+### 16. Extensible Enum Pattern — Prisma String Instead of Enum (NEW - March 2026)
+
+**When a field's allowed values may grow over time (e.g., courier aggregator types), use `String @db.VarChar(N)` instead of a Prisma enum. This avoids requiring `prisma db push` / migration + DB reset every time a new value is added.**
+
+```prisma
+// ✅ CORRECT: Extensible — add new aggregators with just a code change
+aggregatorType String @default("NONE") @db.VarChar(50)
+
+// ❌ AVOID for growing sets: Requires schema migration for each new value
+aggregatorType AggregatorType @default(NONE)
+enum AggregatorType { NONE DELHIVERY BLUEDART CUSTOM }
+```
+
+**Validation moves to application layer:**
+
+```javascript
+const ALLOWED_AGGREGATOR_TYPES = ["DELHIVERY", "BLUEDART"];
+aggregatorType: Joi.string()
+  .valid(...ALLOWED_AGGREGATOR_TYPES)
+  .required();
+```
+
+### 17. Inter-Service Communication Pattern (NEW - March 2026)
+
+**Services communicate over Docker network using HTTP with internal auth headers.**
+
+```javascript
+// Service-to-service calls MUST include X-Internal-Request header
+const httpClient = axios.create({
+  baseURL: process.env.WALLET_SERVICE_URL, // e.g., http://wallet-service:3006
+  headers: {
+    "Content-Type": "application/json",
+    "X-Internal-Request":
+      process.env.INTERNAL_SECRET || "internal-service-secret",
+  },
+});
+```
+
+**Key rule:** Target services block direct access without this header (returns 403). The `INTERNAL_SECRET` env var must be consistent across all services.
+
+### 18. External Wallet Phone-Based Identity Pattern (NEW - March 2026)
+
+**The external wallet API (`wapi.websiteduniya.com`) uses phone numbers as user identifiers, NOT auth service UUIDs.**
+
+```javascript
+// Resolving wallet userId based on user role:
+function resolveOutletContext(req) {
+  if (role === "outlet") {
+    // Outlet's own phone from JWT token
+    return { walletUserId: req.user.phone };
+  }
+  if (["superadmin", "admin"].includes(role)) {
+    // Phone passed from frontend via outletUserId field
+    return { walletUserId: req.body.outletUserId }; // This is a phone number!
+  }
+}
+```
+
+**Wallet admin endpoints** (`/api/v1/wallet/admin/*`) handle the correct `clientCode` (`LOGISTICS`) and use phone as userId for external API calls. Always call these admin endpoints for shipment payment processing, not direct wallet CRUD endpoints.
+
+### 19. Shipment Payment Flow Pattern (NEW - March 2026)
+
+```
+Shipment Controller
+  └─▶ resolveOutletContext(req) → { outletId, clientId, walletUserId (phone) }
+  └─▶ paymentProcessingService
+        ├─▶ GET /api/v1/wallet/admin/wallet?userId={phone} (balance check)
+        ├─▶ POST /api/v1/wallet/admin/debit (payment deduction)
+        └─▶ POST /api/v1/wallet/admin/refund (refund on failure)
+              ↓
+        Wallet Service Admin Controller
+              ↓
+        External Wallet API (wapi.websiteduniya.com)
+        Auth: HMAC SHA-256 with clientCode=LOGISTICS
+```
+
+### 20. Quote Snapshot Storage Pattern (NEW - March 2026)
+
+**When a shipment is created, the selected partner quote (including charge breakdown and discount) is stored in the `quoteSnapshot` JSON field on the Shipment model.**
+
+```javascript
+// Stored in shipment.quoteSnapshot:
+{
+  partnerId: "uuid",
+  partnerName: "Delhivery",
+  totalAmount: 4710,
+  chargeBreakdown: [
+    { name: "Base Freight", amount: 3500 },
+    { name: "Fuel Surcharge", amount: 800 },
+    { name: "COD Handling", amount: 410 },
+  ],
+  discount: {
+    packageName: "Gold Discount",
+    badge: "GOLD",
+    originalTotal: 5200,
+    totalDiscount: 490,
+    finalTotal: 4710,
+  }
+}
+```
+
+**Frontend** reads `quoteSnapshot` on the detail page to display invoice-style breakdown + discount info.
+
 ## Component Relationships
 
 ### Inter-Service Communication
@@ -576,12 +717,16 @@ Each endpoint must define its own `transformResponse` to extract data from the e
 Shipment Service ──────┬─────▶ Partner Service (rates, booking)
                        │
                        ├─────▶ Wallet Service (balance check, deduction)
+                       │       ⚠️ Uses admin endpoints with X-Internal-Request header
+                       │       ⚠️ Wallet userId = outlet PHONE number (not UUID)
                        │
                        └─────▶ User Service (customer validation)
 
 User Service ──────────┬─────▶ Auth Service (role validation)
                        │
                        └─────▶ License Service (tenant limits)
+
+Partner Service ───────┬─────▶ User Service (outlet badge lookup via internal endpoint)
 ```
 
 ### Caching Strategy
@@ -608,5 +753,5 @@ Redis Cache Structure:
 ---
 
 **Architecture Status**: Stable
-**Last Pattern Review**: February 14, 2026
-**Recent Additions**: Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Last Pattern Review**: March 17, 2026
+**Recent Additions**: Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

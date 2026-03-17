@@ -59,6 +59,8 @@ class PartnerChannelService {
           apiUrl: legacyData.apiUrl,
           apiKey: legacyData.apiToken,
           apiVersion: legacyData.apiVersion,
+          aggregatorType: "NONE",
+          aggregatorConfig: null,
         };
       }
 
@@ -188,6 +190,9 @@ class PartnerChannelService {
             isActive: channel.isActive ?? true,
             isPrimary: channel.isPrimary ?? false,
             priority: channel.priority ?? 1,
+            aggregatorType: channel.aggregatorType ?? "NONE",
+            aggregatorConfig: channel.aggregatorConfig ?? undefined,
+            webhookSecret: channel.webhookSecret ?? undefined,
           },
         });
 
@@ -211,6 +216,8 @@ class PartnerChannelService {
         partnerId,
         createdCount: results.length,
       });
+
+      await this._syncChannelMode(partnerId);
 
       return results;
     } catch (error) {
@@ -291,6 +298,12 @@ class PartnerChannelService {
     try {
       logger.info("Deleting channel", { channelId });
 
+      // Get partnerId before deletion for mode sync
+      const channelToDelete = await prisma.partnerChannelConfig.findUnique({
+        where: { id: channelId },
+        select: { partnerId: true },
+      });
+
       await prisma.partnerChannelConfig.delete({
         where: { id: channelId },
       });
@@ -308,6 +321,11 @@ class PartnerChannelService {
       });
 
       logger.info("Channel deleted successfully", { channelId });
+
+      if (channelToDelete) {
+        await this._syncChannelMode(channelToDelete.partnerId);
+      }
+
       return { success: true };
     } catch (error) {
       logger.error("Error deleting channel", {
@@ -319,147 +337,22 @@ class PartnerChannelService {
   }
 
   // ==========================================
-  // CHANNEL MODE SWITCHING
+  // CHANNEL MODE AUTO-SYNC
   // ==========================================
 
   /**
-   * Switch channel mode (SINGLE <-> MULTI)
-   * @param {Object} data - Switch mode data
-   * @param {string} data.partnerId - Partner UUID/CUID
-   * @param {string} data.mode - Target mode (SINGLE or MULTI)
-   * @param {boolean} [data.migrateConfig=true] - Whether to migrate existing config
-   * @param {string} [data.userId] - User ID for audit logging
-   * @returns {Promise<Object>} Updated partner
+   * Auto-sync channelMode based on channel count
+   * @param {string} partnerId - Partner CUID
    */
-  async switchChannelMode(data) {
-    const { partnerId, mode, migrateConfig = true, userId } = data;
-
-    try {
-      logger.info("Switching channel mode", {
-        partnerId,
-        targetMode: mode,
-        migrateConfig,
-      });
-
-      const partner = await prisma.partner.findUnique({
-        where: { id: partnerId },
-      });
-
-      if (!partner) {
-        throw new Error("Partner not found");
-      }
-
-      if (partner.channelMode === mode) {
-        logger.info("Partner already in target mode", {
-          partnerId,
-          mode,
-        });
-        return {
-          message: `Partner already in ${mode} mode`,
-          partner,
-        };
-      }
-
-      // SINGLE -> MULTI: Migrate existing config to a channel
-      if (partner.channelMode === "SINGLE" && mode === "MULTI") {
-        if (migrateConfig && partner.apiUrl) {
-          // Check if default channel already exists
-          const existingDefault = await prisma.partnerChannelConfig.findFirst({
-            where: {
-              partnerId,
-              channelName: "default",
-            },
-          });
-
-          if (!existingDefault) {
-            await prisma.partnerChannelConfig.create({
-              data: {
-                partnerId,
-                channelName: "default",
-                apiUrl: partner.apiUrl,
-                apiKey: partner.apiToken,
-                isActive: true,
-                isPrimary: true,
-                priority: 1,
-              },
-            });
-
-            logger.info("Migrated SINGLE config to MULTI default channel", {
-              partnerId,
-            });
-          }
-        }
-      }
-
-      // MULTI -> SINGLE: Keep primary channel as legacy config
-      if (partner.channelMode === "MULTI" && mode === "SINGLE") {
-        if (migrateConfig) {
-          const primaryChannel = await prisma.partnerChannelConfig.findFirst({
-            where: {
-              partnerId,
-              isPrimary: true,
-            },
-          });
-
-          if (primaryChannel) {
-            await prisma.partner.update({
-              where: { id: partnerId },
-              data: {
-                apiUrl: primaryChannel.apiUrl,
-                apiToken: primaryChannel.apiKey,
-              },
-            });
-
-            logger.info("Migrated MULTI primary channel to SINGLE config", {
-              partnerId,
-              primaryChannel: primaryChannel.channelName,
-            });
-          }
-
-          // Delete all channels
-          await prisma.partnerChannelConfig.deleteMany({
-            where: { partnerId },
-          });
-
-          logger.info("Deleted all channels after switching to SINGLE", {
-            partnerId,
-          });
-        }
-      }
-
-      // Update mode
-      const updated = await prisma.partner.update({
-        where: { id: partnerId },
-        data: { channelMode: mode },
-      });
-
-      // Audit log
-      await prisma.auditLog.create({
-        data: {
-          action: "UPDATE",
-          resourceType: "PARTNER",
-          resourceId: partnerId,
-          userId,
-          requestData: { channelMode: mode, previousMode: partner.channelMode },
-          ipAddress: null,
-          userAgent: null,
-        },
-      });
-
-      logger.info("Channel mode switched successfully", {
-        partnerId,
-        previousMode: partner.channelMode,
-        newMode: mode,
-      });
-
-      return updated;
-    } catch (error) {
-      logger.error("Error switching channel mode", {
-        partnerId,
-        error: error.message,
-      });
-      throw error;
-    }
+  async _syncChannelMode(partnerId) {
+    const count = await prisma.partnerChannelConfig.count({
+      where: { partnerId },
+    });
+    const mode = count <= 1 ? "SINGLE" : "MULTI";
+    await prisma.partner.update({
+      where: { id: partnerId },
+      data: { channelMode: mode },
+    });
   }
 }
 

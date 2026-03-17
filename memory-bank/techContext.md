@@ -376,6 +376,9 @@ docker exec -it logistics-redis redis-cli
 5. **Validation Required**: All inputs validated with Joi
 6. **Auth Required**: All endpoints authenticated (except public)
 7. **Confirmation Dialogs**: All destructive actions require user confirmation
+8. **Redis v4 API**: Use `setEx()` (camelCase), NOT `setex()` (lowercase). Redis v4+ broke backward compat
+9. **Inter-Service Auth**: Services calling other services must include `X-Internal-Request` header with `INTERNAL_SECRET`
+10. **External Wallet Identity**: External wallet API (`wapi.websiteduniya.com`) uses **phone number** as user ID, never auth UUID
 
 ## Frontend Patterns (Updated January 2026)
 
@@ -475,4 +478,4 @@ const handleDelete = (item) => {
 **Environment**: Development  
 **Node Version**: 18.x LTS  
 **Package Manager**: PNPM 8.15.1  
-**Last Updated**: February 14, 2026
+**Last Updated**: March 17, 2026

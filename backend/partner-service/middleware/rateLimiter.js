@@ -291,6 +291,30 @@ const pincodeTypeManagementLimiter = rateLimit({
 });
 
 /**
+ * Courier Operation Rate Limiter
+ * Applies to courier booking, cancellation, tracking, pickup, label, manifest
+ * 30 requests per 15 minutes per user (courier APIs have their own rate limits)
+ */
+const courierOperationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many courier operation requests. Please try again in 15 minutes.",
+      retryAfter: 15 * 60,
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
  * Charges Rule Management Rate Limiter
  * Applies to new charge rule CRUD operations (INVOICE/WEIGHT/ZONE/DISTANCE)
  * 30 requests per 15 minutes per user
@@ -324,6 +348,7 @@ module.exports = {
   discountManagementLimiter,
   chargeCalculationLimiter,
   chargesManagementLimiter,
+  courierOperationLimiter,
   partnerAssignmentLimiter,
   performanceAnalyticsLimiter,
   systemManagementLimiter,

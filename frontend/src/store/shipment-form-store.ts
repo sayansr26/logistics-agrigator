@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-// Type definitions
 export interface Box {
   id: string;
   length: string;
@@ -10,31 +9,41 @@ export interface Box {
 
 export interface Invoice {
   id: string;
-  invoiceType: string;
-  invoiceNo: string;
-  invoiceDate: string;
-  invoiceAmt: string;
-  currency: string;
-  taxAmount: string;
-  discountAmount: string;
-  totalAmount: string;
   eWayBillNo: string;
+  invoiceNo: string;
+  invoiceAmt: string;
+  invoiceDate: string;
   attachment: File | null;
-  sellerGSTIN: string;
-  buyerGSTIN: string;
-  hsnCode: string;
-  sacCode: string;
-  paymentTerms: string;
+  attachmentUrl: string;
 }
 
-export interface ShipmentFormData {
-  // Docket form fields
+export interface FormErrors {
+  [key: string]: string;
+}
+
+export interface ShipmentFormState {
+  // Step tracking
+  currentStep: number;
+
+  // Docket fields
   referenceNo: string;
   actualWeight: string;
+  shipmentType: "B2B" | "B2C";
+  shipmentDirection: "FORWARD" | "REVERSE";
+  paymentType: "PREPAID" | "COD";
+  codAmount: string;
+  serviceType: "STANDARD" | "EXPRESS" | "ECONOMY";
+  outletId: string;
+  outletUserId: string;
   pickupAddress: string;
+  pickupAddressId: string;
   productDescription: string;
+  hsnCode: string;
+  gstPercentage: string;
+  isFragile: boolean;
+  rtoSameAsPickup: boolean;
 
-  // Delivery form fields
+  // Delivery fields
   phoneNumber: string;
   alternatePhone: string;
   email: string;
@@ -46,53 +55,28 @@ export interface ShipmentFormData {
   city: string;
   state: string;
 
-  // RTO and Return Address fields
-  isRTO: boolean;
-  returnAddress: string;
-  returnPincode: string;
-  returnCity: string;
-  returnState: string;
-
-  // Dimensions form fields
-  length: string;
-  width: string;
-  height: string;
-  volumetricWeight: string;
-  packageType: string;
-}
-
-export interface FormErrors {
-  [key: string]: string;
-}
-
-export interface ShipmentFormState {
-  // Form state
-  currentStep: number;
-  formData: ShipmentFormData;
-  errors: FormErrors;
-
   // Collections
   boxes: Box[];
   invoices: Invoice[];
 
-  // Methods
+  // Validation errors
+  errors: FormErrors;
+
+  // Setters
   setStep: (step: number) => void;
-  setField: <K extends keyof ShipmentFormData>(
-    field: K,
-    value: ShipmentFormData[K],
-  ) => void;
+  setField: (field: string, value: unknown) => void;
   setError: (field: string, error: string) => void;
   clearError: (field: string) => void;
   setErrors: (errors: FormErrors) => void;
   clearAllErrors: () => void;
   resetForm: () => void;
 
-  // Box management methods
+  // Box management
   addBox: () => void;
   removeBox: (id: string) => void;
   updateBox: (id: string, field: keyof Box, value: string) => void;
 
-  // Invoice management methods
+  // Invoice management
   addInvoice: () => void;
   removeInvoice: (id: string) => void;
   updateInvoice: (
@@ -100,17 +84,36 @@ export interface ShipmentFormState {
     field: keyof Invoice,
     value: Invoice[keyof Invoice],
   ) => void;
+
+  // Validation
+  validateDocket: () => boolean;
+  validateDelivery: () => boolean;
 }
 
-// Initial form data
-const initialFormData: ShipmentFormData = {
-  // Docket form fields
+function uid(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
+  currentStep: 1,
+
   referenceNo: "",
   actualWeight: "",
+  shipmentType: "B2C",
+  shipmentDirection: "FORWARD",
+  paymentType: "PREPAID",
+  codAmount: "",
+  serviceType: "STANDARD",
+  outletId: "",
+  outletUserId: "",
   pickupAddress: "",
+  pickupAddressId: "",
   productDescription: "",
+  hsnCode: "",
+  gstPercentage: "",
+  isFragile: false,
+  rtoSameAsPickup: true,
 
-  // Delivery form fields
   phoneNumber: "",
   alternatePhone: "",
   email: "",
@@ -122,129 +125,129 @@ const initialFormData: ShipmentFormData = {
   city: "",
   state: "",
 
-  // RTO and Return Address fields
-  isRTO: false,
-  returnAddress: "",
-  returnPincode: "",
-  returnCity: "",
-  returnState: "",
-
-  // Dimensions form fields
-  length: "",
-  width: "",
-  height: "",
-  volumetricWeight: "",
-  packageType: "",
-};
-
-// Initial state
-const initialState = {
-  currentStep: 1,
-  formData: initialFormData,
-  errors: {},
-  boxes: [],
+  boxes: [{ id: `box-${uid()}`, length: "", height: "", width: "" }],
   invoices: [],
-};
 
-export const useShipmentFormStore = create<ShipmentFormState>((set) => ({
-  ...initialState,
+  errors: {},
 
-  setStep: (step: number) => set({ currentStep: step }),
+  setStep: (step) => set({ currentStep: step }),
 
-  setField: <K extends keyof ShipmentFormData>(
-    field: K,
-    value: ShipmentFormData[K],
-  ) =>
-    set((state) => ({
-      formData: { ...state.formData, [field]: value },
-      errors: { ...state.errors, [field]: "" },
+  setField: (field, value) =>
+    set((s) => ({
+      ...s,
+      [field]: value,
+      errors: { ...s.errors, [field]: "" },
     })),
 
-  setError: (field: string, error: string) =>
-    set((state) => ({
-      errors: { ...state.errors, [field]: error },
-    })),
+  setError: (field, error) =>
+    set((s) => ({ errors: { ...s.errors, [field]: error } })),
 
-  clearError: (field: string) =>
-    set((state) => ({
-      errors: { ...state.errors, [field]: "" },
-    })),
+  clearError: (field) => set((s) => ({ errors: { ...s.errors, [field]: "" } })),
 
-  setErrors: (errors: FormErrors) => set({ errors }),
+  setErrors: (errors) => set({ errors }),
 
   clearAllErrors: () => set({ errors: {} }),
 
   resetForm: () =>
     set({
-      ...initialState,
       currentStep: 1,
+      referenceNo: "",
+      actualWeight: "",
+      shipmentType: "B2C",
+      shipmentDirection: "FORWARD",
+      paymentType: "PREPAID",
+      codAmount: "",
+      serviceType: "STANDARD",
+      outletId: "",
+      outletUserId: "",
+      pickupAddress: "",
+      pickupAddressId: "",
+      productDescription: "",
+      hsnCode: "",
+      gstPercentage: "",
+      isFragile: false,
+      rtoSameAsPickup: true,
+      phoneNumber: "",
+      alternatePhone: "",
+      email: "",
+      receiverName: "",
+      address: "",
+      landmark: "",
+      pincode: "",
+      area: "",
+      city: "",
+      state: "",
+      boxes: [{ id: `box-${uid()}`, length: "", height: "", width: "" }],
+      invoices: [],
+      errors: {},
     }),
 
-  // Box management methods
   addBox: () =>
-    set((state) => ({
+    set((s) => ({
       boxes: [
-        ...state.boxes,
-        {
-          id: `box-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          length: "",
-          height: "",
-          width: "",
-        },
+        ...s.boxes,
+        { id: `box-${uid()}`, length: "", height: "", width: "" },
       ],
     })),
 
-  removeBox: (id: string) =>
-    set((state) => ({
-      boxes: state.boxes.filter((box) => box.id !== id),
+  removeBox: (id) =>
+    set((s) => ({ boxes: s.boxes.filter((b) => b.id !== id) })),
+
+  updateBox: (id, field, value) =>
+    set((s) => ({
+      boxes: s.boxes.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
     })),
 
-  updateBox: (id: string, field: keyof Box, value: string) =>
-    set((state) => ({
-      boxes: state.boxes.map((box) =>
-        box.id === id ? { ...box, [field]: value } : box,
-      ),
-    })),
-
-  // Invoice management methods
   addInvoice: () =>
-    set((state) => ({
+    set((s) => ({
       invoices: [
-        ...state.invoices,
+        ...s.invoices,
         {
-          id: `invoice-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          invoiceType: "",
-          invoiceNo: "",
-          invoiceDate: "",
-          invoiceAmt: "",
-          currency: "INR",
-          taxAmount: "",
-          discountAmount: "",
-          totalAmount: "",
+          id: `inv-${uid()}`,
           eWayBillNo: "",
+          invoiceNo: "",
+          invoiceAmt: "",
+          invoiceDate: "",
           attachment: null,
-          sellerGSTIN: "",
-          buyerGSTIN: "",
-          hsnCode: "",
-          sacCode: "",
-          paymentTerms: "",
+          attachmentUrl: "",
         },
       ],
     })),
 
-  removeInvoice: (id: string) =>
-    set((state) => ({
-      invoices: state.invoices.filter((invoice) => invoice.id !== id),
-    })),
+  removeInvoice: (id) =>
+    set((s) => ({ invoices: s.invoices.filter((inv) => inv.id !== id) })),
 
-  updateInvoice: (
-    id: string,
-    field: keyof Invoice,
-    value: Invoice[keyof Invoice],
-  ) =>
-    set((state) => ({
-      invoices: state.invoices.map((invoice) =>
-        invoice.id === id ? { ...invoice, [field]: value } : invoice,
+  updateInvoice: (id, field, value) =>
+    set((s) => ({
+      invoices: s.invoices.map((inv) =>
+        inv.id === id ? { ...inv, [field]: value } : inv,
       ),
     })),
+
+  validateDocket: () => {
+    const s = get();
+    const errs: FormErrors = {};
+    if (!s.referenceNo.trim()) errs.referenceNo = "Reference No is required";
+    if (!s.actualWeight.trim() || parseFloat(s.actualWeight) <= 0)
+      errs.actualWeight = "Valid weight is required";
+    if (!s.pickupAddress) errs.pickupAddress = "Pickup address is required";
+    if (!s.productDescription.trim())
+      errs.productDescription = "Product description is required";
+    set({ errors: errs });
+    return Object.keys(errs).length === 0;
+  },
+
+  validateDelivery: () => {
+    const s = get();
+    const errs: FormErrors = {};
+    if (!s.phoneNumber.trim()) errs.phoneNumber = "Phone number is required";
+    if (!s.receiverName.trim()) errs.receiverName = "Receiver name is required";
+    if (!s.address.trim()) errs.address = "Address is required";
+    if (!s.pincode.trim() || !/^\d{6}$/.test(s.pincode))
+      errs.pincode = "Valid 6-digit pincode is required";
+    if (!s.city.trim()) errs.city = "City is required";
+    if (!s.state.trim()) errs.state = "State is required";
+    set({ errors: errs });
+    return Object.keys(errs).length === 0;
+  },
 }));

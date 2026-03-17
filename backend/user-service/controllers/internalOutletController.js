@@ -76,6 +76,72 @@ async function getOutletByUser(req, res) {
   }
 }
 
+/**
+ * Get outlet badge by outletId directly
+ * Called by partner-service when admin/superadmin creates shipment on behalf of an outlet
+ * Requires X-Internal-Request header
+ *
+ * GET /api/v1/internal/outlets/:outletId/badge
+ * Response: { found: boolean, outletId?: uuid, badge?: OutletBadge }
+ */
+async function getOutletBadgeById(req, res) {
+  try {
+    const { outletId } = req.params;
+
+    if (!outletId) {
+      return res
+        .status(400)
+        .json(APIResponse.error("outletId parameter is required", 400));
+    }
+
+    const outlet = await prisma.outlet.findUnique({
+      where: { id: outletId },
+      select: {
+        id: true,
+        badge: true,
+        name: true,
+        isActive: true,
+      },
+    });
+
+    if (!outlet) {
+      logger.debug("No outlet found for outletId", { outletId });
+      return res
+        .status(200)
+        .json(
+          APIResponse.success({ found: false }, "No outlet found for this ID"),
+        );
+    }
+
+    logger.debug("Outlet badge resolved by ID", {
+      outletId: outlet.id,
+      badge: outlet.badge,
+    });
+
+    return res.status(200).json(
+      APIResponse.success(
+        {
+          found: true,
+          outletId: outlet.id,
+          badge: outlet.badge,
+          outletName: outlet.name,
+          isActive: outlet.isActive,
+        },
+        "Outlet badge resolved successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Error resolving outlet by outletId", {
+      error: error.message,
+      outletId: req.params.outletId,
+    });
+    return res
+      .status(500)
+      .json(APIResponse.error("Failed to resolve outlet badge", 500));
+  }
+}
+
 module.exports = {
   getOutletByUser,
+  getOutletBadgeById,
 };

@@ -230,4 +230,33 @@ router.get(
   internalOutletController.getOutletByUser,
 );
 
+/**
+ * @swagger
+ * /api/v1/internal/outlets/{outletId}/badge:
+ *   get:
+ *     summary: Get outlet badge by outlet ID
+ *     description: Resolves badge tier directly by outletId. Used when admin creates shipment on behalf of an outlet.
+ *     tags: [Internal]
+ *     security:
+ *       - internalAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The outlet ID
+ *     responses:
+ *       200:
+ *         description: Outlet badge resolved
+ *       403:
+ *         description: Unauthorized - missing internal request header
+ */
+router.get(
+  "/outlets/:outletId/badge",
+  requireInternalRequest,
+  internalOutletController.getOutletBadgeById,
+);
+
 module.exports = router;

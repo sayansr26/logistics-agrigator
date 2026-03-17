@@ -9,28 +9,33 @@ datasource db {
 }
 
 model Shipment {
-  id            String         @id @default(uuid()) @db.Uuid
-  orderId       String         @map("order_id") @db.VarChar(100)
-  clientId      String?        @map("client_id") @db.Uuid
-  userId        String         @map("user_id") @db.Uuid
-  status        ShipmentStatus @default(CREATED)
-  paymentType   PaymentType    @default(PREPAID) @map("payment_type")
-  paymentStatus PaymentStatus  @default(PENDING) @map("payment_status")
-  codAmount     Decimal?       @map("cod_amount") @db.Decimal(10, 2)
-  totalCost     Decimal        @map("total_cost") @db.Decimal(10, 2)
-  currency      String         @default("INR") @db.VarChar(3)
+  id                String         @id @default(uuid()) @db.Uuid
+  orderId           String         @map("order_id") @db.VarChar(100)
+  clientId          String?        @map("client_id") @db.Uuid
+  userId            String         @map("user_id") @db.Uuid
+  outletId          String?        @map("outlet_id") @db.Uuid
+  shipmentType      String         @default("B2C") @map("shipment_type") @db.VarChar(10)
+  shipmentDirection String         @default("FORWARD") @map("shipment_direction") @db.VarChar(10)
+  status            ShipmentStatus @default(CREATED)
+  bookingStatus     String         @default("PENDING") @map("booking_status") @db.VarChar(30)
+  paymentType       PaymentType    @default(PREPAID) @map("payment_type")
+  paymentStatus     PaymentStatus  @default(PENDING) @map("payment_status")
+  codAmount         Decimal?       @map("cod_amount") @db.Decimal(10, 2)
+  totalCost         Decimal        @map("total_cost") @db.Decimal(10, 2)
+  currency          String         @default("INR") @db.VarChar(3)
 
-  // Pickup Address (JSON for flexibility)
-  pickupName     String  @map("pickup_name") @db.VarChar(100)
-  pickupPhone    String  @map("pickup_phone") @db.VarChar(15)
-  pickupEmail    String? @map("pickup_email") @db.VarChar(255)
-  pickupLine1    String  @map("pickup_line1") @db.VarChar(255)
-  pickupLine2    String? @map("pickup_line2") @db.VarChar(255)
-  pickupLandmark String? @map("pickup_landmark") @db.VarChar(100)
-  pickupCity     String  @map("pickup_city") @db.VarChar(50)
-  pickupState    String  @map("pickup_state") @db.VarChar(50)
-  pickupPincode  String  @map("pickup_pincode") @db.VarChar(6)
-  pickupCountry  String  @default("India") @map("pickup_country") @db.VarChar(50)
+  // Pickup Address
+  pickupAddressId String? @map("pickup_address_id") @db.Uuid
+  pickupName      String  @map("pickup_name") @db.VarChar(100)
+  pickupPhone     String  @map("pickup_phone") @db.VarChar(15)
+  pickupEmail     String? @map("pickup_email") @db.VarChar(255)
+  pickupLine1     String  @map("pickup_line1") @db.VarChar(255)
+  pickupLine2     String? @map("pickup_line2") @db.VarChar(255)
+  pickupLandmark  String? @map("pickup_landmark") @db.VarChar(100)
+  pickupCity      String  @map("pickup_city") @db.VarChar(50)
+  pickupState     String  @map("pickup_state") @db.VarChar(50)
+  pickupPincode   String  @map("pickup_pincode") @db.VarChar(6)
+  pickupCountry   String  @default("India") @map("pickup_country") @db.VarChar(50)
 
   // Delivery Address
   deliveryName     String  @map("delivery_name") @db.VarChar(100)
@@ -44,14 +49,35 @@ model Shipment {
   deliveryPincode  String  @map("delivery_pincode") @db.VarChar(6)
   deliveryCountry  String  @default("India") @map("delivery_country") @db.VarChar(50)
 
+  // RTO (Return To Origin) Address
+  rtoSameAsPickup Boolean @default(true) @map("rto_same_as_pickup")
+  rtoName         String? @map("rto_name") @db.VarChar(100)
+  rtoPhone        String? @map("rto_phone") @db.VarChar(15)
+  rtoLine1        String? @map("rto_line1") @db.VarChar(255)
+  rtoLine2        String? @map("rto_line2") @db.VarChar(255)
+  rtoLandmark     String? @map("rto_landmark") @db.VarChar(100)
+  rtoCity         String? @map("rto_city") @db.VarChar(50)
+  rtoState        String? @map("rto_state") @db.VarChar(50)
+  rtoPincode      String? @map("rto_pincode") @db.VarChar(6)
+  rtoCountry      String? @default("India") @map("rto_country") @db.VarChar(50)
+
+  // Product Information
+  productDescription String?  @map("product_description") @db.Text
+  hsnCode            String?  @map("hsn_code") @db.VarChar(20)
+  gstPercentage      Decimal? @map("gst_percentage") @db.Decimal(5, 2)
+
   // Package Details
-  weight      Decimal  @db.Decimal(8, 3) // kg with 3 decimal places
-  length      Decimal  @db.Decimal(8, 2) // cm
-  width       Decimal  @db.Decimal(8, 2) // cm
-  height      Decimal  @db.Decimal(8, 2) // cm
-  description String?  @db.VarChar(500)
-  value       Decimal? @db.Decimal(12, 2) // package value for insurance
-  fragile     Boolean  @default(false)
+  numberOfBoxes     Int      @default(1) @map("number_of_boxes")
+  weight            Decimal  @db.Decimal(8, 3)
+  length            Decimal  @db.Decimal(8, 2)
+  width             Decimal  @db.Decimal(8, 2)
+  height            Decimal  @db.Decimal(8, 2)
+  volumetricWeight  Decimal? @map("volumetric_weight") @db.Decimal(8, 3)
+  chargeableWeight  Decimal? @map("chargeable_weight") @db.Decimal(8, 3)
+  volumetricDivisor Decimal? @map("volumetric_divisor") @db.Decimal(10, 2)
+  description       String?  @db.VarChar(500)
+  value             Decimal? @db.Decimal(12, 2)
+  fragile           Boolean  @default(false)
 
   // Service Details
   serviceType         ServiceType @default(STANDARD) @map("service_type")
@@ -63,11 +89,23 @@ model Shipment {
   awbNumber         String? @map("awb_number") @db.VarChar(50)
   partnerShipmentId String? @map("partner_shipment_id") @db.VarChar(100)
 
+  // Quote Snapshot - stores the selected quote at creation time
+  quoteSnapshot Json? @map("quote_snapshot")
+
   // Wallet Integration
   walletTransactionId String?  @map("wallet_transaction_id") @db.VarChar(100)
   paymentReference    String?  @map("payment_reference") @db.VarChar(100)
   refundTransactionId String?  @map("refund_transaction_id") @db.VarChar(100)
   refundAmount        Decimal? @map("refund_amount") @db.Decimal(10, 2)
+
+  // Dispute / Re-rate
+  disputeStatus  String?  @map("dispute_status") @db.VarChar(30)
+  disputedWeight Decimal? @map("disputed_weight") @db.Decimal(8, 3)
+  disputedLength Decimal? @map("disputed_length") @db.Decimal(8, 2)
+  disputedWidth  Decimal? @map("disputed_width") @db.Decimal(8, 2)
+  disputedHeight Decimal? @map("disputed_height") @db.Decimal(8, 2)
+  disputedCost   Decimal? @map("disputed_cost") @db.Decimal(10, 2)
+  holdReason     String?  @map("hold_reason") @db.VarChar(500)
 
   // Dates
   estimatedPickup    DateTime? @map("estimated_pickup")
@@ -82,22 +120,27 @@ model Shipment {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  trackingEvents TrackingEvent[]
-  ndrCases       NDRCase[]
+  trackingEvents       TrackingEvent[]
+  ndrCases             NDRCase[]
+  financialAdjustments ShipmentFinancialAdjustment[]
+  invoices             ShipmentInvoice[]
+  boxes                ShipmentBox[]
 
   // Pickup schedule relation
   pickupScheduleId String?         @map("pickup_schedule_id") @db.Uuid
   pickupSchedule   PickupSchedule? @relation(fields: [pickupScheduleId], references: [id])
 
   @@unique([orderId, clientId])
-  // Indexes for performance
   @@index([clientId, status, createdAt])
   @@index([userId, createdAt])
+  @@index([outletId, createdAt])
   @@index([orderId, clientId])
   @@index([awbNumber])
   @@index([status])
+  @@index([bookingStatus])
   @@index([partnerId])
   @@index([pickupScheduleId])
+  @@index([disputeStatus])
   @@map("shipments")
 }
 
@@ -118,6 +161,37 @@ model TrackingEvent {
   @@index([shipmentId, timestamp])
   @@index([status])
   @@map("tracking_events")
+}
+
+model ShipmentInvoice {
+  id            String   @id @default(uuid()) @db.Uuid
+  shipmentId    String   @map("shipment_id") @db.Uuid
+  eWayBillNo    String?  @map("eway_bill_no") @db.VarChar(50)
+  invoiceNo     String   @map("invoice_no") @db.VarChar(100)
+  invoiceAmt    Decimal  @map("invoice_amt") @db.Decimal(12, 2)
+  invoiceDate   DateTime @map("invoice_date")
+  attachmentUrl String?  @map("attachment_url") @db.VarChar(500)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("shipment_invoices")
+}
+
+model ShipmentBox {
+  id         String   @id @default(uuid()) @db.Uuid
+  shipmentId String   @map("shipment_id") @db.Uuid
+  boxNumber  Int      @map("box_number")
+  length     Decimal  @db.Decimal(8, 2)
+  width      Decimal  @db.Decimal(8, 2)
+  height     Decimal  @db.Decimal(8, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("shipment_boxes")
 }
 
 model AuditLog {
@@ -176,6 +250,33 @@ model ServiceabilityCache {
   @@map("serviceability_cache")
 }
 
+model ShipmentFinancialAdjustment {
+  id             String  @id @default(uuid()) @db.Uuid
+  shipmentId     String  @map("shipment_id") @db.Uuid
+  adjustmentType String  @map("adjustment_type") @db.VarChar(30)
+  reason         String  @db.VarChar(500)
+  oldAmount      Decimal @map("old_amount") @db.Decimal(10, 2)
+  newAmount      Decimal @map("new_amount") @db.Decimal(10, 2)
+  difference     Decimal @db.Decimal(10, 2)
+
+  refundTransactionId String? @map("refund_transaction_id") @db.VarChar(100)
+  chargeTransactionId String? @map("charge_transaction_id") @db.VarChar(100)
+
+  disputedWeight Decimal? @map("disputed_weight") @db.Decimal(8, 3)
+  disputedLength Decimal? @map("disputed_length") @db.Decimal(8, 2)
+  disputedWidth  Decimal? @map("disputed_width") @db.Decimal(8, 2)
+  disputedHeight Decimal? @map("disputed_height") @db.Decimal(8, 2)
+
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@index([adjustmentType])
+  @@map("shipment_financial_adjustments")
+}
+
 // Enums
 enum ShipmentStatus {
   CREATED
@@ -187,6 +288,7 @@ enum ShipmentStatus {
   CANCELLED
   RTO
   NDR
+  HOLD
 }
 
 enum PaymentType {

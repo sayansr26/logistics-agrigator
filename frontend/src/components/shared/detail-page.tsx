@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 interface DetailHeaderProps {
   title: string;
   subtitle?: string;
-  backHref: string;
+  backHref?: string;
   backLabel?: string;
   status?: {
     label: string;
@@ -60,13 +60,15 @@ export function DetailHeader({
   return (
     <div className="flex items-start justify-between">
       <div className="space-y-1">
-        <Link
-          href={backHref}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          {backLabel}
-        </Link>
+        {backHref && (
+          <Link
+            href={backHref}
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            {backLabel}
+          </Link>
+        )}
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {status && (

@@ -10,41 +10,124 @@ import { baseApi } from "../baseApi";
 // Request/Response Interfaces
 // ===========================
 
+interface AddressPayload {
+  name: string;
+  phone: string;
+  email?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country?: string;
+}
+
+interface InvoicePayload {
+  eWayBillNo?: string;
+  invoiceNo: string;
+  invoiceAmt: number;
+  invoiceDate: string;
+  attachmentUrl?: string;
+}
+
+interface BoxPayload {
+  boxNumber: number;
+  length: number;
+  width: number;
+  height: number;
+}
+
 interface CreateShipmentRequest {
-  clientId: string;
-  originPincode: string;
-  destinationPincode: string;
-  weight: number;
-  dimensions?: {
-    length: number;
-    width: number;
-    height: number;
+  orderId: string;
+  shipmentType?: "B2B" | "B2C";
+  shipmentDirection?: "FORWARD" | "REVERSE";
+  outletId?: string;
+  outletUserId?: string;
+  pickupAddressId?: string;
+  pickupAddress: AddressPayload;
+  deliveryAddress: AddressPayload;
+  rtoSameAsPickup?: boolean;
+  rtoAddress?: AddressPayload;
+  productDescription?: string;
+  hsnCode?: string;
+  gstPercentage?: number;
+  packageDetails: {
+    weight: number;
+    dimensions: { length: number; width: number; height: number };
+    description?: string;
+    value?: number;
+    fragile?: boolean;
   };
-  paymentMode: "prepaid" | "cod";
+  numberOfBoxes?: number;
+  boxes?: BoxPayload[];
+  invoices?: InvoicePayload[];
+  paymentType?: "PREPAID" | "COD";
   codAmount?: number;
-  shipmentValue: number;
-  partnerId?: string;
-  packageType?: string;
-  description?: string;
+  serviceType?: "STANDARD" | "EXPRESS" | "ECONOMY";
+  specialInstructions?: string;
+  selectedPartnerId?: string;
+  quoteSnapshot?: PartnerQuote;
+}
+
+interface ShipmentQuoteRequest {
+  fromPincode: string;
+  toPincode: string;
+  weight: number;
+  numberOfBoxes?: number;
+  dimensions: { length: number; width: number; height: number };
+  serviceType?: "STANDARD" | "EXPRESS" | "ECONOMY";
+  paymentType?: "PREPAID" | "COD";
+  codAmount?: number;
+  shipmentType?: "B2B" | "B2C";
+  declaredValue?: number;
   isFragile?: boolean;
-  sender?: {
+  outletId?: string;
+  sortBy?: "cheapest" | "highest";
+}
+
+interface PartnerQuote {
+  partnerId: string;
+  partnerName: string;
+  totalAmount: number;
+  deliveryDays: number | null;
+  chargeBreakdown?: Array<{
     name: string;
-    phone: string;
-    email?: string;
-    address: string;
-    pincode: string;
-    city: string;
-    state: string;
+    amount: number;
+    type?: string | null;
+    calculation?: string | null;
+  }>;
+  discount?: {
+    packageId: string;
+    packageName: string;
+    badge: string;
+    originalTotal: number;
+    totalDiscount: number;
+    finalTotal: number;
+  } | null;
+  volumetricDivisor: number;
+  volumetricWeight: number;
+  chargeableWeight: number;
+  actualWeight: number;
+  serviceable: boolean;
+}
+
+interface ShipmentQuotesResponse {
+  status: string;
+  message: string;
+  data: {
+    quotes: PartnerQuote[];
+    recommended: PartnerQuote | null;
+    params: ShipmentQuoteRequest;
   };
-  receiver?: {
-    name: string;
-    phone: string;
-    email?: string;
-    address: string;
-    pincode: string;
-    city: string;
-    state: string;
-  };
+}
+
+interface RerateShipmentRequest {
+  disputedWeight?: number;
+  disputedLength?: number;
+  disputedWidth?: number;
+  disputedHeight?: number;
+  reason: string;
 }
 
 interface UpdateShipmentRequest {
@@ -63,26 +146,90 @@ interface UpdateShipmentRequest {
 
 interface Shipment {
   id: string;
-  awbNumber: string;
-  clientId: string;
-  partnerId: string;
+  orderId: string;
+  outletId?: string;
+  shipmentType?: string;
+  awbNumber?: string;
+  clientId?: string;
+  partnerId?: string;
+  partnerName?: string;
   status: string;
-  originPincode: string;
-  destinationPincode: string;
-  weight: number;
-  dimensions?: {
-    length: number;
-    width: number;
-    height: number;
-  };
-  paymentMode: string;
+  bookingStatus?: string;
+  paymentType?: string;
+  paymentStatus?: string;
   codAmount?: number;
-  shipmentValue: number;
-  packageType?: string;
-  description?: string;
-  isFragile?: boolean;
+  totalCost: number;
+  currency?: string;
+  serviceType?: string;
+  weight?: number;
+  chargeableWeight?: number;
+  volumetricWeight?: number;
+  estimatedDelivery?: string;
+  actualDelivery?: string;
+  disputeStatus?: string;
+  holdReason?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+
+  // Pickup address (list + detail)
+  pickupName?: string;
+  pickupPhone?: string;
+  pickupEmail?: string;
+  pickupLine1?: string;
+  pickupLine2?: string;
+  pickupLandmark?: string;
+  pickupCity?: string;
+  pickupState?: string;
+  pickupPincode?: string;
+  pickupCountry?: string;
+
+  // Delivery address (list + detail)
+  deliveryName?: string;
+  deliveryPhone?: string;
+  deliveryEmail?: string;
+  deliveryLine1?: string;
+  deliveryLine2?: string;
+  deliveryLandmark?: string;
+  deliveryCity?: string;
+  deliveryState?: string;
+  deliveryPincode?: string;
+  deliveryCountry?: string;
+
+  // Package (detail only)
+  numberOfBoxes?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  description?: string;
+  value?: number;
+  fragile?: boolean;
+  specialInstructions?: string;
+
+  // Partner (detail only)
+  partnerShipmentId?: string;
+  quoteSnapshot?: Record<string, unknown>;
+
+  // Wallet (detail only)
+  walletTransactionId?: string;
+  paymentReference?: string;
+  refundTransactionId?: string;
+  refundAmount?: number;
+
+  // Dispute (detail only)
+  disputedWeight?: number;
+  disputedLength?: number;
+  disputedWidth?: number;
+  disputedHeight?: number;
+  disputedCost?: number;
+
+  // Dates (detail only)
+  estimatedPickup?: string;
+  actualPickup?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+
+  // Relations (detail only)
+  trackingEvents?: TrackingEvent[];
 }
 
 interface ShipmentResponse {
@@ -101,18 +248,22 @@ interface ShipmentsListResponse {
     pagination?: {
       page: number;
       limit: number;
-      total: number;
+      totalCount: number;
       totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
     };
   };
 }
 
 interface TrackingEvent {
   id: string;
-  shipmentId: string;
+  shipmentId?: string;
   status: string;
   location?: string;
-  description: string;
+  message?: string;
+  description?: string;
+  source?: string;
   timestamp: string;
 }
 
@@ -120,8 +271,7 @@ interface TrackingResponse {
   status: string;
   message: string;
   data: {
-    shipment: Shipment;
-    events: TrackingEvent[];
+    shipment: Shipment & { trackingEvents: TrackingEvent[] };
   };
 }
 
@@ -320,6 +470,38 @@ export const shipmentApi = baseApi.injectEndpoints({
         responseHandler: (response) => response.blob(),
       }),
     }),
+
+    /**
+     * Get Shipment Quotes - Fetch partner quotes for staged creation flow
+     */
+    getShipmentQuotes: builder.mutation<
+      ShipmentQuotesResponse,
+      ShipmentQuoteRequest
+    >({
+      query: (quoteData) => ({
+        url: "/api/v1/shipments/quotes",
+        method: "POST",
+        body: quoteData,
+      }),
+    }),
+
+    /**
+     * Rerate Shipment - Dispute re-rate with courier-validated dimensions
+     */
+    rerateShipment: builder.mutation<
+      ShipmentResponse,
+      { id: string; data: RerateShipmentRequest }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/v1/shipments/${id}/rerate`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Shipment", id },
+        { type: "Shipment", id: "LIST" },
+      ],
+    }),
   }),
 });
 
@@ -338,6 +520,8 @@ export const {
   useSchedulePickupMutation,
   useGetPickupSlotsQuery,
   useDownloadLabelMutation,
+  useGetShipmentQuotesMutation,
+  useRerateShipmentMutation,
 } = shipmentApi;
 
 // ===========================
@@ -357,4 +541,11 @@ export type {
   PickupRequest,
   PickupResponse,
   GetShipmentsParams,
+  ShipmentQuoteRequest,
+  ShipmentQuotesResponse,
+  PartnerQuote,
+  RerateShipmentRequest,
+  AddressPayload,
+  InvoicePayload,
+  BoxPayload,
 };

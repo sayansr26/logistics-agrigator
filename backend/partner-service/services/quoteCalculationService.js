@@ -23,8 +23,7 @@ let _outletContextService = null;
 
 const getDistanceZoneService = () => {
   if (!_distanceZoneService) {
-    const DistanceZoneService = require("./distanceZoneService");
-    _distanceZoneService = new DistanceZoneService();
+    _distanceZoneService = require("./distanceZoneService");
   }
   return _distanceZoneService;
 };
@@ -38,8 +37,7 @@ const getChargesRuleCalcService = () => {
 
 const getZoneCoverageValidationService = () => {
   if (!_zoneCoverageValidationService) {
-    const ZoneCoverageValidationService = require("./zoneCoverageValidationService");
-    _zoneCoverageValidationService = new ZoneCoverageValidationService();
+    _zoneCoverageValidationService = require("./zoneCoverageValidationService");
   }
   return _zoneCoverageValidationService;
 };
@@ -70,11 +68,27 @@ const CACHE_TTL = 300; // 5 minutes for quote results
 // ==========================================
 
 /**
- * Generate cache key for quote request
+ * Generate cache key for quote request including all price-driving inputs
  */
 function generateCacheKey(params) {
-  const { fromPincode, toPincode, weight, paymentType } = params;
-  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}`;
+  const {
+    fromPincode,
+    toPincode,
+    weight,
+    paymentType,
+    codAmount = 0,
+    declaredValue = 0,
+    dimensions,
+    partnerId,
+    sortBy = "cheapest",
+  } = params;
+
+  const dimStr = dimensions
+    ? `${dimensions.length}x${dimensions.width}x${dimensions.height}`
+    : "0x0x0";
+
+  const fragile = params.isFragile ? "1" : "0";
+  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:${partnerId || "all"}:${sortBy}:f${fragile}`;
 }
 
 /**
@@ -427,6 +441,8 @@ async function calculateRates(params) {
     paymentType = "PREPAID",
     codAmount = 0,
     declaredValue = 0,
+    isFragile = false,
+    outletId = null,
     partnerId,
     sortBy = "cheapest",
     userContext,
@@ -438,13 +454,37 @@ async function calculateRates(params) {
     weight,
     paymentType,
     partnerId,
+    outletId,
   });
 
-  // Resolve outlet badge if user is an outlet user
+  // Resolve outlet badge — supports two scenarios:
+  // 1. outletId explicitly provided (admin creating shipment on behalf of outlet)
+  // 2. userContext.role === "outlet" (outlet user creating their own shipment)
   let outletBadge = null;
-  const isOutletUser = userContext && userContext.role === "outlet";
 
-  if (isOutletUser && userContext.userId) {
+  if (outletId) {
+    try {
+      const outletContextService = getOutletContextService();
+      const outletData =
+        await outletContextService.resolveOutletBadgeById(outletId);
+      if (outletData && outletData.badge) {
+        outletBadge = outletData.badge;
+        logger.debug("Outlet badge resolved by outletId for quote", {
+          outletId,
+          badge: outletBadge,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        "Failed to resolve outlet badge by outletId, continuing without discounts",
+        { outletId, error: error.message },
+      );
+    }
+  } else if (
+    userContext &&
+    userContext.role === "outlet" &&
+    userContext.userId
+  ) {
     try {
       const outletContextService = getOutletContextService();
       const outletData = await outletContextService.resolveOutletBadge(
@@ -452,7 +492,7 @@ async function calculateRates(params) {
       );
       if (outletData && outletData.badge) {
         outletBadge = outletData.badge;
-        logger.debug("Outlet badge resolved for quote", {
+        logger.debug("Outlet badge resolved by userId for quote", {
           userId: userContext.userId,
           badge: outletBadge,
         });
@@ -460,9 +500,7 @@ async function calculateRates(params) {
     } catch (error) {
       logger.warn(
         "Failed to resolve outlet badge, continuing without discounts",
-        {
-          error: error.message,
-        },
+        { error: error.message },
       );
     }
   }
@@ -473,6 +511,11 @@ async function calculateRates(params) {
     toPincode,
     weight,
     paymentType,
+    codAmount,
+    declaredValue,
+    dimensions,
+    partnerId,
+    sortBy,
   });
   const redis = getRedisClient();
   const skipCache = !!outletBadge;
@@ -558,6 +601,7 @@ async function calculateRates(params) {
         const chargeContext = {
           effectiveWeight,
           invoiceValue: declaredValue,
+          isFragile,
           distanceMilestoneId: zoneResult.milestone?.id || null,
           pickupGeoZoneIds,
           deliveryGeoZoneIds,
@@ -707,7 +751,7 @@ async function calculateRates(params) {
   // Cache the result (skip when badge discounts are applied)
   if (redis && !partnerId && !skipCache && serviceableRates.length > 0) {
     try {
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+      await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
     } catch (error) {
       logger.warn("Cache write error", { error: error.message });
     }

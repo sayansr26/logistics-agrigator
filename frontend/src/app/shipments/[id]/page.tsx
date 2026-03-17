@@ -1,0 +1,806 @@
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useGetShipmentByIdQuery,
+  useCancelShipmentMutation,
+  useDownloadLabelMutation,
+} from "@/store/api/endpoints/shipmentApi";
+import type { TrackingEvent } from "@/store/api/endpoints/shipmentApi";
+import {
+  Package,
+  Truck,
+  MapPin,
+  Clock,
+  IndianRupee,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Plus,
+  Download,
+  MessageSquare,
+  Phone,
+  Mail,
+  ChevronRight,
+  Info,
+  Shield,
+  FileText,
+  Upload,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import Link from "next/link";
+
+const STATUS_COLORS: Record<string, string> = {
+  CREATED: "bg-gray-100 text-gray-800",
+  BOOKED: "bg-blue-100 text-blue-800",
+  PICKED_UP: "bg-indigo-100 text-indigo-800",
+  IN_TRANSIT: "bg-yellow-100 text-yellow-800",
+  OUT_FOR_DELIVERY: "bg-orange-100 text-orange-800",
+  DELIVERED: "bg-green-100 text-green-800",
+  CANCELLED: "bg-red-100 text-red-800",
+  RTO: "bg-pink-100 text-pink-800",
+  NDR: "bg-purple-100 text-purple-800",
+  HOLD: "bg-amber-100 text-amber-800",
+};
+
+const TRACKING_STEPS = [
+  { key: "CREATED", label: "Created", icon: Package },
+  { key: "BOOKED", label: "Booked", icon: Package },
+  { key: "PICKED_UP", label: "Picked Up", icon: Truck },
+  { key: "IN_TRANSIT", label: "In Transit", icon: Truck },
+  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: Truck },
+  { key: "DELIVERED", label: "Delivered", icon: CheckCircle },
+];
+
+const STATUS_INDEX: Record<string, number> = {
+  CREATED: 0,
+  BOOKED: 1,
+  PICKED_UP: 2,
+  IN_TRANSIT: 3,
+  OUT_FOR_DELIVERY: 4,
+  DELIVERED: 5,
+  CANCELLED: 0,
+  RTO: 3,
+  NDR: 4,
+  HOLD: 3,
+};
+
+function formatDate(d?: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateTime(d?: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(n?: number | null) {
+  if (n == null) return "₹0";
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatStatus(s: string) {
+  return s
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+export default function ShipmentDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+
+  const { data, isLoading, error, refetch } = useGetShipmentByIdQuery(id, {
+    skip: !id,
+  });
+  const [cancelShipment, { isLoading: cancelling }] =
+    useCancelShipmentMutation();
+  const [downloadLabel, { isLoading: downloading }] =
+    useDownloadLabelMutation();
+
+  const shipment = data?.data?.shipment;
+
+  const handleCancel = async () => {
+    if (!confirm("Are you sure you want to cancel this shipment?")) return;
+    try {
+      await cancelShipment(id).unwrap();
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  const handleDownloadLabel = async () => {
+    try {
+      const blob = await downloadLabel(id).unwrap();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `label-${shipment?.awbNumber || id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-7xl mx-auto space-y-6 p-6">
+          <Skeleton className="h-12 w-96" />
+          <Skeleton className="h-48 w-full" />
+          <div className="grid grid-cols-3 gap-6">
+            <Skeleton className="h-64 col-span-2" />
+            <Skeleton className="h-64" />
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error || !shipment) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto p-6">
+          <Card>
+            <CardContent className="p-12 text-center">
+              <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                {error ? "Failed to load shipment" : "Shipment Not Found"}
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                {error
+                  ? "Check your connection and try again."
+                  : "The shipment you're looking for doesn't exist."}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button variant="outline" onClick={() => router.back()}>
+                  Go Back
+                </Button>
+                {error && (
+                  <Button onClick={() => refetch()}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Retry
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const currentIndex = STATUS_INDEX[shipment.status] ?? 0;
+  const isCancelledOrSpecial = ["CANCELLED", "RTO", "NDR", "HOLD"].includes(
+    shipment.status,
+  );
+  const progressPercentage = isCancelledOrSpecial
+    ? 0
+    : ((currentIndex + 1) / TRACKING_STEPS.length) * 100;
+
+  const trackingEvents: TrackingEvent[] = shipment.trackingEvents || [];
+  const qs = shipment.quoteSnapshot as {
+    chargeBreakdown?: Array<{ name: string; amount: number }>;
+    discount?: {
+      packageName: string;
+      badge: string;
+      originalTotal: number;
+      totalDiscount: number;
+      finalTotal: number;
+    } | null;
+  } | null;
+  const chargeBreakdown = qs?.chargeBreakdown;
+  const quoteDiscount = qs?.discount;
+
+  const customBreadcrumbs = [
+    { title: "Dashboard", href: "/dashboard" },
+    { title: "Shipments", href: "/shipments" },
+    { title: `#${shipment.awbNumber || shipment.orderId}` },
+  ];
+
+  return (
+    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+              <Package className="h-8 w-8 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">
+                Shipment Details
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                AWB:{" "}
+                <span className="font-mono font-medium">
+                  {shipment.awbNumber || "Pending"}
+                </span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Order: {shipment.orderId} · Type:{" "}
+                {shipment.shipmentType || "B2C"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge
+              className={`${STATUS_COLORS[shipment.status] || ""} text-sm px-4 py-2`}
+            >
+              {formatStatus(shipment.status)}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Top Summary */}
+        <Card className="border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950">
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Package className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Tracking Number
+                    </div>
+                    <div className="text-2xl font-bold tracking-tight font-mono">
+                      {shipment.awbNumber || "Pending"}
+                    </div>
+                  </div>
+                </div>
+                {!isCancelledOrSpecial && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Delivery Progress
+                      </span>
+                      <span className="font-medium">
+                        {Math.round(progressPercentage)}%
+                      </span>
+                    </div>
+                    <Progress value={progressPercentage} className="h-2" />
+                    <div className="text-xs text-muted-foreground">
+                      {currentIndex + 1} of {TRACKING_STEPS.length} steps
+                      completed
+                    </div>
+                  </div>
+                )}
+                {isCancelledOrSpecial && (
+                  <div className="mt-2">
+                    <Badge className={STATUS_COLORS[shipment.status]}>
+                      {formatStatus(shipment.status)}
+                    </Badge>
+                    {shipment.holdReason && (
+                      <p className="text-sm text-amber-700 mt-1">
+                        Hold: {shipment.holdReason}
+                      </p>
+                    )}
+                    {shipment.cancellationReason && (
+                      <p className="text-sm text-red-700 mt-1">
+                        Reason: {shipment.cancellationReason}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="p-4 rounded-lg border bg-white/80 dark:bg-white/5 flex items-center gap-3">
+                  <MapPin className="h-4 w-4 text-green-600" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Route</div>
+                    <div className="font-medium text-xs">
+                      {shipment.pickupCity} → {shipment.deliveryCity}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-white/80 dark:bg-white/5 flex items-center gap-3">
+                  <Clock className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Created</div>
+                    <div className="text-xs font-medium">
+                      {formatDateTime(shipment.createdAt)}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-white/80 dark:bg-white/5 flex items-center gap-3">
+                  <IndianRupee className="h-4 w-4 text-purple-600" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">
+                      Total Cost
+                    </div>
+                    <div className="text-xs font-bold">
+                      {formatCurrency(shipment.totalCost)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main content */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            {/* Tracking Progress */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-blue-600" /> Tracking Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {TRACKING_STEPS.map((step, idx) => {
+                    const isCompleted =
+                      !isCancelledOrSpecial && idx <= currentIndex;
+                    const isCurrent =
+                      !isCancelledOrSpecial && idx === currentIndex;
+                    const Icon = step.icon;
+                    return (
+                      <div key={step.key} className="flex items-start gap-4">
+                        <div className="relative flex-shrink-0">
+                          <div
+                            className={`h-10 w-10 rounded-full flex items-center justify-center transition-all ${
+                              isCompleted
+                                ? "bg-gradient-to-br from-green-500 to-green-600 text-white"
+                                : "bg-gray-100 text-gray-400 dark:bg-gray-800"
+                            } ${isCurrent ? "ring-4 ring-blue-200 ring-offset-2" : ""}`}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle className="h-5 w-5" />
+                            ) : (
+                              <Icon className="h-5 w-5" />
+                            )}
+                          </div>
+                          {idx < TRACKING_STEPS.length - 1 && (
+                            <div
+                              className={`absolute top-10 left-1/2 -translate-x-1/2 w-0.5 h-12 ${
+                                isCompleted
+                                  ? "bg-green-500"
+                                  : "bg-gray-200 dark:bg-gray-700"
+                              }`}
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 pt-1">
+                          <div
+                            className={`font-medium ${isCompleted ? "text-foreground" : "text-muted-foreground"}`}
+                          >
+                            {step.label}
+                          </div>
+                          {isCurrent && (
+                            <div className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs dark:bg-blue-950 dark:text-blue-300">
+                              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />{" "}
+                              Current
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Route & Parties */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-purple-600" /> Route &amp;
+                  Parties
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-5 rounded-xl border bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Package className="h-5 w-5 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Pickup
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="font-semibold">{shipment.pickupName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {shipment.pickupLine1}
+                      </div>
+                      {shipment.pickupLine2 && (
+                        <div className="text-sm text-muted-foreground">
+                          {shipment.pickupLine2}
+                        </div>
+                      )}
+                      <div className="text-sm text-muted-foreground">
+                        {shipment.pickupCity}, {shipment.pickupState} -{" "}
+                        {shipment.pickupPincode}
+                      </div>
+                      {shipment.pickupPhone && (
+                        <div className="text-xs text-muted-foreground">
+                          {shipment.pickupPhone}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-5 rounded-xl border bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950">
+                    <div className="flex items-center gap-3 mb-3">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                        Delivery
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="font-semibold">
+                        {shipment.deliveryName}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {shipment.deliveryLine1}
+                      </div>
+                      {shipment.deliveryLine2 && (
+                        <div className="text-sm text-muted-foreground">
+                          {shipment.deliveryLine2}
+                        </div>
+                      )}
+                      <div className="text-sm text-muted-foreground">
+                        {shipment.deliveryCity}, {shipment.deliveryState} -{" "}
+                        {shipment.deliveryPincode}
+                      </div>
+                      {shipment.deliveryPhone && (
+                        <div className="text-xs text-muted-foreground">
+                          {shipment.deliveryPhone}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800">
+                    <div className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
+                      Weight
+                    </div>
+                    <div className="text-lg font-bold">
+                      {shipment.weight ?? "—"} kg
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800">
+                    <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1">
+                      Value
+                    </div>
+                    <div className="text-lg font-bold">
+                      {formatCurrency(shipment.value)}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 dark:bg-purple-950 dark:border-purple-800">
+                    <div className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-1">
+                      Dimensions
+                    </div>
+                    <div className="text-lg font-bold">
+                      {shipment.length && shipment.width && shipment.height
+                        ? `${shipment.length}×${shipment.width}×${shipment.height}`
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-700">
+                    <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Courier
+                    </div>
+                    <div className="text-lg font-bold">
+                      {shipment.partnerName || "Unassigned"}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Charges Summary */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <IndianRupee className="h-5 w-5 text-emerald-600" /> Charges
+                  Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {chargeBreakdown && chargeBreakdown.length > 0 ? (
+                    <div className="rounded-xl border overflow-hidden">
+                      <div className="divide-y">
+                        {chargeBreakdown.map((cb, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-5 py-3.5"
+                          >
+                            <span className="text-sm text-muted-foreground">
+                              {cb.name}
+                            </span>
+                            <span className="font-semibold tabular-nums">
+                              {formatCurrency(cb.amount)}
+                            </span>
+                          </div>
+                        ))}
+                        {quoteDiscount && (
+                          <div className="flex items-center justify-between px-5 py-3.5 bg-green-50 dark:bg-green-950/40">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 border-green-300 text-green-600"
+                              >
+                                {quoteDiscount.badge}
+                              </Badge>
+                              <span className="text-sm text-green-700 dark:text-green-400">
+                                {quoteDiscount.packageName}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-green-600 tabular-nums">
+                              -{formatCurrency(quoteDiscount.totalDiscount)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                      No charge breakdown available.
+                    </div>
+                  )}
+
+                  <div className="p-6 rounded-xl bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900 border-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-semibold">Total Amount</div>
+                      <div className="text-3xl font-bold">
+                        {formatCurrency(shipment.totalCost)}
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-2">
+                      Payment: {shipment.paymentType} · Status:{" "}
+                      {shipment.paymentStatus || "—"}
+                      {shipment.codAmount
+                        ? ` · COD: ${formatCurrency(shipment.codAmount)}`
+                        : ""}
+                    </div>
+                    {quoteDiscount && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Original: {formatCurrency(quoteDiscount.originalTotal)}{" "}
+                        · You saved{" "}
+                        {formatCurrency(quoteDiscount.totalDiscount)}
+                      </p>
+                    )}
+                  </div>
+
+                  {shipment.disputeStatus && (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-medium">
+                        <AlertTriangle className="h-4 w-4" /> Dispute:{" "}
+                        {shipment.disputeStatus}
+                      </div>
+                      {shipment.disputedCost && (
+                        <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
+                          Disputed Cost: {formatCurrency(shipment.disputedCost)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right column */}
+          <div className="space-y-6">
+            {/* Timeline */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-indigo-600" /> Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {trackingEvents.length > 0 ? (
+                  trackingEvents.map((evt, idx) => (
+                    <div
+                      key={evt.id || idx}
+                      className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                    >
+                      <div className="h-8 w-8 rounded-full flex items-center justify-center bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400">
+                        <CheckCircle className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">
+                          {formatStatus(evt.status)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {evt.message || evt.description || "—"}
+                        </div>
+                        {evt.location && (
+                          <div className="text-xs text-muted-foreground">
+                            {evt.location}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {formatDateTime(evt.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground text-sm">
+                    <Clock className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    No tracking events yet
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-blue-600" /> Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-auto py-3 px-4"
+                  onClick={handleDownloadLabel}
+                  disabled={downloading}
+                >
+                  {downloading ? (
+                    <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-3" />
+                  )}
+                  <div className="text-left">
+                    <div className="font-medium">Download Label</div>
+                    <div className="text-xs text-muted-foreground">
+                      PDF format
+                    </div>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-auto py-3 px-4"
+                  onClick={() => router.push(`/shipments/${id}/edit`)}
+                >
+                  <FileText className="h-4 w-4 mr-3" />
+                  <div className="text-left">
+                    <div className="font-medium">Edit Shipment</div>
+                    <div className="text-xs text-muted-foreground">
+                      Update status or details
+                    </div>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
+                  onClick={handleCancel}
+                  disabled={
+                    cancelling ||
+                    shipment.status === "CANCELLED" ||
+                    shipment.status === "DELIVERED"
+                  }
+                >
+                  {cancelling ? (
+                    <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                  ) : (
+                    <XCircle className="h-4 w-4 mr-3" />
+                  )}
+                  <div className="text-left">
+                    <div className="font-medium">Cancel Shipment</div>
+                    <div className="text-xs text-muted-foreground">
+                      Cancel and request refund
+                    </div>
+                  </div>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Shipment Info */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Info className="h-5 w-5 text-slate-600" /> Additional Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="text-sm space-y-2">
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Service</dt>
+                    <dd className="font-medium">
+                      {shipment.serviceType || "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Boxes</dt>
+                    <dd className="font-medium">
+                      {shipment.numberOfBoxes || 1}
+                    </dd>
+                  </div>
+                  {shipment.chargeableWeight && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">
+                        Chargeable Weight
+                      </dt>
+                      <dd className="font-medium">
+                        {shipment.chargeableWeight} kg
+                      </dd>
+                    </div>
+                  )}
+                  {shipment.volumetricWeight && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">
+                        Volumetric Weight
+                      </dt>
+                      <dd className="font-medium">
+                        {shipment.volumetricWeight} kg
+                      </dd>
+                    </div>
+                  )}
+                  {shipment.fragile && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Fragile</dt>
+                      <dd className="font-medium text-amber-600">Yes</dd>
+                    </div>
+                  )}
+                  {shipment.specialInstructions && (
+                    <div className="pt-2 border-t">
+                      <dt className="text-muted-foreground mb-1">
+                        Special Instructions
+                      </dt>
+                      <dd className="text-sm">
+                        {shipment.specialInstructions}
+                      </dd>
+                    </div>
+                  )}
+                  {shipment.estimatedDelivery && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Est. Delivery</dt>
+                      <dd className="font-medium">
+                        {formatDate(shipment.estimatedDelivery)}
+                      </dd>
+                    </div>
+                  )}
+                  {shipment.actualDelivery && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Actual Delivery</dt>
+                      <dd className="font-medium">
+                        {formatDate(shipment.actualDelivery)}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}

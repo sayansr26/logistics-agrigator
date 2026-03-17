@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: February 21, 2026
+> Development status and changelog | Last Updated: March 17, 2026
 
 ## Overall Project Status
 
@@ -55,17 +55,17 @@ Overall Project Progress          [███████████████
 - ✅ Zone mapping
 - ✅ Partner configuration
 - ✅ HMAC authentication
-- ✅ **Partner Channel Management** (January 15, 2026)
-  - ✅ Single/Multi-channel API configuration support
-  - ✅ Channel mode toggle (SINGLE/MULTI)
+- ✅ **Partner Channel Management** (January 15, 2026 / Updated March 7, 2026)
   - ✅ Multiple API endpoints per partner with priority
   - ✅ Channel CRUD operations (create, update, delete)
   - ✅ Active channel retrieval for API calls
-  - ✅ Channel mode switching with migration
   - ✅ Audit logging for all channel operations
-  - ✅ Frontend: Channel mode toggle in partner creation
-  - ✅ Frontend: Dynamic multi-channel form
-  - ✅ Frontend: RTK Query API endpoints
+  - ✅ Frontend: Dedicated Manage Channels page with hover-reveal actions
+  - ✅ Frontend: RTK Query API endpoints with proper tag invalidation
+  - ✅ **Channel mode auto-sync** — `channelMode` auto-computes from channel count (no manual toggle)
+  - ✅ **AggregatorType extensibility** — Changed from Prisma enum to `String @db.VarChar(50)` (no DB reset for new aggregators)
+  - ✅ **Aggregator validation** — Only DELHIVERY and BLUEDART allowed; NONE/CUSTOM removed
+  - ✅ **Removed**: `switchChannelMode` endpoint, channel mode toggle UI, partner wizard pages (`/partners/add`, `/partners/[id]/edit`)
 - ✅ **Pincode Type Service Charges** (January 2026)
   - ✅ Many-to-many relationship between pincode types and partners
   - ✅ Service charge CRUD operations
@@ -126,15 +126,24 @@ Overall Project Progress          [███████████████
   - Frontend: `phone` field added to User interface in authSlice and authApi
   - Sidebar: `outlet` role added to wallet nav item
 
-#### Shipment Service (90% Complete)
+#### Shipment Service (85% Complete)
 
 - ✅ Single order creation
 - ✅ AWB generation
 - ✅ Real-time tracking
 - ✅ Status updates
 - ✅ NDR management
-- ⏳ Bulk operations (in progress)
-- ⏳ Bulk label printing
+- ✅ **Shipment Creation Flow** (NEW - March 2026)
+  - ✅ End-to-end creation wizard: Docket → Dimensions → Delivery → Invoice → Review
+  - ✅ B2B/B2C multi-box support with invoice generation
+  - ✅ Partner quote calculation with charge breakdown + badge discounts
+  - ✅ Wallet payment integration (auto-debit on PREPAID shipments)
+  - ✅ `resolveOutletContext`: admin uses outlet phone, outlet uses JWT phone
+  - ✅ `paymentProcessingService`: calls wallet admin endpoints with `X-Internal-Request` header
+  - ✅ `quoteSnapshot` stores full charge breakdown + discount for shipment detail page
+  - ✅ Fragile item handling (conditional charge, frontend checkbox)
+- ⏳ Bulk operations (planned)
+- ⏳ Bulk label printing (planned)
 
 #### API Gateway (90% Complete)
 
@@ -190,11 +199,21 @@ Overall Project Progress          [███████████████
 
 #### In Progress
 
-- ⏳ Redux/RTK Query migration (65% complete)
-- ⏳ Outlet portal pages (my-shipments, my-addresses)
-- ⏳ Shipment creation form
+- ⏳ Redux/RTK Query migration (70% complete)
 - ⏳ Bulk upload interface
-- ⏳ Advanced filtering
+- ⏳ Advanced filtering / search enhancements
+
+#### Completed Features (continued - March 2026)
+
+- ✅ **Shipment Creation Wizard** (NEW - March 2026)
+  - ✅ Multi-step form: Docket → Dimensions → Delivery → Invoice → Review & Book
+  - ✅ B2B/B2C conditional rendering (single box vs multi-box + invoices)
+  - ✅ Outlet selection for admin users with phone-based wallet integration
+  - ✅ Partner quote display with charge breakdown table and discount badges
+  - ✅ Confirm & Book with wallet auto-debit
+  - ✅ Shipment detail page with invoice-style charges + "You saved" discount line
+  - ✅ Zustand form store (`shipment-form-store.ts`) with `outletUserId`, `isFragile`
+  - ✅ RTK Query endpoints for quotes and creation
 
 ### Infrastructure
 
@@ -266,6 +285,30 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **End-to-End Shipment Creation Flow (March 17, 2026)**
+  - Complete multi-step shipment creation wizard (Docket → Dimensions → Delivery → Invoice → Review)
+  - B2B/B2C support: single box for B2C, multi-box + invoices for B2B
+  - Partner quote engine integration with charge breakdown + badge-based discounts
+  - Wallet payment: automatic debit from outlet wallet for PREPAID shipments
+  - Critical wallet integration fix: external wallet API uses phone as userId, not auth UUID
+  - Inter-service communication: added `X-Internal-Request` header for wallet service calls
+  - Redis v4 fix: `setex()` → `setEx()` across wallet-service and shipment-service
+  - `paymentProcessingService.js` rewritten to use wallet admin endpoints (`/admin/wallet`, `/admin/debit`, `/admin/refund`)
+  - `resolveOutletContext` in shipmentController: resolves wallet userId to outlet phone number
+  - Frontend form store updated with `outletUserId` (phone) and `isFragile` fields
+  - Shipment detail page: charge breakdown display, discount info from `quoteSnapshot`
+  - Files: `paymentProcessingService.js`, `shipmentController.js`, `shipmentSchemas.js`, `walletService.js`, `externalWalletClient.js`, `trackingService.js`, `shipment-form-store.ts`, `docket/page.tsx`, `review/page.tsx`, `shipments/[id]/page.tsx`, `shipmentApi.ts`
+
+- ✅ **Partner Channel System Cleanup & Polish (March 7, 2026)**
+  - Converted AggregatorType from Prisma enum to String for extensibility
+  - Implemented auto-sync of channelMode based on channel count
+  - Only DELHIVERY/BLUEDART allowed as aggregator types (removed NONE/CUSTOM)
+  - Polished partner detail page: removed legacy fields, consolidated actions
+  - Polished Manage Channels page: hover-reveal actions, credential status icons
+  - Fixed "too many requests": removed redundant refetch() calls, fixed RTK Query tag invalidation
+  - Deleted dead wizard pages (partners/add, partners/[id]/edit)
+  - Made DetailHeader backHref optional to prevent Link crash
 
 - ✅ **Outlet Wallet Page (February 21, 2026)**
   - Outlet users can now view their wallet balance, transaction statistics, and transaction history at `/wallet`
@@ -424,21 +467,112 @@ Overall Project Progress          [███████████████
 | ID  | Service  | Issue                   | Priority | Status      |
 | --- | -------- | ----------------------- | -------- | ----------- |
 | #1  | Shipment | Bulk operations pending | P1       | Planned     |
-| #2  | Frontend | Complete outlet portal  | P1       | Next Sprint |
-| #3  | License  | Integration incomplete  | P1       | In Progress |
+| #2  | License  | Integration incomplete  | P1       | In Progress |
+| #3  | Shipment | Label generation UI     | P2       | Planned     |
+| #4  | Shipment | Pickup scheduling UI    | P2       | Planned     |
 
 ### Recently Fixed
 
-| ID  | Service      | Issue                         | Fixed Date |
-| --- | ------------ | ----------------------------- | ---------- |
-| #4  | User Service | Outlet module implementation  | Jan 2026   |
-| #5  | API Gateway  | Outlet routes added           | Jan 2026   |
-| #6  | Frontend     | Outlet management UI          | Jan 2026   |
-| #7  | Auth         | Outlet role in RBAC           | Jan 2026   |
-| #8  | User Service | Outlet badge system           | Feb 2026   |
-| #9  | User Service | Unhandled rejection crash fix | Feb 2026   |
+| ID  | Service      | Issue                                                  | Fixed Date |
+| --- | ------------ | ------------------------------------------------------ | ---------- |
+| #4  | User Service | Outlet module implementation                           | Jan 2026   |
+| #5  | API Gateway  | Outlet routes added                                    | Jan 2026   |
+| #6  | Frontend     | Outlet management UI                                   | Jan 2026   |
+| #7  | Auth         | Outlet role in RBAC                                    | Jan 2026   |
+| #8  | User Service | Outlet badge system                                    | Feb 2026   |
+| #9  | User Service | Unhandled rejection crash fix                          | Feb 2026   |
+| #10 | Partner Svc  | Channel mode auto-sync, aggregator extensibility       | Mar 2026   |
+| #11 | Frontend     | RTK Query duplicate API calls (refetch + invalidation) | Mar 2026   |
+| #12 | Frontend     | DetailHeader crash (undefined backHref)                | Mar 2026   |
+| #13 | Shipment     | Wallet payment used UUID instead of phone number       | Mar 2026   |
+| #14 | Shipment     | X-Internal-Request header missing for wallet calls     | Mar 2026   |
+| #15 | Wallet/Ship  | redis.setex() → setEx() (Redis v4 compat)              | Mar 2026   |
+| #16 | Shipment     | Charge breakdown not stored in quoteSnapshot           | Mar 2026   |
 
 ## Changelog
+
+### March 2026
+
+```
+[2026-03-17] End-to-End Shipment Creation Flow - COMPLETE
+  Shipment Service (backend):
+  - Multi-step creation: Docket → Dimensions → Delivery → Invoice → Review & Book
+  - B2B/B2C support: conditional box/invoice handling
+  - resolveOutletContext: uses outlet phone (not UUID) for wallet userId
+    - outlet role: req.user.phone from JWT
+    - admin/superadmin: req.body.outletUserId (phone number from frontend)
+  - shipmentSchemas.js: outletUserId changed from Joi.string().uuid() to Joi.string()
+  - paymentProcessingService.js: REWRITTEN to use wallet admin endpoints
+    - /api/v1/wallet/admin/wallet (balance check)
+    - /api/v1/wallet/admin/debit (payment)
+    - /api/v1/wallet/admin/refund (refund)
+    - Added X-Internal-Request header with INTERNAL_SECRET
+  - quoteSnapshot now stores full PartnerQuote (chargeBreakdown + discount)
+  - Redis v4 fix: setex() → setEx() in paymentProcessingService, trackingService
+
+  Wallet Service (backend):
+  - walletService.js: Fixed redis.setex → redis.setEx (Redis v4)
+  - externalWalletClient.js: Fixed redis.setex → redis.setEx (Redis v4)
+  - Admin endpoints correctly interface with external wallet API using phone + clientCode
+
+  Frontend:
+  - shipment-form-store.ts: Added outletUserId, isFragile fields
+  - docket/page.tsx: Outlet selection stores outlet.phone as outletUserId; fragile checkbox
+  - review/page.tsx: Sends outletUserId/isFragile/outletId in payloads; shows discount
+  - shipmentApi.ts: Updated CreateShipmentRequest + PartnerQuote interfaces
+  - shipments/[id]/page.tsx: Invoice-style charge breakdown, discount badge + "You saved" line
+
+  Critical Bug Fixes:
+  - Fixed: 403 "Direct access attempt blocked" — added X-Internal-Request header
+  - Fixed: "Insufficient balance ₹0" — external wallet API uses phone, not UUID
+  - Fixed: Admin shipment creation needed outlet phone for wallet
+  - Fixed: redis.setex is not a function — Redis v4 requires setEx()
+  - Fixed: Charge breakdown missing on detail page — quoteSnapshot now stores full data
+
+[2026-03-07] Partner Channel System Cleanup & Polish - COMPLETE
+  Database (partner-service):
+  - Removed AggregatorType enum from Prisma schema
+  - Changed aggregatorType field from enum to String @default("NONE") @db.VarChar(50)
+  - Added @default("") to apiUrl and apiKey in PartnerChannelConfig
+  - Migration via prisma db push (non-destructive, preserves existing values)
+
+  Backend (partner-service):
+  - partnerChannelSchemas.js: ALLOWED_AGGREGATOR_TYPES = ['DELHIVERY', 'BLUEDART'], aggregatorType required
+  - partnerSchema.js: Removed channelMode and channelConfigs from create/update schemas
+  - partnerChannelService.js: Added _syncChannelMode(partnerId) — auto-sets SINGLE/MULTI based on count
+  - Removed: switchChannelMode() from service, controller, and routes
+  - Removed: PATCH /partners/:partnerId/channel-mode route
+
+  Frontend (RTK Query):
+  - partnerChannelApi.ts: AggregatorType changed to string; removed switchChannelMode mutation
+  - partnerChannelApi.ts: updateChannel/deleteChannel now accept partnerId for proper tag invalidation
+  - partnersApi.ts: channelMode changed to string (read-only, auto-computed)
+  - baseApi.ts: Removed verbose console.logs and dead transformResponse from fetchBaseQuery
+
+  Frontend (Partner Detail Page - partners/[id]/page.tsx):
+  - Removed "API Config" tab → replaced with "Channels" tab showing channel cards
+  - Removed legacy fields: API Endpoint, API Version, API Token, Auth Status, channelMode badge
+  - Removed duplicate Channel Configuration section from Overview
+  - Consolidated actions: single Edit button + one ⋮ dropdown with Manage/Status/Danger groups
+  - Removed backHref (breadcrumbs handle navigation)
+  - Removed all 3 redundant refetch() calls (RTK Query tag invalidation handles auto-refetch)
+
+  Frontend (Manage Channels Page - partners/[id]/channels/page.tsx):
+  - Only DELHIVERY and BLUEDART in AGGREGATOR_OPTIONS
+  - Default aggregatorType: "DELHIVERY"
+  - ChannelCard redesigned: hover-reveal ⋮ dropdown, credential status with color-coded Key icon
+  - Removed manual refetch() calls
+  - Removed back button (breadcrumbs handle navigation)
+
+  Frontend (Shared Components):
+  - detail-page.tsx: Made backHref optional; wrapped <Link> in conditional
+
+  Frontend (Cleanup):
+  - Deleted: partners/add/page.tsx (dead wizard page)
+  - Deleted: partners/[id]/edit/page.tsx (dead wizard page)
+  - dashboard/page.jsx: Changed /partners/add links to /partners
+  - routePermissions.ts: Removed /partners/add and /partners/:id/edit entries
+```
 
 ### February 2026
 
@@ -778,11 +912,12 @@ Overall Project Progress          [███████████████
 | Outlet Module Complete      | Jan 2026    | ✅ Complete    |
 | Charges Management Module   | Feb 2026    | ✅ Complete    |
 | Outlet Portal Pages         | Feb 2026    | ✅ Complete    |
-| License Service Integration | Feb 2026    | 🔄 In Progress |
-| Shipment Bulk Operations    | Feb 2026    | 📋 Planned     |
-| Support Service MVP         | Mar 2026    | 📋 Planned     |
-| Platform Service (Shopify)  | Mar 2026    | 📋 Planned     |
-| Frontend Redux Complete     | Mar 2026    | 📋 Planned     |
+| Shipment Creation Flow      | Mar 2026    | ✅ Complete    |
+| License Service Integration | Mar 2026    | 🔄 In Progress |
+| Shipment Bulk Operations    | Apr 2026    | 📋 Planned     |
+| Support Service MVP         | Apr 2026    | 📋 Planned     |
+| Platform Service (Shopify)  | Apr 2026    | 📋 Planned     |
+| Frontend Redux Complete     | Apr 2026    | 📋 Planned     |
 
 ## Metrics
 
@@ -808,6 +943,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: February 21, 2026
+**Last Updated**: March 17, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

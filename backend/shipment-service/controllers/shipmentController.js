@@ -28,38 +28,93 @@ const pickupSchedulingService = require("../services/pickupSchedulingService");
  */
 
 /**
+ * Resolve the outlet context for shipment creation.
+ * - outlet role: uses own userId as outletId
+ * - superadmin/admin: must provide outletId in body
+ * - other roles: outletId is optional
+ */
+function resolveOutletContext(req) {
+  const role = req.user.role;
+  const userId = req.user.userId || req.user.id;
+  const clientId = req.user.clientId;
+  const bodyOutletId = req.body.outletId;
+  // outletUserId from frontend is the outlet's phone number (external wallet API user ID)
+  const bodyOutletUserId = req.body.outletUserId;
+
+  if (role === "outlet") {
+    // Outlet's phone from JWT token — used as wallet userId in external API
+    const walletUserId = req.user.phone || userId;
+    return { outletId: userId, clientId, walletUserId };
+  }
+
+  if (["superadmin", "admin"].includes(role)) {
+    if (!bodyOutletId) {
+      throw new ValidationError(
+        "outletId is required when creating shipments as admin/superadmin",
+      );
+    }
+    // bodyOutletUserId = outlet phone number passed from frontend for wallet operations
+    if (!bodyOutletUserId) {
+      throw new ValidationError(
+        "outletUserId (phone) is required for wallet payment processing",
+      );
+    }
+    return { outletId: bodyOutletId, clientId, walletUserId: bodyOutletUserId };
+  }
+
+  return {
+    outletId: bodyOutletId || null,
+    clientId,
+    walletUserId: req.user.phone || userId,
+  };
+}
+
+/**
  * Create a new shipment
  */
 async function createShipment(req, res) {
   try {
     const userId = req.user.userId || req.user.id;
-    const clientId = req.user.clientId;
     const {
       orderId,
+      shipmentType = "B2C",
+      shipmentDirection = "FORWARD",
+      pickupAddressId,
       pickupAddress,
       deliveryAddress,
+      rtoSameAsPickup = true,
+      rtoAddress,
+      productDescription,
+      hsnCode,
+      gstPercentage,
       packageDetails,
+      numberOfBoxes = 1,
+      boxes: boxesInput,
+      invoices: invoicesInput,
       paymentType = "PREPAID",
       codAmount,
       serviceType = "STANDARD",
       specialInstructions,
+      selectedPartnerId,
+      quoteSnapshot,
     } = req.body;
+
+    const { outletId, clientId, walletUserId } = resolveOutletContext(req);
 
     logger.info("Creating shipment", {
       service: "shipment-service",
       userId,
       clientId,
+      outletId,
       orderId,
+      shipmentType,
       paymentType,
       serviceType,
     });
 
     // Check for duplicate order ID within client
     const existingShipment = await prisma.shipment.findFirst({
-      where: {
-        orderId,
-        clientId,
-      },
+      where: { orderId, clientId },
     });
 
     if (existingShipment) {
@@ -68,93 +123,74 @@ async function createShipment(req, res) {
       );
     }
 
-    // Calculate shipping rates and select partner using Partner Service
-    const rateCalculationParams = {
-      fromPincode: pickupAddress.pincode,
-      toPincode: deliveryAddress.pincode,
-      weight: packageDetails.weight,
-      serviceType: serviceType.toUpperCase(),
-      dimensions: packageDetails.dimensions,
-      codAmount: paymentType === "COD" ? codAmount : null,
-      strategy: "cheapest", // Can be 'cheapest', 'fastest', or 'balanced'
-    };
+    // Determine the selected partner. Use quoteSnapshot or fall back to live quote.
+    let selectedCourier;
+    let alternativeOptions = [];
 
-    logger.info("Calculating rates using Partner Service", {
-      service: "shipment-service",
-      userId,
-      rateParams: rateCalculationParams,
-    });
+    if (selectedPartnerId && quoteSnapshot) {
+      selectedCourier = quoteSnapshot;
+    } else {
+      const rateCalculationParams = {
+        fromPincode: pickupAddress.pincode,
+        toPincode: deliveryAddress.pincode,
+        weight: packageDetails.weight,
+        serviceType: serviceType.toUpperCase(),
+        dimensions: packageDetails.dimensions,
+        codAmount: paymentType === "COD" ? codAmount : null,
+        strategy: "cheapest",
+      };
 
-    const { selectedCourier, alternativeOptions } =
-      await partnerIntegrationService.selectOptimalCourier(
-        rateCalculationParams,
-      );
+      const courierSelection =
+        await partnerIntegrationService.selectOptimalCourier(
+          rateCalculationParams,
+        );
+      selectedCourier = courierSelection.selectedCourier;
+      alternativeOptions = courierSelection.alternativeOptions;
+    }
 
-    // Use the selected partner's rate as total cost
     const totalCost = selectedCourier.totalAmount;
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(
-      estimatedDelivery.getDate() + selectedCourier.deliveryDays,
+      estimatedDelivery.getDate() + (selectedCourier.deliveryDays || 5),
     );
 
-    logger.info("Partner selected for shipment", {
-      service: "shipment-service",
-      userId,
-      selectedPartner: {
-        partnerId: selectedCourier.partnerId,
-        partnerName: selectedCourier.partnerName,
-        totalAmount: selectedCourier.totalAmount,
-        deliveryDays: selectedCourier.deliveryDays,
-      },
-      alternatives: alternativeOptions.length,
-    });
+    // Calculate volumetric weight: numberOfBoxes * (L*B*H) / divisor
+    const divisor = selectedCourier.volumetricDivisor || 5000;
+    const volWeight =
+      (numberOfBoxes *
+        packageDetails.dimensions.length *
+        packageDetails.dimensions.width *
+        packageDetails.dimensions.height) /
+      divisor;
+    const chargeableWeight = Math.max(packageDetails.weight, volWeight);
 
-    // SHIP-003: Real Wallet Service Integration for PREPAID payments
+    // Wallet debit for PREPAID
     let walletTransactionId = null;
     let paymentReference = null;
 
     if (paymentType === "PREPAID") {
-      logger.info("Processing PREPAID payment via Wallet Service", {
-        service: "shipment-service",
-        userId,
-        shipmentAmount: totalCost,
-        orderId,
-      });
-
       try {
-        // Get auth token from request headers for wallet service
         const authToken = req.headers.authorization?.replace("Bearer ", "");
-
-        // Process payment through Wallet Service (validation + debit)
         const paymentResult =
           await paymentProcessingService.processShipmentPayment(
-            userId,
+            walletUserId,
             totalCost,
-            orderId, // Using orderId as temporary reference until shipment ID is available
+            orderId,
             `Shipment charge for order ${orderId} - ${packageDetails.description || "Package"}`,
             authToken,
           );
 
         walletTransactionId = paymentResult.walletTransactionId;
         paymentReference = paymentResult.paymentReference;
-
-        logger.info("Wallet payment processed successfully", {
-          service: "shipment-service",
-          userId,
-          walletTransactionId,
-          paymentReference,
-          amount: totalCost,
-        });
       } catch (paymentError) {
         logger.error("Wallet payment failed", {
           service: "shipment-service",
-          userId,
+          userId: walletUserId,
           orderId,
           amount: totalCost,
           error: paymentError.message,
         });
 
-        // Re-throw the error to prevent shipment creation
         if (paymentError instanceof ConflictError) {
           throw new ConflictError(
             `Payment failed: ${paymentError.message}`,
@@ -170,13 +206,43 @@ async function createShipment(req, res) {
       }
     }
 
-    // Create shipment with real database operation
+    // Build RTO address fields
+    const rtoFields = rtoSameAsPickup
+      ? {
+          rtoSameAsPickup: true,
+          rtoName: pickupAddress.name,
+          rtoPhone: pickupAddress.phone,
+          rtoLine1: pickupAddress.addressLine1,
+          rtoLine2: pickupAddress.addressLine2,
+          rtoLandmark: pickupAddress.landmark,
+          rtoCity: pickupAddress.city,
+          rtoState: pickupAddress.state,
+          rtoPincode: pickupAddress.pincode,
+          rtoCountry: pickupAddress.country || "India",
+        }
+      : {
+          rtoSameAsPickup: false,
+          rtoName: rtoAddress?.name,
+          rtoPhone: rtoAddress?.phone,
+          rtoLine1: rtoAddress?.addressLine1,
+          rtoLine2: rtoAddress?.addressLine2,
+          rtoLandmark: rtoAddress?.landmark,
+          rtoCity: rtoAddress?.city,
+          rtoState: rtoAddress?.state,
+          rtoPincode: rtoAddress?.pincode,
+          rtoCountry: rtoAddress?.country || "India",
+        };
+
     const shipment = await prisma.shipment.create({
       data: {
         orderId,
         clientId,
         userId,
+        outletId,
+        shipmentType,
+        shipmentDirection,
         status: "CREATED",
+        bookingStatus: "PENDING",
         paymentType,
         paymentStatus:
           paymentType === "COD"
@@ -188,7 +254,7 @@ async function createShipment(req, res) {
         totalCost,
         currency: "INR",
 
-        // Pickup address
+        pickupAddressId: pickupAddressId || null,
         pickupName: pickupAddress.name,
         pickupPhone: pickupAddress.phone,
         pickupEmail: pickupAddress.email,
@@ -200,7 +266,6 @@ async function createShipment(req, res) {
         pickupPincode: pickupAddress.pincode,
         pickupCountry: pickupAddress.country || "India",
 
-        // Delivery address
         deliveryName: deliveryAddress.name,
         deliveryPhone: deliveryAddress.phone,
         deliveryEmail: deliveryAddress.email,
@@ -212,46 +277,86 @@ async function createShipment(req, res) {
         deliveryPincode: deliveryAddress.pincode,
         deliveryCountry: deliveryAddress.country || "India",
 
-        // Package details
+        ...rtoFields,
+
+        productDescription: productDescription || null,
+        hsnCode: hsnCode || null,
+        gstPercentage: gstPercentage || null,
+
+        numberOfBoxes,
         weight: packageDetails.weight,
         length: packageDetails.dimensions.length,
         width: packageDetails.dimensions.width,
         height: packageDetails.dimensions.height,
+        volumetricWeight: volWeight,
+        chargeableWeight,
+        volumetricDivisor: divisor,
         description: packageDetails.description,
         value: packageDetails.value,
         fragile: packageDetails.fragile || false,
 
-        // Service details
         serviceType,
         specialInstructions,
 
-        // Partner assignment from Partner Service
         partnerId: selectedCourier.partnerId,
         partnerName: selectedCourier.partnerName,
+        quoteSnapshot: quoteSnapshot || selectedCourier,
 
-        // Real estimated delivery from Partner Service
         estimatedDelivery,
 
-        // Wallet Integration (SHIP-003: Real integration implemented)
-        walletTransactionId, // Real wallet transaction ID from payment processing
-        paymentReference, // Real payment reference from Wallet Service
+        walletTransactionId,
+        paymentReference,
       },
       select: {
         id: true,
         orderId: true,
+        outletId: true,
+        shipmentType: true,
+        shipmentDirection: true,
         status: true,
+        bookingStatus: true,
         paymentType: true,
         paymentStatus: true,
         codAmount: true,
         totalCost: true,
         currency: true,
         serviceType: true,
+        partnerId: true,
+        partnerName: true,
+        chargeableWeight: true,
+        volumetricWeight: true,
         estimatedDelivery: true,
         createdAt: true,
       },
     });
 
-    // Create initial tracking event using tracking service
+    // Create invoice records for B2B shipments
+    if (invoicesInput && invoicesInput.length > 0) {
+      await prisma.shipmentInvoice.createMany({
+        data: invoicesInput.map((inv) => ({
+          shipmentId: shipment.id,
+          eWayBillNo: inv.eWayBillNo || null,
+          invoiceNo: inv.invoiceNo,
+          invoiceAmt: inv.invoiceAmt,
+          invoiceDate: new Date(inv.invoiceDate),
+          attachmentUrl: inv.attachmentUrl || null,
+        })),
+      });
+    }
+
+    // Create box dimension records for multi-box shipments
+    if (boxesInput && boxesInput.length > 0) {
+      await prisma.shipmentBox.createMany({
+        data: boxesInput.map((box) => ({
+          shipmentId: shipment.id,
+          boxNumber: box.boxNumber,
+          length: box.length,
+          width: box.width,
+          height: box.height,
+        })),
+      });
+    }
+
     await trackingService.createTrackingEvent(
       shipment.id,
       {
@@ -260,17 +365,101 @@ async function createShipment(req, res) {
         eventMetadata: {
           orderId,
           paymentType,
+          shipmentType,
           totalCost: totalCost.toString(),
           serviceType,
           partnerId: selectedCourier.partnerId,
           partnerName: selectedCourier.partnerName,
+          outletId,
         },
         source: trackingService.EVENT_SOURCES.SYSTEM,
       },
       userId,
     );
 
-    // Audit log
+    // Attempt courier booking via partner-service (non-blocking)
+    let courierBookingResult = null;
+    try {
+      const authToken = req.headers.authorization?.replace("Bearer ", "");
+      courierBookingResult = await partnerIntegrationService.bookWithCourier(
+        selectedCourier.partnerId,
+        {
+          shipmentId: shipment.id,
+          orderId,
+          pickupAddress: {
+            name: pickupAddress.name,
+            phone: pickupAddress.phone,
+            address: pickupAddress.addressLine1,
+            city: pickupAddress.city,
+            state: pickupAddress.state,
+            pincode: pickupAddress.pincode,
+          },
+          deliveryAddress: {
+            name: deliveryAddress.name,
+            phone: deliveryAddress.phone,
+            address: deliveryAddress.addressLine1,
+            city: deliveryAddress.city,
+            state: deliveryAddress.state,
+            pincode: deliveryAddress.pincode,
+          },
+          packageDetails: {
+            weight: chargeableWeight,
+            length: packageDetails.dimensions?.length,
+            width: packageDetails.dimensions?.width,
+            height: packageDetails.dimensions?.height,
+          },
+          paymentType,
+          codAmount: paymentType === "COD" ? codAmount : 0,
+          productDescription: packageDetails.description || "Package",
+          declaredValue: packageDetails.value || totalCost,
+        },
+        authToken,
+      );
+
+      if (courierBookingResult?.awbNumber) {
+        await prisma.shipment.update({
+          where: { id: shipment.id },
+          data: {
+            awbNumber: courierBookingResult.awbNumber,
+            partnerShipmentId: courierBookingResult.partnerShipmentId || null,
+            status: "BOOKED",
+            bookingStatus: "BOOKED",
+          },
+        });
+
+        shipment.awbNumber = courierBookingResult.awbNumber;
+        shipment.status = "BOOKED";
+        shipment.bookingStatus = "BOOKED";
+
+        await trackingService.createTrackingEvent(
+          shipment.id,
+          {
+            status: "BOOKED",
+            message: `Shipment booked with courier. AWB: ${courierBookingResult.awbNumber}`,
+            eventMetadata: {
+              awbNumber: courierBookingResult.awbNumber,
+              courierPartnerId: selectedCourier.partnerId,
+            },
+            source: trackingService.EVENT_SOURCES.PARTNER,
+          },
+          userId,
+        );
+      }
+    } catch (courierError) {
+      logger.warn("Courier booking failed - shipment created without AWB", {
+        service: "shipment-service",
+        shipmentId: shipment.id,
+        partnerId: selectedCourier.partnerId,
+        error: courierError.message,
+      });
+
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: { bookingStatus: "PENDING_BOOKING" },
+      });
+      shipment.bookingStatus = "PENDING_BOOKING";
+    }
+
     await prisma.auditLog.create({
       data: {
         userId,
@@ -279,9 +468,12 @@ async function createShipment(req, res) {
         resourceId: shipment.id,
         changes: {
           orderId,
+          shipmentType,
+          outletId,
           paymentType,
           totalCost: totalCost.toString(),
           serviceType,
+          awbNumber: courierBookingResult?.awbNumber || null,
         },
         metadata: {
           source: "shipment-service",
@@ -293,15 +485,6 @@ async function createShipment(req, res) {
       },
     });
 
-    logger.info("Shipment created successfully", {
-      service: "shipment-service",
-      shipmentId: shipment.id,
-      userId,
-      clientId,
-      orderId,
-      totalCost,
-    });
-
     res.status(201).json(
       APIResponse.success(
         {
@@ -311,9 +494,26 @@ async function createShipment(req, res) {
             codAmount: shipment.codAmount
               ? parseFloat(shipment.codAmount)
               : null,
+            chargeableWeight: shipment.chargeableWeight
+              ? parseFloat(shipment.chargeableWeight)
+              : null,
+            volumetricWeight: shipment.volumetricWeight
+              ? parseFloat(shipment.volumetricWeight)
+              : null,
           },
+          courierBooking: courierBookingResult
+            ? {
+                awbNumber: courierBookingResult.awbNumber,
+                booked: true,
+              }
+            : {
+                booked: false,
+                message: "Courier booking pending - manual retry available",
+              },
         },
-        "Shipment created successfully",
+        courierBookingResult?.awbNumber
+          ? "Shipment created and booked successfully"
+          : "Shipment created successfully (courier booking pending)",
       ),
     );
   } catch (error) {
@@ -354,22 +554,32 @@ async function getShipments(req, res) {
       limit = 20,
       status,
       paymentType,
+      search,
       dateFrom,
       dateTo,
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    // Build base where clause
     let where = {};
 
-    // Add filters from query params
     if (status) {
       where.status = status;
     }
 
     if (paymentType) {
       where.paymentType = paymentType;
+    }
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      where.OR = [
+        { awbNumber: { contains: term, mode: "insensitive" } },
+        { orderId: { contains: term, mode: "insensitive" } },
+        { deliveryName: { contains: term, mode: "insensitive" } },
+        { pickupName: { contains: term, mode: "insensitive" } },
+        { deliveryCity: { contains: term, mode: "insensitive" } },
+      ];
     }
 
     if (dateFrom || dateTo) {
@@ -382,7 +592,6 @@ async function getShipments(req, res) {
       }
     }
 
-    // CRITICAL: Apply scope-based filtering for multi-tenant isolation
     where = authUtils.applyScopeFilter(req, where);
 
     // Get shipments with pagination
@@ -392,6 +601,7 @@ async function getShipments(req, res) {
         select: {
           id: true,
           orderId: true,
+          shipmentType: true,
           status: true,
           paymentType: true,
           paymentStatus: true,
@@ -399,9 +609,14 @@ async function getShipments(req, res) {
           totalCost: true,
           currency: true,
           serviceType: true,
+          weight: true,
           partnerId: true,
           partnerName: true,
           awbNumber: true,
+          pickupName: true,
+          pickupCity: true,
+          pickupState: true,
+          pickupPincode: true,
           deliveryName: true,
           deliveryCity: true,
           deliveryState: true,
@@ -420,11 +635,11 @@ async function getShipments(req, res) {
       prisma.shipment.count({ where }),
     ]);
 
-    // Convert Decimal fields to numbers for JSON response
     const formattedShipments = shipments.map((shipment) => ({
       ...shipment,
       totalCost: parseFloat(shipment.totalCost),
       codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : null,
+      weight: shipment.weight ? parseFloat(shipment.weight) : null,
     }));
 
     // Audit log for data access
@@ -733,6 +948,8 @@ async function cancelShipment(req, res) {
         totalCost: true,
         walletTransactionId: true,
         createdAt: true,
+        awbNumber: true,
+        partnerId: true,
       },
     });
 
@@ -743,6 +960,34 @@ async function cancelShipment(req, res) {
     // Check if shipment can be cancelled
     if (!["CREATED", "BOOKED", "PICKED_UP"].includes(shipment.status)) {
       throw new ValidationError("Shipment cannot be cancelled at this stage");
+    }
+
+    // Attempt to cancel with courier if AWB exists (non-blocking)
+    if (shipment.awbNumber && shipment.partnerId) {
+      try {
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+        await partnerIntegrationService.cancelWithCourier(
+          shipment.partnerId,
+          shipment.awbNumber,
+          reason,
+          authToken,
+        );
+        logger.info("Courier cancellation successful", {
+          service: "shipment-service",
+          shipmentId: id,
+          awbNumber: shipment.awbNumber,
+        });
+      } catch (courierCancelError) {
+        logger.warn(
+          "Courier cancellation failed - proceeding with internal cancellation",
+          {
+            service: "shipment-service",
+            shipmentId: id,
+            awbNumber: shipment.awbNumber,
+            error: courierCancelError.message,
+          },
+        );
+      }
     }
 
     // Calculate refund amount
@@ -768,20 +1013,6 @@ async function cancelShipment(req, res) {
         cancellationReason: true,
       },
     });
-
-    // Create tracking event using tracking service
-    await trackingService.updateShipmentStatus(
-      id,
-      "CANCELLED",
-      `Shipment cancelled: ${reason}`,
-      {
-        cancellationReason: reason,
-        refundAmount: refundAmount > 0 ? refundAmount.toString() : null,
-        refundProcessed: refundTransactionId ? true : false,
-        refundTransactionId,
-      },
-      userId,
-    );
 
     // SHIP-003: Real Wallet Service Integration for Refunds
     let refundTransactionId = null;
@@ -851,6 +1082,20 @@ async function cancelShipment(req, res) {
         );
       }
     }
+
+    // Create tracking event for cancellation
+    await trackingService.updateShipmentStatus(
+      id,
+      "CANCELLED",
+      `Shipment cancelled: ${reason}`,
+      {
+        cancellationReason: reason,
+        refundAmount: refundAmount > 0 ? refundAmount.toString() : null,
+        refundProcessed: !!refundTransactionId,
+        refundTransactionId,
+      },
+      userId,
+    );
 
     // Audit log
     await prisma.auditLog.create({
@@ -1111,8 +1356,11 @@ async function calculateRates(req, res) {
       codAmount,
     };
 
-    // Calculate rates using Partner Service
-    const rateData = await partnerIntegrationService.calculateRates(rateParams);
+    const authToken = req.header("Authorization");
+    const rateData = await partnerIntegrationService.calculateRates(
+      rateParams,
+      authToken,
+    );
 
     // Audit logging
     await prisma.auditLog.create({
@@ -1298,9 +1546,12 @@ async function checkServiceability(req, res) {
       serviceType: serviceType.toUpperCase(),
     };
 
-    // Check serviceability using Partner Service
+    const authToken = req.header("Authorization");
     const serviceabilityData =
-      await partnerIntegrationService.checkServiceability(serviceabilityParams);
+      await partnerIntegrationService.checkServiceability(
+        serviceabilityParams,
+        authToken,
+      );
 
     // Count serviceable partners
     const serviceableCount = serviceabilityData.filter(
@@ -1370,6 +1621,463 @@ async function checkServiceability(req, res) {
       "SERVICEABILITY_CHECK_FAILED",
     );
     res.status(500).json(errorResponse);
+  }
+}
+
+/**
+ * Get partner quotes for staged shipment creation.
+ * Returns all available partner rates with charge breakdown and a recommended choice.
+ */
+async function getShipmentQuotes(req, res) {
+  try {
+    const userId = req.user.userId;
+    const {
+      fromPincode,
+      toPincode,
+      weight,
+      numberOfBoxes = 1,
+      dimensions,
+      serviceType = "STANDARD",
+      paymentType = "PREPAID",
+      codAmount,
+      shipmentType = "B2C",
+    } = req.body;
+
+    logger.info("Getting shipment quotes", {
+      service: "shipment-service",
+      userId,
+      fromPincode,
+      toPincode,
+      weight,
+      numberOfBoxes,
+    });
+
+    const rateParams = {
+      fromPincode,
+      toPincode,
+      weight,
+      serviceType: serviceType.toUpperCase(),
+      dimensions,
+      codAmount: paymentType === "COD" ? codAmount : null,
+      declaredValue: req.body.declaredValue || req.body.shipmentValue || 0,
+      paymentMode: paymentType,
+      isFragile: req.body.isFragile || false,
+      outletId: req.body.outletId || null,
+      sortBy: req.body.sortBy || "cheapest",
+    };
+
+    const authToken = req.header("Authorization");
+
+    const [rateData, serviceabilityData] = await Promise.all([
+      partnerIntegrationService.calculateRates(rateParams, authToken),
+      partnerIntegrationService.checkServiceability(rateParams, authToken),
+    ]);
+
+    const serviceableMap = new Map();
+    if (Array.isArray(serviceabilityData)) {
+      serviceabilityData.forEach((s) =>
+        serviceableMap.set(s.partnerId, s.serviceable),
+      );
+    }
+
+    const quotes = (rateData.rates || [])
+      .filter((rate) => serviceableMap.get(rate.partnerId) !== false)
+      .map((rate) => {
+        const divisor = rate.volumetricDivisor || 5000;
+        const volWeight =
+          (numberOfBoxes *
+            dimensions.length *
+            dimensions.width *
+            dimensions.height) /
+          divisor;
+        const chargeableWt = Math.max(weight, volWeight);
+
+        // Normalize breakdown from partner-service to frontend-friendly format
+        const BASE_LABELS = {
+          WEIGHT: "Weight Charge",
+          INVOICE_VALUE: "Invoice Value Charge",
+          ZONE_TO_ZONE_WEIGHT: "Zone-to-Zone Charge",
+          DISTANCE_BASE_WEIGHT: "Distance Charge",
+        };
+
+        const rawBreakdown =
+          rate.breakdown || rate.chargesBreakdown || rate.chargeBreakdown || [];
+        const chargeBreakdown = Array.isArray(rawBreakdown)
+          ? rawBreakdown.map((entry) => {
+              const rawName = entry.chargeTypeName || entry.base || "Charge";
+              const isRawEnum = Object.keys(BASE_LABELS).includes(rawName);
+              const label = isRawEnum ? BASE_LABELS[rawName] : rawName;
+
+              return {
+                name: label,
+                amount: entry.totalCharge || 0,
+                type: entry.base || null,
+                calculation: entry.calculation || null,
+              };
+            })
+          : [];
+
+        return {
+          partnerId: rate.partnerId,
+          partnerName: rate.partnerName,
+          totalAmount: rate.totalRate || rate.totalAmount || 0,
+          deliveryDays: rate.deliveryDays || rate.estimatedDays || null,
+          chargeBreakdown,
+          volumetricDivisor: divisor,
+          volumetricWeight: parseFloat(volWeight.toFixed(3)),
+          chargeableWeight: parseFloat(chargeableWt.toFixed(3)),
+          actualWeight: weight,
+          serviceable: serviceableMap.get(rate.partnerId) !== false,
+          ...(rate.discount && { discount: rate.discount }),
+        };
+      })
+      .sort((a, b) => a.totalAmount - b.totalAmount);
+
+    const recommended = quotes[0] || null;
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "GET_SHIPMENT_QUOTES",
+        resource: "Shipment",
+        metadata: {
+          source: "shipment-service",
+          fromPincode,
+          toPincode,
+          weight,
+          numberOfBoxes,
+          quotesReturned: quotes.length,
+          shipmentType,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success({
+        quotes,
+        recommended,
+        params: {
+          fromPincode,
+          toPincode,
+          weight,
+          numberOfBoxes,
+          dimensions,
+          serviceType,
+          paymentType,
+          shipmentType,
+        },
+      }),
+    );
+  } catch (error) {
+    logger.error("Failed to get shipment quotes", {
+      service: "shipment-service",
+      userId: req.user?.userId,
+      error: error.message,
+    });
+
+    if (error instanceof ValidationError) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to get shipment quotes",
+          "QUOTE_FETCH_FAILED",
+        ),
+      );
+  }
+}
+
+/**
+ * Dispute re-rate: record courier-validated weight/dimensions, recalculate,
+ * refund old amount, charge new amount, or put on hold if balance insufficient.
+ */
+async function rerateShipment(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const clientId = req.user.clientId;
+    const { id } = req.params;
+    const {
+      disputedWeight,
+      disputedLength,
+      disputedWidth,
+      disputedHeight,
+      reason,
+    } = req.body;
+
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        orderId: true,
+        outletId: true,
+        userId: true,
+        status: true,
+        partnerId: true,
+        partnerName: true,
+        totalCost: true,
+        weight: true,
+        length: true,
+        width: true,
+        height: true,
+        numberOfBoxes: true,
+        volumetricDivisor: true,
+        paymentType: true,
+        walletTransactionId: true,
+        pickupPincode: true,
+        deliveryPincode: true,
+        serviceType: true,
+      },
+    });
+
+    if (!shipment) {
+      throw new NotFoundError("Shipment not found");
+    }
+
+    if (!["BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(shipment.status)) {
+      throw new ValidationError(
+        "Shipment can only be re-rated in BOOKED, PICKED_UP, or IN_TRANSIT status",
+      );
+    }
+
+    const oldCost = parseFloat(shipment.totalCost);
+    const newWeight = disputedWeight || parseFloat(shipment.weight);
+    const newLength = disputedLength || parseFloat(shipment.length);
+    const newWidth = disputedWidth || parseFloat(shipment.width);
+    const newHeight = disputedHeight || parseFloat(shipment.height);
+    const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
+    const numBoxes = shipment.numberOfBoxes || 1;
+
+    const newVolWeight =
+      (numBoxes * newLength * newWidth * newHeight) / divisor;
+    const newChargeableWeight = Math.max(newWeight, newVolWeight);
+
+    // Recalculate rates with partner service
+    let newCost = oldCost;
+    try {
+      const rateData = await partnerIntegrationService.calculateRates({
+        fromPincode: shipment.pickupPincode,
+        toPincode: shipment.deliveryPincode,
+        weight: newChargeableWeight,
+        serviceType: shipment.serviceType,
+        dimensions: { length: newLength, width: newWidth, height: newHeight },
+      });
+
+      const partnerRate = (rateData.rates || []).find(
+        (r) => r.partnerId === shipment.partnerId,
+      );
+      if (partnerRate) {
+        newCost = partnerRate.totalAmount;
+      }
+    } catch (rateError) {
+      logger.warn("Rate recalculation failed during re-rate, using old cost", {
+        service: "shipment-service",
+        shipmentId: id,
+        error: rateError.message,
+      });
+    }
+
+    const difference = newCost - oldCost;
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const walletTarget = shipment.outletId || shipment.userId;
+
+    let refundTxId = null;
+    let chargeTxId = null;
+    let holdApplied = false;
+
+    if (difference !== 0 && shipment.paymentType === "PREPAID") {
+      // Refund the old amount first
+      try {
+        const refundResult =
+          await paymentProcessingService.processShipmentRefund(
+            walletTarget,
+            oldCost,
+            shipment.id,
+            `Re-rate refund for shipment ${shipment.orderId}: ${reason}`,
+            authToken,
+          );
+        refundTxId = refundResult.refundTransactionId;
+      } catch (refundErr) {
+        logger.error("Re-rate refund failed", {
+          service: "shipment-service",
+          shipmentId: id,
+          error: refundErr.message,
+        });
+      }
+
+      // Charge the new amount
+      try {
+        const chargeResult =
+          await paymentProcessingService.processShipmentPayment(
+            walletTarget,
+            newCost,
+            shipment.id,
+            `Re-rate charge for shipment ${shipment.orderId}: ${reason}`,
+            authToken,
+          );
+        chargeTxId = chargeResult.walletTransactionId;
+      } catch (chargeErr) {
+        logger.warn("Re-rate charge failed - putting shipment on hold", {
+          service: "shipment-service",
+          shipmentId: id,
+          error: chargeErr.message,
+        });
+        holdApplied = true;
+      }
+    }
+
+    const updateData = {
+      disputeStatus: holdApplied ? "HOLD" : "RESOLVED",
+      disputedWeight: newWeight,
+      disputedLength: newLength,
+      disputedWidth: newWidth,
+      disputedHeight: newHeight,
+      disputedCost: newCost,
+      totalCost: holdApplied ? shipment.totalCost : newCost,
+      chargeableWeight: newChargeableWeight,
+      volumetricWeight: newVolWeight,
+    };
+
+    if (holdApplied) {
+      updateData.status = "HOLD";
+      updateData.holdReason = `Insufficient balance after re-rate. New charge: ₹${newCost}, Old charge: ₹${oldCost}. Reason: ${reason}`;
+    }
+
+    const updatedShipment = await prisma.shipment.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        disputeStatus: true,
+        totalCost: true,
+        disputedCost: true,
+        chargeableWeight: true,
+        holdReason: true,
+        updatedAt: true,
+      },
+    });
+
+    // Record financial adjustment
+    await prisma.shipmentFinancialAdjustment.create({
+      data: {
+        shipmentId: id,
+        adjustmentType: "DISPUTE_RERATE",
+        reason,
+        oldAmount: oldCost,
+        newAmount: newCost,
+        difference,
+        refundTransactionId: refundTxId,
+        chargeTransactionId: chargeTxId,
+        disputedWeight: newWeight,
+        disputedLength: newLength,
+        disputedWidth: newWidth,
+        disputedHeight: newHeight,
+        createdById: userId,
+      },
+    });
+
+    await trackingService.createTrackingEvent(
+      id,
+      {
+        status: holdApplied ? "HOLD" : "RERATE_RESOLVED",
+        message: holdApplied
+          ? `Shipment on hold: insufficient balance after re-rate (₹${oldCost} → ₹${newCost})`
+          : `Shipment re-rated: ₹${oldCost} → ₹${newCost}`,
+        eventMetadata: {
+          reason,
+          oldCost,
+          newCost,
+          difference,
+          holdApplied,
+          disputedWeight: newWeight,
+          chargeableWeight: newChargeableWeight,
+        },
+        source: trackingService.EVENT_SOURCES.MANUAL,
+      },
+      userId,
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "RERATE_SHIPMENT",
+        resource: "Shipment",
+        resourceId: id,
+        changes: {
+          reason,
+          oldCost,
+          newCost,
+          difference,
+          holdApplied,
+          disputedWeight: newWeight,
+          disputedLength: newLength,
+          disputedWidth: newWidth,
+          disputedHeight: newHeight,
+        },
+        metadata: { source: "shipment-service" },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        clientId,
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          shipment: {
+            ...updatedShipment,
+            totalCost: parseFloat(updatedShipment.totalCost),
+            disputedCost: updatedShipment.disputedCost
+              ? parseFloat(updatedShipment.disputedCost)
+              : null,
+            chargeableWeight: updatedShipment.chargeableWeight
+              ? parseFloat(updatedShipment.chargeableWeight)
+              : null,
+          },
+          financialImpact: {
+            oldCost,
+            newCost,
+            difference,
+            refundTransactionId: refundTxId,
+            chargeTransactionId: chargeTxId,
+            holdApplied,
+          },
+        },
+        holdApplied
+          ? "Shipment re-rated and placed on hold due to insufficient balance"
+          : "Shipment re-rated successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to re-rate shipment", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      userId: req.user?.userId,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError) {
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
+    }
+    if (error instanceof ValidationError) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    }
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to re-rate shipment", "RERATE_FAILED"));
   }
 }
 
@@ -2051,6 +2759,8 @@ module.exports = {
   calculateRates,
   selectPartner,
   checkServiceability,
+  getShipmentQuotes,
+  rerateShipment,
   // SHIP-004 endpoints
   trackByAwbNumber,
   recordDeliveryConfirmation,

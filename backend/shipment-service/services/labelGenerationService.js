@@ -372,6 +372,64 @@ class LabelGenerationService {
   }
 
   /**
+   * Get courier-generated shipping label via partner-service
+   * Uses actual courier API (Delhivery, BlueDart) for label generation
+   */
+  async getCourierLabel(shipmentId, format = "pdf", authToken = null) {
+    try {
+      const shipment = await prisma.shipment.findUnique({
+        where: { id: shipmentId },
+        select: {
+          id: true,
+          awbNumber: true,
+          partnerId: true,
+          partnerName: true,
+          status: true,
+        },
+      });
+
+      if (!shipment) {
+        throw new NotFoundError(`Shipment not found: ${shipmentId}`);
+      }
+
+      if (!shipment.awbNumber || !shipment.partnerId) {
+        throw new ValidationError(
+          "Shipment has no AWB number or partner assigned. Use local label generation instead.",
+        );
+      }
+
+      logger.info("Fetching courier label", {
+        shipmentId,
+        awbNumber: shipment.awbNumber,
+        partnerId: shipment.partnerId,
+        format,
+      });
+
+      const result = await partnerIntegrationService.getCourierLabel(
+        shipment.partnerId,
+        shipment.awbNumber,
+        format,
+        authToken,
+      );
+
+      return {
+        shipmentId,
+        awbNumber: shipment.awbNumber,
+        partnerId: shipment.partnerId,
+        partnerName: shipment.partnerName,
+        label: result,
+        source: "COURIER_API",
+      };
+    } catch (error) {
+      logger.error("Get courier label error", {
+        shipmentId,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Get generated label or manifest
    */
   async getGeneratedDocument(documentId, documentType = "label") {

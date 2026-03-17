@@ -559,9 +559,15 @@ class DistanceZoneService {
         };
       }
 
-      // Find matching milestone (using exact float comparison)
+      // Find matching milestone — exact range first, then fall back to
+      // the highest milestone so that distances beyond the configured max
+      // are still serviceable (charged at the highest milestone rate).
       let matchedZone = null;
       let matchedMilestone = null;
+
+      // Also track the highest milestone across all zones as fallback
+      let fallbackZone = null;
+      let fallbackMilestone = null;
 
       for (const zone of zones) {
         for (const milestone of zone.milestones) {
@@ -570,8 +576,27 @@ class DistanceZoneService {
             matchedMilestone = milestone;
             break;
           }
+          if (!fallbackMilestone || milestone.maxKm > fallbackMilestone.maxKm) {
+            fallbackZone = zone;
+            fallbackMilestone = milestone;
+          }
         }
         if (matchedMilestone) break;
+      }
+
+      // If no exact match, use the highest milestone as fallback
+      if (!matchedMilestone && fallbackMilestone) {
+        matchedZone = fallbackZone;
+        matchedMilestone = fallbackMilestone;
+        logger.info(
+          "Distance exceeds configured milestones, using highest milestone rate",
+          {
+            partnerId,
+            distanceKm,
+            fallbackSuffix: fallbackMilestone.suffix,
+            fallbackMaxKm: fallbackMilestone.maxKm,
+          },
+        );
       }
 
       const result = matchedMilestone
@@ -598,14 +623,7 @@ class DistanceZoneService {
             matched: false,
             distanceKm,
             partnerId,
-            message: `No milestone found for distance ${distanceKm} km`,
-            availableRanges: zones.flatMap((z) =>
-              z.milestones.map((m) => ({
-                zoneName: z.name,
-                range: `${m.minKm}-${m.maxKm} km`,
-                suffix: m.suffix,
-              })),
-            ),
+            message: "No distance zones configured for this partner",
           };
 
       // Cache result

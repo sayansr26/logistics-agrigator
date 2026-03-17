@@ -1022,6 +1022,42 @@ app.use(
   }),
 );
 
+// Manual proxy for Courier Operations endpoints
+// Routes: /api/v1/courier-operations/*
+logger.info("Adding manual proxy for courier operation endpoints");
+app.use(
+  "/api/v1/courier-operations",
+  createProxyMiddleware({
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    changeOrigin: true,
+    pathRewrite: (path) => {
+      logger.info(`Proxying courier operation request: ${path}`);
+      return path;
+    },
+    parseReqBody: false,
+    onError: (err, req, res) => {
+      logger.error(`Proxy error for courier operations:`, {
+        error: err.message,
+        path: req.path,
+      });
+      res.status(503).json({
+        status: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message:
+            "Partner service (courier operations) is currently unavailable",
+        },
+      });
+    },
+    onProxyReq: (proxyReq, req, _res) => {
+      const internalSecret = process.env.INTERNAL_SECRET;
+      if (internalSecret) {
+        proxyReq.setHeader("X-Internal-Request", internalSecret);
+      }
+    },
+  }),
+);
+
 // Catch all for undefined routes
 app.use("*", (req, res) => {
   res.status(404).json({

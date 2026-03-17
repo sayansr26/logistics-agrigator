@@ -15,21 +15,8 @@ export const baseApi = createApi({
       const state = getState() as RootState;
       const token = state.auth.token;
 
-      console.log("[baseApi.prepareHeaders] Auth state check:", {
-        hasToken: !!token,
-        isAuthenticated: state.auth.isAuthenticated,
-        hasUser: !!state.auth.user,
-        userEmail: state.auth.user?.email || "N/A",
-      });
-
-      // If we have a token, include it in the headers
       if (token) {
-        console.log("[baseApi.prepareHeaders] ✅ Adding Authorization header");
         headers.set("Authorization", `Bearer ${token}`);
-      } else {
-        console.log(
-          "[baseApi.prepareHeaders] ❌ NO TOKEN - Authorization header not added",
-        );
       }
 
       // Set content type
@@ -40,16 +27,6 @@ export const baseApi = createApi({
 
     // Timeout configuration
     timeout: API_CONFIG.TIMEOUT,
-
-    // Extract data field from response (all our APIs return { status, data, meta })
-    transformResponse: (response: any) => {
-      // Handle blob responses (for file downloads)
-      if (response instanceof Blob) {
-        return response;
-      }
-      // Extract data field from { status, data, meta } format
-      return response?.data || response;
-    },
   }),
 
   // Tag types for cache invalidation

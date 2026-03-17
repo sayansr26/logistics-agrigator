@@ -293,22 +293,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 
   // ==================== PARTNER MANAGEMENT ====================
   {
-    path: "/partners/add",
-    public: false,
-    roles: ["superadmin", "admin"],
-    permission: "partner:create:all",
-    title: "Add Partner",
-    description: "Add new courier partner",
-  },
-  {
-    path: "/partners/:id/edit",
-    public: false,
-    roles: ["superadmin", "admin"],
-    permission: "partner:update:all",
-    title: "Edit Partner",
-    description: "Modify partner details",
-  },
-  {
     path: "/partners/:id",
     public: false,
     roles: ["superadmin", "admin", "client"],

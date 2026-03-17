@@ -22,7 +22,7 @@ interface Partner {
   isActive: boolean;
 
   // Channel Mode
-  channelMode?: "SINGLE" | "MULTI";
+  channelMode?: string;
 
   // Service Configuration
   supportsCOD?: boolean;

@@ -64,7 +64,7 @@ async function getUserWallet(userId, clientCode = "DEFAULT") {
     }
 
     // Cache wallet for 10 minutes
-    await redis.setex(cacheKey, 600, JSON.stringify(wallet));
+    await redis.setEx(cacheKey, 600, JSON.stringify(wallet));
 
     logger.debug("Wallet retrieved successfully", {
       userId,
@@ -175,26 +175,6 @@ async function getWalletBalance(userId) {
           wallet.externalWalletId,
         );
         externalBalance = externalData.balance;
-
-        // Update local balance if external balance differs significantly
-        const balanceDiff = Math.abs(
-          parseFloat(wallet.balance) - parseFloat(externalBalance),
-        );
-        if (balanceDiff > 0.01) {
-          // More than 1 paisa difference
-          logger.warn("Balance mismatch detected", {
-            userId,
-            localBalance: wallet.balance,
-            externalBalance,
-            difference: balanceDiff,
-          });
-
-          // Optional: sync balance (uncomment if needed)
-          // await prisma.wallet.update({
-          //   where: { id: wallet.id },
-          //   data: { balance: externalBalance },
-          // });
-        }
       } catch (error) {
         logger.warn("Failed to get external balance", {
           userId,

@@ -22,6 +22,8 @@ const {
   calculateRates,
   selectPartner,
   checkServiceability,
+  getShipmentQuotes,
+  rerateShipment,
   // New SHIP-004 endpoints
   trackByAwbNumber,
   recordDeliveryConfirmation,
@@ -51,6 +53,8 @@ const {
   rateCalculationSchema,
   partnerSelectionSchema,
   serviceabilitySchema,
+  shipmentQuoteSchema,
+  rerateShipmentSchema,
   // New SHIP-004 validation schemas
   deliveryConfirmationSchema,
   analyticsQuerySchema,
@@ -153,7 +157,7 @@ router.post(
   createShipmentLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "create", "parent"),
+  authMiddleware.requirePermission("shipment", "create", "own"),
   validate(createShipmentSchema),
   createShipment,
 );
@@ -243,7 +247,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(getShipmentsQuerySchema, "query"),
   getShipments,
 );
@@ -871,6 +875,45 @@ router.post(
   authMiddleware.requirePermission("shipment", "read", "own"),
   validate(serviceabilitySchema),
   checkServiceability,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/quotes:
+ *   post:
+ *     tags: [Shipment Creation Flow]
+ *     summary: Get partner quotes for shipment creation
+ *     description: Returns per-partner charge breakdown with recommended option for the staged creation flow
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/quotes",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "create", "own"),
+  validate(shipmentQuoteSchema),
+  getShipmentQuotes,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/{id}/rerate:
+ *   post:
+ *     tags: [Shipment Operations]
+ *     summary: Dispute re-rate a shipment with courier-validated dimensions
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/:id/rerate",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "all"),
+  validate(rerateShipmentSchema),
+  rerateShipment,
 );
 
 // SHIP-004: New tracking endpoints

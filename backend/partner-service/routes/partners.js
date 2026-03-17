@@ -317,6 +317,7 @@ router.post(
   rateCalculationLimiter,
   authMiddleware.authenticate,
   authMiddleware.requirePermission("partner", "read", "own"),
+  validateBody(partnerSchema.calculateRate),
   async (req, res, next) => {
     try {
       // Pass user context for badge-based discount resolution
