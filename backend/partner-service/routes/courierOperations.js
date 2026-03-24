@@ -25,6 +25,7 @@ const {
   getLabelQuerySchema,
   generateManifestSchema,
   checkServiceabilityParamsSchema,
+  getCapabilitiesSchema,
 } = require("../validation/courierOperationSchemas");
 const { courierOperationLimiter } = require("../middleware/rateLimiter");
 
@@ -43,6 +44,16 @@ router.post(
   authMiddleware.authenticate,
   validateBody(bookShipmentSchema),
   courierOperationController.bookShipment,
+);
+
+/**
+ * POST /capabilities - Get provider capabilities and available actions for a shipment
+ */
+router.post(
+  "/capabilities",
+  authMiddleware.authenticate,
+  validateBody(getCapabilitiesSchema),
+  courierOperationController.getShipmentCapabilities,
 );
 
 /**

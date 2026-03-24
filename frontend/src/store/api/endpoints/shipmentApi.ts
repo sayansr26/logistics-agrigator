@@ -45,6 +45,7 @@ interface CreateShipmentRequest {
   outletId?: string;
   outletUserId?: string;
   pickupAddressId?: string;
+  pickupLocation?: string;
   pickupAddress: AddressPayload;
   deliveryAddress: AddressPayload;
   rtoSameAsPickup?: boolean;
@@ -144,6 +145,58 @@ interface UpdateShipmentRequest {
   isFragile?: boolean;
 }
 
+interface RetryCourierBookingRequest {
+  id: string;
+  pickupLocation?: string;
+}
+
+interface RetryCourierBookingResponse {
+  status: string;
+  data: {
+    shipmentId: string;
+    orderId: string;
+    awbNumber: string;
+    trackingUrl?: string;
+    courierBooking: unknown;
+  };
+  meta?: Record<string, unknown>;
+  statusCode?: number;
+}
+
+interface ProviderAction {
+  action: string;
+  description: string;
+  enabled: boolean;
+  reason?: string | null;
+}
+
+interface ProviderCapabilities {
+  success: boolean;
+  providerName: string;
+  aggregatorType: string;
+  capabilities: Record<
+    string,
+    {
+      supported: boolean;
+      requiresAwb: boolean;
+      description: string;
+      allowedStatuses?: string[];
+    }
+  >;
+  availableActions: ProviderAction[];
+}
+
+interface ShipmentDocument {
+  id: string;
+  type: string;
+  name: string;
+  url?: string | null;
+  format?: string | null;
+  source: string;
+  fetchedAt?: string | null;
+  createdAt: string;
+}
+
 interface Shipment {
   id: string;
   orderId: string;
@@ -182,6 +235,7 @@ interface Shipment {
   pickupState?: string;
   pickupPincode?: string;
   pickupCountry?: string;
+  pickupAddressId?: string;
 
   // Delivery address (list + detail)
   deliveryName?: string;
@@ -207,6 +261,7 @@ interface Shipment {
 
   // Partner (detail only)
   partnerShipmentId?: string;
+  trackingUrl?: string;
   quoteSnapshot?: Record<string, unknown>;
 
   // Wallet (detail only)
@@ -230,6 +285,15 @@ interface Shipment {
 
   // Relations (detail only)
   trackingEvents?: TrackingEvent[];
+  documents?: ShipmentDocument[];
+
+  // Provider lifecycle fields
+  providerStatus?: string | null;
+  providerLastSyncAt?: string | null;
+  courierLabelUrl?: string | null;
+  courierLabelFormat?: string | null;
+  pickupRequestId?: string | null;
+  pickupRequestedAt?: string | null;
 }
 
 interface ShipmentResponse {
@@ -237,7 +301,46 @@ interface ShipmentResponse {
   message: string;
   data: {
     shipment: Shipment;
+    providerCapabilities?: ProviderCapabilities | null;
   };
+}
+
+interface RefreshFromProviderResponse {
+  status: string;
+  data: {
+    shipmentId: string;
+    awbNumber: string;
+    previousStatus: string;
+    currentStatus: string;
+    syncedAt: string;
+    trackingData: unknown;
+  };
+  meta?: Record<string, unknown>;
+}
+
+interface FetchCourierLabelResponse {
+  status: string;
+  data: {
+    shipmentId: string;
+    awbNumber: string;
+    label: {
+      data: string | null;
+      format: string;
+    };
+  };
+  meta?: Record<string, unknown>;
+}
+
+interface CancelWithProviderResponse {
+  status: string;
+  data: {
+    shipmentId: string;
+    orderId: string;
+    status: string;
+    providerCancelled: boolean;
+    providerCancelResult: unknown;
+  };
+  meta?: Record<string, unknown>;
 }
 
 interface ShipmentsListResponse {
@@ -412,6 +515,24 @@ export const shipmentApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * Retry Courier Booking - Re-attempt booking for shipments pending AWB
+     */
+    retryCourierBooking: builder.mutation<
+      RetryCourierBookingResponse,
+      RetryCourierBookingRequest
+    >({
+      query: ({ id, pickupLocation }) => ({
+        url: `/api/v1/shipments/${id}/retry-booking`,
+        method: "POST",
+        body: pickupLocation ? { pickupLocation } : {},
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Shipment", id },
+        { type: "Shipment", id: "LIST" },
+      ],
+    }),
+
+    /**
      * Track Shipment - Get tracking information for a shipment
      */
     trackShipment: builder.query<TrackingResponse, string>({
@@ -502,6 +623,61 @@ export const shipmentApi = baseApi.injectEndpoints({
         { type: "Shipment", id: "LIST" },
       ],
     }),
+
+    /**
+     * Refresh From Provider - Fetch latest status from courier
+     */
+    refreshFromProvider: builder.mutation<RefreshFromProviderResponse, string>({
+      query: (shipmentId) => ({
+        url: `/api/v1/shipments/${shipmentId}/refresh`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: "Shipment", id }],
+    }),
+
+    /**
+     * Fetch Courier Label - Get label from courier provider
+     */
+    fetchCourierLabel: builder.mutation<
+      FetchCourierLabelResponse,
+      { id: string; format?: string }
+    >({
+      query: ({ id, format = "pdf" }) => ({
+        url: `/api/v1/shipments/${id}/courier-label`,
+        method: "POST",
+        body: { format },
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "Shipment", id }],
+    }),
+
+    /**
+     * Cancel With Provider - Cancel via courier first, then internally
+     */
+    cancelWithProvider: builder.mutation<
+      CancelWithProviderResponse,
+      { id: string; reason?: string }
+    >({
+      query: ({ id, reason }) => ({
+        url: `/api/v1/shipments/${id}/cancel-with-provider`,
+        method: "POST",
+        body: reason ? { reason } : {},
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Shipment", id },
+        { type: "Shipment", id: "LIST" },
+      ],
+    }),
+
+    /**
+     * Get Shipment Documents
+     */
+    getShipmentDocuments: builder.query<
+      { status: string; data: { documents: ShipmentDocument[] } },
+      string
+    >({
+      query: (shipmentId) => `/api/v1/shipments/${shipmentId}/documents`,
+      providesTags: (result, error, id) => [{ type: "Shipment", id }],
+    }),
   }),
 });
 
@@ -515,6 +691,7 @@ export const {
   useGetShipmentByIdQuery,
   useUpdateShipmentMutation,
   useCancelShipmentMutation,
+  useRetryCourierBookingMutation,
   useTrackShipmentQuery,
   useBulkCreateShipmentsMutation,
   useSchedulePickupMutation,
@@ -522,6 +699,10 @@ export const {
   useDownloadLabelMutation,
   useGetShipmentQuotesMutation,
   useRerateShipmentMutation,
+  useRefreshFromProviderMutation,
+  useFetchCourierLabelMutation,
+  useCancelWithProviderMutation,
+  useGetShipmentDocumentsQuery,
 } = shipmentApi;
 
 // ===========================
@@ -531,6 +712,8 @@ export const {
 export type {
   CreateShipmentRequest,
   UpdateShipmentRequest,
+  RetryCourierBookingRequest,
+  RetryCourierBookingResponse,
   Shipment,
   ShipmentResponse,
   ShipmentsListResponse,
@@ -548,4 +731,10 @@ export type {
   AddressPayload,
   InvoicePayload,
   BoxPayload,
+  ProviderAction,
+  ProviderCapabilities,
+  ShipmentDocument,
+  RefreshFromProviderResponse,
+  FetchCourierLabelResponse,
+  CancelWithProviderResponse,
 };

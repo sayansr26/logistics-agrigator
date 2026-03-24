@@ -65,6 +65,21 @@ class PartnerIntegrationService {
   }
 
   /**
+   * Normalize an auth token into a proper Bearer Authorization header.
+   * Callers may pass either raw JWT or already-prefixed "Bearer <jwt>".
+   */
+  normalizeAuthHeader(authToken) {
+    if (!authToken) return null;
+    const trimmed = String(authToken).trim();
+    if (!trimmed) return null;
+
+    const tokenValue = trimmed.replace(/^Bearer\s+/i, "").trim();
+    if (!tokenValue) return null;
+
+    return `Bearer ${tokenValue}`;
+  }
+
+  /**
    * Setup axios interceptors for logging and error handling
    */
   setupInterceptors() {
@@ -242,16 +257,27 @@ class PartnerIntegrationService {
       const cacheKey = this.createRateCalculationCacheKey(rateParams);
 
       // Try cache first
-      const redis = getRedisClient();
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.info("Rate calculation cache hit", {
+      let redis = null;
+      try {
+        redis = getRedisClient();
+      } catch (redisError) {
+        logger.warn("Redis not available for rate cache", {
           service: "shipment-service",
-          cacheKey,
-          fromPincode: rateParams.fromPincode,
-          toPincode: rateParams.toPincode,
+          error: redisError.message,
         });
-        return JSON.parse(cached);
+      }
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.info("Rate calculation cache hit", {
+            service: "shipment-service",
+            cacheKey,
+            fromPincode: rateParams.fromPincode,
+            toPincode: rateParams.toPincode,
+          });
+          return JSON.parse(cached);
+        }
       }
 
       // Prepare Partner Service request with all pricing inputs
@@ -280,7 +306,29 @@ class PartnerIntegrationService {
         try {
           const requestConfig = {};
           if (authToken) {
-            requestConfig.headers = { Authorization: authToken };
+            const normalizedAuth = this.normalizeAuthHeader(authToken);
+            const tokenValue = normalizedAuth
+              ? normalizedAuth.replace(/^Bearer\s+/i, "").trim()
+              : "";
+            const tokenHash = tokenValue
+              ? crypto
+                  .createHash("sha256")
+                  .update(tokenValue)
+                  .digest("hex")
+                  .slice(0, 12)
+              : null;
+
+            logger.debug("Forwarding auth token to Partner Service", {
+              service: "shipment-service",
+              endpoint: "/api/partners/calculate",
+              hasAuth: !!tokenValue,
+              authLength: tokenValue ? tokenValue.length : 0,
+              authHash: tokenHash,
+            });
+
+            requestConfig.headers = {
+              Authorization: normalizedAuth,
+            };
           }
           const response = await this.client.post(
             "/api/partners/calculate",
@@ -292,11 +340,13 @@ class PartnerIntegrationService {
             const rateData = response.data.data;
 
             // Cache the successful response
-            await redis.setEx(
-              cacheKey,
-              this.cacheTTL.rateCalculation,
-              JSON.stringify(rateData),
-            );
+            if (redis) {
+              await redis.setEx(
+                cacheKey,
+                this.cacheTTL.rateCalculation,
+                JSON.stringify(rateData),
+              );
+            }
 
             logger.info("Rate calculation successful", {
               service: "shipment-service",
@@ -310,6 +360,29 @@ class PartnerIntegrationService {
             throw new APIError("Invalid response format from Partner Service");
           }
         } catch (error) {
+          if (error instanceof APIError) throw error;
+
+          const status = error.response?.status;
+          const partnerError = error.response?.data?.error;
+          const partnerCode = partnerError?.code;
+          const partnerMessage = partnerError?.message;
+          const partnerDetails = partnerError?.details || null;
+
+          // Non-retriable client errors: bubble up to controller as proper HTTP status
+          if (status && status < 500 && status !== 429) {
+            if (status === 400) {
+              throw new ValidationError(
+                partnerMessage || "Partner service validation failed",
+                partnerDetails,
+              );
+            }
+            throw new APIError(
+              partnerMessage || error.message,
+              status,
+              partnerCode || "PARTNER_SERVICE_ERROR",
+            );
+          }
+
           lastError = error;
           if (attempt < this.retryAttempts) {
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
@@ -359,16 +432,27 @@ class PartnerIntegrationService {
       const cacheKey = this.createServiceabilityCacheKey(serviceabilityParams);
 
       // Try cache first
-      const redis = getRedisClient();
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.info("Serviceability check cache hit", {
+      let redis = null;
+      try {
+        redis = getRedisClient();
+      } catch (redisError) {
+        logger.warn("Redis not available for serviceability cache", {
           service: "shipment-service",
-          cacheKey,
-          fromPincode: serviceabilityParams.fromPincode,
-          toPincode: serviceabilityParams.toPincode,
+          error: redisError.message,
         });
-        return JSON.parse(cached);
+      }
+
+      if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          logger.info("Serviceability check cache hit", {
+            service: "shipment-service",
+            cacheKey,
+            fromPincode: serviceabilityParams.fromPincode,
+            toPincode: serviceabilityParams.toPincode,
+          });
+          return JSON.parse(cached);
+        }
       }
 
       // Prepare Partner Service request
@@ -386,7 +470,29 @@ class PartnerIntegrationService {
       // Call Partner Service with optional auth header
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        const normalizedAuth = this.normalizeAuthHeader(authToken);
+        const tokenValue = normalizedAuth
+          ? normalizedAuth.replace(/^Bearer\s+/i, "").trim()
+          : "";
+        const tokenHash = tokenValue
+          ? crypto
+              .createHash("sha256")
+              .update(tokenValue)
+              .digest("hex")
+              .slice(0, 12)
+          : null;
+
+        logger.debug("Forwarding auth token to Partner Service", {
+          service: "shipment-service",
+          endpoint: "/api/partners/serviceability",
+          hasAuth: !!tokenValue,
+          authLength: tokenValue ? tokenValue.length : 0,
+          authHash: tokenHash,
+        });
+
+        requestConfig.headers = {
+          Authorization: normalizedAuth,
+        };
       }
       const response = await this.client.post(
         "/api/partners/serviceability",
@@ -403,11 +509,13 @@ class PartnerIntegrationService {
             : [];
 
         // Cache the successful response
-        await redis.setEx(
-          cacheKey,
-          this.cacheTTL.serviceability,
-          JSON.stringify(serviceabilityList),
-        );
+        if (redis) {
+          await redis.setEx(
+            cacheKey,
+            this.cacheTTL.serviceability,
+            JSON.stringify(serviceabilityList),
+          );
+        }
 
         logger.info("Serviceability check successful", {
           service: "shipment-service",
@@ -420,6 +528,28 @@ class PartnerIntegrationService {
         throw new APIError("Invalid response format from Partner Service");
       }
     } catch (error) {
+      if (error instanceof APIError) throw error;
+
+      const status = error.response?.status;
+      const partnerError = error.response?.data?.error;
+      const partnerCode = partnerError?.code;
+      const partnerMessage = partnerError?.message;
+      const partnerDetails = partnerError?.details || null;
+
+      if (status && status < 500 && status !== 429) {
+        if (status === 400) {
+          throw new ValidationError(
+            partnerMessage || "Partner service validation failed",
+            partnerDetails,
+          );
+        }
+        throw new APIError(
+          partnerMessage || error.message,
+          status,
+          partnerCode || "PARTNER_SERVICE_ERROR",
+        );
+      }
+
       logger.error("Serviceability check error", {
         service: "shipment-service",
         error: error.message,
@@ -580,7 +710,9 @@ class PartnerIntegrationService {
 
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service to book courier shipment", {
@@ -601,12 +733,32 @@ class PartnerIntegrationService {
 
       throw new APIError("Invalid response from courier booking");
     } catch (error) {
+      const partnerError = error.response?.data?.error;
+      const partnerCode = partnerError?.code || "COURIER_BOOKING_FAILED";
+      const partnerMessage =
+        partnerError?.message || error.message || "Courier booking failed";
+      const partnerDetails = partnerError?.details || null;
+      const httpStatus = error.response?.status || 500;
+
       logger.error("Courier booking error via partner-service", {
         service: "shipment-service",
         partnerId,
-        error: error.message,
+        orderId: shipmentData.orderId,
+        error: partnerMessage,
+        code: partnerCode,
+        httpStatus,
+        details: partnerDetails,
       });
-      throw error;
+
+      if (error instanceof APIError) throw error;
+
+      const bookingError = new APIError(
+        partnerMessage,
+        httpStatus,
+        partnerCode,
+      );
+      bookingError.details = partnerDetails;
+      throw bookingError;
     }
   }
 
@@ -624,7 +776,9 @@ class PartnerIntegrationService {
 
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service to cancel courier shipment", {
@@ -668,7 +822,9 @@ class PartnerIntegrationService {
 
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service to track courier shipment", {
@@ -711,7 +867,9 @@ class PartnerIntegrationService {
 
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service to request courier pickup", {
@@ -759,7 +917,9 @@ class PartnerIntegrationService {
 
       const requestConfig = { params: { format } };
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service for courier label", {
@@ -803,7 +963,9 @@ class PartnerIntegrationService {
 
       const requestConfig = {};
       if (authToken) {
-        requestConfig.headers = { Authorization: authToken };
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
       }
 
       logger.info("Calling partner-service to generate courier manifest", {
@@ -831,6 +993,85 @@ class PartnerIntegrationService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Get provider capabilities for a shipment
+   * @param {string} partnerId - Partner ID
+   * @param {Object} shipmentContext - { status, bookingStatus, awbNumber, paymentType }
+   * @param {string} [authToken] - Authorization token
+   * @returns {Object} Capabilities and available actions
+   */
+  async getProviderCapabilities(partnerId, shipmentContext, authToken = null) {
+    try {
+      this.checkCircuitBreaker();
+
+      const requestConfig = {};
+      if (authToken) {
+        requestConfig.headers = {
+          Authorization: this.normalizeAuthHeader(authToken),
+        };
+      }
+
+      logger.info("Fetching provider capabilities from partner-service", {
+        service: "shipment-service",
+        partnerId,
+        status: shipmentContext?.status,
+      });
+
+      const response = await this.client.post(
+        "/api/v1/courier-operations/capabilities",
+        { partnerId, shipmentContext },
+        requestConfig,
+      );
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+
+      throw new APIError("Invalid response from capabilities request");
+    } catch (error) {
+      logger.error("Provider capabilities error via partner-service", {
+        service: "shipment-service",
+        partnerId,
+        error: error.message,
+      });
+
+      if (error instanceof APIError) throw error;
+
+      return {
+        success: false,
+        capabilities: {},
+        availableActions: [],
+        providerName: "Unknown",
+        aggregatorType: "UNKNOWN",
+      };
+    }
+  }
+
+  /**
+   * Cancel a shipment with the courier FIRST, then return result for internal state update.
+   * Implements the "cancel from partner first" flow.
+   * @param {string} partnerId
+   * @param {string} awbNumber
+   * @param {string} reason
+   * @param {string} [authToken]
+   * @returns {Object} Cancellation result from partner
+   */
+  async cancelWithCourierFirst(partnerId, awbNumber, reason, authToken = null) {
+    return this.cancelWithCourier(partnerId, awbNumber, reason, authToken);
+  }
+
+  /**
+   * Fetch latest tracking/status from provider and return normalized data.
+   * Does NOT update local DB — caller does that.
+   * @param {string} partnerId
+   * @param {string} awbNumber
+   * @param {string} [authToken]
+   * @returns {Object} Tracking result from partner
+   */
+  async refreshFromProvider(partnerId, awbNumber, authToken = null) {
+    return this.trackWithCourier(partnerId, awbNumber, authToken);
   }
 
   /**

@@ -7,6 +7,25 @@ const APIResponse = require("../shared/lib/response");
 const { ConflictError, errorUtils } = require("../shared/lib/errors");
 const logger = require("../shared/lib/logger");
 
+function parseJwtExpiryToSeconds(expiresIn) {
+  if (!expiresIn) return 3600;
+  if (typeof expiresIn === "number" && Number.isFinite(expiresIn)) {
+    return Math.max(1, Math.floor(expiresIn));
+  }
+
+  const raw = String(expiresIn).trim();
+  if (!raw) return 3600;
+  if (/^\d+$/.test(raw)) return Math.max(1, parseInt(raw, 10));
+
+  const match = raw.match(/^(\d+)\s*([smhd])$/i);
+  if (!match) return 3600;
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+  return Math.max(1, value * (multipliers[unit] || 3600));
+}
+
 class AuthController {
   // User registration
   static async register(req, res) {
@@ -100,8 +119,11 @@ class AuthController {
         parentUserId: null,
       };
 
+      const accessTokenExpiresIn = process.env.JWT_EXPIRES_IN || "1h";
+      const expiresInSeconds = parseJwtExpiryToSeconds(accessTokenExpiresIn);
+
       const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+        expiresIn: accessTokenExpiresIn,
       });
 
       const refreshToken = jwt.sign(
@@ -125,7 +147,7 @@ class AuthController {
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
-        3600,
+        expiresInSeconds,
         JSON.stringify({
           userId: user.id,
           role: user.role,
@@ -147,7 +169,7 @@ class AuthController {
           },
           accessToken,
           refreshToken,
-          expiresIn: 3600,
+          expiresIn: expiresInSeconds,
         },
         meta: {
           message: "Registration successful",
@@ -260,8 +282,11 @@ class AuthController {
         parentUserId: user.parentUserId || null,
       };
 
+      const accessTokenExpiresIn = process.env.JWT_EXPIRES_IN || "1h";
+      const expiresInSeconds = parseJwtExpiryToSeconds(accessTokenExpiresIn);
+
       const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+        expiresIn: accessTokenExpiresIn,
       });
 
       const refreshToken = jwt.sign(
@@ -285,7 +310,7 @@ class AuthController {
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
-        3600,
+        expiresInSeconds,
         JSON.stringify({
           userId: user.id,
           role: user.role,
@@ -316,7 +341,7 @@ class AuthController {
           },
           accessToken,
           refreshToken,
-          expiresIn: 3600,
+          expiresIn: expiresInSeconds,
         },
       });
     } catch (error) {
@@ -389,8 +414,11 @@ class AuthController {
         parentUserId: user.parentUserId || null,
       };
 
+      const accessTokenExpiresIn = process.env.JWT_EXPIRES_IN || "1h";
+      const expiresInSeconds = parseJwtExpiryToSeconds(accessTokenExpiresIn);
+
       const newAccessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+        expiresIn: accessTokenExpiresIn,
       });
 
       // Generate new refresh token
@@ -415,7 +443,7 @@ class AuthController {
       const redisClient = getRedisClient();
       await redisClient.setEx(
         `session:${user.id}`,
-        3600,
+        expiresInSeconds,
         JSON.stringify({
           userId: user.id,
           role: user.role,
@@ -443,7 +471,7 @@ class AuthController {
         data: {
           accessToken: newAccessToken,
           refreshToken: newRefreshToken,
-          expiresIn: 3600,
+          expiresIn: expiresInSeconds,
         },
       });
     } catch (error) {

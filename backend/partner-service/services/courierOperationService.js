@@ -16,6 +16,12 @@ const {
 const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
 
+function normalizeIndianPhone(phone) {
+  const raw = String(phone || "").trim();
+  if (!raw) return raw;
+  return raw.startsWith("+91") ? raw.slice(3) : raw;
+}
+
 class CourierOperationService {
   constructor() {
     this.serviceName = "CourierOperationService";
@@ -65,7 +71,61 @@ class CourierOperationService {
 
       const channel = await this._getValidatedChannel(partnerId);
       const adapter = createAdapter(channel);
-      const result = await adapter.createOrder(shipmentData);
+      if (!adapter) {
+        throw Object.assign(
+          new Error(`No adapter available for partner ${partnerId}`),
+          { code: "ADAPTER_NOT_FOUND", statusCode: 500 },
+        );
+      }
+      const normalizedShipmentData = {
+        ...shipmentData,
+        pickupAddress: {
+          ...shipmentData.pickupAddress,
+          phone: normalizeIndianPhone(shipmentData.pickupAddress?.phone),
+        },
+        deliveryAddress: {
+          ...shipmentData.deliveryAddress,
+          phone: normalizeIndianPhone(shipmentData.deliveryAddress?.phone),
+        },
+      };
+
+      const result = await adapter.createOrder(normalizedShipmentData);
+
+      if (!result?.awbNumber) {
+        const pkg = result?.rawResponse?.packages?.[0];
+        const packageRemarks = pkg?.remarks || [];
+        const packageStatus = pkg?.status;
+
+        const msg =
+          (packageRemarks.length > 0
+            ? packageRemarks.filter(Boolean).join("; ")
+            : null) ||
+          result?.rawResponse?.rmk ||
+          result?.bookingReference ||
+          "Courier booking failed (AWB not generated)";
+
+        logger.warn("Courier booking did not return AWB", {
+          partnerId,
+          orderId: normalizedShipmentData.orderId,
+          aggregatorType: channel.aggregatorType,
+          packageStatus,
+          packageRemarks,
+          rmk: result?.rawResponse?.rmk,
+        });
+
+        throw Object.assign(new Error(msg), {
+          code: "COURIER_BOOKING_FAILED",
+          statusCode: 400,
+          details: {
+            partnerId,
+            orderId: normalizedShipmentData.orderId,
+            aggregatorType: channel.aggregatorType,
+            bookingReference: result?.bookingReference || null,
+            packageStatus,
+            packageRemarks,
+          },
+        });
+      }
 
       if (result && result.awbNumber) {
         await prisma.partnerShipment.create({
@@ -74,6 +134,7 @@ class CourierOperationService {
             shipmentId: shipmentData.shipmentId || null,
             partnerAwbNo: result.awbNumber,
             status: "BOOKED",
+            trackingUrl: result.trackingUrl || null,
             calculatedRate: shipmentData.declaredValue || 0,
             codAmount:
               shipmentData.paymentType === "COD" ? shipmentData.codAmount : 0,
@@ -91,7 +152,7 @@ class CourierOperationService {
           userId,
           requestData: {
             partnerId,
-            orderId: shipmentData.orderId,
+            orderId: normalizedShipmentData.orderId,
             awbNumber: result?.awbNumber,
           },
           ipAddress: null,
@@ -392,6 +453,42 @@ class CourierOperationService {
       logger.error("Error checking courier serviceability", {
         partnerId,
         pincode,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get capabilities and available actions for a shipment/partner combination
+   * @param {string} partnerId - Partner ID
+   * @param {Object} shipmentContext - { status, bookingStatus, awbNumber, paymentType }
+   * @returns {Promise<Object>} { capabilities, availableActions, providerName }
+   */
+  async getShipmentCapabilities(partnerId, shipmentContext) {
+    try {
+      const channel = await this._getValidatedChannel(partnerId);
+      const adapter = createAdapter(channel);
+      if (!adapter) {
+        throw Object.assign(
+          new Error(`No adapter available for partner ${partnerId}`),
+          { code: "ADAPTER_NOT_FOUND", statusCode: 500 },
+        );
+      }
+
+      const capabilities = adapter.getCapabilities();
+      const availableActions = adapter.getAvailableActions(shipmentContext);
+
+      return {
+        success: true,
+        providerName: channel.channelName || channel.aggregatorType,
+        aggregatorType: channel.aggregatorType,
+        capabilities,
+        availableActions,
+      };
+    } catch (error) {
+      logger.error("Error getting shipment capabilities", {
+        partnerId,
         error: error.message,
       });
       throw error;

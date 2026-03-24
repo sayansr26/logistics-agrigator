@@ -200,6 +200,15 @@ const createShipmentSchema = Joi.object({
     "string.guid": "Pickup address ID must be a valid UUID",
   }),
 
+  // Optional registered warehouse/pickup location name (needed for some couriers like Delhivery).
+  // Frontend should pass the selected address label (warehouse name).
+  pickupLocation: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .allow(null, ""),
+
   pickupAddress: addressSchema.required(),
 
   deliveryAddress: addressSchema.required(),
@@ -843,6 +852,35 @@ const updatePickupStatusSchema = Joi.object({
     .description("Actual pickup timestamp"),
 });
 
+// Phase 3: Lifecycle endpoint validation schemas
+
+const refreshFromProviderSchema = Joi.object({});
+
+const fetchCourierLabelSchema = Joi.object({
+  format: Joi.string().valid("pdf", "png", "zpl").default("pdf").optional(),
+});
+
+const cancelWithProviderSchema = Joi.object({
+  reason: Joi.string()
+    .max(500)
+    .optional()
+    .default("User requested cancellation"),
+});
+
+const retryBookingSchema = {
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    pickupLocation: Joi.string()
+      .trim()
+      .min(1)
+      .max(100)
+      .optional()
+      .allow(null, ""),
+  }),
+};
+
 module.exports = {
   createShipmentSchema,
   updateShipmentSchema,
@@ -859,6 +897,10 @@ module.exports = {
   // New SHIP-004 schemas
   deliveryConfirmationSchema,
   analyticsQuerySchema,
+  // Phase 3: Lifecycle schemas
+  refreshFromProviderSchema,
+  fetchCourierLabelSchema,
+  cancelWithProviderSchema,
   // SHIP-005 validation schemas
   processBulkShipmentsSchema,
   createNDRCaseSchema,
@@ -868,4 +910,5 @@ module.exports = {
   createManifestSchema,
   schedulePickupSchema,
   updatePickupStatusSchema,
+  retryBookingSchema,
 };

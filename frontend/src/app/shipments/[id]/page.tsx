@@ -1,19 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   useGetShipmentByIdQuery,
   useCancelShipmentMutation,
   useDownloadLabelMutation,
+  useRetryCourierBookingMutation,
+  useRefreshFromProviderMutation,
+  useFetchCourierLabelMutation,
+  useCancelWithProviderMutation,
 } from "@/store/api/endpoints/shipmentApi";
-import type { TrackingEvent } from "@/store/api/endpoints/shipmentApi";
+import type {
+  TrackingEvent,
+  ProviderAction,
+} from "@/store/api/endpoints/shipmentApi";
+import { useRole } from "@/hooks/useRole";
+import {
+  useGetMyAddressesQuery,
+  useGetOutletAddressesQuery,
+} from "@/store/api/endpoints/outletApi";
+import type { OutletAddress } from "@/store/api/endpoints/outletApi";
 import {
   Package,
   Truck,
@@ -36,6 +60,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -110,6 +135,9 @@ export default function ShipmentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const { isSystemAdmin, isRole } = useRole();
+  const isOutlet = isRole("outlet");
+  const isAdminLike = isSystemAdmin();
 
   const { data, isLoading, error, refetch } = useGetShipmentByIdQuery(id, {
     skip: !id,
@@ -118,8 +146,48 @@ export default function ShipmentDetailPage() {
     useCancelShipmentMutation();
   const [downloadLabel, { isLoading: downloading }] =
     useDownloadLabelMutation();
+  const [retryCourierBooking, { isLoading: retrying }] =
+    useRetryCourierBookingMutation();
+  const [refreshFromProvider, { isLoading: refreshing }] =
+    useRefreshFromProviderMutation();
+  const [fetchCourierLabel, { isLoading: fetchingLabel }] =
+    useFetchCourierLabelMutation();
+  const [cancelWithProvider, { isLoading: cancellingProvider }] =
+    useCancelWithProviderMutation();
 
   const shipment = data?.data?.shipment;
+  const providerCapabilities = data?.data?.providerCapabilities;
+  const availableActions: ProviderAction[] =
+    providerCapabilities?.availableActions || [];
+
+  const shouldFetchOutletAddrs = isAdminLike && !!shipment?.outletId;
+  const { data: outletAddrsData } = useGetOutletAddressesQuery(
+    shipment?.outletId || "",
+    { skip: !shouldFetchOutletAddrs },
+  );
+  const { data: myAddrsData } = useGetMyAddressesQuery(undefined, {
+    skip: !isOutlet,
+  });
+
+  const resolvedAddresses: OutletAddress[] = isOutlet
+    ? myAddrsData?.data?.addresses || []
+    : outletAddrsData?.data?.addresses || [];
+
+  const resolvedPickupLocation =
+    resolvedAddresses.find((a) => a.id === shipment?.pickupAddressId)?.label ||
+    resolvedAddresses.find((a) => a.id === shipment?.pickupAddressId)?.name ||
+    "";
+
+  const [retryOpen, setRetryOpen] = useState(false);
+  const [retryPickupLocation, setRetryPickupLocation] = useState("");
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!shipment) return;
+    if (retryOpen) return;
+    // Prefer the outlet-address label/name (warehouse) over pickup contact name.
+    setRetryPickupLocation(resolvedPickupLocation || "");
+  }, [shipment?.id, resolvedPickupLocation, retryOpen]);
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this shipment?")) return;
@@ -127,6 +195,35 @@ export default function ShipmentDetailPage() {
       await cancelShipment(id).unwrap();
     } catch {
       // handled by RTK
+    }
+  };
+
+  const handleRetryBooking = async (pickupLocationOverride?: string) => {
+    setRetryError(null);
+    try {
+      const pickupLocation =
+        typeof pickupLocationOverride === "string"
+          ? pickupLocationOverride
+          : retryPickupLocation;
+
+      await retryCourierBooking({
+        id,
+        pickupLocation: pickupLocation.trim() || undefined,
+      }).unwrap();
+      setRetryOpen(false);
+      await refetch();
+    } catch (e) {
+      const err = e as {
+        data?: { error?: { message?: string } };
+        error?: { message?: string };
+        message?: string;
+      };
+      setRetryError(
+        err?.data?.error?.message ||
+          err?.error?.message ||
+          err?.message ||
+          "Failed to retry courier booking",
+      );
     }
   };
 
@@ -139,6 +236,56 @@ export default function ShipmentDetailPage() {
       a.download = `label-${shipment?.awbNumber || id}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  const handleRefreshFromProvider = async () => {
+    try {
+      await refreshFromProvider(id).unwrap();
+      await refetch();
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  const handleFetchCourierLabel = async () => {
+    try {
+      const result = await fetchCourierLabel({ id }).unwrap();
+      if (result?.data?.label?.data) {
+        const byteCharacters = atob(result.data.label.data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `courier-label-${shipment?.awbNumber || id}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  const handleCancelWithProvider = async () => {
+    if (
+      !confirm(
+        "Cancel this shipment? This will cancel with the courier first, then update internally.",
+      )
+    )
+      return;
+    try {
+      await cancelWithProvider({
+        id,
+        reason: "User requested cancellation",
+      }).unwrap();
+      await refetch();
     } catch {
       // handled by RTK
     }
@@ -219,6 +366,9 @@ export default function ShipmentDetailPage() {
     { title: `#${shipment.awbNumber || shipment.orderId}` },
   ];
 
+  const canRetryBooking =
+    !shipment.awbNumber && shipment.bookingStatus === "PENDING_BOOKING";
+
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="max-w-7xl mx-auto space-y-8">
@@ -237,6 +387,16 @@ export default function ShipmentDetailPage() {
                 <span className="font-mono font-medium">
                   {shipment.awbNumber || "Pending"}
                 </span>
+                {shipment.trackingUrl && (
+                  <a
+                    href={shipment.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 ml-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    Track <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </p>
               <p className="text-sm text-muted-foreground">
                 Order: {shipment.orderId} · Type:{" "}
@@ -655,7 +815,7 @@ export default function ShipmentDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
+            {/* Quick Actions - Dynamic from provider capabilities */}
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2">
@@ -663,64 +823,341 @@ export default function ShipmentDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-auto py-3 px-4"
-                  onClick={handleDownloadLabel}
-                  disabled={downloading}
-                >
-                  {downloading ? (
-                    <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-3" />
-                  )}
-                  <div className="text-left">
-                    <div className="font-medium">Download Label</div>
-                    <div className="text-xs text-muted-foreground">
-                      PDF format
+                {canRetryBooking && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start h-auto py-3 px-4"
+                    onClick={() => {
+                      if (resolvedPickupLocation) {
+                        void handleRetryBooking(resolvedPickupLocation);
+                        return;
+                      }
+                      setRetryOpen(true);
+                    }}
+                    disabled={retrying}
+                  >
+                    {retrying ? (
+                      <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-3" />
+                    )}
+                    <div className="text-left">
+                      <div className="font-medium">Retry Booking</div>
+                      <div className="text-xs text-muted-foreground">
+                        Generate AWB again (pending booking)
+                      </div>
                     </div>
-                  </div>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-auto py-3 px-4"
-                  onClick={() => router.push(`/shipments/${id}/edit`)}
-                >
-                  <FileText className="h-4 w-4 mr-3" />
-                  <div className="text-left">
-                    <div className="font-medium">Edit Shipment</div>
-                    <div className="text-xs text-muted-foreground">
-                      Update status or details
-                    </div>
-                  </div>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
-                  onClick={handleCancel}
-                  disabled={
-                    cancelling ||
-                    shipment.status === "CANCELLED" ||
-                    shipment.status === "DELIVERED"
-                  }
-                >
-                  {cancelling ? (
-                    <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                  ) : (
-                    <XCircle className="h-4 w-4 mr-3" />
-                  )}
-                  <div className="text-left">
-                    <div className="font-medium">Cancel Shipment</div>
-                    <div className="text-xs text-muted-foreground">
-                      Cancel and request refund
-                    </div>
-                  </div>
-                </Button>
+                  </Button>
+                )}
+
+                {availableActions
+                  .filter((a) => a.enabled)
+                  .map((action) => {
+                    if (action.action === "refresh") {
+                      return (
+                        <Button
+                          key={action.action}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4"
+                          onClick={handleRefreshFromProvider}
+                          disabled={refreshing}
+                        >
+                          {refreshing ? (
+                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 mr-3" />
+                          )}
+                          <div className="text-left">
+                            <div className="font-medium">
+                              Refresh from Provider
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {action.description}
+                            </div>
+                          </div>
+                        </Button>
+                      );
+                    }
+
+                    if (action.action === "track" && shipment.trackingUrl) {
+                      return (
+                        <a
+                          key={action.action}
+                          href={shipment.trackingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full block"
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full justify-start h-auto py-3 px-4"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-3" />
+                            <div className="text-left">
+                              <div className="font-medium">Track Shipment</div>
+                              <div className="text-xs text-muted-foreground">
+                                {action.description}
+                              </div>
+                            </div>
+                          </Button>
+                        </a>
+                      );
+                    }
+
+                    if (action.action === "label") {
+                      return (
+                        <Button
+                          key={action.action}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4"
+                          onClick={handleFetchCourierLabel}
+                          disabled={fetchingLabel}
+                        >
+                          {fetchingLabel ? (
+                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-3" />
+                          )}
+                          <div className="text-left">
+                            <div className="font-medium">
+                              Download Courier Label
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {action.description}
+                            </div>
+                          </div>
+                        </Button>
+                      );
+                    }
+
+                    if (action.action === "cancel") {
+                      return (
+                        <Button
+                          key={action.action}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
+                          onClick={handleCancelWithProvider}
+                          disabled={
+                            cancellingProvider ||
+                            shipment.status === "CANCELLED" ||
+                            shipment.status === "DELIVERED"
+                          }
+                        >
+                          {cancellingProvider ? (
+                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-3" />
+                          )}
+                          <div className="text-left">
+                            <div className="font-medium">Cancel Shipment</div>
+                            <div className="text-xs text-muted-foreground">
+                              {action.description}
+                            </div>
+                          </div>
+                        </Button>
+                      );
+                    }
+
+                    if (action.action === "edit") {
+                      return (
+                        <Button
+                          key={action.action}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4"
+                          onClick={() => router.push(`/shipments/${id}/edit`)}
+                        >
+                          <FileText className="h-4 w-4 mr-3" />
+                          <div className="text-left">
+                            <div className="font-medium">Edit Shipment</div>
+                            <div className="text-xs text-muted-foreground">
+                              {action.description}
+                            </div>
+                          </div>
+                        </Button>
+                      );
+                    }
+
+                    if (action.action === "pickup") {
+                      return (
+                        <Button
+                          key={action.action}
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4"
+                          disabled
+                        >
+                          <Truck className="h-4 w-4 mr-3" />
+                          <div className="text-left">
+                            <div className="font-medium">Request Pickup</div>
+                            <div className="text-xs text-muted-foreground">
+                              {action.description}
+                            </div>
+                          </div>
+                        </Button>
+                      );
+                    }
+
+                    return null;
+                  })}
+
+                {/* Fallback actions when no provider capabilities loaded */}
+                {availableActions.length === 0 && !canRetryBooking && (
+                  <>
+                    {shipment.trackingUrl && (
+                      <a
+                        href={shipment.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full block"
+                      >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-3" />
+                          <div className="text-left">
+                            <div className="font-medium">Track Shipment</div>
+                            <div className="text-xs text-muted-foreground">
+                              View on courier website
+                            </div>
+                          </div>
+                        </Button>
+                      </a>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start h-auto py-3 px-4"
+                      onClick={handleDownloadLabel}
+                      disabled={downloading}
+                    >
+                      {downloading ? (
+                        <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-3" />
+                      )}
+                      <div className="text-left">
+                        <div className="font-medium">Download Label</div>
+                        <div className="text-xs text-muted-foreground">
+                          PDF format
+                        </div>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
+                      onClick={handleCancel}
+                      disabled={
+                        cancelling ||
+                        shipment.status === "CANCELLED" ||
+                        shipment.status === "DELIVERED"
+                      }
+                    >
+                      {cancelling ? (
+                        <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-3" />
+                      )}
+                      <div className="text-left">
+                        <div className="font-medium">Cancel Shipment</div>
+                        <div className="text-xs text-muted-foreground">
+                          Cancel and request refund
+                        </div>
+                      </div>
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
+
+            {/* Documents */}
+            {shipment.documents && shipment.documents.length > 0 && (
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-green-600" /> Documents
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {shipment.documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center dark:bg-green-950">
+                          <FileText className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium">{doc.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {doc.type} · {doc.source} · {doc.format || "—"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {doc.fetchedAt
+                          ? formatDateTime(doc.fetchedAt)
+                          : formatDateTime(doc.createdAt)}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Provider Sync Status */}
+            {providerCapabilities && (
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-orange-600" /> Provider
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="text-sm space-y-2">
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Provider</dt>
+                      <dd className="font-medium">
+                        {providerCapabilities.providerName}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Type</dt>
+                      <dd className="font-medium">
+                        {providerCapabilities.aggregatorType}
+                      </dd>
+                    </div>
+                    {shipment.providerLastSyncAt && (
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">Last Synced</dt>
+                        <dd className="font-medium">
+                          {formatDateTime(shipment.providerLastSyncAt)}
+                        </dd>
+                      </div>
+                    )}
+                    {shipment.providerStatus && (
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">
+                          Provider Status
+                        </dt>
+                        <dd className="font-medium">
+                          {formatStatus(shipment.providerStatus)}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Shipment Info */}
             <Card>
@@ -801,6 +1238,67 @@ export default function ShipmentDetailPage() {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={retryOpen}
+        onOpenChange={(open) => {
+          setRetryOpen(open);
+          if (!open) setRetryError(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Retry Courier Booking</DialogTitle>
+            <DialogDescription>
+              If you’re using Delhivery,{" "}
+              <span className="font-medium">Pickup Location</span> must match
+              the warehouse name configured in your Delhivery account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="pickupLocation">Pickup Location</Label>
+            <Input
+              id="pickupLocation"
+              placeholder="e.g. WH_HOWRAH_01"
+              value={retryPickupLocation}
+              onChange={(e) => setRetryPickupLocation(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use the exact Delhivery One pickup location name (warehouse), not
+              the pickup person’s name. If your pickup address has a warehouse
+              label, we auto-fill it for you.
+            </p>
+            {retryError && (
+              <p className="text-sm text-destructive">{retryError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRetryOpen(false)}
+              disabled={retrying}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleRetryBooking()}
+              disabled={retrying}
+            >
+              {retrying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Retrying…
+                </>
+              ) : (
+                "Retry Booking"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

@@ -76,6 +76,7 @@ export default function ReviewPage() {
   }, [isOutlet, isAdminLike, store.outletId, myAddrsData, outletAddrsData]);
 
   const selectedAddr = addresses.find((a) => a.id === store.pickupAddressId);
+  const selectedRtoAddr = addresses.find((a) => a.id === store.rtoAddressId);
 
   const quotes = quotesData?.data?.quotes || [];
   const recommended = quotesData?.data?.recommended || null;
@@ -123,10 +124,17 @@ export default function ReviewPage() {
 
   async function handleConfirm() {
     if (!selectedQuote || !selectedAddr) return;
+    if (!store.rtoSameAsPickup && !selectedRtoAddr) return;
     try {
+      const normalizePhone = (phone?: string) => {
+        const raw = (phone || "").trim();
+        if (!raw) return raw;
+        return raw.startsWith("+91") ? raw : `+91${raw}`;
+      };
+
       const pickupAddress = {
         name: selectedAddr.name,
-        phone: selectedAddr.phone,
+        phone: normalizePhone(selectedAddr.phone),
         email: selectedAddr.email,
         addressLine1: selectedAddr.addressLine1,
         addressLine2: selectedAddr.addressLine2,
@@ -152,6 +160,21 @@ export default function ReviewPage() {
         country: "India",
       };
 
+      const rtoAddress =
+        store.rtoSameAsPickup || !selectedRtoAddr
+          ? undefined
+          : {
+              name: selectedRtoAddr.name,
+              phone: normalizePhone(selectedRtoAddr.phone),
+              addressLine1: selectedRtoAddr.addressLine1,
+              addressLine2: selectedRtoAddr.addressLine2,
+              landmark: selectedRtoAddr.landmark,
+              city: selectedRtoAddr.city,
+              state: selectedRtoAddr.state,
+              pincode: selectedRtoAddr.pincode,
+              country: selectedRtoAddr.country || "India",
+            };
+
       const payload: CreateShipmentRequest = {
         orderId: store.referenceNo,
         shipmentType: store.shipmentType,
@@ -159,9 +182,11 @@ export default function ReviewPage() {
         outletId: isOutlet ? undefined : store.outletId || undefined,
         outletUserId: isOutlet ? undefined : store.outletUserId || undefined,
         pickupAddressId: store.pickupAddressId || undefined,
+        pickupLocation: selectedAddr.label || selectedAddr.name,
         pickupAddress,
         deliveryAddress,
         rtoSameAsPickup: store.rtoSameAsPickup,
+        rtoAddress,
         productDescription: store.productDescription || undefined,
         hsnCode: store.hsnCode || undefined,
         gstPercentage: store.gstPercentage

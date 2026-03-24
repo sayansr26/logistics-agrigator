@@ -2,12 +2,14 @@
 
 class APIResponse {
   static success(data, meta = {}) {
+    const normalizedMeta =
+      typeof meta === "string" ? { message: meta } : meta || {};
     return {
       status: "success",
       data,
       meta: {
         timestamp: new Date().toISOString(),
-        ...meta,
+        ...normalizedMeta,
       },
     };
   }

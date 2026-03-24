@@ -17,6 +17,7 @@ const publicPaths = [
   "/api/v1/auth/verify-email",
   "/api/v1/auth/refresh-token",
   "/api/v1/geography", // All geographical data endpoints (public)
+  "/api/v1/shipments/webhook", // Courier provider webhook callbacks (public)
 ];
 
 /**

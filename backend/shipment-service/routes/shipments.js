@@ -13,6 +13,11 @@ const {
 // Import controllers
 const {
   createShipment,
+  retryCourierBooking,
+  refreshFromProvider,
+  fetchCourierLabel,
+  cancelWithProvider,
+  getShipmentDocuments,
   getShipments,
   getShipmentById,
   updateShipment,
@@ -28,6 +33,8 @@ const {
   trackByAwbNumber,
   recordDeliveryConfirmation,
   getTrackingAnalytics,
+  // Phase 4: Webhook ingestion
+  handleProviderWebhook,
   // SHIP-005: Bulk Operations and Advanced Features
   processBulkShipments,
   getBulkJobStatus,
@@ -55,6 +62,10 @@ const {
   serviceabilitySchema,
   shipmentQuoteSchema,
   rerateShipmentSchema,
+  // Phase 3: Lifecycle validation schemas
+  refreshFromProviderSchema,
+  fetchCourierLabelSchema,
+  cancelWithProviderSchema,
   // New SHIP-004 validation schemas
   deliveryConfirmationSchema,
   analyticsQuerySchema,
@@ -67,6 +78,7 @@ const {
   createManifestSchema,
   schedulePickupSchema,
   updatePickupStatusSchema,
+  retryBookingSchema,
 } = require("../validation/shipmentSchemas");
 
 /**
@@ -163,6 +175,72 @@ router.post(
 );
 
 /**
+ * POST /api/v1/shipments/:id/retry-booking
+ * Retry courier booking for an existing shipment (e.g., after fixing Delhivery pickup location config).
+ */
+router.post(
+  "/:id/retry-booking",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  validate(retryBookingSchema),
+  retryCourierBooking,
+);
+
+/**
+ * POST /api/v1/shipments/:id/refresh
+ * Refresh shipment data from courier provider and sync local records.
+ */
+router.post(
+  "/:id/refresh",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  refreshFromProvider,
+);
+
+/**
+ * POST /api/v1/shipments/:id/courier-label
+ * Fetch courier label from provider.
+ */
+router.post(
+  "/:id/courier-label",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  fetchCourierLabel,
+);
+
+/**
+ * POST /api/v1/shipments/:id/cancel-with-provider
+ * Cancel shipment — calls provider first, then cancels internally.
+ */
+router.post(
+  "/:id/cancel-with-provider",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "delete", "own"),
+  cancelWithProvider,
+);
+
+/**
+ * GET /api/v1/shipments/:id/documents
+ * Get shipment documents (labels, POD, invoices, etc.)
+ */
+router.get(
+  "/:id/documents",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getShipmentDocuments,
+);
+
+/**
  * @swagger
  * /api/v1/shipments:
  *   get:
@@ -251,6 +329,13 @@ router.get(
   validate(getShipmentsQuerySchema, "query"),
   getShipments,
 );
+
+/**
+ * POST /api/v1/shipments/webhook/:provider
+ * Global webhook endpoint for courier providers to push status updates.
+ * PUBLIC — no JWT authentication required. Uses webhook secret verification.
+ */
+router.post("/webhook/:provider", generalLimiter, handleProviderWebhook);
 
 /**
  * @swagger

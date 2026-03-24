@@ -285,6 +285,45 @@ class CourierOperationController {
   }
 
   /**
+   * Get shipment capabilities and available actions
+   * POST /api/v1/courier-operations/capabilities
+   */
+  async getShipmentCapabilities(req, res) {
+    try {
+      const { partnerId, shipmentContext } = req.body;
+
+      logger.info("Get shipment capabilities request", {
+        partnerId,
+        status: shipmentContext?.status,
+      });
+
+      const result = await courierOperationService.getShipmentCapabilities(
+        partnerId,
+        shipmentContext || {},
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error in getShipmentCapabilities controller", {
+        error: error.message,
+      });
+
+      const statusCode = error.statusCode || 500;
+
+      res.status(statusCode).json({
+        status: "error",
+        error: {
+          code: error.code || "INTERNAL_ERROR",
+          message: error.message,
+        },
+      });
+    }
+  }
+
+  /**
    * Get list of supported aggregator types
    * GET /api/v1/courier-operations/supported-aggregators
    */

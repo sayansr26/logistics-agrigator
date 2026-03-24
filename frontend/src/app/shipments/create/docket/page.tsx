@@ -35,6 +35,7 @@ import {
   Upload,
   Package,
   ArrowRight,
+  RefreshCcw,
 } from "lucide-react";
 
 export default function ShipmentDetailsPage() {
@@ -81,12 +82,19 @@ export default function ShipmentDetailsPage() {
   const selectedAddr = pickupAddresses.find(
     (a) => a.id === store.pickupAddressId,
   );
+  const selectedRtoAddr = pickupAddresses.find(
+    (a) => a.id === store.rtoAddressId,
+  );
   const needsOutletFirst = isAdminLike && !store.outletId;
   const isB2B = store.shipmentType === "B2B";
 
   function handleSelectPickupAddress(addrId: string) {
     store.setField("pickupAddressId", addrId);
     store.setField("pickupAddress", addrId);
+  }
+
+  function handleSelectRtoAddress(addrId: string) {
+    store.setField("rtoAddressId", addrId);
   }
 
   function handleNext() {
@@ -112,16 +120,28 @@ export default function ShipmentDetailsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label>Reference No*</Label>
-                  <Input
-                    placeholder="26021706133881"
-                    value={store.referenceNo}
-                    onChange={(e) =>
-                      store.setField("referenceNo", e.target.value)
-                    }
-                    className={
-                      store.errors.referenceNo ? "border-destructive" : ""
-                    }
-                  />
+                  <div className="relative">
+                    <Input
+                      placeholder="Auto-generated"
+                      value={store.referenceNo}
+                      readOnly
+                      className={[
+                        "pr-10",
+                        store.errors.referenceNo ? "border-destructive" : "",
+                      ].join(" ")}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => store.regenerateReferenceNo()}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                      aria-label="Regenerate reference number"
+                      title="Regenerate reference number"
+                    >
+                      <RefreshCcw className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <FormError message={store.errors.referenceNo} />
                 </div>
                 <div className="space-y-1">
@@ -205,6 +225,8 @@ export default function ShipmentDetailsPage() {
                         store.setField("outletUserId", selected?.phone || "");
                         store.setField("pickupAddress", "");
                         store.setField("pickupAddressId", "");
+                        store.setField("rtoSameAsPickup", true);
+                        store.setField("rtoAddressId", "");
                       }}
                     >
                       <SelectTrigger>
@@ -346,9 +368,11 @@ export default function ShipmentDetailsPage() {
                   type="checkbox"
                   id="rtoSameAsPickup"
                   checked={store.rtoSameAsPickup}
-                  onChange={(e) =>
-                    store.setField("rtoSameAsPickup", e.target.checked)
-                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    store.setField("rtoSameAsPickup", checked);
+                    store.setField("rtoAddressId", "");
+                  }}
                   className="rounded accent-green-600"
                 />
                 <Label
@@ -358,6 +382,67 @@ export default function ShipmentDetailsPage() {
                   RTO address same as pickup address.
                 </Label>
               </div>
+
+              {!store.rtoSameAsPickup && (
+                <div className="space-y-2 pt-2">
+                  <Label>RTO Address*</Label>
+                  {needsOutletFirst ? (
+                    <div className="flex items-center gap-2 p-3 text-sm text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      Please select an outlet first to load RTO addresses.
+                    </div>
+                  ) : addressesLoading ? (
+                    <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading
+                      addresses...
+                    </div>
+                  ) : pickupAddresses.length === 0 ? (
+                    <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground border rounded-lg">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      No addresses found. Add an address in the Outlets section
+                      first.
+                    </div>
+                  ) : (
+                    <Select
+                      value={store.rtoAddressId}
+                      onValueChange={handleSelectRtoAddress}
+                    >
+                      <SelectTrigger
+                        className={
+                          store.errors.rtoAddressId ? "border-destructive" : ""
+                        }
+                      >
+                        <SelectValue placeholder="Select an RTO address" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pickupAddresses.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.label || a.name} - {a.city}, {a.pincode}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <FormError message={store.errors.rtoAddressId} />
+
+                  {selectedRtoAddr && (
+                    <div className="text-xs text-muted-foreground p-3 rounded-lg border bg-muted/50 space-y-0.5">
+                      <div className="font-semibold text-foreground">
+                        Warehouse:{" "}
+                        {selectedRtoAddr.label || selectedRtoAddr.name}
+                      </div>
+                      <div>
+                        {selectedRtoAddr.city}, {selectedRtoAddr.state},{" "}
+                        {selectedRtoAddr.pincode}
+                      </div>
+                      <div>{selectedRtoAddr.addressLine1}</div>
+                      {selectedRtoAddr.addressLine2 && (
+                        <div>{selectedRtoAddr.addressLine2}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -37,6 +37,7 @@ export interface ShipmentFormState {
   outletUserId: string;
   pickupAddress: string;
   pickupAddressId: string;
+  rtoAddressId: string;
   productDescription: string;
   hsnCode: string;
   gstPercentage: string;
@@ -65,6 +66,7 @@ export interface ShipmentFormState {
   // Setters
   setStep: (step: number) => void;
   setField: (field: string, value: unknown) => void;
+  regenerateReferenceNo: () => void;
   setError: (field: string, error: string) => void;
   clearError: (field: string) => void;
   setErrors: (errors: FormErrors) => void;
@@ -94,10 +96,24 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
+function generateReferenceNo(): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  const random = Math.floor(Math.random() * 100)
+    .toString()
+    .padStart(2, "0");
+  return `${yy}${mm}${dd}${hh}${mi}${ss}${random}`;
+}
+
 export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
   currentStep: 1,
 
-  referenceNo: "",
+  referenceNo: generateReferenceNo(),
   actualWeight: "",
   shipmentType: "B2C",
   shipmentDirection: "FORWARD",
@@ -108,6 +124,7 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
   outletUserId: "",
   pickupAddress: "",
   pickupAddressId: "",
+  rtoAddressId: "",
   productDescription: "",
   hsnCode: "",
   gstPercentage: "",
@@ -139,6 +156,12 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
       errors: { ...s.errors, [field]: "" },
     })),
 
+  regenerateReferenceNo: () =>
+    set((s) => ({
+      referenceNo: generateReferenceNo(),
+      errors: { ...s.errors, referenceNo: "" },
+    })),
+
   setError: (field, error) =>
     set((s) => ({ errors: { ...s.errors, [field]: error } })),
 
@@ -151,7 +174,7 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
   resetForm: () =>
     set({
       currentStep: 1,
-      referenceNo: "",
+      referenceNo: generateReferenceNo(),
       actualWeight: "",
       shipmentType: "B2C",
       shipmentDirection: "FORWARD",
@@ -162,6 +185,7 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
       outletUserId: "",
       pickupAddress: "",
       pickupAddressId: "",
+      rtoAddressId: "",
       productDescription: "",
       hsnCode: "",
       gstPercentage: "",
@@ -231,6 +255,8 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
     if (!s.actualWeight.trim() || parseFloat(s.actualWeight) <= 0)
       errs.actualWeight = "Valid weight is required";
     if (!s.pickupAddress) errs.pickupAddress = "Pickup address is required";
+    if (!s.rtoSameAsPickup && !s.rtoAddressId)
+      errs.rtoAddressId = "RTO address is required";
     if (!s.productDescription.trim())
       errs.productDescription = "Product description is required";
     set({ errors: errs });

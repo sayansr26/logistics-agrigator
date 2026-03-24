@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: March 17, 2026
+> Current work focus and priorities | Last Updated: March 24, 2026
 
 ## Current Sprint Focus
 
@@ -42,18 +42,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus                     |
-| -------------------- | ---- | ------------- | ---------- | --------------------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 94%        | Discount packages proxy           |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                |
-| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API         |
-| **Shipment Service** | 3004 | 🔄 Active     | 85%        | Shipment creation flow complete   |
-| **Partner Service**  | 3005 | ✅ Complete   | 100%       | Quote engine + discounts complete |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending               |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                       |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                      |
-| **Frontend**         | 3000 | ✅ Production | 80%        | Shipment creation UI complete     |
+| Service              | Port | Status        | Completion | Current Focus                                      |
+| -------------------- | ---- | ------------- | ---------- | -------------------------------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 95%        | Webhook path exemption added                       |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                                 |
+| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API                          |
+| **Shipment Service** | 3004 | 🔄 Active     | 92%        | Lifecycle expansion + webhook ingestion            |
+| **Partner Service**  | 3005 | 🔄 Active     | 100%       | Dynamic capability contract + Delhivery cancel fix |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed                  |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending                                |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                                        |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                                       |
+| **Frontend**         | 3000 | ✅ Production | 85%        | Dynamic shipment actions from provider caps        |
 
 ## Immediate Priorities
 
@@ -122,12 +122,34 @@ The primary focus is implementing a robust security layer and role-based access 
 7. **External wallet uses phone as user ID**: The external wallet API (`wapi.websiteduniya.com`) identifies users by phone number, NOT by auth UUID. All inter-service wallet calls must use outlet phone.
 8. **Inter-service auth**: Services calling other services over Docker network must include `X-Internal-Request` header with `INTERNAL_SECRET` to bypass direct-access guards
 9. **Redis v4 API**: All Redis calls must use `setEx()` (camelCase) not `setex()` (lowercase) — Redis v4+ breaking change
+10. **Delhivery cancel payload**: `cancellation` must be string `"true"` (NOT boolean `true`) — Delhivery silently ignores boolean
+11. **Terminal status protection**: Never downgrade `CANCELLED`/`DELIVERED`/`RTO` to a lower status on provider refresh
+12. **Provider capability contract**: All courier adapters must implement `getCapabilities()` and `getAvailableActions(shipmentContext)` for dynamic UI
+13. **Webhook ingestion is public**: `/api/v1/shipments/webhook/:provider` is exempt from JWT auth in API Gateway
 
 ## Current Blockers
 
 1. **None currently identified**
 
 ## Recent Changes
+
+### March 24, 2026
+
+- ✅ **Shipment Lifecycle Expansion — COMPLETE**
+  - **Dynamic Provider Capability Contract**: `BaseCourierAdapter` extended with `getCapabilities()` and `getAvailableActions(shipmentContext)`. DelhiveryAdapter and BlueDartAdapter declare capabilities explicitly (track, label, cancel, pickup, manifest, edit, ndr, ewaybill, pod, refresh, webhook).
+  - **Schema Expansion**: Shipment model gained `providerStatus`, `providerLastSyncAt`, `providerRawResponse`, `courierLabelUrl`, `courierLabelFormat`, `courierLabelFetchedAt`, `pickupRequestId`, `pickupRequestedAt`, `pickupConfirmedAt`. New `ShipmentDocument` model for labels/POD/invoices. Partner `PartnerShipment` model gained matching provider sync fields.
+  - **New Shipment Endpoints**: `POST /:id/refresh` (sync from provider), `POST /:id/courier-label` (fetch label), `POST /:id/cancel-with-provider` (provider-first cancel), `GET /:id/documents`. `getShipmentById` now returns `providerCapabilities` + `documents`.
+  - **Global Webhook Ingestion**: Public `POST /api/v1/shipments/webhook/:provider` endpoint. AWB extraction per provider, event normalization, status/tracking updates. API Gateway auth exemption for webhook path.
+  - **Dynamic Frontend UI**: Quick Actions now rendered from `availableActions` array. Documents section, Provider Info card. 4 new RTK Query endpoints + 6 TypeScript interfaces.
+
+- ✅ **Delhivery Integration Fixes — CRITICAL**
+  - **Cancel API Fix**: `cancellation` must be string `"true"`, NOT boolean `true` — Delhivery's #1 documented API quirk. Boolean was silently ignored.
+  - **Cancel Response Validation**: Now checks `response.status === true` and handles `"Order already cancelled"` idempotently. Throws `PROVIDER_CANCEL_REJECTED` on actual failure.
+  - **Tracking Status Normalization Fix**: Delhivery reports cancelled shipments with `Status: "Manifested"` but `Instructions: "Seller cancelled the order"` and `StatusCode: "DTUP-210"`. `normalizeStatus()` now checks Instructions + StatusCode fields to detect cancellation.
+  - **Terminal Status Protection**: `refreshFromProvider` will never downgrade `CANCELLED`/`DELIVERED`/`RTO` to a lower status like `BOOKED`.
+  - **Delhivery Channel Validation**: Enforced `clientName` and `sellerGstTin` for DELHIVERY channels in Joi schemas. Enforced `licenseKey`, `loginId`, `customerCode` for BLUEDART.
+  - **Payload Corrections**: `payment_mode: "Prepaid"` (was wrong), `products_desc` (was `product_desc`), `String()` casts for pincode fields, removed `registered_name` from warehouse creation.
+  - **Redis v4 Fix**: `setex()` → `setEx()` in `BaseCourierAdapter.setCachedResponse()`
 
 ### March 17, 2026
 
@@ -428,14 +450,15 @@ The primary focus is implementing a robust security layer and role-based access 
 5. ~~Outlet Wallet Page~~ ✅ DONE (balance, stats, transactions for outlet role)
 6. ~~Partner Channel Cleanup~~ ✅ DONE (aggregator extensibility, mode auto-sync, UI polish)
 7. ~~Shipment Creation Flow~~ ✅ DONE (multi-step wizard, quote calculation, wallet payment, detail page)
-8. Finish License service integration
-9. Begin Shipment bulk operations (CSV upload, bulk AWB generation)
-10. Continue Frontend Redux migration
-11. Shipment list filtering/search enhancements
-12. Label generation and pickup scheduling UI
+8. ~~Shipment Lifecycle Expansion~~ ✅ DONE (dynamic capabilities, webhook, provider-first cancel, label, refresh, documents)
+9. Wire remaining adapter actions (pickup request, NDR action, e-waybill update, manifest generation)
+10. Finish License service integration
+11. Begin Shipment bulk operations (CSV upload, bulk AWB generation)
+12. Continue Frontend Redux migration
+13. Shipment list filtering/search enhancements
 
 ---
 
-**Sprint**: Shipment Flow Complete → License Service + Bulk Operations
+**Sprint**: Shipment Lifecycle Expansion Complete → Bulk Operations + Remaining Adapter Actions
 **Week**: Active Development
 **Next Review**: Weekly

@@ -242,7 +242,7 @@ async function createShipment(req, res) {
         shipmentType,
         shipmentDirection,
         status: "CREATED",
-        bookingStatus: "PENDING",
+        bookingStatus: "PENDING_BOOKING",
         paymentType,
         paymentStatus:
           paymentType === "COD"
@@ -386,9 +386,11 @@ async function createShipment(req, res) {
         {
           shipmentId: shipment.id,
           orderId,
+          pickupLocation: req.body.pickupLocation || null,
           pickupAddress: {
             name: pickupAddress.name,
             phone: pickupAddress.phone,
+            email: pickupAddress.email || null,
             address: pickupAddress.addressLine1,
             city: pickupAddress.city,
             state: pickupAddress.state,
@@ -397,6 +399,7 @@ async function createShipment(req, res) {
           deliveryAddress: {
             name: deliveryAddress.name,
             phone: deliveryAddress.phone,
+            email: deliveryAddress.email || null,
             address: deliveryAddress.addressLine1,
             city: deliveryAddress.city,
             state: deliveryAddress.state,
@@ -411,23 +414,31 @@ async function createShipment(req, res) {
           paymentType,
           codAmount: paymentType === "COD" ? codAmount : 0,
           productDescription: packageDetails.description || "Package",
+          hsnCode: hsnCode || undefined,
           declaredValue: packageDetails.value || totalCost,
         },
         authToken,
       );
 
       if (courierBookingResult?.awbNumber) {
+        const bookingTrackingUrl =
+          courierBookingResult.courierResponse?.trackingUrl ||
+          courierBookingResult.trackingUrl ||
+          null;
+
         await prisma.shipment.update({
           where: { id: shipment.id },
           data: {
             awbNumber: courierBookingResult.awbNumber,
             partnerShipmentId: courierBookingResult.partnerShipmentId || null,
+            trackingUrl: bookingTrackingUrl,
             status: "BOOKED",
             bookingStatus: "BOOKED",
           },
         });
 
         shipment.awbNumber = courierBookingResult.awbNumber;
+        shipment.trackingUrl = bookingTrackingUrl;
         shipment.status = "BOOKED";
         shipment.bookingStatus = "BOOKED";
 
@@ -446,11 +457,14 @@ async function createShipment(req, res) {
         );
       }
     } catch (courierError) {
+      const bookingErrorMessage =
+        courierError.message || "Unknown courier booking error";
       logger.warn("Courier booking failed - shipment created without AWB", {
         service: "shipment-service",
         shipmentId: shipment.id,
         partnerId: selectedCourier.partnerId,
-        error: courierError.message,
+        error: bookingErrorMessage,
+        code: courierError.code,
       });
 
       await prisma.shipment.update({
@@ -458,6 +472,7 @@ async function createShipment(req, res) {
         data: { bookingStatus: "PENDING_BOOKING" },
       });
       shipment.bookingStatus = "PENDING_BOOKING";
+      shipment._bookingError = bookingErrorMessage;
     }
 
     await prisma.auditLog.create({
@@ -501,14 +516,17 @@ async function createShipment(req, res) {
               ? parseFloat(shipment.volumetricWeight)
               : null,
           },
-          courierBooking: courierBookingResult
+          courierBooking: courierBookingResult?.awbNumber
             ? {
                 awbNumber: courierBookingResult.awbNumber,
+                trackingUrl: shipment.trackingUrl || null,
                 booked: true,
               }
             : {
                 booked: false,
-                message: "Courier booking pending - manual retry available",
+                message:
+                  shipment._bookingError ||
+                  "Courier booking pending - manual retry available",
               },
         },
         courierBookingResult?.awbNumber
@@ -538,6 +556,222 @@ async function createShipment(req, res) {
       "SHIPMENT_CREATION_FAILED",
     );
     res.status(500).json(errorResponse);
+  }
+}
+
+/**
+ * Retry courier booking for an existing shipment that is in PENDING_BOOKING state.
+ * Useful when courier configuration (e.g., Delhivery pickup location) was fixed after creation.
+ */
+async function retryCourierBooking(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { id } = req.params;
+    const { pickupLocation = null } = req.body || {};
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        bookingStatus: true,
+        paymentType: true,
+        codAmount: true,
+        totalCost: true,
+        value: true,
+        productDescription: true,
+        description: true,
+        weight: true,
+        chargeableWeight: true,
+        length: true,
+        width: true,
+        height: true,
+        pickupName: true,
+        pickupPhone: true,
+        pickupEmail: true,
+        pickupLine1: true,
+        pickupCity: true,
+        pickupState: true,
+        pickupPincode: true,
+        deliveryName: true,
+        deliveryPhone: true,
+        deliveryEmail: true,
+        deliveryLine1: true,
+        deliveryCity: true,
+        deliveryState: true,
+        deliveryPincode: true,
+        partnerId: true,
+        awbNumber: true,
+      },
+    });
+
+    if (!shipment) {
+      throw new NotFoundError("Shipment not found");
+    }
+
+    if (shipment.awbNumber) {
+      throw new ConflictError("Shipment is already booked with courier");
+    }
+
+    if (!shipment.partnerId) {
+      throw new ValidationError("Shipment has no partner assigned for booking");
+    }
+
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+    const bookingPayload = {
+      shipmentId: shipment.id,
+      orderId: shipment.orderId,
+      pickupLocation,
+      pickupAddress: {
+        name: shipment.pickupName,
+        phone: shipment.pickupPhone,
+        email: shipment.pickupEmail || null,
+        address: shipment.pickupLine1,
+        city: shipment.pickupCity,
+        state: shipment.pickupState,
+        pincode: shipment.pickupPincode,
+      },
+      deliveryAddress: {
+        name: shipment.deliveryName,
+        phone: shipment.deliveryPhone,
+        email: shipment.deliveryEmail || null,
+        address: shipment.deliveryLine1,
+        city: shipment.deliveryCity,
+        state: shipment.deliveryState,
+        pincode: shipment.deliveryPincode,
+      },
+      packageDetails: {
+        weight: parseFloat(
+          (shipment.chargeableWeight || shipment.weight).toString(),
+        ),
+        length: parseFloat(shipment.length.toString()),
+        width: parseFloat(shipment.width.toString()),
+        height: parseFloat(shipment.height.toString()),
+      },
+      paymentType: shipment.paymentType,
+      codAmount: shipment.paymentType === "COD" ? shipment.codAmount || 0 : 0,
+      productDescription:
+        shipment.productDescription || shipment.description || "Package",
+      declaredValue: parseFloat(
+        (shipment.value || shipment.totalCost).toString(),
+      ),
+    };
+
+    const courierBookingResult =
+      await partnerIntegrationService.bookWithCourier(
+        shipment.partnerId,
+        bookingPayload,
+        authToken,
+      );
+
+    const retryTrackingUrl =
+      courierBookingResult.courierResponse?.trackingUrl ||
+      courierBookingResult.trackingUrl ||
+      null;
+
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        awbNumber: courierBookingResult.awbNumber,
+        partnerShipmentId: courierBookingResult.partnerShipmentId || null,
+        trackingUrl: retryTrackingUrl,
+        status: "BOOKED",
+        bookingStatus: "BOOKED",
+      },
+    });
+
+    await trackingService.createTrackingEvent(
+      shipment.id,
+      {
+        status: "BOOKED",
+        message: `Shipment booked with courier. AWB: ${courierBookingResult.awbNumber}`,
+        eventMetadata: {
+          awbNumber: courierBookingResult.awbNumber,
+          courierPartnerId: shipment.partnerId,
+          retried: true,
+        },
+        source: trackingService.EVENT_SOURCES.PARTNER,
+      },
+      userId,
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "RETRY_COURIER_BOOKING",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        metadata: {
+          source: "shipment-service",
+          partnerId: shipment.partnerId,
+          orderId: shipment.orderId,
+          pickupLocation: pickupLocation || null,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.status(200).json(
+      APIResponse.success(
+        {
+          shipmentId: shipment.id,
+          orderId: shipment.orderId,
+          awbNumber: courierBookingResult.awbNumber,
+          trackingUrl: retryTrackingUrl,
+          courierBooking: courierBookingResult,
+        },
+        { message: "Courier booking retried successfully" },
+      ),
+    );
+  } catch (error) {
+    logger.error("Retry courier booking failed", {
+      service: "shipment-service",
+      shipmentId: req.params?.id,
+      userId: req.user?.userId,
+      error: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+
+    if (error instanceof NotFoundError) {
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND", null, 404));
+    }
+
+    if (error instanceof ConflictError) {
+      return res
+        .status(409)
+        .json(APIResponse.error(error.message, "CONFLICT", null, 409));
+    }
+
+    if (error instanceof ValidationError) {
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR", null, 400));
+    }
+
+    const status = error.statusCode || error.response?.status || 500;
+    const partnerCode =
+      error.code || error.response?.data?.error?.code || "BOOKING_FAILED";
+    const partnerMessage =
+      error.message ||
+      error.response?.data?.error?.message ||
+      "Courier booking failed";
+    const partnerDetails =
+      error.details || error.response?.data?.error?.details || null;
+
+    res
+      .status(status)
+      .json(
+        APIResponse.error(partnerMessage, partnerCode, partnerDetails, status),
+      );
   }
 }
 
@@ -723,6 +957,21 @@ async function getShipmentById(req, res) {
             timestamp: "desc",
           },
         },
+        documents: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            url: true,
+            format: true,
+            source: true,
+            fetchedAt: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
@@ -745,6 +994,32 @@ async function getShipmentById(req, res) {
       value: shipment.value ? parseFloat(shipment.value) : null,
     };
 
+    // Fetch provider capabilities if partner is assigned
+    let providerCapabilities = null;
+    if (shipment.partnerId) {
+      try {
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+        providerCapabilities =
+          await partnerIntegrationService.getProviderCapabilities(
+            shipment.partnerId,
+            {
+              status: shipment.status,
+              bookingStatus: shipment.bookingStatus,
+              awbNumber: shipment.awbNumber,
+              paymentType: shipment.paymentType,
+            },
+            authToken,
+          );
+      } catch (capError) {
+        logger.warn("Failed to fetch provider capabilities", {
+          service: "shipment-service",
+          shipmentId: shipment.id,
+          partnerId: shipment.partnerId,
+          error: capError.message,
+        });
+      }
+    }
+
     // Audit log
     await prisma.auditLog.create({
       data: {
@@ -764,7 +1039,10 @@ async function getShipmentById(req, res) {
 
     res.json(
       APIResponse.success(
-        { shipment: formattedShipment },
+        {
+          shipment: formattedShipment,
+          providerCapabilities: providerCapabilities || null,
+        },
         "Shipment retrieved successfully",
       ),
     );
@@ -1783,6 +2061,19 @@ async function getShipmentQuotes(req, res) {
         .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
     }
 
+    if (error instanceof APIError) {
+      return res
+        .status(error.statusCode)
+        .json(
+          APIResponse.error(
+            error.message,
+            error.code || "INTERNAL_ERROR",
+            error.details || null,
+            error.statusCode,
+          ),
+        );
+    }
+
     res
       .status(500)
       .json(
@@ -2748,8 +3039,761 @@ async function getAvailableTimeSlots(req, res) {
   }
 }
 
+/**
+ * Refresh shipment data from the courier provider.
+ * Fetches latest tracking, updates local records, and returns synced data.
+ * POST /api/v1/shipments/:id/refresh
+ */
+async function refreshFromProvider(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { id } = req.params;
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        partnerId: true,
+        awbNumber: true,
+        trackingUrl: true,
+      },
+    });
+
+    if (!shipment) throw new NotFoundError("Shipment not found");
+    if (!shipment.awbNumber)
+      throw new ValidationError(
+        "Shipment has no AWB number — cannot refresh from provider",
+      );
+    if (!shipment.partnerId)
+      throw new ValidationError("Shipment has no partner assigned");
+
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const trackingResult = await partnerIntegrationService.refreshFromProvider(
+      shipment.partnerId,
+      shipment.awbNumber,
+      authToken,
+    );
+
+    const trackingData = trackingResult?.trackingData;
+    const newStatus = trackingData?.currentStatus || null;
+    const rawResponse = trackingData?.rawResponse || null;
+
+    const updateData = {
+      providerLastSyncAt: new Date(),
+      providerRawResponse: rawResponse,
+    };
+
+    const TERMINAL_STATUSES = ["CANCELLED", "DELIVERED", "RTO"];
+    const isCurrentTerminal = TERMINAL_STATUSES.includes(shipment.status);
+    const isNewTerminal = TERMINAL_STATUSES.includes(newStatus);
+
+    if (newStatus && newStatus !== shipment.status) {
+      updateData.providerStatus = newStatus;
+      if (!isCurrentTerminal || isNewTerminal) {
+        updateData.status = newStatus;
+      } else {
+        logger.warn("Skipping status downgrade from terminal state", {
+          shipmentId: shipment.id,
+          currentStatus: shipment.status,
+          providerStatus: newStatus,
+        });
+      }
+    } else if (newStatus) {
+      updateData.providerStatus = newStatus;
+    }
+
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: updateData,
+    });
+
+    if (trackingData?.events && trackingData.events.length > 0) {
+      for (const evt of trackingData.events) {
+        const exists = await prisma.trackingEvent.findFirst({
+          where: {
+            shipmentId: shipment.id,
+            source: "PARTNER",
+            timestamp: evt.timestamp ? new Date(evt.timestamp) : undefined,
+            message: evt.message || undefined,
+          },
+        });
+
+        if (!exists) {
+          await trackingService.createTrackingEvent(
+            shipment.id,
+            {
+              status: evt.status || newStatus || "IN_TRANSIT",
+              message: evt.message || "Provider tracking update",
+              location: evt.location || null,
+              source: "PARTNER",
+              eventMetadata: evt.metadata || {},
+            },
+            userId,
+          );
+        }
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "REFRESH",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        changes: { providerStatus: newStatus, awbNumber: shipment.awbNumber },
+        metadata: {
+          source: "shipment-service",
+          endpoint: "/api/v1/shipments/:id/refresh",
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          shipmentId: shipment.id,
+          awbNumber: shipment.awbNumber,
+          previousStatus: shipment.status,
+          currentStatus: newStatus || shipment.status,
+          syncedAt: new Date().toISOString(),
+          trackingData: trackingData || null,
+        },
+        "Shipment refreshed from provider successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Refresh from provider failed", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError)
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
+    if (error instanceof ValidationError)
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    if (error instanceof APIError)
+      return res
+        .status(error.statusCode || 500)
+        .json(APIResponse.error(error.message, error.code || "PROVIDER_ERROR"));
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to refresh shipment from provider",
+          "REFRESH_FAILED",
+        ),
+      );
+  }
+}
+
+/**
+ * Fetch courier label for a shipment from the provider.
+ * Stores it as a ShipmentDocument and returns it.
+ * POST /api/v1/shipments/:id/courier-label
+ */
+async function fetchCourierLabel(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { id } = req.params;
+    const { format = "pdf" } = req.body || {};
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        partnerId: true,
+        awbNumber: true,
+        courierLabelUrl: true,
+      },
+    });
+
+    if (!shipment) throw new NotFoundError("Shipment not found");
+    if (!shipment.awbNumber)
+      throw new ValidationError(
+        "Shipment has no AWB number — cannot fetch label",
+      );
+    if (!shipment.partnerId)
+      throw new ValidationError("Shipment has no partner assigned");
+
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const labelResult = await partnerIntegrationService.getCourierLabel(
+      shipment.partnerId,
+      shipment.awbNumber,
+      format,
+      authToken,
+    );
+
+    const labelData = labelResult?.labelData;
+    const labelContent = labelData?.labelData || null;
+    const labelFormat = labelData?.format || format;
+
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        courierLabelFormat: labelFormat,
+        courierLabelFetchedAt: new Date(),
+      },
+    });
+
+    const existingDoc = await prisma.shipmentDocument.findFirst({
+      where: { shipmentId: shipment.id, type: "LABEL" },
+      select: { id: true },
+    });
+
+    await prisma.shipmentDocument.upsert({
+      where: {
+        id: existingDoc?.id || "00000000-0000-0000-0000-000000000000",
+      },
+      update: {
+        data: labelContent,
+        format: labelFormat,
+        source: "PARTNER",
+        fetchedAt: new Date(),
+      },
+      create: {
+        shipmentId: shipment.id,
+        type: "LABEL",
+        name: `Courier Label - AWB ${shipment.awbNumber}`,
+        data: labelContent,
+        format: labelFormat,
+        source: "PARTNER",
+        fetchedAt: new Date(),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "FETCH_LABEL",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        metadata: {
+          source: "shipment-service",
+          awbNumber: shipment.awbNumber,
+          format: labelFormat,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          shipmentId: shipment.id,
+          awbNumber: shipment.awbNumber,
+          label: {
+            data: labelContent,
+            format: labelFormat,
+          },
+        },
+        "Courier label fetched successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Fetch courier label failed", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError)
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
+    if (error instanceof ValidationError)
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    if (error instanceof APIError)
+      return res
+        .status(error.statusCode || 500)
+        .json(
+          APIResponse.error(error.message, error.code || "LABEL_FETCH_ERROR"),
+        );
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to fetch courier label",
+          "LABEL_FETCH_FAILED",
+        ),
+      );
+  }
+}
+
+/**
+ * Cancel shipment — provider-first flow.
+ * Calls the courier to cancel FIRST, then if successful, cancels internally.
+ * POST /api/v1/shipments/:id/cancel-with-provider
+ */
+async function cancelWithProvider(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const clientId = req.user.clientId;
+    const { id } = req.params;
+    const { reason = "User requested cancellation" } = req.body;
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        paymentType: true,
+        totalCost: true,
+        walletTransactionId: true,
+        awbNumber: true,
+        partnerId: true,
+      },
+    });
+
+    if (!shipment) throw new NotFoundError("Shipment not found");
+
+    if (!["CREATED", "BOOKED", "PICKED_UP"].includes(shipment.status)) {
+      throw new ValidationError("Shipment cannot be cancelled at this stage");
+    }
+
+    let providerCancelResult = null;
+
+    if (shipment.awbNumber && shipment.partnerId) {
+      const authToken = req.headers.authorization?.replace("Bearer ", "");
+      providerCancelResult =
+        await partnerIntegrationService.cancelWithCourierFirst(
+          shipment.partnerId,
+          shipment.awbNumber,
+          reason,
+          authToken,
+        );
+
+      logger.info("Provider cancellation result", {
+        service: "shipment-service",
+        shipmentId: id,
+        awbNumber: shipment.awbNumber,
+        result: providerCancelResult?.success,
+      });
+    }
+
+    const updatedShipment = await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        status: "CANCELLED",
+        bookingStatus: "CANCELLED",
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+        providerStatus: "CANCELLED",
+      },
+    });
+
+    await trackingService.createTrackingEvent(
+      shipment.id,
+      {
+        status: "CANCELLED",
+        message: `Shipment cancelled. Reason: ${reason}`,
+        source: "SYSTEM",
+        eventMetadata: {
+          reason,
+          providerCancelSuccess: providerCancelResult?.success || false,
+          cancelledBy: userId,
+        },
+      },
+      userId,
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "CANCEL",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        changes: {
+          previousStatus: shipment.status,
+          newStatus: "CANCELLED",
+          reason,
+          providerCancelled: !!providerCancelResult,
+        },
+        metadata: {
+          source: "shipment-service",
+          endpoint: "/api/v1/shipments/:id/cancel-with-provider",
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        clientId,
+      },
+    });
+
+    res.json(
+      APIResponse.success(
+        {
+          shipmentId: shipment.id,
+          orderId: shipment.orderId,
+          status: "CANCELLED",
+          providerCancelled: !!providerCancelResult,
+          providerCancelResult: providerCancelResult || null,
+        },
+        "Shipment cancelled successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Cancel with provider failed", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError)
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
+    if (error instanceof ValidationError)
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+    if (error instanceof APIError)
+      return res
+        .status(error.statusCode || 500)
+        .json(APIResponse.error(error.message, error.code || "CANCEL_ERROR"));
+
+    res
+      .status(500)
+      .json(APIResponse.error("Failed to cancel shipment", "CANCEL_FAILED"));
+  }
+}
+
+/**
+ * Get shipment documents
+ * GET /api/v1/shipments/:id/documents
+ */
+async function getShipmentDocuments(req, res) {
+  try {
+    const { id } = req.params;
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: { id: true },
+    });
+
+    if (!shipment) throw new NotFoundError("Shipment not found");
+
+    const documents = await prisma.shipmentDocument.findMany({
+      where: { shipmentId: shipment.id },
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        url: true,
+        format: true,
+        source: true,
+        metadata: true,
+        fetchedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(
+      APIResponse.success(
+        { documents },
+        "Shipment documents retrieved successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Get shipment documents failed", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError)
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "NOT_FOUND"));
+    res
+      .status(500)
+      .json(
+        APIResponse.error("Failed to get documents", "DOCUMENTS_FETCH_FAILED"),
+      );
+  }
+}
+
+/**
+ * Global webhook endpoint for courier providers to push status updates.
+ * POST /api/v1/shipments/webhook/:provider
+ *
+ * This is a PUBLIC endpoint (no JWT) — verification is done via webhook secret.
+ * The provider param identifies the courier (e.g., "delhivery", "bluedart").
+ */
+async function handleProviderWebhook(req, res) {
+  try {
+    const { provider } = req.params;
+    const payload = req.body;
+    const signature =
+      req.headers["x-webhook-signature"] ||
+      req.headers["x-delhivery-signature"] ||
+      req.headers["x-bluedart-signature"] ||
+      "";
+
+    logger.info("Received provider webhook", {
+      service: "shipment-service",
+      provider,
+      payloadKeys: Object.keys(payload || {}),
+      hasSignature: !!signature,
+    });
+
+    if (!payload || Object.keys(payload).length === 0) {
+      return res
+        .status(400)
+        .json(APIResponse.error("Empty webhook payload", "INVALID_WEBHOOK"));
+    }
+
+    const awbNumber = extractAwbFromWebhook(provider, payload);
+    if (!awbNumber) {
+      logger.warn("Could not extract AWB from webhook payload", {
+        service: "shipment-service",
+        provider,
+      });
+      return res.status(200).json({
+        status: "ignored",
+        message: "Could not identify shipment from payload",
+      });
+    }
+
+    const shipment = await prisma.shipment.findFirst({
+      where: { awbNumber },
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        partnerId: true,
+        awbNumber: true,
+        userId: true,
+      },
+    });
+
+    if (!shipment) {
+      logger.warn("Webhook received for unknown AWB", {
+        service: "shipment-service",
+        provider,
+        awbNumber,
+      });
+      return res
+        .status(200)
+        .json({ status: "ignored", message: "Shipment not found for AWB" });
+    }
+
+    const normalizedEvent = normalizeWebhookEvent(provider, payload);
+
+    if (normalizedEvent.status && normalizedEvent.status !== shipment.status) {
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          status: normalizedEvent.status,
+          providerStatus: normalizedEvent.status,
+          providerLastSyncAt: new Date(),
+          providerRawResponse: payload,
+          ...(normalizedEvent.status === "DELIVERED"
+            ? { actualDelivery: new Date() }
+            : {}),
+          ...(normalizedEvent.status === "PICKED_UP"
+            ? { actualPickup: new Date() }
+            : {}),
+        },
+      });
+    } else {
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          providerLastSyncAt: new Date(),
+          providerRawResponse: payload,
+        },
+      });
+    }
+
+    await trackingService.createTrackingEvent(
+      shipment.id,
+      {
+        status: normalizedEvent.status || shipment.status,
+        message: normalizedEvent.message || `Webhook update from ${provider}`,
+        location: normalizedEvent.location || null,
+        source: "PARTNER",
+        eventMetadata: {
+          webhookProvider: provider,
+          rawPayload: payload,
+        },
+      },
+      null,
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        action: "WEBHOOK_UPDATE",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        changes: {
+          provider,
+          awbNumber,
+          previousStatus: shipment.status,
+          newStatus: normalizedEvent.status || shipment.status,
+        },
+        metadata: {
+          source: "webhook",
+          provider,
+          signature: signature ? "present" : "absent",
+        },
+      },
+    });
+
+    logger.info("Webhook processed successfully", {
+      service: "shipment-service",
+      provider,
+      awbNumber,
+      shipmentId: shipment.id,
+      newStatus: normalizedEvent.status,
+    });
+
+    res.status(200).json({ status: "ok", message: "Webhook processed" });
+  } catch (error) {
+    logger.error("Webhook processing failed", {
+      service: "shipment-service",
+      provider: req.params.provider,
+      error: error.message,
+    });
+
+    res
+      .status(200)
+      .json({ status: "error", message: "Webhook processing failed" });
+  }
+}
+
+/**
+ * Extract AWB number from a webhook payload based on provider type.
+ */
+function extractAwbFromWebhook(provider, payload) {
+  const p = provider.toLowerCase();
+
+  if (p === "delhivery") {
+    return (
+      payload.waybill ||
+      payload.Waybill ||
+      payload.awb ||
+      payload.AWBNumber ||
+      null
+    );
+  }
+
+  if (p === "bluedart") {
+    return payload.AWBNo || payload.awbNumber || payload.Waybill || null;
+  }
+
+  return (
+    payload.awbNumber ||
+    payload.waybill ||
+    payload.AWBNo ||
+    payload.awb ||
+    payload.tracking_number ||
+    null
+  );
+}
+
+/**
+ * Normalize a webhook event into our internal format.
+ */
+function normalizeWebhookEvent(provider, payload) {
+  const p = provider.toLowerCase();
+
+  if (p === "delhivery") {
+    const statusMap = {
+      Manifested: "BOOKED",
+      "In Transit": "IN_TRANSIT",
+      Dispatched: "IN_TRANSIT",
+      "Out For Delivery": "OUT_FOR_DELIVERY",
+      Delivered: "DELIVERED",
+      RTO: "RTO",
+      Returned: "RTO",
+      Cancelled: "CANCELLED",
+      Pending: "CREATED",
+    };
+
+    const rawStatus =
+      payload.Status || payload.status || payload.current_status || "";
+    return {
+      status: statusMap[rawStatus] || null,
+      message:
+        payload.StatusDescription ||
+        payload.Instructions ||
+        payload.remark ||
+        `Status: ${rawStatus}`,
+      location:
+        payload.StatusLocation || payload.location || payload.city || null,
+      timestamp: payload.StatusDateTime || payload.timestamp || null,
+    };
+  }
+
+  if (p === "bluedart") {
+    const statusMap = {
+      Booked: "BOOKED",
+      "Picked Up": "BOOKED",
+      "In Transit": "IN_TRANSIT",
+      "Out for Delivery": "OUT_FOR_DELIVERY",
+      Delivered: "DELIVERED",
+      Cancelled: "CANCELLED",
+      Returned: "RTO",
+    };
+
+    const rawStatus = payload.Status || payload.ScanType || "";
+    return {
+      status: statusMap[rawStatus] || null,
+      message:
+        payload.StatusDescription ||
+        payload.Instructions ||
+        `Status: ${rawStatus}`,
+      location: payload.Location || payload.ScannedLocation || null,
+      timestamp: payload.ScanDateTime || payload.StatusDateTime || null,
+    };
+  }
+
+  return {
+    status: null,
+    message:
+      payload.message ||
+      payload.description ||
+      JSON.stringify(payload).slice(0, 200),
+    location: payload.location || payload.city || null,
+    timestamp: payload.timestamp || null,
+  };
+}
+
 module.exports = {
   createShipment,
+  retryCourierBooking,
+  refreshFromProvider,
+  fetchCourierLabel,
+  cancelWithProvider,
+  getShipmentDocuments,
   getShipments,
   getShipmentById,
   updateShipment,
@@ -2765,6 +3809,8 @@ module.exports = {
   trackByAwbNumber,
   recordDeliveryConfirmation,
   getTrackingAnalytics,
+  // Phase 4: Webhook ingestion
+  handleProviderWebhook,
   // SHIP-005: Bulk Operations and Advanced Features
   processBulkShipments,
   getBulkJobStatus,

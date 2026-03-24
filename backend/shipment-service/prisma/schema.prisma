@@ -88,6 +88,22 @@ model Shipment {
   partnerName       String? @map("partner_name") @db.VarChar(100)
   awbNumber         String? @map("awb_number") @db.VarChar(50)
   partnerShipmentId String? @map("partner_shipment_id") @db.VarChar(100)
+  trackingUrl       String? @map("tracking_url") @db.VarChar(500)
+
+  // Provider sync metadata
+  providerStatus      String?   @map("provider_status") @db.VarChar(50)
+  providerLastSyncAt  DateTime? @map("provider_last_sync_at")
+  providerRawResponse Json?     @map("provider_raw_response")
+
+  // Label / document metadata
+  courierLabelUrl       String?   @map("courier_label_url") @db.VarChar(500)
+  courierLabelFormat    String?   @map("courier_label_format") @db.VarChar(20)
+  courierLabelFetchedAt DateTime? @map("courier_label_fetched_at")
+
+  // Pickup metadata
+  pickupRequestId   String?   @map("pickup_request_id") @db.VarChar(100)
+  pickupRequestedAt DateTime? @map("pickup_requested_at")
+  pickupConfirmedAt DateTime? @map("pickup_confirmed_at")
 
   // Quote Snapshot - stores the selected quote at creation time
   quoteSnapshot Json? @map("quote_snapshot")
@@ -125,6 +141,7 @@ model Shipment {
   financialAdjustments ShipmentFinancialAdjustment[]
   invoices             ShipmentInvoice[]
   boxes                ShipmentBox[]
+  documents            ShipmentDocument[]
 
   // Pickup schedule relation
   pickupScheduleId String?         @map("pickup_schedule_id") @db.Uuid
@@ -192,6 +209,25 @@ model ShipmentBox {
 
   @@index([shipmentId])
   @@map("shipment_boxes")
+}
+
+model ShipmentDocument {
+  id         String    @id @default(uuid()) @db.Uuid
+  shipmentId String    @map("shipment_id") @db.Uuid
+  type       String    @db.VarChar(50)
+  name       String    @db.VarChar(200)
+  url        String?   @db.VarChar(500)
+  data       String?   @db.Text
+  format     String?   @db.VarChar(20)
+  source     String    @default("SYSTEM") @db.VarChar(50)
+  metadata   Json?
+  fetchedAt  DateTime? @map("fetched_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, type])
+  @@map("shipment_documents")
 }
 
 model AuditLog {

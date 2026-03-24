@@ -150,6 +150,16 @@ model PartnerShipment {
   status      String // BOOKED, PICKED, IN_TRANSIT, DELIVERED, RTO, etc.
   trackingUrl String?
 
+  // Provider sync metadata
+  providerStatus      String?   @map("provider_status") @db.VarChar(50)
+  providerLastSyncAt  DateTime? @map("provider_last_sync_at")
+  providerRawResponse Json?     @map("provider_raw_response")
+
+  // Label / document metadata
+  courierLabelUrl   String?   @map("courier_label_url") @db.VarChar(500)
+  pickupRequestId   String?   @map("pickup_request_id") @db.VarChar(100)
+  pickupRequestedAt DateTime? @map("pickup_requested_at")
+
   // Charges
   calculatedRate Float?
   actualRate     Float?

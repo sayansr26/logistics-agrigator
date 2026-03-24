@@ -4,14 +4,14 @@ const addressSchema = Joi.object({
   name: Joi.string().required().trim().min(2).max(100),
   phone: Joi.string()
     .required()
-    .pattern(/^[6-9]\d{9}$/),
+    .pattern(/^(\+91)?[6-9]\d{9}$/),
   address: Joi.string().required().trim().min(5).max(500),
   city: Joi.string().required().trim(),
   state: Joi.string().required().trim(),
   pincode: Joi.string()
     .required()
     .pattern(/^\d{6}$/),
-  email: Joi.string().email().optional(),
+  email: Joi.string().email().optional().allow(null, ""),
 });
 
 const packageDetailsSchema = Joi.object({
@@ -25,6 +25,14 @@ const bookShipmentSchema = Joi.object({
   partnerId: Joi.string().required(),
   shipmentId: Joi.string().uuid().optional(),
   orderId: Joi.string().required().trim(),
+  // For Delhivery and other aggregators that require a registered warehouse/pickup location name.
+  // This must match the pickup location configured in the courier panel.
+  pickupLocation: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .allow(null, ""),
   pickupAddress: addressSchema.required(),
   deliveryAddress: addressSchema.required(),
   packageDetails: packageDetailsSchema.required(),
@@ -81,6 +89,18 @@ const checkServiceabilityParamsSchema = Joi.object({
     .pattern(/^\d{6}$/),
 });
 
+const getCapabilitiesSchema = Joi.object({
+  partnerId: Joi.string().required().messages({
+    "string.empty": "Partner ID is required",
+  }),
+  shipmentContext: Joi.object({
+    status: Joi.string().optional(),
+    bookingStatus: Joi.string().optional(),
+    awbNumber: Joi.string().optional().allow(null, ""),
+    paymentType: Joi.string().optional(),
+  }).optional(),
+});
+
 module.exports = {
   addressSchema,
   packageDetailsSchema,
@@ -92,4 +112,5 @@ module.exports = {
   getLabelQuerySchema,
   generateManifestSchema,
   checkServiceabilityParamsSchema,
+  getCapabilitiesSchema,
 };

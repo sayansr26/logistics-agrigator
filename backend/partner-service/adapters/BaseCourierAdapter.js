@@ -236,7 +236,7 @@ class BaseCourierAdapter {
   async setCachedResponse(cacheKey, data, ttl) {
     try {
       const redis = await getClient();
-      await redis.setex(cacheKey, ttl, JSON.stringify(data));
+      await redis.setEx(cacheKey, ttl, JSON.stringify(data));
     } catch (error) {
       logger.warn("Cache set failed", {
         error: error.message,
@@ -361,6 +361,116 @@ class BaseCourierAdapter {
     throw new Error(
       "Not implemented: normalizeTrackingEvents must be implemented by subclass",
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dynamic Capabilities — override per adapter to declare supported actions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Return the static capability descriptor for this adapter.
+   * Each key is an action name; value is { supported, requiresAwb, allowedStatuses?, description }.
+   * Subclasses MUST override this.
+   */
+  getCapabilities() {
+    return {
+      track: {
+        supported: false,
+        requiresAwb: true,
+        description: "Track shipment",
+      },
+      label: {
+        supported: false,
+        requiresAwb: true,
+        description: "Download courier label / packing slip",
+      },
+      cancel: {
+        supported: false,
+        requiresAwb: true,
+        description: "Cancel shipment with courier",
+      },
+      pickup: {
+        supported: false,
+        requiresAwb: false,
+        description: "Request pickup from courier",
+      },
+      manifest: {
+        supported: false,
+        requiresAwb: true,
+        description: "Generate manifest",
+      },
+      edit: {
+        supported: false,
+        requiresAwb: true,
+        description: "Edit shipment details with courier",
+      },
+      ndr: {
+        supported: false,
+        requiresAwb: true,
+        description: "NDR action / status",
+      },
+      ewaybill: {
+        supported: false,
+        requiresAwb: true,
+        description: "E-waybill update",
+      },
+      pod: {
+        supported: false,
+        requiresAwb: true,
+        description: "Download proof of delivery",
+      },
+      invoice: {
+        supported: false,
+        requiresAwb: true,
+        description: "Download courier invoice",
+      },
+      refresh: {
+        supported: false,
+        requiresAwb: true,
+        description: "Fetch latest status from courier",
+      },
+      webhook: {
+        supported: false,
+        requiresAwb: false,
+        description: "Inbound webhook support",
+      },
+    };
+  }
+
+  /**
+   * Given the current shipment context, return only the actions that are
+   * currently executable. Override in subclass for state-aware filtering.
+   *
+   * @param {Object} shipmentContext - { status, bookingStatus, awbNumber, partnerName, paymentType, ... }
+   * @returns {Object[]} Array of { action, description, enabled, reason? }
+   */
+  getAvailableActions(shipmentContext) {
+    const caps = this.getCapabilities();
+    const actions = [];
+
+    for (const [action, meta] of Object.entries(caps)) {
+      if (!meta.supported) continue;
+
+      let enabled = true;
+      let reason = null;
+
+      if (meta.requiresAwb && !shipmentContext.awbNumber) {
+        enabled = false;
+        reason = "AWB number not yet assigned";
+      }
+
+      if (
+        meta.allowedStatuses &&
+        !meta.allowedStatuses.includes(shipmentContext.status)
+      ) {
+        enabled = false;
+        reason = `Not available in status ${shipmentContext.status}`;
+      }
+
+      actions.push({ action, description: meta.description, enabled, reason });
+    }
+
+    return actions;
   }
 }
 

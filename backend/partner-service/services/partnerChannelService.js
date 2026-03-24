@@ -48,6 +48,39 @@ class PartnerChannelService {
 
       // For SINGLE mode, return the legacy config
       if (partner.channelMode === "SINGLE") {
+        // If channel configs exist, prefer them even in SINGLE mode (single configured channel).
+        // Legacy partner.apiUrl/apiToken is used only when no channel configs are present.
+        const primaryChannel = await prisma.partnerChannelConfig.findFirst({
+          where: {
+            partnerId,
+            isActive: true,
+            isPrimary: true,
+          },
+          orderBy: { priority: "asc" },
+        });
+
+        if (primaryChannel) {
+          return {
+            ...primaryChannel,
+            mode: "SINGLE",
+          };
+        }
+
+        const fallbackChannel = await prisma.partnerChannelConfig.findFirst({
+          where: {
+            partnerId,
+            isActive: true,
+          },
+          orderBy: { priority: "asc" },
+        });
+
+        if (fallbackChannel) {
+          return {
+            ...fallbackChannel,
+            mode: "SINGLE",
+          };
+        }
+
         const legacyData = await prisma.partner.findUnique({
           where: { id: partnerId },
           select: { apiUrl: true, apiToken: true, apiVersion: true },

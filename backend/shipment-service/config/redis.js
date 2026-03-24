@@ -1,18 +1,10 @@
-const redis = require("redis");
+const redisUtils = require("../shared/lib/redis");
 
 let client;
 
 const connectRedis = async () => {
   try {
-    client = redis.createClient({
-      url: process.env.REDIS_URL,
-    });
-
-    client.on("error", (err) => {
-      console.error("Redis Client Error:", err);
-    });
-
-    await client.connect();
+    client = await redisUtils.createClient(process.env.REDIS_URL);
     console.log("Redis connected");
     return client;
   } catch (error) {

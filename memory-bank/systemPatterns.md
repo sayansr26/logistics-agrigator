@@ -752,6 +752,104 @@ Redis Cache Structure:
 
 ---
 
+### 21. Dynamic Provider Capability Contract Pattern (NEW - March 2026)
+
+**Every courier adapter declares its capabilities and exposes available actions dynamically based on shipment state.**
+
+```javascript
+// BaseCourierAdapter — abstract capability contract
+getCapabilities() {
+  return {
+    track:    { supported: false, requiresAwb: true,  description: "Track shipment" },
+    label:    { supported: false, requiresAwb: true,  description: "Download label" },
+    cancel:   { supported: false, requiresAwb: true,  description: "Cancel shipment" },
+    pickup:   { supported: false, requiresAwb: false, description: "Request pickup" },
+    manifest: { supported: false, requiresAwb: true,  description: "Generate manifest" },
+    edit:     { supported: false, requiresAwb: true,  description: "Edit shipment" },
+    refresh:  { supported: false, requiresAwb: true,  description: "Fetch latest from courier" },
+    webhook:  { supported: false, requiresAwb: false, description: "Inbound webhook" },
+    // ... more actions
+  };
+}
+
+// Concrete adapter overrides to declare support
+getCapabilities() {
+  return {
+    ...super.getCapabilities(),
+    track:  { supported: true, requiresAwb: true, description: "Track via Delhivery" },
+    cancel: { supported: true, requiresAwb: true, allowedStatuses: ["BOOKED", "PENDING_BOOKING"], description: "Cancel via Delhivery" },
+    // ...
+  };
+}
+
+// Dynamic filtering based on shipment context
+getAvailableActions(shipmentContext) {
+  const caps = this.getCapabilities();
+  const available = {};
+  for (const [action, config] of Object.entries(caps)) {
+    if (!config.supported) continue;
+    if (config.allowedStatuses && !config.allowedStatuses.includes(shipmentContext.status)) continue;
+    available[action] = config;
+  }
+  return available;
+}
+```
+
+**Frontend** renders Quick Actions from the returned `availableActions` object — buttons appear/disappear based on provider support and shipment status.
+
+### 22. Terminal Status Protection Pattern (NEW - March 2026)
+
+**Shipments in terminal states (`CANCELLED`, `DELIVERED`, `RTO`) must never have their status downgraded by provider sync.**
+
+```javascript
+const TERMINAL_STATUSES = ["CANCELLED", "DELIVERED", "RTO"];
+
+// In refreshFromProvider:
+const isCurrentTerminal = TERMINAL_STATUSES.includes(shipment.status);
+const isNewTerminal = TERMINAL_STATUSES.includes(newStatus);
+
+if (!isCurrentTerminal || isNewTerminal) {
+  updateData.status = newStatus; // Allow update
+} else {
+  // Skip — would downgrade CANCELLED → BOOKED
+  updateData.providerStatus = newStatus; // Still track what provider says
+}
+```
+
+### 23. Global Webhook Ingestion Pattern (NEW - March 2026)
+
+**A single public endpoint handles webhook pushes from all courier partners.**
+
+```
+POST /api/v1/shipments/webhook/:provider
+```
+
+- **Public** — no JWT auth required (exempted in API Gateway `authValidator.js` publicPaths)
+- **AWB extraction** varies by provider (e.g., Delhivery sends `Awb`, BlueDart sends `AWBNo`)
+- **Event normalization** maps provider-specific fields to internal `{ status, message, location, timestamp }`
+- **Idempotent** — duplicate webhook events with same status are logged but don't create duplicate TrackingEvents
+- **Creates**: `TrackingEvent` (source: `WEBHOOK`) + `AuditLog` (action: `WEBHOOK_STATUS_UPDATE`)
+
+### 24. Provider-First Cancellation Pattern (NEW - March 2026)
+
+**Cancellations must succeed at the provider before internal status changes.**
+
+```
+Frontend "Cancel with Provider" button
+  └─▶ POST /api/v1/shipments/:id/cancel-with-provider
+        ├─▶ partnerIntegrationService.cancelWithCourierFirst(partnerId, awbNumber, reason)
+        │     └─▶ Partner Service → DelhiveryAdapter.cancelOrder()
+        │           └─▶ Delhivery API (cancellation: "true")  ← MUST be string
+        │
+        ├─▶ On success: Update Shipment status → CANCELLED, bookingStatus → CANCELLED
+        ├─▶ Create TrackingEvent (source: USER, message: "Cancelled via provider")
+        └─▶ Create AuditLog
+```
+
+**Key Delhivery quirk**: `cancellation` parameter must be the **string** `"true"`, not boolean `true`. Delhivery silently ignores boolean values.
+
+---
+
 **Architecture Status**: Stable
-**Last Pattern Review**: March 17, 2026
-**Recent Additions**: Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Last Pattern Review**: March 24, 2026
+**Recent Additions**: Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

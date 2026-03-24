@@ -472,6 +472,106 @@ class BlueDartAdapter extends BaseCourierAdapter {
       };
     });
   }
+
+  getCapabilities() {
+    return {
+      track: {
+        supported: true,
+        requiresAwb: true,
+        description: "Track shipment via BlueDart API",
+      },
+      label: {
+        supported: true,
+        requiresAwb: true,
+        description: "Download waybill label from BlueDart",
+      },
+      cancel: {
+        supported: true,
+        requiresAwb: true,
+        allowedStatuses: ["BOOKED", "CREATED"],
+        description: "Cancel booking via BlueDart API",
+      },
+      pickup: {
+        supported: true,
+        requiresAwb: false,
+        description: "Register pickup with BlueDart",
+      },
+      manifest: {
+        supported: true,
+        requiresAwb: true,
+        description: "Generate manifest",
+      },
+      edit: {
+        supported: false,
+        requiresAwb: true,
+        description: "Edit not supported by BlueDart API",
+      },
+      ndr: {
+        supported: false,
+        requiresAwb: true,
+        description: "NDR not supported via BlueDart API",
+      },
+      ewaybill: {
+        supported: false,
+        requiresAwb: true,
+        description: "E-waybill not supported",
+      },
+      pod: {
+        supported: false,
+        requiresAwb: true,
+        description: "POD not available via API",
+      },
+      invoice: {
+        supported: false,
+        requiresAwb: true,
+        description: "Invoice not available via API",
+      },
+      refresh: {
+        supported: true,
+        requiresAwb: true,
+        description: "Fetch latest tracking from BlueDart",
+      },
+      webhook: {
+        supported: false,
+        requiresAwb: false,
+        description: "BlueDart webhook not implemented",
+      },
+    };
+  }
+
+  getAvailableActions(shipmentContext) {
+    const caps = this.getCapabilities();
+    const actions = [];
+    const status = shipmentContext.status;
+
+    for (const [action, meta] of Object.entries(caps)) {
+      if (!meta.supported) continue;
+
+      let enabled = true;
+      let reason = null;
+
+      if (meta.requiresAwb && !shipmentContext.awbNumber) {
+        enabled = false;
+        reason = "AWB number not yet assigned";
+      }
+
+      if (meta.allowedStatuses && !meta.allowedStatuses.includes(status)) {
+        enabled = false;
+        reason = `Not available in ${status} status`;
+      }
+
+      if (
+        action === "cancel" &&
+        ["DELIVERED", "RTO", "CANCELLED", "IN_TRANSIT"].includes(status)
+      ) {
+        continue;
+      }
+
+      actions.push({ action, description: meta.description, enabled, reason });
+    }
+
+    return actions;
+  }
 }
 
 module.exports = BlueDartAdapter;

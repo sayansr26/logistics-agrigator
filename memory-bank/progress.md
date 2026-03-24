@@ -1,14 +1,14 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: March 17, 2026
+> Development status and changelog | Last Updated: March 24, 2026
 
 ## Overall Project Status
 
 ```
 Phase 1: Core Services & Auth     [█████████████████████] 97%
-Phase 2: Courier Integration      [█████████████████████] 97%
+Phase 2: Courier Integration      [██████████████████████] 98%
 Phase 3: Platform Integrations    [████░░░░░░░░░░░░░░░░] 20%
-Overall Project Progress          [█████████████████░░░] 82%
+Overall Project Progress          [██████████████████░░] 85%
 ```
 
 ## What Works ✅
@@ -126,14 +126,14 @@ Overall Project Progress          [███████████████
   - Frontend: `phone` field added to User interface in authSlice and authApi
   - Sidebar: `outlet` role added to wallet nav item
 
-#### Shipment Service (85% Complete)
+#### Shipment Service (92% Complete)
 
 - ✅ Single order creation
 - ✅ AWB generation
 - ✅ Real-time tracking
 - ✅ Status updates
 - ✅ NDR management
-- ✅ **Shipment Creation Flow** (NEW - March 2026)
+- ✅ **Shipment Creation Flow** (March 2026)
   - ✅ End-to-end creation wizard: Docket → Dimensions → Delivery → Invoice → Review
   - ✅ B2B/B2C multi-box support with invoice generation
   - ✅ Partner quote calculation with charge breakdown + badge discounts
@@ -142,10 +142,37 @@ Overall Project Progress          [███████████████
   - ✅ `paymentProcessingService`: calls wallet admin endpoints with `X-Internal-Request` header
   - ✅ `quoteSnapshot` stores full charge breakdown + discount for shipment detail page
   - ✅ Fragile item handling (conditional charge, frontend checkbox)
+- ✅ **Shipment Lifecycle Expansion** (NEW - March 24, 2026)
+  - ✅ `POST /:id/refresh` — Fetch latest status from provider, update local DB
+  - ✅ `POST /:id/courier-label` — Fetch label from provider, store as ShipmentDocument
+  - ✅ `POST /:id/cancel-with-provider` — Provider-first cancellation flow
+  - ✅ `GET /:id/documents` — List shipment documents (labels, POD, invoices)
+  - ✅ `getShipmentById` enriched with `providerCapabilities` and `documents`
+  - ✅ Global webhook ingestion `POST /webhook/:provider` (public, no auth)
+  - ✅ Terminal status protection — never downgrade CANCELLED/DELIVERED/RTO
+  - ✅ Schema: `providerStatus`, `providerLastSyncAt`, `providerRawResponse`, `courierLabelUrl`, `courierLabelFormat`, `courierLabelFetchedAt`, `pickupRequestId`, `pickupRequestedAt`, `pickupConfirmedAt`
+  - ✅ New `ShipmentDocument` model (type: LABEL, MANIFEST, INVOICE, POD, EWAYBILL, OTHER)
 - ⏳ Bulk operations (planned)
 - ⏳ Bulk label printing (planned)
 
-#### API Gateway (90% Complete)
+#### Partner Service (100% Complete — Enhanced)
+
+- ✅ 75+ courier integrations (existing)
+- ✅ **Dynamic Capability Contract** (NEW - March 24, 2026)
+  - ✅ `BaseCourierAdapter` extended with `getCapabilities()` and `getAvailableActions(shipmentContext)` abstract methods
+  - ✅ `DelhiveryAdapter` declares: track, label, cancel, pickup, manifest, edit, ndr, ewaybill, pod, refresh, webhook
+  - ✅ `BlueDartAdapter` declares: track, label, cancel, pickup, manifest, refresh
+  - ✅ `courierOperationService.getShipmentCapabilities()` resolves adapter and returns capabilities
+  - ✅ `POST /api/v1/courier-operations/capabilities` endpoint with Joi validation
+  - ✅ Delhivery cancel fix: `cancellation: "true"` (string, not boolean)
+  - ✅ Delhivery tracking normalization: checks Instructions + StatusCode for cancellation detection
+  - ✅ Delhivery warehouse creation: removed `registered_name`, added country fields
+  - ✅ Delhivery payload corrections: `payment_mode: "Prepaid"`, `products_desc`, pincode String casts
+  - ✅ Partner channel Joi validation: DELHIVERY requires `clientName`/`sellerGstTin`, BLUEDART requires `licenseKey`/`loginId`/`customerCode`
+  - ✅ Schema: `PartnerShipment` expanded with `providerStatus`, `providerLastSyncAt`, `providerRawResponse`, `courierLabelUrl`, `pickupRequestId`, `pickupRequestedAt`
+  - ✅ Redis v4 fix: `setEx()` in `BaseCourierAdapter.setCachedResponse()`
+
+#### API Gateway (95% Complete)
 
 - ✅ Service routing
 - ✅ Basic authentication
@@ -153,7 +180,8 @@ Overall Project Progress          [███████████████
 - ✅ RBAC integration
 - ✅ Permission caching
 - ✅ Scope filtering
-- ✅ **Outlet routes** (NEW)
+- ✅ **Outlet routes**
+- ✅ **Webhook path exemption** (NEW - March 24, 2026): `/api/v1/shipments/webhook` added to `publicPaths` in `authValidator.js`
 
 #### License Service (30% Complete)
 
@@ -199,13 +227,13 @@ Overall Project Progress          [███████████████
 
 #### In Progress
 
-- ⏳ Redux/RTK Query migration (70% complete)
+- ⏳ Redux/RTK Query migration (75% complete)
 - ⏳ Bulk upload interface
 - ⏳ Advanced filtering / search enhancements
 
 #### Completed Features (continued - March 2026)
 
-- ✅ **Shipment Creation Wizard** (NEW - March 2026)
+- ✅ **Shipment Creation Wizard** (March 2026)
   - ✅ Multi-step form: Docket → Dimensions → Delivery → Invoice → Review & Book
   - ✅ B2B/B2C conditional rendering (single box vs multi-box + invoices)
   - ✅ Outlet selection for admin users with phone-based wallet integration
@@ -214,6 +242,16 @@ Overall Project Progress          [███████████████
   - ✅ Shipment detail page with invoice-style charges + "You saved" discount line
   - ✅ Zustand form store (`shipment-form-store.ts`) with `outletUserId`, `isFragile`
   - ✅ RTK Query endpoints for quotes and creation
+
+- ✅ **Dynamic Shipment Detail Page** (NEW - March 24, 2026)
+  - ✅ Quick Actions rendered dynamically from provider capabilities (`availableActions`)
+  - ✅ "Refresh from Provider" button fetches latest status from courier API and updates local DB
+  - ✅ "Download Label" button fetches and downloads PDF label (base64 decode + blob download)
+  - ✅ "Cancel with Provider" button with confirmation modal — provider-first cancellation
+  - ✅ Documents section displaying all `ShipmentDocument` records (LABEL, MANIFEST, INVOICE, POD)
+  - ✅ Provider Sync Status section (provider name, aggregator type, last sync, provider status)
+  - ✅ 4 new RTK Query hooks: `refreshFromProvider`, `fetchCourierLabel`, `cancelWithProvider`, `getShipmentDocuments`
+  - ✅ 6 new TypeScript interfaces: `ProviderAction`, `ProviderCapabilities`, `ShipmentDocument`, etc.
 
 ### Infrastructure
 
@@ -464,36 +502,110 @@ Overall Project Progress          [███████████████
 
 ### Open Issues
 
-| ID  | Service  | Issue                   | Priority | Status      |
-| --- | -------- | ----------------------- | -------- | ----------- |
-| #1  | Shipment | Bulk operations pending | P1       | Planned     |
-| #2  | License  | Integration incomplete  | P1       | In Progress |
-| #3  | Shipment | Label generation UI     | P2       | Planned     |
-| #4  | Shipment | Pickup scheduling UI    | P2       | Planned     |
+| ID  | Service  | Issue                                                        | Priority | Status      |
+| --- | -------- | ------------------------------------------------------------ | -------- | ----------- |
+| #1  | Shipment | Bulk operations pending                                      | P1       | Planned     |
+| #2  | License  | Integration incomplete                                       | P1       | In Progress |
+| #3  | Partner  | Remaining adapter actions (pickup, NDR, e-waybill, manifest) | P2       | Planned     |
+| #4  | Shipment | Shipment list filters/search                                 | P2       | Planned     |
 
 ### Recently Fixed
 
-| ID  | Service      | Issue                                                  | Fixed Date |
-| --- | ------------ | ------------------------------------------------------ | ---------- |
-| #4  | User Service | Outlet module implementation                           | Jan 2026   |
-| #5  | API Gateway  | Outlet routes added                                    | Jan 2026   |
-| #6  | Frontend     | Outlet management UI                                   | Jan 2026   |
-| #7  | Auth         | Outlet role in RBAC                                    | Jan 2026   |
-| #8  | User Service | Outlet badge system                                    | Feb 2026   |
-| #9  | User Service | Unhandled rejection crash fix                          | Feb 2026   |
-| #10 | Partner Svc  | Channel mode auto-sync, aggregator extensibility       | Mar 2026   |
-| #11 | Frontend     | RTK Query duplicate API calls (refetch + invalidation) | Mar 2026   |
-| #12 | Frontend     | DetailHeader crash (undefined backHref)                | Mar 2026   |
-| #13 | Shipment     | Wallet payment used UUID instead of phone number       | Mar 2026   |
-| #14 | Shipment     | X-Internal-Request header missing for wallet calls     | Mar 2026   |
-| #15 | Wallet/Ship  | redis.setex() → setEx() (Redis v4 compat)              | Mar 2026   |
-| #16 | Shipment     | Charge breakdown not stored in quoteSnapshot           | Mar 2026   |
+| ID  | Service      | Issue                                                               | Fixed Date |
+| --- | ------------ | ------------------------------------------------------------------- | ---------- |
+| #4  | User Service | Outlet module implementation                                        | Jan 2026   |
+| #5  | API Gateway  | Outlet routes added                                                 | Jan 2026   |
+| #6  | Frontend     | Outlet management UI                                                | Jan 2026   |
+| #7  | Auth         | Outlet role in RBAC                                                 | Jan 2026   |
+| #8  | User Service | Outlet badge system                                                 | Feb 2026   |
+| #9  | User Service | Unhandled rejection crash fix                                       | Feb 2026   |
+| #10 | Partner Svc  | Channel mode auto-sync, aggregator extensibility                    | Mar 2026   |
+| #11 | Frontend     | RTK Query duplicate API calls (refetch + invalidation)              | Mar 2026   |
+| #12 | Frontend     | DetailHeader crash (undefined backHref)                             | Mar 2026   |
+| #13 | Shipment     | Wallet payment used UUID instead of phone number                    | Mar 2026   |
+| #14 | Shipment     | X-Internal-Request header missing for wallet calls                  | Mar 2026   |
+| #15 | Wallet/Ship  | redis.setex() → setEx() (Redis v4 compat)                           | Mar 2026   |
+| #16 | Shipment     | Charge breakdown not stored in quoteSnapshot                        | Mar 2026   |
+| #17 | Partner      | Delhivery cancel: boolean `true` → string `"true"`                  | Mar 2026   |
+| #18 | Partner      | Delhivery normalizeStatus: check Instructions+StatusCode for cancel | Mar 2026   |
+| #19 | Shipment     | Terminal status downgrade protection in refreshFromProvider         | Mar 2026   |
+| #20 | Partner      | BaseCourierAdapter.setCachedResponse setex→setEx (Redis v4)         | Mar 2026   |
+| #21 | Partner      | Delhivery warehouse: removed registered_name, added country         | Mar 2026   |
 
 ## Changelog
 
 ### March 2026
 
 ```
+[2026-03-24] Shipment Lifecycle Expansion + Delhivery Fix - COMPLETE
+  Phase 1: Dynamic Provider Capability Contract
+  - BaseCourierAdapter: getCapabilities() + getAvailableActions(shipmentContext) abstract methods
+  - DelhiveryAdapter: 11 capabilities (track, label, cancel, pickup, manifest, edit, ndr, ewaybill, pod, refresh, webhook)
+  - BlueDartAdapter: 6 capabilities (track, label, cancel, pickup, manifest, refresh)
+  - courierOperationService.getShipmentCapabilities() + POST /capabilities endpoint
+  - getCapabilitiesSchema Joi validation
+
+  Phase 2: Schema & Persistence Expansion
+  - Shipment model: +9 fields (providerStatus, providerLastSyncAt, providerRawResponse, courierLabel*, pickup*)
+  - New ShipmentDocument model (type: LABEL, MANIFEST, INVOICE, POD, EWAYBILL, OTHER)
+  - PartnerShipment model: +6 fields (providerStatus, providerLastSyncAt, providerRawResponse, courierLabelUrl, pickup*)
+  - Manual migrations for both services (Docker non-interactive env)
+
+  Phase 3: Shipment Lifecycle Endpoints
+  - POST /:id/refresh — fetch latest tracking from provider, update local DB + create TrackingEvents
+  - POST /:id/courier-label — fetch label, store as ShipmentDocument (upsert), return data
+  - POST /:id/cancel-with-provider — provider-first cancel flow, then internal status update
+  - GET /:id/documents — list all ShipmentDocuments for a shipment
+  - getShipmentById enriched with providerCapabilities + documents
+  - partnerIntegrationService: getProviderCapabilities(), cancelWithCourierFirst(), refreshFromProvider()
+  - Joi schemas: refreshFromProviderSchema, fetchCourierLabelSchema, cancelWithProviderSchema
+
+  Phase 4: Global Webhook Ingestion
+  - POST /api/v1/shipments/webhook/:provider — public endpoint (no JWT)
+  - AWB extraction per provider type (delhivery/bluedart/generic)
+  - Event normalization: status, message, location, timestamp
+  - Updates Shipment record + creates TrackingEvent + AuditLog
+  - API Gateway: /api/v1/shipments/webhook added to publicPaths in authValidator.js
+
+  Phase 5: Dynamic Frontend UI
+  - Quick Actions rendered from availableActions (refresh, track, label, cancel, edit, pickup)
+  - Download Label: base64 decode → Blob → download trigger
+  - Cancel with Provider: confirmation modal → provider-first flow
+  - Documents section + Provider Sync Status card
+  - 4 new RTK Query endpoints + 6 TypeScript interfaces
+
+  Phase 6: Delhivery Critical Fixes
+  - cancelOrder: cancellation: "true" (string) instead of boolean true
+  - cancelOrder: validate response.status === true, handle "already cancelled", throw PROVIDER_CANCEL_REJECTED
+  - trackShipment: extract statusInstructions + statusCode from Status object
+  - normalizeStatus: check Instructions for "cancelled"/"canceled" + StatusCode "DTUP-210"
+  - Removed X-UCI from cancellation codes (incorrect mapping)
+  - normalizeTrackingEvents: pass scanInstructions + scanStatusCode to normalizeStatus
+  - Terminal status protection: CANCELLED/DELIVERED/RTO never downgraded by refreshFromProvider
+  - Warehouse: removed registered_name, added country: "India"
+  - Payload: payment_mode: "Prepaid", products_desc, String() pincode casts
+  - Channel validation: clientName + sellerGstTin required for DELHIVERY
+  - Redis v4: setex→setEx in BaseCourierAdapter.setCachedResponse()
+
+  Key Files Modified:
+  - backend/partner-service/adapters/BaseCourierAdapter.js
+  - backend/partner-service/adapters/DelhiveryAdapter.js
+  - backend/partner-service/adapters/BlueDartAdapter.js
+  - backend/partner-service/controllers/courierOperationController.js
+  - backend/partner-service/services/courierOperationService.js
+  - backend/partner-service/routes/courierOperations.js
+  - backend/partner-service/validation/courierOperationSchemas.js
+  - backend/partner-service/validation/partnerChannelSchemas.js
+  - backend/partner-service/prisma/schema.prisma (+migration)
+  - backend/shipment-service/controllers/shipmentController.js
+  - backend/shipment-service/routes/shipments.js
+  - backend/shipment-service/services/partnerIntegrationService.js
+  - backend/shipment-service/validation/shipmentSchemas.js
+  - backend/shipment-service/prisma/schema.prisma (+2 migrations)
+  - backend/api-gateway/middleware/authValidator.js
+  - frontend/src/app/shipments/[id]/page.tsx
+  - frontend/src/store/api/endpoints/shipmentApi.ts
+
 [2026-03-17] End-to-End Shipment Creation Flow - COMPLETE
   Shipment Service (backend):
   - Multi-step creation: Docket → Dimensions → Delivery → Invoice → Review & Book
@@ -907,17 +1019,19 @@ Overall Project Progress          [███████████████
 
 ## Upcoming Milestones
 
-| Milestone                   | Target Date | Status         |
-| --------------------------- | ----------- | -------------- |
-| Outlet Module Complete      | Jan 2026    | ✅ Complete    |
-| Charges Management Module   | Feb 2026    | ✅ Complete    |
-| Outlet Portal Pages         | Feb 2026    | ✅ Complete    |
-| Shipment Creation Flow      | Mar 2026    | ✅ Complete    |
-| License Service Integration | Mar 2026    | 🔄 In Progress |
-| Shipment Bulk Operations    | Apr 2026    | 📋 Planned     |
-| Support Service MVP         | Apr 2026    | 📋 Planned     |
-| Platform Service (Shopify)  | Apr 2026    | 📋 Planned     |
-| Frontend Redux Complete     | Apr 2026    | 📋 Planned     |
+| Milestone                    | Target Date | Status         |
+| ---------------------------- | ----------- | -------------- |
+| Outlet Module Complete       | Jan 2026    | ✅ Complete    |
+| Charges Management Module    | Feb 2026    | ✅ Complete    |
+| Outlet Portal Pages          | Feb 2026    | ✅ Complete    |
+| Shipment Creation Flow       | Mar 2026    | ✅ Complete    |
+| Shipment Lifecycle Expansion | Mar 2026    | ✅ Complete    |
+| License Service Integration  | Apr 2026    | 🔄 In Progress |
+| Remaining Adapter Actions    | Apr 2026    | 📋 Planned     |
+| Shipment Bulk Operations     | Apr 2026    | 📋 Planned     |
+| Support Service MVP          | Apr 2026    | 📋 Planned     |
+| Platform Service (Shopify)   | May 2026    | 📋 Planned     |
+| Frontend Redux Complete      | May 2026    | 📋 Planned     |
 
 ## Metrics
 
@@ -943,6 +1057,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: March 17, 2026
+**Last Updated**: March 24, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team

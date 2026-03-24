@@ -87,6 +87,8 @@ interface ChannelFormData {
   isPrimary: boolean;
   priority: number;
   aggregatorType: AggregatorType;
+  delhiveryClientName: string;
+  delhiverySellerGstTin: string;
   licenseKey: string;
   loginId: string;
   customerCode: string;
@@ -101,6 +103,8 @@ const emptyForm: ChannelFormData = {
   isPrimary: false,
   priority: 1,
   aggregatorType: "DELHIVERY",
+  delhiveryClientName: "",
+  delhiverySellerGstTin: "",
   licenseKey: "",
   loginId: "",
   customerCode: "",
@@ -125,7 +129,10 @@ function buildChannelPayload(form: ChannelFormData): ChannelConfig {
   switch (form.aggregatorType) {
     case "DELHIVERY":
       base.apiKey = form.apiKey.trim() || undefined;
-      base.aggregatorConfig = {};
+      base.aggregatorConfig = {
+        clientName: form.delhiveryClientName.trim(),
+        sellerGstTin: form.delhiverySellerGstTin.trim(),
+      };
       break;
     case "BLUEDART":
       base.apiKey = undefined;
@@ -154,6 +161,8 @@ function channelToFormData(channel: ChannelConfig): ChannelFormData {
     isPrimary: channel.isPrimary,
     priority: channel.priority,
     aggregatorType: channel.aggregatorType ?? "DELHIVERY",
+    delhiveryClientName: config.clientName ?? "",
+    delhiverySellerGstTin: config.sellerGstTin ?? config.seller_gst_tin ?? "",
     licenseKey: config.licenseKey ?? "",
     loginId: config.loginId ?? "",
     customerCode: config.customerCode ?? "",
@@ -176,21 +185,58 @@ function AggregatorConfigFields({
 }) {
   if (aggregatorType === "DELHIVERY") {
     return (
-      <div className="space-y-1.5">
-        <Label htmlFor="apiKey">
-          API Token <span className="text-red-500">*</span>
-        </Label>
-        <Input
-          id="apiKey"
-          type="password"
-          placeholder="Enter Delhivery API token"
-          value={form.apiKey}
-          onChange={(e) => onChange("apiKey", e.target.value)}
-          autoComplete="new-password"
-        />
-        <p className="text-xs text-muted-foreground">
-          The Delhivery One API access token
-        </p>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="apiKey">
+            API Token <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="apiKey"
+            type="password"
+            placeholder="Enter Delhivery API token"
+            value={form.apiKey}
+            onChange={(e) => onChange("apiKey", e.target.value)}
+            autoComplete="new-password"
+          />
+          <p className="text-xs text-muted-foreground">
+            Delhivery One API access token (Authorization: Token &lt;token&gt;)
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="delhiveryClientName">
+            Client Name <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="delhiveryClientName"
+            type="text"
+            placeholder="Exact Delhivery One registered client name"
+            value={form.delhiveryClientName}
+            onChange={(e) => onChange("delhiveryClientName", e.target.value)}
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            Must exactly match the registered client/seller name in Delhivery
+            One
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="delhiverySellerGstTin">
+            Seller GSTIN <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="delhiverySellerGstTin"
+            type="text"
+            placeholder="e.g. 22AAAAA0000A1Z5"
+            value={form.delhiverySellerGstTin}
+            onChange={(e) => onChange("delhiverySellerGstTin", e.target.value)}
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            Used as <code>seller_gst_tin</code> in Delhivery shipment creation
+          </p>
+        </div>
       </div>
     );
   }
@@ -473,6 +519,10 @@ export default function ManageChannelsPage() {
     if (form.aggregatorType === "DELHIVERY") {
       if (!editingChannel && !form.apiKey.trim())
         return "API Token is required for Delhivery.";
+      if (!form.delhiveryClientName.trim())
+        return "Client Name is required for Delhivery.";
+      if (!form.delhiverySellerGstTin.trim())
+        return "Seller GSTIN is required for Delhivery.";
     }
 
     if (form.aggregatorType === "BLUEDART") {

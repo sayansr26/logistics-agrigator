@@ -2,6 +2,34 @@ const Joi = require("joi");
 
 const ALLOWED_AGGREGATOR_TYPES = ["DELHIVERY", "BLUEDART"];
 
+const delhiveryAggregatorConfigSchema = Joi.object({
+  clientName: Joi.string().trim().min(1).required().messages({
+    "any.required":
+      "Delhivery clientName is required (must match your Delhivery One registered client name)",
+    "string.empty":
+      "Delhivery clientName cannot be empty (must match your Delhivery One registered client name)",
+  }),
+  sellerGstTin: Joi.string().trim().min(1).required().messages({
+    "any.required": "Delhivery sellerGstTin (seller GSTIN) is required",
+    "string.empty": "Delhivery sellerGstTin (seller GSTIN) cannot be empty",
+  }),
+}).unknown(true);
+
+const bluedartAggregatorConfigSchema = Joi.object({
+  licenseKey: Joi.string().trim().min(1).required().messages({
+    "any.required": "BlueDart licenseKey is required",
+    "string.empty": "BlueDart licenseKey cannot be empty",
+  }),
+  loginId: Joi.string().trim().min(1).required().messages({
+    "any.required": "BlueDart loginId is required",
+    "string.empty": "BlueDart loginId cannot be empty",
+  }),
+  customerCode: Joi.string().trim().min(1).required().messages({
+    "any.required": "BlueDart customerCode is required",
+    "string.empty": "BlueDart customerCode cannot be empty",
+  }),
+}).unknown(true);
+
 const channelConfigSchema = Joi.object({
   id: Joi.string().uuid().optional(),
   channelName: Joi.string()
@@ -15,7 +43,14 @@ const channelConfigSchema = Joi.object({
     .allow("", null)
     .optional()
     .messages({ "string.uri": "API URL must be a valid URL" }),
-  apiKey: Joi.string().trim().min(1).max(500).allow("", null).optional(),
+  apiKey: Joi.when("aggregatorType", {
+    is: "DELHIVERY",
+    then: Joi.string().trim().min(1).max(500).required().messages({
+      "any.required": "Delhivery API token is required",
+      "string.empty": "Delhivery API token cannot be empty",
+    }),
+    otherwise: Joi.string().trim().min(1).max(500).allow("", null).optional(),
+  }),
   isActive: Joi.boolean().default(true),
   isPrimary: Joi.boolean().default(false),
   priority: Joi.number().integer().min(1).max(100).default(1),
@@ -26,7 +61,13 @@ const channelConfigSchema = Joi.object({
       "any.only": "Aggregator type must be one of: DELHIVERY, BLUEDART",
       "any.required": "Aggregator type is required",
     }),
-  aggregatorConfig: Joi.object().optional().allow(null),
+  aggregatorConfig: Joi.when("aggregatorType", {
+    switch: [
+      { is: "DELHIVERY", then: delhiveryAggregatorConfigSchema.required() },
+      { is: "BLUEDART", then: bluedartAggregatorConfigSchema.required() },
+    ],
+    otherwise: Joi.object().optional().allow(null),
+  }),
   webhookSecret: Joi.string().trim().max(500).optional().allow("", null),
 });
 
@@ -52,7 +93,13 @@ const updateChannelSchema = Joi.object({
   aggregatorType: Joi.string()
     .valid(...ALLOWED_AGGREGATOR_TYPES)
     .optional(),
-  aggregatorConfig: Joi.object().optional().allow(null),
+  aggregatorConfig: Joi.when("aggregatorType", {
+    switch: [
+      { is: "DELHIVERY", then: delhiveryAggregatorConfigSchema.required() },
+      { is: "BLUEDART", then: bluedartAggregatorConfigSchema.required() },
+    ],
+    otherwise: Joi.object().optional().allow(null),
+  }),
   webhookSecret: Joi.string().trim().max(500).optional().allow("", null),
 });
 
