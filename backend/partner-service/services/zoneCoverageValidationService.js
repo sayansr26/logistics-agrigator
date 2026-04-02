@@ -80,27 +80,9 @@ class ZoneCoverageValidationService {
             },
           },
         },
-        include: {
-          zoneServices: {
-            where: { isAvailable: true },
-            select: {
-              serviceType: true,
-              additionalCharges: true,
-              remarks: true,
-            },
-          },
-        },
       });
 
       const serviceable = zones.length > 0;
-
-      // Build service types availability map
-      const availableServices = new Set();
-      zones.forEach((zone) => {
-        zone.zoneServices.forEach((service) => {
-          availableServices.add(service.serviceType);
-        });
-      });
 
       const result = {
         success: true,
@@ -120,10 +102,10 @@ class ZoneCoverageValidationService {
           zones: zones.map((z) => ({
             id: z.id,
             name: z.name,
-            services: z.zoneServices.map((s) => s.serviceType),
+            services: [],
           })),
         },
-        availableServices: Array.from(availableServices),
+        availableServices: [],
         metadata: {
           timestamp: new Date().toISOString(),
           source: "database",
@@ -207,14 +189,6 @@ class ZoneCoverageValidationService {
           },
         },
         include: {
-          zoneServices: {
-            where: { isAvailable: true },
-            select: {
-              serviceType: true,
-              additionalCharges: true,
-              remarks: true,
-            },
-          },
           zonePincodes: {
             select: { pincodeId: true },
           },
@@ -231,7 +205,7 @@ class ZoneCoverageValidationService {
           name: zone.name,
           description: zone.description,
           status: zone.status,
-          services: zone.zoneServices,
+          services: [],
           totalPincodes: zone.zonePincodes.length,
           createdAt: zone.createdAt,
         })),
@@ -561,9 +535,6 @@ class ZoneCoverageValidationService {
               pincode: { select: { code: true, areaName: true } },
             },
           },
-          zoneServices: {
-            where: { isAvailable: true },
-          },
         },
       });
 
@@ -590,15 +561,6 @@ class ZoneCoverageValidationService {
           type: "NO_COVERAGE",
           severity: "ERROR",
           message: "Zone has no geographical coverage defined",
-        });
-      }
-
-      // Check if zone has services configured
-      if (zone.zoneServices.length === 0) {
-        validationIssues.push({
-          type: "NO_SERVICES",
-          severity: "WARNING",
-          message: "Zone has no service types configured",
         });
       }
 
@@ -632,7 +594,7 @@ class ZoneCoverageValidationService {
           areas: zone.zoneAreas.length,
           pincodes: zone.zonePincodes.length,
         },
-        services: zone.zoneServices.map((s) => s.serviceType),
+        services: [],
         validationIssues,
         summary: {
           totalIssues: validationIssues.length,

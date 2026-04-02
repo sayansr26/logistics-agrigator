@@ -406,6 +406,13 @@ const rerateShipmentSchema = Joi.object({
     "string.min": "Reason must be at least 5 characters",
     "string.max": "Reason cannot exceed 500 characters",
   }),
+
+  codAction: Joi.string()
+    .valid("DEDUCT_WALLET", "UPDATE_COD")
+    .optional()
+    .messages({
+      "any.only": "codAction must be DEDUCT_WALLET or UPDATE_COD",
+    }),
 }).min(2);
 
 // Update shipment validation schema

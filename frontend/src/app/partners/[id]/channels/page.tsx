@@ -88,7 +88,6 @@ interface ChannelFormData {
   priority: number;
   aggregatorType: AggregatorType;
   delhiveryClientName: string;
-  delhiverySellerGstTin: string;
   licenseKey: string;
   loginId: string;
   customerCode: string;
@@ -104,7 +103,6 @@ const emptyForm: ChannelFormData = {
   priority: 1,
   aggregatorType: "DELHIVERY",
   delhiveryClientName: "",
-  delhiverySellerGstTin: "",
   licenseKey: "",
   loginId: "",
   customerCode: "",
@@ -131,7 +129,6 @@ function buildChannelPayload(form: ChannelFormData): ChannelConfig {
       base.apiKey = form.apiKey.trim() || undefined;
       base.aggregatorConfig = {
         clientName: form.delhiveryClientName.trim(),
-        sellerGstTin: form.delhiverySellerGstTin.trim(),
       };
       break;
     case "BLUEDART":
@@ -162,7 +159,6 @@ function channelToFormData(channel: ChannelConfig): ChannelFormData {
     priority: channel.priority,
     aggregatorType: channel.aggregatorType ?? "DELHIVERY",
     delhiveryClientName: config.clientName ?? "",
-    delhiverySellerGstTin: config.sellerGstTin ?? config.seller_gst_tin ?? "",
     licenseKey: config.licenseKey ?? "",
     loginId: config.loginId ?? "",
     customerCode: config.customerCode ?? "",
@@ -218,23 +214,6 @@ function AggregatorConfigFields({
           <p className="text-xs text-muted-foreground">
             Must exactly match the registered client/seller name in Delhivery
             One
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="delhiverySellerGstTin">
-            Seller GSTIN <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="delhiverySellerGstTin"
-            type="text"
-            placeholder="e.g. 22AAAAA0000A1Z5"
-            value={form.delhiverySellerGstTin}
-            onChange={(e) => onChange("delhiverySellerGstTin", e.target.value)}
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            Used as <code>seller_gst_tin</code> in Delhivery shipment creation
           </p>
         </div>
       </div>
@@ -484,6 +463,7 @@ export default function ManageChannelsPage() {
       aggregatorType: value,
       apiUrl: "",
       apiKey: "",
+      delhiveryClientName: "",
       licenseKey: "",
       loginId: "",
       customerCode: "",
@@ -521,8 +501,6 @@ export default function ManageChannelsPage() {
         return "API Token is required for Delhivery.";
       if (!form.delhiveryClientName.trim())
         return "Client Name is required for Delhivery.";
-      if (!form.delhiverySellerGstTin.trim())
-        return "Seller GSTIN is required for Delhivery.";
     }
 
     if (form.aggregatorType === "BLUEDART") {

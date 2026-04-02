@@ -27,6 +27,7 @@ import {
   useRefreshFromProviderMutation,
   useFetchCourierLabelMutation,
   useCancelWithProviderMutation,
+  useRerateShipmentMutation,
 } from "@/store/api/endpoints/shipmentApi";
 import type {
   TrackingEvent,
@@ -61,6 +62,7 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
+  Scale,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -154,6 +156,7 @@ export default function ShipmentDetailPage() {
     useFetchCourierLabelMutation();
   const [cancelWithProvider, { isLoading: cancellingProvider }] =
     useCancelWithProviderMutation();
+  const [rerateShipment, { isLoading: rerating }] = useRerateShipmentMutation();
 
   const shipment = data?.data?.shipment;
   const providerCapabilities = data?.data?.providerCapabilities;
@@ -181,6 +184,18 @@ export default function ShipmentDetailPage() {
   const [retryOpen, setRetryOpen] = useState(false);
   const [retryPickupLocation, setRetryPickupLocation] = useState("");
   const [retryError, setRetryError] = useState<string | null>(null);
+
+  const [revalueOpen, setRevalueOpen] = useState(false);
+  const [revalueWeight, setRevalueWeight] = useState("");
+  const [revalueLength, setRevalueLength] = useState("");
+  const [revalueWidth, setRevalueWidth] = useState("");
+  const [revalueHeight, setRevalueHeight] = useState("");
+  const [revalueReason, setRevalueReason] = useState("");
+  const [revalueCodAction, setRevalueCodAction] = useState<
+    "DEDUCT_WALLET" | "UPDATE_COD"
+  >("UPDATE_COD");
+  const [revalueError, setRevalueError] = useState<string | null>(null);
+  const [revalueSuccess, setRevalueSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!shipment) return;
@@ -288,6 +303,78 @@ export default function ShipmentDetailPage() {
       await refetch();
     } catch {
       // handled by RTK
+    }
+  };
+
+  const handleRevalueCharges = async () => {
+    setRevalueError(null);
+    setRevalueSuccess(null);
+
+    if (!revalueReason.trim() || revalueReason.trim().length < 5) {
+      setRevalueError("Reason must be at least 5 characters");
+      return;
+    }
+
+    const hasAtLeastOneField =
+      revalueWeight || revalueLength || revalueWidth || revalueHeight;
+    if (!hasAtLeastOneField) {
+      setRevalueError(
+        "At least one disputed dimension or weight must be provided",
+      );
+      return;
+    }
+
+    try {
+      const payload: {
+        disputedWeight?: number;
+        disputedLength?: number;
+        disputedWidth?: number;
+        disputedHeight?: number;
+        reason: string;
+        codAction?: "DEDUCT_WALLET" | "UPDATE_COD";
+      } = {
+        reason: revalueReason.trim(),
+      };
+
+      if (revalueWeight) payload.disputedWeight = parseFloat(revalueWeight);
+      if (revalueLength) payload.disputedLength = parseFloat(revalueLength);
+      if (revalueWidth) payload.disputedWidth = parseFloat(revalueWidth);
+      if (revalueHeight) payload.disputedHeight = parseFloat(revalueHeight);
+
+      if (shipment?.paymentType === "COD") {
+        payload.codAction = revalueCodAction;
+      }
+
+      const result = await rerateShipment({ id, data: payload }).unwrap();
+      const msg =
+        result?.message ||
+        result?.data?.message ||
+        "Charges revalued successfully";
+      setRevalueSuccess(msg);
+      await refetch();
+      setTimeout(() => {
+        setRevalueOpen(false);
+        setRevalueSuccess(null);
+        setRevalueWeight("");
+        setRevalueLength("");
+        setRevalueWidth("");
+        setRevalueHeight("");
+        setRevalueReason("");
+        setRevalueCodAction("UPDATE_COD");
+      }, 2000);
+    } catch (e) {
+      const err = e as {
+        data?: { error?: { message?: string }; message?: string };
+        error?: { message?: string };
+        message?: string;
+      };
+      setRevalueError(
+        err?.data?.error?.message ||
+          err?.data?.message ||
+          err?.error?.message ||
+          err?.message ||
+          "Failed to revalue charges",
+      );
     }
   };
 
@@ -640,18 +727,28 @@ export default function ShipmentDetailPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800">
                     <div className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
-                      Weight
+                      Weight{shipment.disputedWeight ? " (Disputed)" : ""}
                     </div>
                     <div className="text-lg font-bold">
-                      {shipment.weight ?? "—"} kg
+                      {shipment.disputedWeight ??
+                        shipment.chargeableWeight ??
+                        shipment.weight ??
+                        "—"}{" "}
+                      kg
                     </div>
+                    {shipment.disputedWeight &&
+                      shipment.disputedWeight !== shipment.weight && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Original: {shipment.weight} kg
+                        </div>
+                      )}
                   </div>
                   <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800">
                     <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1">
                       Value
                     </div>
                     <div className="text-lg font-bold">
-                      {formatCurrency(shipment.value)}
+                      {shipment.value ? formatCurrency(shipment.value) : "—"}
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 dark:bg-purple-950 dark:border-purple-800">
@@ -664,14 +761,25 @@ export default function ShipmentDetailPage() {
                         : "—"}
                     </div>
                   </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-700">
-                    <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Courier
+                  {shipment.paymentType === "COD" && shipment.codAmount ? (
+                    <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                      <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
+                        COD Amount
+                      </div>
+                      <div className="text-lg font-bold">
+                        {formatCurrency(shipment.codAmount)}
+                      </div>
                     </div>
-                    <div className="text-lg font-bold">
-                      {shipment.partnerName || "Unassigned"}
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-700">
+                      <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Courier
+                      </div>
+                      <div className="text-lg font-bold">
+                        {shipment.partnerName || "Unassigned"}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -850,6 +958,42 @@ export default function ShipmentDetailPage() {
                     </div>
                   </Button>
                 )}
+
+                {isAdminLike &&
+                  ["CREATED", "BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(
+                    shipment.status,
+                  ) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start h-auto py-3 px-4 text-amber-600 hover:text-amber-700"
+                      onClick={() => {
+                        setRevalueError(null);
+                        setRevalueSuccess(null);
+                        setRevalueWeight(
+                          shipment.weight ? String(shipment.weight) : "",
+                        );
+                        setRevalueLength(
+                          shipment.length ? String(shipment.length) : "",
+                        );
+                        setRevalueWidth(
+                          shipment.width ? String(shipment.width) : "",
+                        );
+                        setRevalueHeight(
+                          shipment.height ? String(shipment.height) : "",
+                        );
+                        setRevalueOpen(true);
+                      }}
+                    >
+                      <Scale className="h-4 w-4 mr-3" />
+                      <div className="text-left">
+                        <div className="font-medium">Revalue Charges</div>
+                        <div className="text-xs text-muted-foreground">
+                          Re-rate with updated weight or dimensions
+                        </div>
+                      </div>
+                    </Button>
+                  )}
 
                 {availableActions
                   .filter((a) => a.enabled)
@@ -1294,6 +1438,186 @@ export default function ShipmentDetailPage() {
                 </>
               ) : (
                 "Retry Booking"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revalue Charges Dialog */}
+      <Dialog
+        open={revalueOpen}
+        onOpenChange={(open) => {
+          setRevalueOpen(open);
+          if (!open) {
+            setRevalueError(null);
+            setRevalueSuccess(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Revalue Charges</DialogTitle>
+            <DialogDescription>
+              Enter the courier-validated weight and/or dimensions to
+              recalculate shipping charges. The difference will be settled based
+              on the payment type.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="revalueWeight">Weight (kg)</Label>
+                <Input
+                  id="revalueWeight"
+                  type="number"
+                  step="0.001"
+                  min="0.001"
+                  placeholder="e.g. 2.5"
+                  value={revalueWeight}
+                  onChange={(e) => setRevalueWeight(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="revalueLength">Length (cm)</Label>
+                <Input
+                  id="revalueLength"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="e.g. 30"
+                  value={revalueLength}
+                  onChange={(e) => setRevalueLength(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="revalueWidth">Width (cm)</Label>
+                <Input
+                  id="revalueWidth"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="e.g. 20"
+                  value={revalueWidth}
+                  onChange={(e) => setRevalueWidth(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="revalueHeight">Height (cm)</Label>
+                <Input
+                  id="revalueHeight"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="e.g. 15"
+                  value={revalueHeight}
+                  onChange={(e) => setRevalueHeight(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="revalueReason">Reason</Label>
+              <Input
+                id="revalueReason"
+                placeholder="e.g. Courier weight discrepancy"
+                value={revalueReason}
+                onChange={(e) => setRevalueReason(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum 5 characters. Describe why the charges need revaluation.
+              </p>
+            </div>
+
+            {shipment?.paymentType === "COD" && (
+              <div className="space-y-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                <Label className="text-amber-800 dark:text-amber-300 font-medium">
+                  COD Extra Charge Handling
+                </Label>
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  If the new charges are higher, how should the extra cost be
+                  handled?
+                </p>
+                <div className="space-y-2 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="codAction"
+                      value="UPDATE_COD"
+                      checked={revalueCodAction === "UPDATE_COD"}
+                      onChange={() => setRevalueCodAction("UPDATE_COD")}
+                      className="accent-amber-600"
+                    />
+                    <div>
+                      <span className="text-sm font-medium">
+                        Update COD Amount
+                      </span>
+                      <p className="text-xs text-muted-foreground">
+                        Increase the COD collection amount to cover the
+                        difference
+                      </p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="codAction"
+                      value="DEDUCT_WALLET"
+                      checked={revalueCodAction === "DEDUCT_WALLET"}
+                      onChange={() => setRevalueCodAction("DEDUCT_WALLET")}
+                      className="accent-amber-600"
+                    />
+                    <div>
+                      <span className="text-sm font-medium">
+                        Deduct from Wallet
+                      </span>
+                      <p className="text-xs text-muted-foreground">
+                        Charge the difference from the user&apos;s wallet
+                        balance
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {revalueError && (
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {revalueError}
+              </div>
+            )}
+
+            {revalueSuccess && (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                {revalueSuccess}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRevalueOpen(false)}
+              disabled={rerating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleRevalueCharges()}
+              disabled={rerating || !!revalueSuccess}
+            >
+              {rerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                  Recalculating...
+                </>
+              ) : (
+                "Revalue Charges"
               )}
             </Button>
           </DialogFooter>

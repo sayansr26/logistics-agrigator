@@ -14,6 +14,7 @@ import { baseApi } from "../baseApi";
 export type AggregatorType = string;
 
 export interface DelhiveryConfig {
+  clientName?: string;
   [key: string]: any;
 }
 

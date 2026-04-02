@@ -2100,6 +2100,7 @@ async function rerateShipment(req, res) {
       disputedWidth,
       disputedHeight,
       reason,
+      codAction,
     } = req.body;
 
     const shipment = await prisma.shipment.findUnique({
@@ -2113,6 +2114,7 @@ async function rerateShipment(req, res) {
         partnerId: true,
         partnerName: true,
         totalCost: true,
+        codAmount: true,
         weight: true,
         length: true,
         width: true,
@@ -2124,6 +2126,9 @@ async function rerateShipment(req, res) {
         pickupPincode: true,
         deliveryPincode: true,
         serviceType: true,
+        value: true,
+        fragile: true,
+        quoteSnapshot: true,
       },
     });
 
@@ -2131,9 +2136,13 @@ async function rerateShipment(req, res) {
       throw new NotFoundError("Shipment not found");
     }
 
-    if (!["BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(shipment.status)) {
+    if (
+      !["CREATED", "BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(
+        shipment.status,
+      )
+    ) {
       throw new ValidationError(
-        "Shipment can only be re-rated in BOOKED, PICKED_UP, or IN_TRANSIT status",
+        "Shipment can only be re-rated in CREATED, BOOKED, PICKED_UP, or IN_TRANSIT status",
       );
     }
 
@@ -2150,21 +2159,35 @@ async function rerateShipment(req, res) {
     const newChargeableWeight = Math.max(newWeight, newVolWeight);
 
     // Recalculate rates with partner service
+    const authToken = req.header("Authorization");
     let newCost = oldCost;
+    let newBreakdown = null;
     try {
-      const rateData = await partnerIntegrationService.calculateRates({
-        fromPincode: shipment.pickupPincode,
-        toPincode: shipment.deliveryPincode,
-        weight: newChargeableWeight,
-        serviceType: shipment.serviceType,
-        dimensions: { length: newLength, width: newWidth, height: newHeight },
-      });
+      const rateData = await partnerIntegrationService.calculateRates(
+        {
+          fromPincode: shipment.pickupPincode,
+          toPincode: shipment.deliveryPincode,
+          weight: newChargeableWeight,
+          serviceType: shipment.serviceType,
+          dimensions: { length: newLength, width: newWidth, height: newHeight },
+          paymentMode: shipment.paymentType,
+          codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : 0,
+          declaredValue: shipment.value ? parseFloat(shipment.value) : 0,
+          isFragile: shipment.fragile || false,
+          outletId: shipment.outletId || undefined,
+          partnerId: shipment.partnerId,
+          skipServiceabilityCheck: true,
+        },
+        authToken,
+      );
 
       const partnerRate = (rateData.rates || []).find(
         (r) => r.partnerId === shipment.partnerId,
       );
       if (partnerRate) {
         newCost = partnerRate.totalAmount;
+        newBreakdown =
+          partnerRate.breakdown || partnerRate.chargesBreakdown || [];
       }
     } catch (rateError) {
       logger.warn("Rate recalculation failed during re-rate, using old cost", {
@@ -2175,15 +2198,20 @@ async function rerateShipment(req, res) {
     }
 
     const difference = newCost - oldCost;
-    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const walletAuthToken = req.headers.authorization?.replace("Bearer ", "");
     const walletTarget = shipment.outletId || shipment.userId;
+    const oldCodAmount = shipment.codAmount
+      ? parseFloat(shipment.codAmount)
+      : 0;
 
     let refundTxId = null;
     let chargeTxId = null;
     let holdApplied = false;
+    let codAmountUpdated = false;
+    let newCodAmount = oldCodAmount;
 
     if (difference !== 0 && shipment.paymentType === "PREPAID") {
-      // Refund the old amount first
+      // PREPAID: refund old amount, charge new amount via wallet
       try {
         const refundResult =
           await paymentProcessingService.processShipmentRefund(
@@ -2191,7 +2219,7 @@ async function rerateShipment(req, res) {
             oldCost,
             shipment.id,
             `Re-rate refund for shipment ${shipment.orderId}: ${reason}`,
-            authToken,
+            walletAuthToken,
           );
         refundTxId = refundResult.refundTransactionId;
       } catch (refundErr) {
@@ -2202,7 +2230,6 @@ async function rerateShipment(req, res) {
         });
       }
 
-      // Charge the new amount
       try {
         const chargeResult =
           await paymentProcessingService.processShipmentPayment(
@@ -2210,7 +2237,7 @@ async function rerateShipment(req, res) {
             newCost,
             shipment.id,
             `Re-rate charge for shipment ${shipment.orderId}: ${reason}`,
-            authToken,
+            walletAuthToken,
           );
         chargeTxId = chargeResult.walletTransactionId;
       } catch (chargeErr) {
@@ -2220,6 +2247,69 @@ async function rerateShipment(req, res) {
           error: chargeErr.message,
         });
         holdApplied = true;
+      }
+    } else if (difference !== 0 && shipment.paymentType === "COD") {
+      // COD handling — admin chooses how to settle the difference
+      if (difference > 0 && !codAction) {
+        throw new ValidationError(
+          "codAction is required for COD shipments when charges increase. Use DEDUCT_WALLET or UPDATE_COD.",
+        );
+      }
+
+      const effectiveCodAction = difference < 0 ? "UPDATE_COD" : codAction;
+
+      if (effectiveCodAction === "UPDATE_COD") {
+        newCodAmount = oldCodAmount + difference;
+        if (newCodAmount < 0) newCodAmount = 0;
+        codAmountUpdated = true;
+        logger.info("COD amount adjusted via re-rate", {
+          service: "shipment-service",
+          shipmentId: id,
+          oldCodAmount,
+          newCodAmount,
+          difference,
+        });
+      } else if (effectiveCodAction === "DEDUCT_WALLET") {
+        // Same wallet refund+charge pattern as PREPAID
+        try {
+          const refundResult =
+            await paymentProcessingService.processShipmentRefund(
+              walletTarget,
+              oldCost,
+              shipment.id,
+              `Re-rate refund (COD wallet deduct) for shipment ${shipment.orderId}: ${reason}`,
+              walletAuthToken,
+            );
+          refundTxId = refundResult.refundTransactionId;
+        } catch (refundErr) {
+          logger.error("Re-rate COD wallet refund failed", {
+            service: "shipment-service",
+            shipmentId: id,
+            error: refundErr.message,
+          });
+        }
+
+        try {
+          const chargeResult =
+            await paymentProcessingService.processShipmentPayment(
+              walletTarget,
+              newCost,
+              shipment.id,
+              `Re-rate charge (COD wallet deduct) for shipment ${shipment.orderId}: ${reason}`,
+              walletAuthToken,
+            );
+          chargeTxId = chargeResult.walletTransactionId;
+        } catch (chargeErr) {
+          logger.warn(
+            "Re-rate COD wallet charge failed - putting shipment on hold",
+            {
+              service: "shipment-service",
+              shipmentId: id,
+              error: chargeErr.message,
+            },
+          );
+          holdApplied = true;
+        }
       }
     }
 
@@ -2235,6 +2325,29 @@ async function rerateShipment(req, res) {
       volumetricWeight: newVolWeight,
     };
 
+    if (newBreakdown && newBreakdown.length > 0) {
+      const chargeBreakdown = newBreakdown.map((entry) => {
+        const rawName = entry.chargeTypeName || entry.base || "Charge";
+        const displayName =
+          rawName === "DISTANCE_BASE_WEIGHT"
+            ? "Distance Charge"
+            : rawName.charAt(0) + rawName.slice(1).toLowerCase();
+        return { name: displayName, amount: entry.totalCharge || 0 };
+      });
+      const existingSnapshot =
+        typeof shipment.quoteSnapshot === "object" && shipment.quoteSnapshot
+          ? shipment.quoteSnapshot
+          : {};
+      updateData.quoteSnapshot = {
+        ...existingSnapshot,
+        chargeBreakdown,
+      };
+    }
+
+    if (codAmountUpdated) {
+      updateData.codAmount = newCodAmount;
+    }
+
     if (holdApplied) {
       updateData.status = "HOLD";
       updateData.holdReason = `Insufficient balance after re-rate. New charge: ₹${newCost}, Old charge: ₹${oldCost}. Reason: ${reason}`;
@@ -2249,6 +2362,7 @@ async function rerateShipment(req, res) {
         status: true,
         disputeStatus: true,
         totalCost: true,
+        codAmount: true,
         disputedCost: true,
         chargeableWeight: true,
         holdReason: true,
@@ -2275,19 +2389,29 @@ async function rerateShipment(req, res) {
       },
     });
 
+    const trackingMessage = holdApplied
+      ? `Shipment on hold: insufficient balance after re-rate (₹${oldCost} → ₹${newCost})`
+      : codAmountUpdated
+        ? `Shipment re-rated: ₹${oldCost} → ₹${newCost}, COD updated: ₹${oldCodAmount} → ₹${newCodAmount}`
+        : `Shipment re-rated: ₹${oldCost} → ₹${newCost}`;
+
+    // Use current shipment status for the tracking event to avoid
+    // invalid status transitions — rerate is recorded via message/metadata
     await trackingService.createTrackingEvent(
       id,
       {
-        status: holdApplied ? "HOLD" : "RERATE_RESOLVED",
-        message: holdApplied
-          ? `Shipment on hold: insufficient balance after re-rate (₹${oldCost} → ₹${newCost})`
-          : `Shipment re-rated: ₹${oldCost} → ₹${newCost}`,
+        status: shipment.status,
+        message: trackingMessage,
         eventMetadata: {
           reason,
           oldCost,
           newCost,
           difference,
           holdApplied,
+          codAction: codAction || null,
+          codAmountUpdated,
+          oldCodAmount: codAmountUpdated ? oldCodAmount : undefined,
+          newCodAmount: codAmountUpdated ? newCodAmount : undefined,
           disputedWeight: newWeight,
           chargeableWeight: newChargeableWeight,
         },
@@ -2308,6 +2432,10 @@ async function rerateShipment(req, res) {
           newCost,
           difference,
           holdApplied,
+          codAction: codAction || null,
+          codAmountUpdated,
+          oldCodAmount: codAmountUpdated ? oldCodAmount : undefined,
+          newCodAmount: codAmountUpdated ? newCodAmount : undefined,
           disputedWeight: newWeight,
           disputedLength: newLength,
           disputedWidth: newWidth,
@@ -2320,12 +2448,23 @@ async function rerateShipment(req, res) {
       },
     });
 
+    let statusMessage = "Shipment re-rated successfully";
+    if (holdApplied) {
+      statusMessage =
+        "Shipment re-rated and placed on hold due to insufficient balance";
+    } else if (codAmountUpdated) {
+      statusMessage = `Shipment re-rated successfully. COD amount updated: ₹${oldCodAmount} → ₹${newCodAmount}`;
+    }
+
     res.json(
       APIResponse.success(
         {
           shipment: {
             ...updatedShipment,
             totalCost: parseFloat(updatedShipment.totalCost),
+            codAmount: updatedShipment.codAmount
+              ? parseFloat(updatedShipment.codAmount)
+              : null,
             disputedCost: updatedShipment.disputedCost
               ? parseFloat(updatedShipment.disputedCost)
               : null,
@@ -2340,11 +2479,13 @@ async function rerateShipment(req, res) {
             refundTransactionId: refundTxId,
             chargeTransactionId: chargeTxId,
             holdApplied,
+            codAction: codAction || null,
+            codAmountUpdated,
+            oldCodAmount: codAmountUpdated ? oldCodAmount : undefined,
+            newCodAmount: codAmountUpdated ? newCodAmount : undefined,
           },
         },
-        holdApplied
-          ? "Shipment re-rated and placed on hold due to insufficient balance"
-          : "Shipment re-rated successfully",
+        statusMessage,
       ),
     );
   } catch (error) {
@@ -3366,6 +3507,7 @@ async function cancelWithProvider(req, res) {
         walletTransactionId: true,
         awbNumber: true,
         partnerId: true,
+        createdAt: true,
       },
     });
 
@@ -3395,6 +3537,55 @@ async function cancelWithProvider(req, res) {
       });
     }
 
+    // Process wallet refund for PREPAID shipments
+    const refundAmount = calculateRefundAmount(shipment, reason);
+    let refundTransactionId = null;
+    let refundResult = null;
+
+    if (
+      refundAmount > 0 &&
+      shipment.paymentType === "PREPAID" &&
+      shipment.walletTransactionId
+    ) {
+      const walletUserId = req.user.phone || userId;
+      const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+      logger.info("Processing refund for cancelled prepaid shipment", {
+        service: "shipment-service",
+        shipmentId: id,
+        walletUserId,
+        refundAmount,
+        originalWalletTransactionId: shipment.walletTransactionId,
+      });
+
+      try {
+        refundResult = await paymentProcessingService.processShipmentRefund(
+          walletUserId,
+          refundAmount,
+          shipment.id,
+          reason,
+          authToken,
+        );
+        refundTransactionId = refundResult.refundTransactionId;
+
+        logger.info("Wallet refund processed successfully", {
+          service: "shipment-service",
+          shipmentId: id,
+          walletUserId,
+          refundTransactionId,
+          refundAmount,
+        });
+      } catch (refundError) {
+        logger.error("Wallet refund failed — shipment still cancelled", {
+          service: "shipment-service",
+          shipmentId: id,
+          walletUserId,
+          refundAmount,
+          error: refundError.message,
+        });
+      }
+    }
+
     const updatedShipment = await prisma.shipment.update({
       where: { id: shipment.id },
       data: {
@@ -3403,6 +3594,9 @@ async function cancelWithProvider(req, res) {
         cancelledAt: new Date(),
         cancellationReason: reason,
         providerStatus: "CANCELLED",
+        paymentStatus: refundAmount > 0 ? "REFUNDED" : "NO_REFUND",
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+        refundTransactionId: refundTransactionId || undefined,
       },
     });
 
@@ -3416,6 +3610,8 @@ async function cancelWithProvider(req, res) {
           reason,
           providerCancelSuccess: providerCancelResult?.success || false,
           cancelledBy: userId,
+          refundAmount: refundAmount > 0 ? refundAmount : 0,
+          refundTransactionId,
         },
       },
       userId,
@@ -3432,6 +3628,8 @@ async function cancelWithProvider(req, res) {
           newStatus: "CANCELLED",
           reason,
           providerCancelled: !!providerCancelResult,
+          refundAmount: refundAmount > 0 ? refundAmount : 0,
+          refundTransactionId,
         },
         metadata: {
           source: "shipment-service",
@@ -3451,6 +3649,14 @@ async function cancelWithProvider(req, res) {
           status: "CANCELLED",
           providerCancelled: !!providerCancelResult,
           providerCancelResult: providerCancelResult || null,
+          refund:
+            refundAmount > 0
+              ? {
+                  amount: refundAmount,
+                  transactionId: refundTransactionId,
+                  status: refundTransactionId ? "PROCESSED" : "FAILED",
+                }
+              : null,
         },
         "Shipment cancelled successfully",
       ),

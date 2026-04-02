@@ -44,7 +44,7 @@ import {
   DollarSign,
   Layers,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   useGetChargeRulesQuery,
   useGetChargeRuleByIdQuery,
@@ -256,6 +256,7 @@ function CreateChargeRuleModal({
 
   const [formData, setFormData] = useState<any>(initialForm);
   const [errors, setErrors] = useState<any>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [createRule, { isLoading }] = useCreateChargeRuleMutation();
 
   // Geological zones for Zone-to-Zone
@@ -379,9 +380,13 @@ function CreateChargeRuleModal({
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting || isLoading) return;
+
     const newErrors = validate();
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
+
+    setIsSubmitting(true);
 
     const basePayload: Partial<CreateChargeRuleRequest> = {
       partnerId: formData.partnerId,
@@ -416,24 +421,25 @@ function CreateChargeRuleModal({
           perKgCharge: parseFloat(formData.perKgCharge) || 0,
         }).unwrap();
       } else if (formData.base === "DISTANCE_BASE_WEIGHT") {
-        // Create one rule per selected milestone
-        await Promise.all(
-          formData.selectedMilestones.map((msId: string) =>
-            createRule({
-              ...(basePayload as CreateChargeRuleRequest),
-              zoneMilestoneId: msId,
-              perKg: parseFloat(formData.milestonePerKg[msId] || "1") || 1,
-              perKgCharge:
-                parseFloat(formData.milestonePerKgCharge[msId] || "0") || 0,
-            }).unwrap(),
-          ),
-        );
+        // Create one rule per selected milestone sequentially to avoid
+        // N concurrent requests exhausting the rate limiter.
+        for (const msId of formData.selectedMilestones as string[]) {
+          await createRule({
+            ...(basePayload as CreateChargeRuleRequest),
+            zoneMilestoneId: msId,
+            perKg: parseFloat(formData.milestonePerKg[msId] || "1") || 1,
+            perKgCharge:
+              parseFloat(formData.milestonePerKgCharge[msId] || "0") || 0,
+          }).unwrap();
+        }
       }
       onClose();
     } catch (err: any) {
       setErrors({
         submit: err?.data?.error?.message || "Failed to create charge rule",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -826,11 +832,15 @@ function CreateChargeRuleModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={isSubmitting || isLoading}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? (
+          <Button onClick={handleSubmit} disabled={isSubmitting || isLoading}>
+            {isSubmitting || isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...
               </>
@@ -1189,6 +1199,7 @@ function ViewEditChargeRuleModal({
 // MAIN PAGE
 // ============================================
 export default function ChargesPage() {
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBase, setFilterBase] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -1200,6 +1211,17 @@ export default function ChargesPage() {
   const [viewEditModalOpen, setViewEditModalOpen] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<"view" | "edit">("view");
+
+  // Debounce search input to avoid a GET request on every keystroke
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchTerm(value);
+      setPage(1);
+    }, 400);
+  }, []);
 
   const {
     data: rulesData,
@@ -1367,12 +1389,18 @@ export default function ChargesPage() {
                   <Input
                     placeholder="Search by partner name..."
                     className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                   />
                 </div>
               </div>
-              <Select value={filterPartner} onValueChange={setFilterPartner}>
+              <Select
+                value={filterPartner}
+                onValueChange={(v) => {
+                  setFilterPartner(v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Partners" />
                 </SelectTrigger>
@@ -1385,7 +1413,13 @@ export default function ChargesPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterBase} onValueChange={setFilterBase}>
+              <Select
+                value={filterBase}
+                onValueChange={(v) => {
+                  setFilterBase(v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Bases" />
                 </SelectTrigger>
@@ -1401,7 +1435,13 @@ export default function ChargesPage() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <Select
+                value={filterStatus}
+                onValueChange={(v) => {
+                  setFilterStatus(v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[130px]">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>

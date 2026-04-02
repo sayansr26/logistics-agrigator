@@ -101,6 +101,7 @@ const partnerSchema = {
     }),
     isFragile: Joi.boolean().default(false),
     outletId: Joi.string().allow("", null),
+    skipServiceabilityCheck: Joi.boolean().default(false),
     sortBy: Joi.string().valid("cheapest", "highest"),
   }),
 

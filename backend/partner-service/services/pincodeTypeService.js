@@ -13,6 +13,7 @@
 const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
 const { getRedisClient } = require("../config/redis");
+const { canonicalTypeName } = require("../utils/typeNameNormalizer");
 
 class PincodeTypeService {
   constructor() {
@@ -46,14 +47,19 @@ class PincodeTypeService {
         throw error;
       }
 
-      // Check for existing type with same name
-      const existingType = await prisma.pincodeType.findFirst({
-        where: { name },
-        select: { id: true },
+      // Case-insensitive / canonical duplicate check
+      const allTypes = await prisma.pincodeType.findMany({
+        select: { id: true, name: true },
       });
+      const canonicalNew = canonicalTypeName(name);
+      const existingType = allTypes.find(
+        (t) => canonicalTypeName(t.name) === canonicalNew,
+      );
 
       if (existingType) {
-        const error = new Error(`Pincode type '${name}' already exists`);
+        const error = new Error(
+          `Pincode type '${name}' already exists (matches '${existingType.name}')`,
+        );
         error.statusCode = 409;
         throw error;
       }
@@ -248,19 +254,20 @@ class PincodeTypeService {
         throw error;
       }
 
-      // Check for name conflict if name is being updated
+      // Case-insensitive / canonical duplicate check when name is being updated
       if (updateData.name && updateData.name !== existingType.name) {
-        const nameConflict = await prisma.pincodeType.findFirst({
-          where: {
-            name: updateData.name,
-            id: { not: id },
-          },
-          select: { id: true },
+        const allTypes = await prisma.pincodeType.findMany({
+          where: { id: { not: id } },
+          select: { id: true, name: true },
         });
+        const canonicalNew = canonicalTypeName(updateData.name);
+        const nameConflict = allTypes.find(
+          (t) => canonicalTypeName(t.name) === canonicalNew,
+        );
 
         if (nameConflict) {
           const error = new Error(
-            `Pincode type '${updateData.name}' already exists`,
+            `Pincode type '${updateData.name}' already exists (matches '${nameConflict.name}')`,
           );
           error.statusCode = 409;
           throw error;

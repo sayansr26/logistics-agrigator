@@ -16,19 +16,11 @@ class DelhiveryAdapter extends BaseCourierAdapter {
     super(channelConfig);
 
     if (!this.apiUrl) {
-      const fallbackUrl =
-        process.env.DELHIVERY_API_URL || "https://track.delhivery.com";
-      this.apiUrl = fallbackUrl;
-      this.client.defaults.baseURL = fallbackUrl;
+      this.apiUrl = "https://track.delhivery.com";
+      this.client.defaults.baseURL = this.apiUrl;
     }
 
-    this.clientName =
-      this.config.clientName || process.env.DELHIVERY_CLIENT_NAME || "";
-    this.sellerGstTin =
-      this.config.sellerGstTin ||
-      this.config.seller_gst_tin ||
-      process.env.DELHIVERY_SELLER_GST_TIN ||
-      "";
+    this.clientName = this.config.clientName || "";
 
     // Set up axios instance with Delhivery auth headers
     this.client.defaults.headers.common["Authorization"] =
@@ -81,18 +73,6 @@ class DelhiveryAdapter extends BaseCourierAdapter {
         },
       );
     }
-    if (!this.sellerGstTin) {
-      throw Object.assign(
-        new Error(
-          "Delhivery seller GSTIN (sellerGstTin) is missing (required for /api/cmu/create.json)",
-        ),
-        {
-          code: "DELHIVERY_CONFIG_MISSING",
-          statusCode: 400,
-        },
-      );
-    }
-
     const derivedPickupLocationName =
       this.getDerivedPickupLocationName(shipmentData);
     const pickupLocationName =
@@ -134,19 +114,40 @@ class DelhiveryAdapter extends BaseCourierAdapter {
         },
       );
 
+      let warehouseCreated = false;
       try {
         await this.createWarehouse(
           pickupLocationName,
           shipmentData.pickupAddress,
         );
-        response = await this.createOrderRequest(shipmentPayload);
+        warehouseCreated = true;
       } catch (warehouseError) {
+        // If creation timed out, the warehouse may still have been registered
+        // on Delhivery's side — always retry the order regardless.
+        const isTimeout =
+          warehouseError.message?.includes("timeout") ||
+          warehouseError.code === "ECONNABORTED";
+
         logger.error("Delhivery warehouse auto-creation failed", {
           orderId: shipmentData.orderId,
           pickupLocation: pickupLocationName,
           error: warehouseError.message,
+          retryingOrder: isTimeout,
         });
+
+        if (!isTimeout) {
+          // Non-timeout failure (e.g. validation error) — no point retrying
+          throw warehouseError;
+        }
       }
+
+      // Retry the order whether creation succeeded or timed out
+      logger.info("Retrying Delhivery order after warehouse creation attempt", {
+        orderId: shipmentData.orderId,
+        pickupLocation: pickupLocationName,
+        warehouseCreated,
+      });
+      response = await this.createOrderRequest(shipmentPayload);
     }
 
     const pkg = response.packages && response.packages[0];
@@ -203,7 +204,6 @@ class DelhiveryAdapter extends BaseCourierAdapter {
           shipment_length: shipmentData.packageDetails.length || 10,
           products_desc: shipmentData.productDescription || "Package",
           hsn_code: shipmentData.hsnCode || "",
-          seller_gst_tin: this.sellerGstTin,
           seller_name: sellerName || "",
           pickup_location: pickupLocationName,
         },
@@ -268,9 +268,11 @@ class DelhiveryAdapter extends BaseCourierAdapter {
     };
 
     try {
+      // Use a longer timeout for warehouse creation (Delhivery can be slow)
       const response = await this.client.post(
         "/api/backend/clientwarehouse/create/",
         payload,
+        { timeout: 30000 },
       );
       this.onSuccess();
 

@@ -16,7 +16,10 @@ const {
   validateQuery,
 } = require("../middleware/validate");
 const { chargeRules: schemas } = require("../validation/chargesSchemas");
-const { chargesManagementLimiter } = require("../middleware/rateLimiter");
+const {
+  chargesManagementLimiter,
+  chargesReadLimiter,
+} = require("../middleware/rateLimiter");
 
 // ========================================
 // ROUTES
@@ -98,6 +101,7 @@ router.post(
  */
 router.get(
   "/",
+  chargesReadLimiter,
   authMiddleware.authenticate,
   authMiddleware.requirePermission("partner", "read", "all"),
   validateQuery(schemas.listChargeRules.query),
@@ -127,6 +131,7 @@ router.get(
  */
 router.get(
   "/:id",
+  chargesReadLimiter,
   authMiddleware.authenticate,
   authMiddleware.requirePermission("partner", "read", "all"),
   validateParams(schemas.getChargeRule.params),

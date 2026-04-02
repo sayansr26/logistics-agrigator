@@ -316,12 +316,12 @@ const courierOperationLimiter = rateLimit({
 
 /**
  * Charges Rule Management Rate Limiter
- * Applies to new charge rule CRUD operations (INVOICE/WEIGHT/ZONE/DISTANCE)
- * 30 requests per 15 minutes per user
+ * Applies to charge rule write operations (POST/PUT/DELETE)
+ * 100 requests per 15 minutes per user — supports bulk milestone creation
  */
 const chargesManagementLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each user to 30 charge rule operations per windowMs
+  max: 100, // Supports creating many milestone rules in a single session
   message: {
     status: "error",
     error: {
@@ -329,6 +329,30 @@ const chargesManagementLimiter = rateLimit({
       message:
         "Too many charges management requests. Please try again in 15 minutes.",
       retryAfter: 15 * 60, // seconds
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return generateSecureKey(req, req.user?.id || "unknown");
+  },
+});
+
+/**
+ * Charges Read Rate Limiter
+ * Applies to GET charge rule list and detail endpoints
+ * 200 requests per 5 minutes per user — accommodates RTK Query refetches after mutations
+ */
+const chargesReadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 200,
+  message: {
+    status: "error",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      message:
+        "Too many charge rule read requests. Please try again in 5 minutes.",
+      retryAfter: 5 * 60,
     },
   },
   standardHeaders: true,
@@ -348,6 +372,7 @@ module.exports = {
   discountManagementLimiter,
   chargeCalculationLimiter,
   chargesManagementLimiter,
+  chargesReadLimiter,
   courierOperationLimiter,
   partnerAssignmentLimiter,
   performanceAnalyticsLimiter,

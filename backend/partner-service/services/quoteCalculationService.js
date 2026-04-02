@@ -165,6 +165,64 @@ async function getPincodeTypeValues(partnerId, pincodeCode) {
   }
 }
 
+/**
+ * Check whether a partner has an active pincode assignment for a given pincode.
+ * @param {string} partnerId
+ * @param {string} pincodeCode - 6-digit pincode string
+ * @returns {Promise<boolean>}
+ */
+async function hasPincodeAssignment(partnerId, pincodeCode) {
+  try {
+    const pincode = await prisma.pincode.findUnique({
+      where: { code: pincodeCode },
+      select: { id: true },
+    });
+    if (!pincode) return false;
+
+    const assign = await prisma.partnerPincodeAssign.findFirst({
+      where: {
+        partnerId,
+        pincodeId: pincode.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    return !!assign;
+  } catch (error) {
+    logger.debug("Error checking pincode assignment", {
+      partnerId,
+      pincodeCode,
+      error: error.message,
+    });
+    return false;
+  }
+}
+
+/**
+ * Check whether a partner has active zone coverage for a given pincode.
+ * Looks for ANY active zone (GEOLOGICAL or DISTANCE) containing the pincode.
+ * @param {string} partnerId
+ * @param {string} pincodeCode
+ * @returns {Promise<boolean>}
+ */
+async function hasZoneCoverage(partnerId, pincodeCode) {
+  try {
+    const zoneCoverageService = getZoneCoverageValidationService();
+    const result = await zoneCoverageService.validatePincodeServiceability(
+      partnerId,
+      pincodeCode,
+    );
+    return result.success && result.serviceable;
+  } catch (error) {
+    logger.debug("Error checking zone coverage", {
+      partnerId,
+      pincodeCode,
+      error: error.message,
+    });
+    return false;
+  }
+}
+
 // ==========================================
 // BADGE-BASED DISCOUNT APPLICATION
 // ==========================================
@@ -369,10 +427,55 @@ async function checkServiceability(params) {
     },
   });
 
-  // Check serviceability for each partner
+  // Check serviceability for each partner — strict: both pickup and delivery
+  // must have active pincode assignment AND zone coverage
   const results = await Promise.all(
     partners.map(async (partner) => {
       try {
+        const [pickupAssigned, deliveryAssigned] = await Promise.all([
+          hasPincodeAssignment(partner.id, fromPincode),
+          hasPincodeAssignment(partner.id, toPincode),
+        ]);
+
+        if (!pickupAssigned) {
+          return {
+            partnerId: partner.id,
+            partnerName: partner.displayName || partner.name,
+            serviceable: false,
+            reason: "Pickup pincode not assigned to this partner",
+          };
+        }
+        if (!deliveryAssigned) {
+          return {
+            partnerId: partner.id,
+            partnerName: partner.displayName || partner.name,
+            serviceable: false,
+            reason: "Delivery pincode not assigned to this partner",
+          };
+        }
+
+        const [pickupCovered, deliveryCovered] = await Promise.all([
+          hasZoneCoverage(partner.id, fromPincode),
+          hasZoneCoverage(partner.id, toPincode),
+        ]);
+
+        if (!pickupCovered) {
+          return {
+            partnerId: partner.id,
+            partnerName: partner.displayName || partner.name,
+            serviceable: false,
+            reason: "Pickup pincode has no active zone coverage",
+          };
+        }
+        if (!deliveryCovered) {
+          return {
+            partnerId: partner.id,
+            partnerName: partner.displayName || partner.name,
+            serviceable: false,
+            reason: "Delivery pincode has no active zone coverage",
+          };
+        }
+
         const zoneResult = await distanceZoneService.getZoneForShipment(
           partner.id,
           fromPincode,
@@ -388,6 +491,7 @@ async function checkServiceability(params) {
           zoneId: zoneResult.zone?.id,
           zoneName: zoneResult.zone?.name,
           estimatedDays: partner.defaultDeliveryDays,
+          reason: zoneResult.matched ? undefined : "No matching distance zone",
         };
       } catch (error) {
         logger.warn("Serviceability check failed for partner", {
@@ -446,6 +550,7 @@ async function calculateRates(params) {
     partnerId,
     sortBy = "cheapest",
     userContext,
+    skipServiceabilityCheck = false,
   } = params;
 
   logger.info("Calculating rates", {
@@ -516,6 +621,7 @@ async function calculateRates(params) {
     dimensions,
     partnerId,
     sortBy,
+    isFragile,
   });
   const redis = getRedisClient();
   const skipCache = !!outletBadge;
@@ -568,14 +674,63 @@ async function calculateRates(params) {
   const rates = await Promise.all(
     partners.map(async (partner) => {
       try {
-        // Check serviceability via distance zone
+        // When skipServiceabilityCheck is true (e.g. during rerate of an
+        // existing shipment), we skip pincode-assignment and zone-coverage
+        // gates because the shipment is already booked with this partner.
+        if (!skipServiceabilityCheck) {
+          const [pickupAssigned, deliveryAssigned] = await Promise.all([
+            hasPincodeAssignment(partner.id, fromPincode),
+            hasPincodeAssignment(partner.id, toPincode),
+          ]);
+
+          if (!pickupAssigned) {
+            return {
+              partnerId: partner.id,
+              partnerName: partner.displayName || partner.name,
+              serviceable: false,
+              reason: "Pickup pincode not assigned to this partner",
+            };
+          }
+          if (!deliveryAssigned) {
+            return {
+              partnerId: partner.id,
+              partnerName: partner.displayName || partner.name,
+              serviceable: false,
+              reason: "Delivery pincode not assigned to this partner",
+            };
+          }
+
+          const [pickupCovered, deliveryCovered] = await Promise.all([
+            hasZoneCoverage(partner.id, fromPincode),
+            hasZoneCoverage(partner.id, toPincode),
+          ]);
+
+          if (!pickupCovered) {
+            return {
+              partnerId: partner.id,
+              partnerName: partner.displayName || partner.name,
+              serviceable: false,
+              reason: "Pickup pincode has no active zone coverage",
+            };
+          }
+          if (!deliveryCovered) {
+            return {
+              partnerId: partner.id,
+              partnerName: partner.displayName || partner.name,
+              serviceable: false,
+              reason: "Delivery pincode has no active zone coverage",
+            };
+          }
+        }
+
+        // Distance zone matching for pricing context
         const zoneResult = await distanceZoneService.getZoneForShipment(
           partner.id,
           fromPincode,
           toPincode,
         );
 
-        if (!zoneResult.matched) {
+        if (!zoneResult.matched && !skipServiceabilityCheck) {
           return {
             partnerId: partner.id,
             partnerName: partner.displayName || partner.name,
@@ -602,6 +757,7 @@ async function calculateRates(params) {
           effectiveWeight,
           invoiceValue: declaredValue,
           isFragile,
+          paymentType,
           distanceMilestoneId: zoneResult.milestone?.id || null,
           pickupGeoZoneIds,
           deliveryGeoZoneIds,

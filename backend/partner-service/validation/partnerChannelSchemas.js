@@ -9,10 +9,6 @@ const delhiveryAggregatorConfigSchema = Joi.object({
     "string.empty":
       "Delhivery clientName cannot be empty (must match your Delhivery One registered client name)",
   }),
-  sellerGstTin: Joi.string().trim().min(1).required().messages({
-    "any.required": "Delhivery sellerGstTin (seller GSTIN) is required",
-    "string.empty": "Delhivery sellerGstTin (seller GSTIN) cannot be empty",
-  }),
 }).unknown(true);
 
 const bluedartAggregatorConfigSchema = Joi.object({

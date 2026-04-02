@@ -210,6 +210,7 @@ class PartnerIntegrationService {
       paymentMode: rateParams.paymentMode || "PREPAID",
       isFragile: rateParams.isFragile || false,
       outletId: rateParams.outletId || null,
+      partnerId: rateParams.partnerId || null,
       sortBy: rateParams.sortBy || "cheapest",
     };
 
@@ -292,6 +293,8 @@ class PartnerIntegrationService {
         paymentMode: rateParams.paymentMode || "PREPAID",
         isFragile: rateParams.isFragile || false,
         outletId: rateParams.outletId || undefined,
+        partnerId: rateParams.partnerId || undefined,
+        skipServiceabilityCheck: rateParams.skipServiceabilityCheck || false,
         sortBy: rateParams.sortBy || "cheapest",
       };
 

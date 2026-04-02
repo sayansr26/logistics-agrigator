@@ -305,6 +305,7 @@ async function calculateRates(params, userContext = null) {
     isFragile,
     outletId,
     sortBy,
+    skipServiceabilityCheck,
   } = params;
 
   // Validate required parameters
@@ -337,6 +338,7 @@ async function calculateRates(params, userContext = null) {
       partnerId,
       sortBy: sortBy || "cheapest",
       userContext,
+      skipServiceabilityCheck: skipServiceabilityCheck || false,
     });
 
     // Transform to expected response format (maintaining backward compatibility)

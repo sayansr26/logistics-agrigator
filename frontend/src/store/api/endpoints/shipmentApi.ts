@@ -129,6 +129,7 @@ interface RerateShipmentRequest {
   disputedWidth?: number;
   disputedHeight?: number;
   reason: string;
+  codAction?: "DEDUCT_WALLET" | "UPDATE_COD";
 }
 
 interface UpdateShipmentRequest {

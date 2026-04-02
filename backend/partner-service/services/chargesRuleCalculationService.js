@@ -23,6 +23,7 @@
 
 const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
+const { matchesSemantic } = require("../utils/typeNameNormalizer");
 
 // ========================================
 // INDIVIDUAL CHARGE CALCULATORS
@@ -157,6 +158,7 @@ function calcDistanceBaseWeight(rule, weightKg, distanceMilestoneId) {
 
 /**
  * Check if a pincode-type rule is active for a given side's type values.
+ * Tolerant of various yes/no representations (yes, Yes, YES, true, 1, y).
  * @param {string} pincodeTypeId
  * @param {string} pincodeTypeDataType - "yes_no" | "number"
  * @param {Object} sideTypeValues - map of pincodeTypeId → value string
@@ -172,7 +174,8 @@ function isPincodeTypeActive(
   if (val === undefined || val === null) return false;
 
   if (pincodeTypeDataType === "yes_no") {
-    return val.toString().toLowerCase() === "yes";
+    const normalised = val.toString().trim().toLowerCase();
+    return ["yes", "y", "true", "1"].includes(normalised);
   }
   if (pincodeTypeDataType === "number") {
     return parseFloat(val) > 0;
@@ -185,12 +188,64 @@ function isPincodeTypeActive(
 // ========================================
 
 /**
+ * Determine whether a charge rule should be included based on the shipment context.
+ *
+ * Conditional gating:
+ * - FRAGILE charges → only when isFragile === true
+ * - COD charges     → only when paymentType === "COD"
+ * - PREPAID charges → only when paymentType === "PREPAID"
+ * - REVERSE charges → only when paymentType === "REVERSE"
+ * - All others (weight, distance, insurance, etc.) → always included
+ *
+ * Works on both chargesType.name and pincodeType.name using canonical normalization.
+ */
+function shouldIncludeRule(rule, context) {
+  const { isFragile, paymentType } = context;
+
+  const ctName = rule.chargesType?.name;
+  const ptName = rule.pincodeType?.name;
+
+  // Fragile gating (chargesType or pincodeType named "fragile"/"FRGILE"/etc.)
+  if (
+    matchesSemantic(ctName, "FRAGILE") ||
+    matchesSemantic(ptName, "FRAGILE")
+  ) {
+    return !!isFragile;
+  }
+
+  // COD gating
+  if (matchesSemantic(ctName, "COD") || matchesSemantic(ptName, "COD")) {
+    return (paymentType || "").toUpperCase() === "COD";
+  }
+
+  // Prepaid gating
+  if (
+    matchesSemantic(ctName, "PREPAID") ||
+    matchesSemantic(ptName, "PREPAID")
+  ) {
+    return (paymentType || "").toUpperCase() === "PREPAID";
+  }
+
+  // Reverse gating
+  if (
+    matchesSemantic(ctName, "REVERSE") ||
+    matchesSemantic(ptName, "REVERSE")
+  ) {
+    return (paymentType || "").toUpperCase() === "REVERSE";
+  }
+
+  return true;
+}
+
+/**
  * Calculate all charges for a partner given shipment context.
  *
  * @param {string} partnerId
  * @param {Object} context
  * @param {number} context.effectiveWeight - kg
  * @param {number} context.invoiceValue - declared value
+ * @param {boolean} [context.isFragile=false]
+ * @param {string} [context.paymentType='PREPAID']
  * @param {string|null} context.distanceMilestoneId - ZoneMilestone.id matched by distance zone
  * @param {string[]} context.pickupGeoZoneIds - GEOLOGICAL zone IDs covering pickup
  * @param {string[]} context.deliveryGeoZoneIds - GEOLOGICAL zone IDs covering delivery
@@ -203,6 +258,7 @@ async function calculateCharges(partnerId, context) {
     effectiveWeight = 0,
     invoiceValue = 0,
     isFragile = false,
+    paymentType = "PREPAID",
     distanceMilestoneId = null,
     pickupGeoZoneIds = [],
     deliveryGeoZoneIds = [],
@@ -210,7 +266,7 @@ async function calculateCharges(partnerId, context) {
     deliveryPincodeTypeValues = {},
   } = context;
 
-  let rules = await prisma.chargeRule.findMany({
+  const allRules = await prisma.chargeRule.findMany({
     where: { partnerId, isActive: true },
     include: {
       chargesType: { select: { id: true, name: true } },
@@ -222,11 +278,19 @@ async function calculateCharges(partnerId, context) {
     orderBy: [{ base: "asc" }],
   });
 
-  if (!isFragile) {
-    rules = rules.filter(
-      (rule) => !rule.chargesType?.name?.toLowerCase().includes("fragile"),
-    );
-  }
+  // Apply semantic conditional gating — fragile, COD, prepaid, reverse
+  const rules = allRules.filter((rule) =>
+    shouldIncludeRule(rule, { isFragile, paymentType }),
+  );
+
+  logger.debug("Charge rules after conditional gating", {
+    partnerId,
+    totalRules: allRules.length,
+    includedRules: rules.length,
+    excludedCount: allRules.length - rules.length,
+    paymentType,
+    isFragile,
+  });
 
   if (rules.length === 0) {
     return {
@@ -433,5 +497,6 @@ module.exports = {
     calcZoneToZoneWeight,
     calcDistanceBaseWeight,
     isPincodeTypeActive,
+    shouldIncludeRule,
   },
 };
