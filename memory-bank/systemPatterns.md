@@ -1,6 +1,6 @@
 # System Patterns - Logistics Aggregator Portal
 
-> Architecture and design patterns | Last Updated: March 17, 2026
+> Architecture and design patterns | Last Updated: March 28, 2026
 
 ## Architecture Overview
 
@@ -848,8 +848,104 @@ Frontend "Cancel with Provider" button
 
 **Key Delhivery quirk**: `cancellation` parameter must be the **string** `"true"`, not boolean `true`. Delhivery silently ignores boolean values.
 
+### 25. Semantic Type Normalization Pattern (NEW - March 2026)
+
+**PincodeType and ChargesType names are normalized to canonical uppercase form for consistent matching across the system.**
+
+```javascript
+// backend/partner-service/utils/typeNameNormalizer.js
+const CANONICAL_MAP = {
+  cod: "COD",
+  prepaid: "PREPAID",
+  fragile: "FRAGILE",
+  frgile: "FRAGILE",
+  insurance: "INSURANCE",
+  reverse: "REVERSE",
+  rto: "RTO",
+  freight: "FREIGHT",
+  handling: "HANDLING",
+  fuel: "FUEL",
+  oda: "ODA",
+};
+
+function canonicalTypeName(name) {
+  const lower = name.trim().toLowerCase();
+  return CANONICAL_MAP[lower] || name.trim().toUpperCase();
+}
+
+function matchesSemantic(name, semantic) {
+  return canonicalTypeName(name) === semantic;
+}
+```
+
+**Applied at two layers:**
+
+1. **Write time** (create/update): Duplicate detection uses canonical names — `COD`, `cod`, `Cod` are recognized as the same type
+2. **Runtime** (charge calculation): `shouldIncludeRule()` uses `matchesSemantic()` to gate conditional charges — COD charges only for COD payment type, FRAGILE charges only for fragile shipments
+
+### 26. Shipment Rerate / Revalue Pattern (NEW - March 2026)
+
+**Existing shipments can be re-rated with updated weight/dimensions by admin/superadmin without re-validating pincode serviceability.**
+
+```
+Admin clicks "Revalue Charges" on shipment detail
+  └─▶ POST /api/v1/shipments/:id/rerate
+        ├─▶ Fetch shipment (including quoteSnapshot, value, fragile, paymentType)
+        ├─▶ Calculate new volumetric/chargeable weight
+        ├─▶ Call partner service with skipServiceabilityCheck: true
+        │     └─▶ quoteCalculationService: bypasses pincode/zone checks
+        │     └─▶ chargesRuleCalculationService: evaluates all rules with full context
+        ├─▶ Compare newCost vs oldCost
+        ├─▶ If PREPAID: debit extra from wallet or refund savings
+        ├─▶ If COD: admin chooses DEDUCT_WALLET or UPDATE_COD
+        ├─▶ Update shipment: totalCost, disputedWeight, chargeableWeight, quoteSnapshot.chargeBreakdown
+        └─▶ Create tracking event with current status + rerate details in metadata
+```
+
+**Key design decisions:**
+
+- `skipServiceabilityCheck: true` — existing shipments don't re-validate pincode/zone (partner was valid at booking time)
+- `quoteSnapshot.chargeBreakdown` is overwritten so the frontend Charges Summary always shows current charges
+- Tracking events use the shipment's current status to avoid invalid status transitions
+- Auth token must be explicitly forwarded to partner service (not automatically inherited)
+
+### 27. Strict Partner Eligibility Pattern (NEW - March 2026)
+
+**Partners only appear in rate quotes when they have active coverage for BOTH pickup and delivery pincodes.**
+
+```javascript
+// quoteCalculationService.js
+async function hasPincodeAssignment(partnerId, pincode) {
+  return !!(await prisma.partnerPincodeAssign.findFirst({
+    where: { partnerId, pincode: { code: pincode }, isActive: true },
+  }));
+}
+
+async function hasZoneCoverage(partnerId, pincode) {
+  return !!(await prisma.zone.findFirst({
+    where: {
+      partnerId,
+      isActive: true,
+      zonePincodes: { some: { pincode: { code: pincode } } },
+    },
+  }));
+}
+
+// Both must pass for BOTH pincodes:
+const [pickupAssigned, deliveryAssigned] = await Promise.all([
+  hasPincodeAssignment(partnerId, fromPincode),
+  hasPincodeAssignment(partnerId, toPincode),
+]);
+const [pickupCovered, deliveryCovered] = await Promise.all([
+  hasZoneCoverage(partnerId, fromPincode),
+  hasZoneCoverage(partnerId, toPincode),
+]);
+```
+
+**Bypassed during rerate** via `skipServiceabilityCheck: true` flag.
+
 ---
 
 **Architecture Status**: Stable
-**Last Pattern Review**: March 24, 2026
-**Recent Additions**: Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Last Pattern Review**: March 28, 2026
+**Recent Additions**: Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

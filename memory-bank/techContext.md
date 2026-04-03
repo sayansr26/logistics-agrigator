@@ -379,6 +379,9 @@ docker exec -it logistics-redis redis-cli
 8. **Redis v4 API**: Use `setEx()` (camelCase), NOT `setex()` (lowercase). Redis v4+ broke backward compat
 9. **Inter-Service Auth**: Services calling other services must include `X-Internal-Request` header with `INTERNAL_SECRET`
 10. **External Wallet Identity**: External wallet API (`wapi.websiteduniya.com`) uses **phone number** as user ID, never auth UUID
+11. **Semantic Type Normalization**: PincodeType/ChargesType names are canonicalized via `typeNameNormalizer.js` — `COD`/`cod`/`Cod` → `COD`, `FRGILE` → `FRAGILE`. Applied at write (duplicate detection) and runtime (charge matching)
+12. **Case-Sensitive Filenames**: Git tracks filenames case-sensitively even on macOS. Always verify import paths match exact filename case — mismatches break Linux production builds
+13. **Joi stripUnknown**: Partner service validation uses `stripUnknown: true` — any field not explicitly in the Joi schema is silently removed from `req.body`. New fields (e.g., `skipServiceabilityCheck`) MUST be added to the schema
 
 ## Frontend Patterns (Updated January 2026)
 
@@ -478,4 +481,4 @@ const handleDelete = (item) => {
 **Environment**: Development  
 **Node Version**: 18.x LTS  
 **Package Manager**: PNPM 8.15.1  
-**Last Updated**: March 17, 2026
+**Last Updated**: March 28, 2026

@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: March 24, 2026
+> Current work focus and priorities | Last Updated: March 28, 2026
 
 ## Current Sprint Focus
 
@@ -42,18 +42,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus                                      |
-| -------------------- | ---- | ------------- | ---------- | -------------------------------------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 95%        | Webhook path exemption added                       |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                                 |
-| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API                          |
-| **Shipment Service** | 3004 | 🔄 Active     | 92%        | Lifecycle expansion + webhook ingestion            |
-| **Partner Service**  | 3005 | 🔄 Active     | 100%       | Dynamic capability contract + Delhivery cancel fix |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed                  |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending                                |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                                        |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                                       |
-| **Frontend**         | 3000 | ✅ Production | 85%        | Dynamic shipment actions from provider caps        |
+| Service              | Port | Status        | Completion | Current Focus                                            |
+| -------------------- | ---- | ------------- | ---------- | -------------------------------------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 95%        | Webhook path exemption added                             |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                                       |
+| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API                                |
+| **Shipment Service** | 3004 | 🔄 Active     | 95%        | Revalue charges + cancel refund + rerate breakdown       |
+| **Partner Service**  | 3005 | 🔄 Active     | 100%       | Semantic type normalization + strict partner eligibility |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed                        |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending                                      |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                                              |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                                             |
+| **Frontend**         | 3000 | ✅ Production | 88%        | Shipment revalue UI + COD display + weight dispute       |
 
 ## Immediate Priorities
 
@@ -126,12 +126,46 @@ The primary focus is implementing a robust security layer and role-based access 
 11. **Terminal status protection**: Never downgrade `CANCELLED`/`DELIVERED`/`RTO` to a lower status on provider refresh
 12. **Provider capability contract**: All courier adapters must implement `getCapabilities()` and `getAvailableActions(shipmentContext)` for dynamic UI
 13. **Webhook ingestion is public**: `/api/v1/shipments/webhook/:provider` is exempt from JWT auth in API Gateway
+14. **Semantic type normalization**: `PincodeType` and `ChargesType` names are normalized to canonical uppercase via `typeNameNormalizer.js` — `COD`, `cod`, `Cod` all treated as `COD`
+15. **skipServiceabilityCheck for rerate**: Existing shipments bypass pincode assignment and zone coverage validation during re-rate — only weight/dimension-based charge recalculation applies
+16. **quoteSnapshot updated on rerate**: When a shipment is re-rated, the `quoteSnapshot.chargeBreakdown` is overwritten with the new charges so the frontend Charges Summary is always current
+17. **COD rerate options**: For COD shipments with extra charges after rerate, admin can choose `DEDUCT_WALLET` (debit from wallet) or `UPDATE_COD` (increase COD amount to collect from customer)
+18. **Case-sensitive filenames in git**: Always match filename case exactly with import paths — macOS hides mismatches but Linux production builds fail
 
 ## Current Blockers
 
 1. **None currently identified**
 
 ## Recent Changes
+
+### March 28, 2026
+
+- ✅ **Shipment Revalue Charges Feature — COMPLETE**
+  - **Admin/Superadmin-only re-rate**: New "Revalue Charges" button on shipment detail page for `CREATED`, `BOOKED`, `PICKED_UP`, `IN_TRANSIT` statuses
+  - **Full re-rate flow**: Updated weight/dimensions → partner service recalculates charges → wallet debit/refund for prepaid, COD amount update or wallet debit choice for COD
+  - **`skipServiceabilityCheck` flag**: Re-rate bypasses pincode assignment and zone coverage checks (existing shipments assumed valid)
+  - **quoteSnapshot updated on rerate**: Charges breakdown in `quoteSnapshot.chargeBreakdown` is now updated with fresh breakdown from rerate, so the Charges Summary reflects current charges
+  - **Cancel order refund**: Added wallet refund logic for PREPAID shipment cancellations
+  - **Frontend display fixes**: Weight card shows `disputedWeight` (with original below), Value card shows actual `value` or "—", COD Amount card replaces Courier card for COD shipments
+  - **Tracking event fix**: Re-rate creates tracking event with `shipment.status` (current status) instead of non-existent `RERATE_RESOLVED` status, with details in message/metadata
+
+- ✅ **Partner Eligibility & Charges Engine Fixes — CRITICAL**
+  - **Strict partner eligibility**: Partners only appear in quotes when BOTH pickup and delivery pincodes have active `PartnerPincodeAssign` records AND active zone coverage
+  - **Semantic type normalization**: New `typeNameNormalizer.js` utility — `COD`/`cod`/`Cod` treated as same canonical type. Applied during creation/update (duplicate detection) and at runtime (charge rule matching)
+  - **Conditional charge gating**: `shouldIncludeRule()` function gates charges by context — COD charges only for COD shipments, FRAGILE charges only for fragile items, INSURANCE based on `INVOICE_VALUE` rules
+  - **`paymentType` in charge context**: `chargesRuleCalculationService` now receives and uses `paymentType` for conditional charge evaluation
+
+- ✅ **Delhivery Channel Cleanup — COMPLETE**
+  - **Removed env variable fallbacks**: `DelhiveryAdapter` no longer falls back to `DELHIVERY_CLIENT_NAME` or `DELHIVERY_API_URL` — strictly uses channel config
+  - **Removed `sellerGstTin`**: Not needed for Delhivery channels; removed from frontend, backend Joi validation, and adapter
+  - **`clientName` kept and used**: Properly passed from channel config to Delhivery API headers
+
+- ✅ **Charges Management Rate Limit Fix**
+  - **Frontend**: Added `isSubmitting` guard, sequential `for...of` loop for batch operations, debounced search, reset pagination on filter change
+  - **Backend**: Increased `chargesManagementLimiter` limits, added separate `chargesReadLimiter`
+
+- ✅ **Production Build Fix**
+  - **Case-sensitivity**: Renamed `Skeleton.tsx` to `skeleton.tsx` in git to match import paths — macOS case-insensitive FS hid the mismatch, Linux production build failed with `Module not found`
 
 ### March 24, 2026
 
@@ -438,6 +472,8 @@ The primary focus is implementing a robust security layer and role-based access 
 | Outlet controller   | `backend/user-service/controllers/outletController.js`                   |
 | Outlet frontend     | `frontend/src/app/outlets/page.tsx`                                      |
 | Outlet API (RTK)    | `frontend/src/store/api/endpoints/outletApi.ts`                          |
+| Type normalizer     | `backend/partner-service/utils/typeNameNormalizer.js`                    |
+| Partner integration | `backend/shipment-service/services/partnerIntegrationService.js`         |
 | API response format | `shared/lib/response.js`                                                 |
 | Error classes       | `shared/lib/errors.js`                                                   |
 
@@ -451,14 +487,17 @@ The primary focus is implementing a robust security layer and role-based access 
 6. ~~Partner Channel Cleanup~~ ✅ DONE (aggregator extensibility, mode auto-sync, UI polish)
 7. ~~Shipment Creation Flow~~ ✅ DONE (multi-step wizard, quote calculation, wallet payment, detail page)
 8. ~~Shipment Lifecycle Expansion~~ ✅ DONE (dynamic capabilities, webhook, provider-first cancel, label, refresh, documents)
-9. Wire remaining adapter actions (pickup request, NDR action, e-waybill update, manifest generation)
-10. Finish License service integration
-11. Begin Shipment bulk operations (CSV upload, bulk AWB generation)
-12. Continue Frontend Redux migration
-13. Shipment list filtering/search enhancements
+9. ~~Revalue Charges Feature~~ ✅ DONE (admin rerate, wallet debit/refund, COD handling, quoteSnapshot update)
+10. ~~Partner Eligibility & Charges Engine Fixes~~ ✅ DONE (strict pincode+zone, semantic normalization, conditional charges)
+11. ~~Delhivery Channel Cleanup~~ ✅ DONE (env removal, sellerGstTin removal, clientName fix)
+12. Wire remaining adapter actions (pickup request, NDR action, e-waybill update, manifest generation)
+13. Finish License service integration
+14. Begin Shipment bulk operations (CSV upload, bulk AWB generation)
+15. Continue Frontend Redux migration
+16. Shipment list filtering/search enhancements
 
 ---
 
-**Sprint**: Shipment Lifecycle Expansion Complete → Bulk Operations + Remaining Adapter Actions
+**Sprint**: Revalue Charges + Charges Engine Fixes Complete → Bulk Operations + Remaining Adapter Actions
 **Week**: Active Development
 **Next Review**: Weekly

@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: March 24, 2026
+> Development status and changelog | Last Updated: March 28, 2026
 
 ## Overall Project Status
 
@@ -126,7 +126,7 @@ Overall Project Progress          [███████████████
   - Frontend: `phone` field added to User interface in authSlice and authApi
   - Sidebar: `outlet` role added to wallet nav item
 
-#### Shipment Service (92% Complete)
+#### Shipment Service (95% Complete)
 
 - ✅ Single order creation
 - ✅ AWB generation
@@ -152,6 +152,14 @@ Overall Project Progress          [███████████████
   - ✅ Terminal status protection — never downgrade CANCELLED/DELIVERED/RTO
   - ✅ Schema: `providerStatus`, `providerLastSyncAt`, `providerRawResponse`, `courierLabelUrl`, `courierLabelFormat`, `courierLabelFetchedAt`, `pickupRequestId`, `pickupRequestedAt`, `pickupConfirmedAt`
   - ✅ New `ShipmentDocument` model (type: LABEL, MANIFEST, INVOICE, POD, EWAYBILL, OTHER)
+- ✅ **Revalue Charges** (March 28, 2026)
+  - ✅ Admin/Superadmin re-rate with updated weight/dimensions
+  - ✅ Wallet debit/refund for PREPAID shipments
+  - ✅ COD handling: DEDUCT_WALLET or UPDATE_COD options
+  - ✅ `skipServiceabilityCheck` bypasses pincode/zone checks for existing shipments
+  - ✅ `quoteSnapshot.chargeBreakdown` updated with fresh breakdown after rerate
+  - ✅ Frontend: disputed weight display, COD amount card, actual value display
+  - ✅ Cancel order wallet refund for PREPAID payment mode
 - ⏳ Bulk operations (planned)
 - ⏳ Bulk label printing (planned)
 
@@ -171,6 +179,12 @@ Overall Project Progress          [███████████████
   - ✅ Partner channel Joi validation: DELHIVERY requires `clientName`/`sellerGstTin`, BLUEDART requires `licenseKey`/`loginId`/`customerCode`
   - ✅ Schema: `PartnerShipment` expanded with `providerStatus`, `providerLastSyncAt`, `providerRawResponse`, `courierLabelUrl`, `pickupRequestId`, `pickupRequestedAt`
   - ✅ Redis v4 fix: `setEx()` in `BaseCourierAdapter.setCachedResponse()`
+- ✅ **Partner Eligibility & Charges Engine Fixes** (March 28, 2026)
+  - ✅ Strict partner eligibility: requires BOTH pincode assignment AND zone coverage for pickup AND delivery
+  - ✅ Semantic type normalization (`typeNameNormalizer.js`): COD/cod/Cod → COD canonicalization
+  - ✅ Conditional charge gating: COD charges only for COD, FRAGILE only for fragile, INSURANCE via INVOICE_VALUE rules
+  - ✅ `paymentType` forwarded to charge engine context
+  - ✅ Duplicate detection on PincodeType/ChargesType creation uses canonical names
 
 #### API Gateway (95% Complete)
 
@@ -511,32 +525,106 @@ Overall Project Progress          [███████████████
 
 ### Recently Fixed
 
-| ID  | Service      | Issue                                                               | Fixed Date |
-| --- | ------------ | ------------------------------------------------------------------- | ---------- |
-| #4  | User Service | Outlet module implementation                                        | Jan 2026   |
-| #5  | API Gateway  | Outlet routes added                                                 | Jan 2026   |
-| #6  | Frontend     | Outlet management UI                                                | Jan 2026   |
-| #7  | Auth         | Outlet role in RBAC                                                 | Jan 2026   |
-| #8  | User Service | Outlet badge system                                                 | Feb 2026   |
-| #9  | User Service | Unhandled rejection crash fix                                       | Feb 2026   |
-| #10 | Partner Svc  | Channel mode auto-sync, aggregator extensibility                    | Mar 2026   |
-| #11 | Frontend     | RTK Query duplicate API calls (refetch + invalidation)              | Mar 2026   |
-| #12 | Frontend     | DetailHeader crash (undefined backHref)                             | Mar 2026   |
-| #13 | Shipment     | Wallet payment used UUID instead of phone number                    | Mar 2026   |
-| #14 | Shipment     | X-Internal-Request header missing for wallet calls                  | Mar 2026   |
-| #15 | Wallet/Ship  | redis.setex() → setEx() (Redis v4 compat)                           | Mar 2026   |
-| #16 | Shipment     | Charge breakdown not stored in quoteSnapshot                        | Mar 2026   |
-| #17 | Partner      | Delhivery cancel: boolean `true` → string `"true"`                  | Mar 2026   |
-| #18 | Partner      | Delhivery normalizeStatus: check Instructions+StatusCode for cancel | Mar 2026   |
-| #19 | Shipment     | Terminal status downgrade protection in refreshFromProvider         | Mar 2026   |
-| #20 | Partner      | BaseCourierAdapter.setCachedResponse setex→setEx (Redis v4)         | Mar 2026   |
-| #21 | Partner      | Delhivery warehouse: removed registered_name, added country         | Mar 2026   |
+| ID  | Service      | Issue                                                                 | Fixed Date |
+| --- | ------------ | --------------------------------------------------------------------- | ---------- |
+| #4  | User Service | Outlet module implementation                                          | Jan 2026   |
+| #5  | API Gateway  | Outlet routes added                                                   | Jan 2026   |
+| #6  | Frontend     | Outlet management UI                                                  | Jan 2026   |
+| #7  | Auth         | Outlet role in RBAC                                                   | Jan 2026   |
+| #8  | User Service | Outlet badge system                                                   | Feb 2026   |
+| #9  | User Service | Unhandled rejection crash fix                                         | Feb 2026   |
+| #10 | Partner Svc  | Channel mode auto-sync, aggregator extensibility                      | Mar 2026   |
+| #11 | Frontend     | RTK Query duplicate API calls (refetch + invalidation)                | Mar 2026   |
+| #12 | Frontend     | DetailHeader crash (undefined backHref)                               | Mar 2026   |
+| #13 | Shipment     | Wallet payment used UUID instead of phone number                      | Mar 2026   |
+| #14 | Shipment     | X-Internal-Request header missing for wallet calls                    | Mar 2026   |
+| #15 | Wallet/Ship  | redis.setex() → setEx() (Redis v4 compat)                             | Mar 2026   |
+| #16 | Shipment     | Charge breakdown not stored in quoteSnapshot                          | Mar 2026   |
+| #17 | Partner      | Delhivery cancel: boolean `true` → string `"true"`                    | Mar 2026   |
+| #18 | Partner      | Delhivery normalizeStatus: check Instructions+StatusCode for cancel   | Mar 2026   |
+| #19 | Shipment     | Terminal status downgrade protection in refreshFromProvider           | Mar 2026   |
+| #20 | Partner      | BaseCourierAdapter.setCachedResponse setex→setEx (Redis v4)           | Mar 2026   |
+| #21 | Partner      | Delhivery warehouse: removed registered_name, added country           | Mar 2026   |
+| #22 | Partner      | Partners shown for quotes without pincode assignment or zone coverage | Mar 2026   |
+| #23 | Partner      | Only partial charges applied (missing weight, COD, conditional)       | Mar 2026   |
+| #24 | Partner      | PincodeType/ChargesType case-sensitivity (COD vs cod)                 | Mar 2026   |
+| #25 | Shipment     | Rerate not forwarding auth token to partner service (401)             | Mar 2026   |
+| #26 | Shipment     | Rerate tracking event used non-existent RERATE_RESOLVED status        | Mar 2026   |
+| #27 | Shipment     | Rerate quoteSnapshot not updated (stale charges summary)              | Mar 2026   |
+| #28 | Shipment     | Cancel order missing wallet refund for PREPAID                        | Mar 2026   |
+| #29 | Partner      | DelhiveryAdapter falling back to env vars instead of channel config   | Mar 2026   |
+| #30 | Frontend     | Skeleton.tsx case mismatch breaking Linux production builds           | Mar 2026   |
+| #31 | Frontend     | Charges management multiple requests causing 429 rate limit errors    | Mar 2026   |
 
 ## Changelog
 
 ### March 2026
 
 ```
+[2026-03-28] Revalue Charges + Partner Eligibility + Charges Engine Fixes - COMPLETE
+  Shipment Revalue Charges Feature:
+  - Admin/Superadmin-only "Revalue Charges" button on shipment detail for CREATED/BOOKED/PICKED_UP/IN_TRANSIT
+  - Re-rate flow: new weight/dimensions → partner service recalculates → wallet debit/refund or COD update
+  - skipServiceabilityCheck flag: bypasses pincode/zone checks for existing shipments
+  - quoteSnapshot.chargeBreakdown overwritten with fresh rerate breakdown
+  - Cancel order refund: wallet refund for PREPAID shipment cancellations
+  - Tracking event: uses shipment.status (not RERATE_RESOLVED) to avoid invalid transitions
+  - Auth token correctly forwarded to partner service during rerate
+  - Frontend: COD action choice (DEDUCT_WALLET / UPDATE_COD) for COD shipments
+
+  Partner Eligibility Fixes:
+  - Strict partner filtering: BOTH pickup AND delivery must have PartnerPincodeAssign + zone coverage
+  - hasPincodeAssignment() and hasZoneCoverage() helper functions added to quoteCalculationService
+  - Removed zoneServices references from zoneCoverageValidationService (PrismaClientValidationError)
+
+  Charges Engine Fixes:
+  - New typeNameNormalizer.js: canonicalTypeName() maps COD/cod/Cod → COD, FRGILE → FRAGILE, etc.
+  - shouldIncludeRule() gates charges by context: COD→COD payments, FRAGILE→fragile items
+  - isPincodeTypeActive() accepts yes/y/true/1 variants
+  - paymentType forwarded to chargeContext for conditional evaluation
+  - Duplicate detection on PincodeType/ChargesType creation uses canonical names
+
+  Delhivery Channel Cleanup:
+  - Removed all process.env.DELHIVERY_* fallbacks from DelhiveryAdapter
+  - Removed sellerGstTin from Joi schema, frontend, and adapter
+  - clientName kept and properly used from channel config
+
+  Charges Management Rate Limit Fix:
+  - Frontend: isSubmitting guard, sequential for...of loop, debounced search, pagination reset
+  - Backend: increased chargesManagementLimiter, added chargesReadLimiter
+
+  Frontend Display Fixes:
+  - Weight card: shows disputedWeight with original below
+  - Value card: shows actual shipment.value or "—" (not ₹0)
+  - COD Amount card: replaces Courier card for COD shipments
+  - Charges Summary: reads from updated quoteSnapshot after rerate
+
+  Production Build Fix:
+  - Renamed Skeleton.tsx → skeleton.tsx in git (case-sensitivity mismatch broke Linux builds)
+
+  Key Files Modified:
+  - backend/partner-service/utils/typeNameNormalizer.js (NEW)
+  - backend/partner-service/services/quoteCalculationService.js
+  - backend/partner-service/services/chargesRuleCalculationService.js
+  - backend/partner-service/services/chargesTypeService.js
+  - backend/partner-service/services/pincodeTypeService.js
+  - backend/partner-service/services/zoneCoverageValidationService.js
+  - backend/partner-service/controllers/partnerController.js
+  - backend/partner-service/validation/partnerSchema.js
+  - backend/partner-service/validation/partnerChannelSchemas.js
+  - backend/partner-service/adapters/DelhiveryAdapter.js
+  - backend/partner-service/middleware/rateLimiter.js
+  - backend/partner-service/routes/charges.js
+  - backend/shipment-service/controllers/shipmentController.js
+  - backend/shipment-service/services/partnerIntegrationService.js
+  - backend/shipment-service/validation/shipmentSchemas.js
+  - frontend/src/app/shipments/[id]/page.tsx
+  - frontend/src/app/charges/page.tsx
+  - frontend/src/app/partners/[id]/channels/page.tsx
+  - frontend/src/store/api/endpoints/shipmentApi.ts
+  - frontend/src/store/api/endpoints/partnerChannelApi.ts
+  - frontend/src/components/ui/skeleton.tsx (renamed from Skeleton.tsx)
+
 [2026-03-24] Shipment Lifecycle Expansion + Delhivery Fix - COMPLETE
   Phase 1: Dynamic Provider Capability Contract
   - BaseCourierAdapter: getCapabilities() + getAvailableActions(shipmentContext) abstract methods
@@ -1019,19 +1107,20 @@ Overall Project Progress          [███████████████
 
 ## Upcoming Milestones
 
-| Milestone                    | Target Date | Status         |
-| ---------------------------- | ----------- | -------------- |
-| Outlet Module Complete       | Jan 2026    | ✅ Complete    |
-| Charges Management Module    | Feb 2026    | ✅ Complete    |
-| Outlet Portal Pages          | Feb 2026    | ✅ Complete    |
-| Shipment Creation Flow       | Mar 2026    | ✅ Complete    |
-| Shipment Lifecycle Expansion | Mar 2026    | ✅ Complete    |
-| License Service Integration  | Apr 2026    | 🔄 In Progress |
-| Remaining Adapter Actions    | Apr 2026    | 📋 Planned     |
-| Shipment Bulk Operations     | Apr 2026    | 📋 Planned     |
-| Support Service MVP          | Apr 2026    | 📋 Planned     |
-| Platform Service (Shopify)   | May 2026    | 📋 Planned     |
-| Frontend Redux Complete      | May 2026    | 📋 Planned     |
+| Milestone                     | Target Date | Status         |
+| ----------------------------- | ----------- | -------------- |
+| Outlet Module Complete        | Jan 2026    | ✅ Complete    |
+| Charges Management Module     | Feb 2026    | ✅ Complete    |
+| Outlet Portal Pages           | Feb 2026    | ✅ Complete    |
+| Shipment Creation Flow        | Mar 2026    | ✅ Complete    |
+| Shipment Lifecycle Expansion  | Mar 2026    | ✅ Complete    |
+| Revalue Charges + Charges Fix | Mar 2026    | ✅ Complete    |
+| License Service Integration   | Apr 2026    | 🔄 In Progress |
+| Remaining Adapter Actions     | Apr 2026    | 📋 Planned     |
+| Shipment Bulk Operations      | Apr 2026    | 📋 Planned     |
+| Support Service MVP           | Apr 2026    | 📋 Planned     |
+| Platform Service (Shopify)    | May 2026    | 📋 Planned     |
+| Frontend Redux Complete       | May 2026    | 📋 Planned     |
 
 ## Metrics
 
@@ -1057,6 +1146,6 @@ Overall Project Progress          [███████████████
 
 ---
 
-**Last Updated**: March 24, 2026
+**Last Updated**: March 28, 2026
 **Next Update**: Weekly or after major changes
 **Maintainer**: Development Team
