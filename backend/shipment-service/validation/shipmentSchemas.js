@@ -867,12 +867,32 @@ const fetchCourierLabelSchema = Joi.object({
   format: Joi.string().valid("pdf", "png", "zpl").default("pdf").optional(),
 });
 
-const cancelWithProviderSchema = Joi.object({
+const cancelRequestBodySchema = Joi.object({
   reason: Joi.string()
     .max(500)
     .optional()
     .default("User requested cancellation"),
 });
+
+const cancelShipmentSchema = {
+  params: Joi.object({
+    id: Joi.string().uuid().required().messages({
+      "string.guid": "Shipment ID must be a valid UUID",
+      "any.required": "Shipment ID is required",
+    }),
+  }),
+  body: cancelRequestBodySchema,
+};
+
+const cancelWithProviderSchema = {
+  params: Joi.object({
+    id: Joi.string().uuid().required().messages({
+      "string.guid": "Shipment ID must be a valid UUID",
+      "any.required": "Shipment ID is required",
+    }),
+  }),
+  body: cancelRequestBodySchema,
+};
 
 const retryBookingSchema = {
   params: Joi.object({
@@ -907,6 +927,7 @@ module.exports = {
   // Phase 3: Lifecycle schemas
   refreshFromProviderSchema,
   fetchCourierLabelSchema,
+  cancelShipmentSchema,
   cancelWithProviderSchema,
   // SHIP-005 validation schemas
   processBulkShipmentsSchema,

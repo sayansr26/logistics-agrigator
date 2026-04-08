@@ -8,12 +8,12 @@ const logger = require("../shared/lib/logger");
 const prisma = new PrismaClient();
 
 /**
- * Get outlet badge by userId
- * Called by partner-service to resolve outlet badge tier for discount packages
+ * Get outlet details by userId
+ * Called by internal services to resolve outlet badge tier and wallet phone
  * Requires X-Internal-Request header
  *
  * GET /api/v1/internal/outlets/by-user/:userId
- * Response: { found: boolean, outletId?: uuid, badge?: OutletBadge }
+ * Response: { found: boolean, outletId?: uuid, badge?: OutletBadge, phone?: string }
  */
 async function getOutletByUser(req, res) {
   try {
@@ -31,6 +31,7 @@ async function getOutletByUser(req, res) {
         id: true,
         badge: true,
         name: true,
+        phone: true,
         isActive: true,
       },
     });
@@ -60,6 +61,7 @@ async function getOutletByUser(req, res) {
           outletId: outlet.id,
           badge: outlet.badge,
           outletName: outlet.name,
+          phone: outlet.phone,
           isActive: outlet.isActive,
         },
         "Outlet badge resolved successfully",
@@ -77,12 +79,12 @@ async function getOutletByUser(req, res) {
 }
 
 /**
- * Get outlet badge by outletId directly
- * Called by partner-service when admin/superadmin creates shipment on behalf of an outlet
+ * Get outlet details by outletId directly
+ * Called by internal services when admin/superadmin creates shipment on behalf of an outlet
  * Requires X-Internal-Request header
  *
  * GET /api/v1/internal/outlets/:outletId/badge
- * Response: { found: boolean, outletId?: uuid, badge?: OutletBadge }
+ * Response: { found: boolean, outletId?: uuid, badge?: OutletBadge, phone?: string }
  */
 async function getOutletBadgeById(req, res) {
   try {
@@ -100,6 +102,7 @@ async function getOutletBadgeById(req, res) {
         id: true,
         badge: true,
         name: true,
+        phone: true,
         isActive: true,
       },
     });
@@ -125,6 +128,7 @@ async function getOutletBadgeById(req, res) {
           outletId: outlet.id,
           badge: outlet.badge,
           outletName: outlet.name,
+          phone: outlet.phone,
           isActive: outlet.isActive,
         },
         "Outlet badge resolved successfully",

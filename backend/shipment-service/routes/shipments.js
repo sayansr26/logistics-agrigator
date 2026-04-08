@@ -65,6 +65,7 @@ const {
   // Phase 3: Lifecycle validation schemas
   refreshFromProviderSchema,
   fetchCourierLabelSchema,
+  cancelShipmentSchema,
   cancelWithProviderSchema,
   // New SHIP-004 validation schemas
   deliveryConfirmationSchema,
@@ -198,6 +199,7 @@ router.post(
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
   authMiddleware.requirePermission("shipment", "update", "assigned"),
+  validate(refreshFromProviderSchema),
   refreshFromProvider,
 );
 
@@ -211,6 +213,7 @@ router.post(
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
   authMiddleware.requirePermission("shipment", "read", "assigned"),
+  validate(fetchCourierLabelSchema),
   fetchCourierLabel,
 );
 
@@ -224,6 +227,7 @@ router.post(
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
   authMiddleware.requirePermission("shipment", "delete", "own"),
+  validate(cancelWithProviderSchema),
   cancelWithProvider,
 );
 
@@ -511,6 +515,7 @@ router.post(
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
   authMiddleware.requirePermission("shipment", "delete", "own"),
+  validate(cancelShipmentSchema),
   cancelShipment,
 );
 

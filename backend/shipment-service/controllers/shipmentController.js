@@ -10,6 +10,7 @@ const {
 const { authUtils } = require("../shared/lib/auth");
 const partnerIntegrationService = require("../services/partnerIntegrationService");
 const paymentProcessingService = require("../services/paymentProcessingService");
+const shipmentWalletService = require("../services/shipmentWalletService");
 const trackingService = require("../services/trackingService");
 const bulkProcessingService = require("../services/bulkProcessingService");
 const ndrService = require("../services/ndrService");
@@ -67,6 +68,98 @@ function resolveOutletContext(req) {
     clientId,
     walletUserId: req.user.phone || userId,
   };
+}
+
+async function processCancellationRefund(shipment, reason, authToken) {
+  const refundAmount = calculateRefundAmount(shipment, reason);
+
+  if (shipment.paymentType !== "PREPAID" || refundAmount <= 0) {
+    return {
+      refundAmount,
+      refundTransactionId: null,
+      paymentStatus: shipmentWalletService.getCancellationPaymentStatus(
+        shipment,
+        refundAmount,
+        null,
+      ),
+      walletUserId: shipment.walletUserId || null,
+    };
+  }
+
+  const walletResolution =
+    await shipmentWalletService.resolveShipmentWalletTarget(shipment);
+
+  if (!walletResolution.walletUserId) {
+    logger.warn("Unable to resolve wallet user ID for shipment refund", {
+      service: "shipment-service",
+      shipmentId: shipment.id,
+      orderId: shipment.orderId,
+      outletId: shipment.outletId,
+      userId: shipment.userId,
+    });
+
+    return {
+      refundAmount,
+      refundTransactionId: null,
+      paymentStatus: shipmentWalletService.getCancellationPaymentStatus(
+        shipment,
+        refundAmount,
+        null,
+      ),
+      walletUserId: null,
+    };
+  }
+
+  logger.info("Processing refund via Wallet Service", {
+    service: "shipment-service",
+    shipmentId: shipment.id,
+    orderId: shipment.orderId,
+    walletUserId: walletResolution.walletUserId,
+    walletTargetSource: walletResolution.source,
+    refundAmount,
+    originalWalletTransactionId: shipment.walletTransactionId || null,
+  });
+
+  try {
+    const refundResult = await paymentProcessingService.processShipmentRefund(
+      walletResolution.walletUserId,
+      refundAmount,
+      shipment.id,
+      reason,
+      authToken,
+    );
+
+    return {
+      refundAmount,
+      refundTransactionId: refundResult.refundTransactionId,
+      paymentStatus: shipmentWalletService.getCancellationPaymentStatus(
+        shipment,
+        refundAmount,
+        refundResult.refundTransactionId,
+      ),
+      walletUserId: walletResolution.walletUserId,
+    };
+  } catch (refundError) {
+    logger.error("Wallet refund failed", {
+      service: "shipment-service",
+      shipmentId: shipment.id,
+      orderId: shipment.orderId,
+      walletUserId: walletResolution.walletUserId,
+      refundAmount,
+      error: refundError.message,
+    });
+
+    return {
+      refundAmount,
+      refundTransactionId: null,
+      paymentStatus: shipmentWalletService.getCancellationPaymentStatus(
+        shipment,
+        refundAmount,
+        null,
+      ),
+      walletUserId: walletResolution.walletUserId,
+    };
+  }
 }
 
 /**
@@ -305,6 +398,7 @@ async function createShipment(req, res) {
         estimatedDelivery,
 
         walletTransactionId,
+        walletUserId,
         paymentReference,
       },
       select: {
@@ -1221,10 +1315,14 @@ async function cancelShipment(req, res) {
       select: {
         id: true,
         orderId: true,
+        userId: true,
+        outletId: true,
         status: true,
         paymentType: true,
+        paymentStatus: true,
         totalCost: true,
         walletTransactionId: true,
+        walletUserId: true,
         createdAt: true,
         awbNumber: true,
         partnerId: true,
@@ -1271,15 +1369,29 @@ async function cancelShipment(req, res) {
     // Calculate refund amount
     const refundAmount = calculateRefundAmount(shipment, reason);
 
-    // Update shipment status
-    const updatedShipment = await prisma.shipment.update({
+    await prisma.shipment.update({
       where: { id },
       data: {
         status: "CANCELLED",
-        paymentStatus: refundAmount > 0 ? "REFUNDED" : "NO_REFUND",
-        refundAmount: refundAmount > 0 ? refundAmount : null,
         cancelledAt: new Date(),
         cancellationReason: reason,
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+      },
+    });
+
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const refundResult = await processCancellationRefund(
+      shipment,
+      reason,
+      authToken,
+    );
+
+    const updatedShipment = await prisma.shipment.update({
+      where: { id },
+      data: {
+        paymentStatus: refundResult.paymentStatus,
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+        refundTransactionId: refundResult.refundTransactionId || null,
       },
       select: {
         id: true,
@@ -1287,79 +1399,11 @@ async function cancelShipment(req, res) {
         status: true,
         paymentStatus: true,
         refundAmount: true,
+        refundTransactionId: true,
         cancelledAt: true,
         cancellationReason: true,
       },
     });
-
-    // SHIP-003: Real Wallet Service Integration for Refunds
-    let refundTransactionId = null;
-
-    if (
-      refundAmount > 0 &&
-      shipment.paymentType === "PREPAID" &&
-      shipment.walletTransactionId
-    ) {
-      logger.info("Processing refund via Wallet Service", {
-        service: "shipment-service",
-        shipmentId: id,
-        userId: shipment.userId || userId,
-        refundAmount,
-        originalWalletTransactionId: shipment.walletTransactionId,
-      });
-
-      try {
-        // Get auth token from request headers for wallet service
-        const authToken = req.headers.authorization?.replace("Bearer ", "");
-
-        // Process refund through Wallet Service
-        const refundResult =
-          await paymentProcessingService.processShipmentRefund(
-            shipment.userId || userId,
-            refundAmount,
-            shipment.id,
-            reason,
-            authToken,
-          );
-
-        refundTransactionId = refundResult.refundTransactionId;
-
-        // Update shipment with refund transaction ID
-        await prisma.shipment.update({
-          where: { id },
-          data: {
-            refundTransactionId,
-          },
-        });
-
-        logger.info("Wallet refund processed successfully", {
-          service: "shipment-service",
-          shipmentId: id,
-          userId: shipment.userId || userId,
-          refundTransactionId,
-          refundAmount,
-        });
-      } catch (refundError) {
-        logger.error("Wallet refund failed", {
-          service: "shipment-service",
-          shipmentId: id,
-          userId: shipment.userId || userId,
-          refundAmount,
-          error: refundError.message,
-        });
-
-        // Don't fail the cancellation if refund fails - admin can handle manually
-        logger.warn(
-          "Shipment cancelled but refund processing failed - requires manual intervention",
-          {
-            service: "shipment-service",
-            shipmentId: id,
-            refundAmount,
-            walletTransactionId: shipment.walletTransactionId,
-          },
-        );
-      }
-    }
 
     // Create tracking event for cancellation
     await trackingService.updateShipmentStatus(
@@ -1369,8 +1413,9 @@ async function cancelShipment(req, res) {
       {
         cancellationReason: reason,
         refundAmount: refundAmount > 0 ? refundAmount.toString() : null,
-        refundProcessed: !!refundTransactionId,
-        refundTransactionId,
+        refundProcessed: !!refundResult.refundTransactionId,
+        refundTransactionId: refundResult.refundTransactionId,
+        paymentStatus: refundResult.paymentStatus,
       },
       userId,
     );
@@ -1385,6 +1430,8 @@ async function cancelShipment(req, res) {
         changes: {
           status: "CANCELLED",
           refundAmount: refundAmount > 0 ? refundAmount.toString() : null,
+          paymentStatus: refundResult.paymentStatus,
+          refundTransactionId: refundResult.refundTransactionId,
           reason,
         },
         metadata: {
@@ -1403,6 +1450,7 @@ async function cancelShipment(req, res) {
       userId,
       clientId,
       refundAmount,
+      paymentStatus: refundResult.paymentStatus,
       reason,
     });
 
@@ -2110,6 +2158,7 @@ async function rerateShipment(req, res) {
         orderId: true,
         outletId: true,
         userId: true,
+        walletUserId: true,
         status: true,
         partnerId: true,
         partnerName: true,
@@ -2199,7 +2248,9 @@ async function rerateShipment(req, res) {
 
     const difference = newCost - oldCost;
     const walletAuthToken = req.headers.authorization?.replace("Bearer ", "");
-    const walletTarget = shipment.outletId || shipment.userId;
+    const walletResolution =
+      await shipmentWalletService.resolveShipmentWalletTarget(shipment);
+    const walletTarget = walletResolution.walletUserId;
     const oldCodAmount = shipment.codAmount
       ? parseFloat(shipment.codAmount)
       : 0;
@@ -3501,8 +3552,12 @@ async function cancelWithProvider(req, res) {
       select: {
         id: true,
         orderId: true,
+        userId: true,
+        outletId: true,
+        walletUserId: true,
         status: true,
         paymentType: true,
+        paymentStatus: true,
         totalCost: true,
         walletTransactionId: true,
         awbNumber: true,
@@ -3537,56 +3592,9 @@ async function cancelWithProvider(req, res) {
       });
     }
 
-    // Process wallet refund for PREPAID shipments
     const refundAmount = calculateRefundAmount(shipment, reason);
-    let refundTransactionId = null;
-    let refundResult = null;
 
-    if (
-      refundAmount > 0 &&
-      shipment.paymentType === "PREPAID" &&
-      shipment.walletTransactionId
-    ) {
-      const walletUserId = req.user.phone || userId;
-      const authToken = req.headers.authorization?.replace("Bearer ", "");
-
-      logger.info("Processing refund for cancelled prepaid shipment", {
-        service: "shipment-service",
-        shipmentId: id,
-        walletUserId,
-        refundAmount,
-        originalWalletTransactionId: shipment.walletTransactionId,
-      });
-
-      try {
-        refundResult = await paymentProcessingService.processShipmentRefund(
-          walletUserId,
-          refundAmount,
-          shipment.id,
-          reason,
-          authToken,
-        );
-        refundTransactionId = refundResult.refundTransactionId;
-
-        logger.info("Wallet refund processed successfully", {
-          service: "shipment-service",
-          shipmentId: id,
-          walletUserId,
-          refundTransactionId,
-          refundAmount,
-        });
-      } catch (refundError) {
-        logger.error("Wallet refund failed — shipment still cancelled", {
-          service: "shipment-service",
-          shipmentId: id,
-          walletUserId,
-          refundAmount,
-          error: refundError.message,
-        });
-      }
-    }
-
-    const updatedShipment = await prisma.shipment.update({
+    await prisma.shipment.update({
       where: { id: shipment.id },
       data: {
         status: "CANCELLED",
@@ -3594,9 +3602,23 @@ async function cancelWithProvider(req, res) {
         cancelledAt: new Date(),
         cancellationReason: reason,
         providerStatus: "CANCELLED",
-        paymentStatus: refundAmount > 0 ? "REFUNDED" : "NO_REFUND",
         refundAmount: refundAmount > 0 ? refundAmount : null,
-        refundTransactionId: refundTransactionId || undefined,
+      },
+    });
+
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+    const refundResult = await processCancellationRefund(
+      shipment,
+      reason,
+      authToken,
+    );
+
+    const updatedShipment = await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        paymentStatus: refundResult.paymentStatus,
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+        refundTransactionId: refundResult.refundTransactionId || null,
       },
     });
 
@@ -3611,7 +3633,8 @@ async function cancelWithProvider(req, res) {
           providerCancelSuccess: providerCancelResult?.success || false,
           cancelledBy: userId,
           refundAmount: refundAmount > 0 ? refundAmount : 0,
-          refundTransactionId,
+          refundTransactionId: refundResult.refundTransactionId,
+          paymentStatus: refundResult.paymentStatus,
         },
       },
       userId,
@@ -3629,7 +3652,8 @@ async function cancelWithProvider(req, res) {
           reason,
           providerCancelled: !!providerCancelResult,
           refundAmount: refundAmount > 0 ? refundAmount : 0,
-          refundTransactionId,
+          refundTransactionId: refundResult.refundTransactionId,
+          paymentStatus: refundResult.paymentStatus,
         },
         metadata: {
           source: "shipment-service",
@@ -3653,10 +3677,13 @@ async function cancelWithProvider(req, res) {
             refundAmount > 0
               ? {
                   amount: refundAmount,
-                  transactionId: refundTransactionId,
-                  status: refundTransactionId ? "PROCESSED" : "FAILED",
+                  transactionId: refundResult.refundTransactionId,
+                  status: refundResult.refundTransactionId
+                    ? "PROCESSED"
+                    : "FAILED",
                 }
               : null,
+          paymentStatus: updatedShipment.paymentStatus,
         },
         "Shipment cancelled successfully",
       ),

@@ -110,6 +110,7 @@ model Shipment {
 
   // Wallet Integration
   walletTransactionId String?  @map("wallet_transaction_id") @db.VarChar(100)
+  walletUserId        String?  @map("wallet_user_id") @db.VarChar(20)
   paymentReference    String?  @map("payment_reference") @db.VarChar(100)
   refundTransactionId String?  @map("refund_transaction_id") @db.VarChar(100)
   refundAmount        Decimal? @map("refund_amount") @db.Decimal(10, 2)
@@ -338,6 +339,7 @@ enum PaymentStatus {
   CONFIRMED
   FAILED
   REFUNDED
+  REFUND_FAILED
   NO_REFUND
 }
 

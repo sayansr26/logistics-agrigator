@@ -1,0 +1,4 @@
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'REFUND_FAILED';
+
+ALTER TABLE "shipments"
+ADD COLUMN "wallet_user_id" VARCHAR(20);
