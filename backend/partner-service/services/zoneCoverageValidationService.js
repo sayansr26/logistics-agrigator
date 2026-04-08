@@ -27,8 +27,8 @@ class ZoneCoverageValidationService {
     try {
       logger.info("Validating pincode serviceability", { partnerId, pincode });
 
-      // Check cache first
-      const cacheKey = `${this.cachePrefix}:serviceable:${partnerId}:${pincode}`;
+      // v2: distance-zone fallback changes outcomes; new key busts stale "false" entries
+      const cacheKey = `${this.cachePrefix}:serviceable:v2:${partnerId}:${pincode}`;
       const redis = getRedisClient();
 
       if (redis) {
@@ -69,8 +69,8 @@ class ZoneCoverageValidationService {
         };
       }
 
-      // Find zones covering this pincode for the partner
-      const zones = await prisma.zone.findMany({
+      // Geographical coverage: pincode explicitly linked via zone_pincodes
+      let zones = await prisma.zone.findMany({
         where: {
           partnerId,
           status: true,
@@ -81,6 +81,32 @@ class ZoneCoverageValidationService {
           },
         },
       });
+
+      let distancePricingFallback = false;
+
+      // Many partners only maintain DISTANCE zones + milestones (no per-pincode
+      // zone_pincodes rows). Pincode assignment already gates service; without
+      // this fallback those pincodes incorrectly fail "zone coverage" and quotes
+      // stay empty despite valid charge rules.
+      if (zones.length === 0) {
+        const distanceZone = await prisma.zone.findFirst({
+          where: {
+            partnerId,
+            status: true,
+            zoneType: "DISTANCE",
+            milestones: { some: {} },
+          },
+          select: { id: true, name: true },
+        });
+        if (distanceZone) {
+          zones = [distanceZone];
+          distancePricingFallback = true;
+          logger.info(
+            "Pincode treated as covered via DISTANCE pricing zone (no geo zone_pincodes link)",
+            { partnerId, pincode, zoneId: distanceZone.id },
+          );
+        }
+      }
 
       const serviceable = zones.length > 0;
 
@@ -109,11 +135,13 @@ class ZoneCoverageValidationService {
         metadata: {
           timestamp: new Date().toISOString(),
           source: "database",
+          distancePricingFallback,
         },
       };
 
-      // Cache the result
-      if (redis) {
+      // Only cache positive coverage. Cached "not serviceable" outlives config fixes
+      // (new charge rules, zone links, distance fallback) and blocks quotes for hours.
+      if (redis && serviceable) {
         await redis.set(cacheKey, JSON.stringify(result), {
           EX: this.cacheTTL,
         });

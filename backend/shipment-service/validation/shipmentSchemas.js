@@ -415,6 +415,36 @@ const rerateShipmentSchema = Joi.object({
     }),
 }).min(2);
 
+const assignPartnerSchema = Joi.object({
+  partnerId: Joi.string().required().messages({
+    "any.required": "Partner ID is required",
+    "string.empty": "Partner ID is required",
+  }),
+
+  quoteSnapshot: Joi.object({
+    partnerId: Joi.string().required(),
+    partnerName: Joi.string().required(),
+    totalAmount: Joi.number().min(0).required(),
+    deliveryDays: Joi.number().integer().min(0).allow(null).optional(),
+    volumetricDivisor: Joi.number().positive().optional(),
+    volumetricWeight: Joi.number().positive().optional(),
+    chargeableWeight: Joi.number().positive().optional(),
+    actualWeight: Joi.number().positive().optional(),
+  })
+    .required()
+    .unknown(true)
+    .messages({
+      "any.required": "Quote snapshot is required",
+    }),
+
+  pickupLocation: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .allow(null, ""),
+});
+
 // Update shipment validation schema
 const updateShipmentSchema = Joi.object({
   status: Joi.string()
@@ -911,6 +941,7 @@ const retryBookingSchema = {
 module.exports = {
   createShipmentSchema,
   updateShipmentSchema,
+  assignPartnerSchema,
   trackingEventSchema,
   getShipmentsQuerySchema,
   rateCalculationSchema,

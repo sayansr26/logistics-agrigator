@@ -78,7 +78,7 @@ export function Header({ className }) {
             </Sheet>
 
             {/* Desktop Quick Actions - Compact (Role-based) */}
-            {/* <div className="hidden md:flex items-center space-x-2">
+            <div className="hidden md:flex items-center space-x-2">
               {canCreateShipment && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/shipments/create">
@@ -95,7 +95,7 @@ export function Header({ className }) {
                   </Link>
                 </Button>
               )}
-            </div> */}
+            </div>
           </div>
 
           {/* Right side */}

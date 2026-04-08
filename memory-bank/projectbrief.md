@@ -1,6 +1,6 @@
 # Project Brief - Logistics Aggregator Portal
 
-> Foundation document | Last Updated: December 2024
+> Foundation document | Last Updated: April 8, 2026
 
 ## Project Overview
 
@@ -125,6 +125,10 @@ To become the leading logistics aggregation platform in India, offering seamless
 - **Operations Team**: Logistics and courier partnerships
 - **Finance Team**: Wallet and billing operations
 - **Support Team**: Customer and client assistance
+
+## Recent platform notes (April 2026)
+
+Partner rate quotes depend on pincode assignment, zone coverage rules (including **DISTANCE** zones with milestones when `zone_pincodes` rows are absent), and Redis caching policies that avoid persisting empty rate lists or long-lived “not serviceable” negatives. After changing partner coverage or charge config, restart **partner-service** and **shipment-service** and re-test quotes via the API Gateway.
 
 ---
 

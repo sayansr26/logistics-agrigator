@@ -16,6 +16,7 @@ const bulkProcessingService = require("../services/bulkProcessingService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
+const DEFAULT_VOLUMETRIC_DIVISOR = 5000;
 
 /**
  * Shipment Controller with Real Database Operations
@@ -34,7 +35,8 @@ const pickupSchedulingService = require("../services/pickupSchedulingService");
  * - superadmin/admin: must provide outletId in body
  * - other roles: outletId is optional
  */
-function resolveOutletContext(req) {
+function resolveOutletContext(req, options = {}) {
+  const { requireWalletUserId = false } = options;
   const role = req.user.role;
   const userId = req.user.userId || req.user.id;
   const clientId = req.user.clientId;
@@ -55,12 +57,16 @@ function resolveOutletContext(req) {
       );
     }
     // bodyOutletUserId = outlet phone number passed from frontend for wallet operations
-    if (!bodyOutletUserId) {
+    if (requireWalletUserId && !bodyOutletUserId) {
       throw new ValidationError(
         "outletUserId (phone) is required for wallet payment processing",
       );
     }
-    return { outletId: bodyOutletId, clientId, walletUserId: bodyOutletUserId };
+    return {
+      outletId: bodyOutletId,
+      clientId,
+      walletUserId: bodyOutletUserId || null,
+    };
   }
 
   return {
@@ -162,6 +168,135 @@ async function processCancellationRefund(shipment, reason, authToken) {
   }
 }
 
+function toNumber(value, fallback = 0) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getEstimatedDeliveryDate(deliveryDays) {
+  const days = toNumber(deliveryDays, 0);
+  if (days <= 0) return null;
+
+  const estimatedDelivery = new Date();
+  estimatedDelivery.setDate(estimatedDelivery.getDate() + days);
+  return estimatedDelivery;
+}
+
+function buildCourierMetrics({
+  quoteSnapshot,
+  weight,
+  numberOfBoxes,
+  dimensions,
+}) {
+  const divisor = toNumber(
+    quoteSnapshot?.volumetricDivisor,
+    DEFAULT_VOLUMETRIC_DIVISOR,
+  );
+  const actualWeight = toNumber(quoteSnapshot?.actualWeight, weight);
+  const volumetricWeight =
+    quoteSnapshot?.volumetricWeight !== undefined &&
+    quoteSnapshot?.volumetricWeight !== null
+      ? toNumber(quoteSnapshot.volumetricWeight)
+      : (numberOfBoxes *
+          toNumber(dimensions?.length) *
+          toNumber(dimensions?.width) *
+          toNumber(dimensions?.height)) /
+        divisor;
+  const chargeableWeight =
+    quoteSnapshot?.chargeableWeight !== undefined &&
+    quoteSnapshot?.chargeableWeight !== null
+      ? toNumber(quoteSnapshot.chargeableWeight)
+      : Math.max(actualWeight, volumetricWeight);
+
+  return {
+    divisor,
+    actualWeight,
+    volumetricWeight,
+    chargeableWeight,
+    totalCost: toNumber(quoteSnapshot?.totalAmount),
+    estimatedDelivery: getEstimatedDeliveryDate(quoteSnapshot?.deliveryDays),
+  };
+}
+
+async function attemptCourierBooking({
+  shipmentId,
+  orderId,
+  partnerId,
+  pickupLocation,
+  pickupAddress,
+  deliveryAddress,
+  packageDetails,
+  paymentType,
+  codAmount,
+  productDescription,
+  hsnCode,
+  declaredValue,
+  authToken,
+}) {
+  const courierBookingResult = await partnerIntegrationService.bookWithCourier(
+    partnerId,
+    {
+      shipmentId,
+      orderId,
+      pickupLocation: pickupLocation || null,
+      pickupAddress,
+      deliveryAddress,
+      packageDetails,
+      paymentType,
+      codAmount: paymentType === "COD" ? codAmount || 0 : 0,
+      productDescription: productDescription || "Package",
+      hsnCode: hsnCode || undefined,
+      declaredValue,
+    },
+    authToken,
+  );
+
+  return {
+    courierBookingResult,
+    trackingUrl:
+      courierBookingResult?.courierResponse?.trackingUrl ||
+      courierBookingResult?.trackingUrl ||
+      null,
+  };
+}
+
+async function createBookingResultAuditLog({
+  userId,
+  clientId,
+  shipmentId,
+  action,
+  bookingSucceeded,
+  partnerId,
+  partnerName,
+  awbNumber,
+  errorMessage,
+  req,
+}) {
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action,
+      resource: "Shipment",
+      resourceId: shipmentId,
+      metadata: {
+        source: "shipment-service",
+        bookingSucceeded,
+        partnerId,
+        partnerName,
+        awbNumber: awbNumber || null,
+        error: errorMessage || null,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+      clientId,
+    },
+  });
+}
+
 /**
  * Create a new shipment
  */
@@ -192,7 +327,19 @@ async function createShipment(req, res) {
       quoteSnapshot,
     } = req.body;
 
-    const { outletId, clientId, walletUserId } = resolveOutletContext(req);
+    if (
+      (selectedPartnerId && !quoteSnapshot) ||
+      (!selectedPartnerId && quoteSnapshot)
+    ) {
+      throw new ValidationError(
+        "selectedPartnerId and quoteSnapshot must be provided together",
+      );
+    }
+
+    const hasAssignedPartner = Boolean(selectedPartnerId && quoteSnapshot);
+    const { outletId, clientId, walletUserId } = resolveOutletContext(req, {
+      requireWalletUserId: paymentType === "PREPAID" && hasAssignedPartner,
+    });
 
     logger.info("Creating shipment", {
       service: "shipment-service",
@@ -203,6 +350,7 @@ async function createShipment(req, res) {
       shipmentType,
       paymentType,
       serviceType,
+      hasAssignedPartner,
     });
 
     // Check for duplicate order ID within client
@@ -216,52 +364,23 @@ async function createShipment(req, res) {
       );
     }
 
-    // Determine the selected partner. Use quoteSnapshot or fall back to live quote.
-    let selectedCourier;
-    let alternativeOptions = [];
-
-    if (selectedPartnerId && quoteSnapshot) {
-      selectedCourier = quoteSnapshot;
-    } else {
-      const rateCalculationParams = {
-        fromPincode: pickupAddress.pincode,
-        toPincode: deliveryAddress.pincode,
-        weight: packageDetails.weight,
-        serviceType: serviceType.toUpperCase(),
-        dimensions: packageDetails.dimensions,
-        codAmount: paymentType === "COD" ? codAmount : null,
-        strategy: "cheapest",
-      };
-
-      const courierSelection =
-        await partnerIntegrationService.selectOptimalCourier(
-          rateCalculationParams,
-        );
-      selectedCourier = courierSelection.selectedCourier;
-      alternativeOptions = courierSelection.alternativeOptions;
-    }
-
-    const totalCost = selectedCourier.totalAmount;
-    const estimatedDelivery = new Date();
-    estimatedDelivery.setDate(
-      estimatedDelivery.getDate() + (selectedCourier.deliveryDays || 5),
-    );
-
-    // Calculate volumetric weight: numberOfBoxes * (L*B*H) / divisor
-    const divisor = selectedCourier.volumetricDivisor || 5000;
-    const volWeight =
-      (numberOfBoxes *
-        packageDetails.dimensions.length *
-        packageDetails.dimensions.width *
-        packageDetails.dimensions.height) /
-      divisor;
-    const chargeableWeight = Math.max(packageDetails.weight, volWeight);
+    const selectedCourier = hasAssignedPartner ? quoteSnapshot : null;
+    const metrics = buildCourierMetrics({
+      quoteSnapshot: selectedCourier,
+      weight: toNumber(packageDetails.weight),
+      numberOfBoxes,
+      dimensions: packageDetails.dimensions,
+    });
+    const totalCost = hasAssignedPartner ? metrics.totalCost : 0;
+    const estimatedDelivery = hasAssignedPartner
+      ? metrics.estimatedDelivery
+      : null;
 
     // Wallet debit for PREPAID
     let walletTransactionId = null;
     let paymentReference = null;
 
-    if (paymentType === "PREPAID") {
+    if (paymentType === "PREPAID" && hasAssignedPartner) {
       try {
         const authToken = req.headers.authorization?.replace("Bearer ", "");
         const paymentResult =
@@ -335,14 +454,15 @@ async function createShipment(req, res) {
         shipmentType,
         shipmentDirection,
         status: "CREATED",
-        bookingStatus: "PENDING_BOOKING",
+        bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
         paymentType,
-        paymentStatus:
-          paymentType === "COD"
+        paymentStatus: hasAssignedPartner
+          ? paymentType === "COD"
             ? "CONFIRMED"
             : walletTransactionId
               ? "CONFIRMED"
-              : "PENDING",
+              : "PENDING"
+          : "PENDING",
         codAmount: paymentType === "COD" ? codAmount : null,
         totalCost,
         currency: "INR",
@@ -381,9 +501,9 @@ async function createShipment(req, res) {
         length: packageDetails.dimensions.length,
         width: packageDetails.dimensions.width,
         height: packageDetails.dimensions.height,
-        volumetricWeight: volWeight,
-        chargeableWeight,
-        volumetricDivisor: divisor,
+        volumetricWeight: metrics.volumetricWeight,
+        chargeableWeight: metrics.chargeableWeight,
+        volumetricDivisor: metrics.divisor,
         description: packageDetails.description,
         value: packageDetails.value,
         fragile: packageDetails.fragile || false,
@@ -391,9 +511,11 @@ async function createShipment(req, res) {
         serviceType,
         specialInstructions,
 
-        partnerId: selectedCourier.partnerId,
-        partnerName: selectedCourier.partnerName,
-        quoteSnapshot: quoteSnapshot || selectedCourier,
+        partnerId: hasAssignedPartner ? selectedCourier.partnerId : null,
+        partnerName: hasAssignedPartner ? selectedCourier.partnerName : null,
+        quoteSnapshot: hasAssignedPartner
+          ? quoteSnapshot || selectedCourier
+          : null,
 
         estimatedDelivery,
 
@@ -455,15 +577,18 @@ async function createShipment(req, res) {
       shipment.id,
       {
         status: "CREATED",
-        message: `Shipment created successfully with order ID ${orderId}`,
+        message: hasAssignedPartner
+          ? `Shipment created successfully with order ID ${orderId}`
+          : `Shipment created without partner assignment for order ID ${orderId}`,
         eventMetadata: {
           orderId,
           paymentType,
           shipmentType,
           totalCost: totalCost.toString(),
           serviceType,
-          partnerId: selectedCourier.partnerId,
-          partnerName: selectedCourier.partnerName,
+          partnerId: hasAssignedPartner ? selectedCourier.partnerId : null,
+          partnerName: hasAssignedPartner ? selectedCourier.partnerName : null,
+          bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
           outletId,
         },
         source: trackingService.EVENT_SOURCES.SYSTEM,
@@ -473,13 +598,13 @@ async function createShipment(req, res) {
 
     // Attempt courier booking via partner-service (non-blocking)
     let courierBookingResult = null;
-    try {
-      const authToken = req.headers.authorization?.replace("Bearer ", "");
-      courierBookingResult = await partnerIntegrationService.bookWithCourier(
-        selectedCourier.partnerId,
-        {
+    if (hasAssignedPartner) {
+      try {
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+        const bookingAttempt = await attemptCourierBooking({
           shipmentId: shipment.id,
           orderId,
+          partnerId: selectedCourier.partnerId,
           pickupLocation: req.body.pickupLocation || null,
           pickupAddress: {
             name: pickupAddress.name,
@@ -500,73 +625,109 @@ async function createShipment(req, res) {
             pincode: deliveryAddress.pincode,
           },
           packageDetails: {
-            weight: chargeableWeight,
+            weight: metrics.chargeableWeight,
             length: packageDetails.dimensions?.length,
             width: packageDetails.dimensions?.width,
             height: packageDetails.dimensions?.height,
           },
           paymentType,
-          codAmount: paymentType === "COD" ? codAmount : 0,
+          codAmount,
           productDescription: packageDetails.description || "Package",
-          hsnCode: hsnCode || undefined,
+          hsnCode,
           declaredValue: packageDetails.value || totalCost,
-        },
-        authToken,
-      );
+          authToken,
+        });
 
-      if (courierBookingResult?.awbNumber) {
-        const bookingTrackingUrl =
-          courierBookingResult.courierResponse?.trackingUrl ||
-          courierBookingResult.trackingUrl ||
-          null;
+        courierBookingResult = bookingAttempt.courierBookingResult;
+
+        if (courierBookingResult?.awbNumber) {
+          await prisma.shipment.update({
+            where: { id: shipment.id },
+            data: {
+              awbNumber: courierBookingResult.awbNumber,
+              partnerShipmentId: courierBookingResult.partnerShipmentId || null,
+              trackingUrl: bookingAttempt.trackingUrl,
+              status: "BOOKED",
+              bookingStatus: "BOOKED",
+            },
+          });
+
+          shipment.awbNumber = courierBookingResult.awbNumber;
+          shipment.trackingUrl = bookingAttempt.trackingUrl;
+          shipment.status = "BOOKED";
+          shipment.bookingStatus = "BOOKED";
+
+          await trackingService.createTrackingEvent(
+            shipment.id,
+            {
+              status: "BOOKED",
+              message: `Shipment booked with courier. AWB: ${courierBookingResult.awbNumber}`,
+              eventMetadata: {
+                awbNumber: courierBookingResult.awbNumber,
+                courierPartnerId: selectedCourier.partnerId,
+              },
+              source: trackingService.EVENT_SOURCES.PARTNER,
+            },
+            userId,
+          );
+
+          await createBookingResultAuditLog({
+            userId,
+            clientId,
+            shipmentId: shipment.id,
+            action: "CREATE_SHIPMENT_BOOKING_SUCCESS",
+            bookingSucceeded: true,
+            partnerId: selectedCourier.partnerId,
+            partnerName: selectedCourier.partnerName,
+            awbNumber: courierBookingResult.awbNumber,
+            req,
+          });
+        }
+      } catch (courierError) {
+        const bookingErrorMessage =
+          courierError.message || "Unknown courier booking error";
+        logger.warn("Courier booking failed - shipment created without AWB", {
+          service: "shipment-service",
+          shipmentId: shipment.id,
+          partnerId: selectedCourier.partnerId,
+          error: bookingErrorMessage,
+          code: courierError.code,
+        });
 
         await prisma.shipment.update({
           where: { id: shipment.id },
-          data: {
-            awbNumber: courierBookingResult.awbNumber,
-            partnerShipmentId: courierBookingResult.partnerShipmentId || null,
-            trackingUrl: bookingTrackingUrl,
-            status: "BOOKED",
-            bookingStatus: "BOOKED",
-          },
+          data: { bookingStatus: "PENDING_BOOKING" },
         });
-
-        shipment.awbNumber = courierBookingResult.awbNumber;
-        shipment.trackingUrl = bookingTrackingUrl;
-        shipment.status = "BOOKED";
-        shipment.bookingStatus = "BOOKED";
+        shipment.bookingStatus = "PENDING_BOOKING";
+        shipment._bookingError = bookingErrorMessage;
 
         await trackingService.createTrackingEvent(
           shipment.id,
           {
-            status: "BOOKED",
-            message: `Shipment booked with courier. AWB: ${courierBookingResult.awbNumber}`,
+            status: "CREATED",
+            message: `Partner assigned but courier booking is pending: ${bookingErrorMessage}`,
             eventMetadata: {
-              awbNumber: courierBookingResult.awbNumber,
               courierPartnerId: selectedCourier.partnerId,
+              bookingStatus: "PENDING_BOOKING",
+              error: bookingErrorMessage,
             },
-            source: trackingService.EVENT_SOURCES.PARTNER,
+            source: trackingService.EVENT_SOURCES.SYSTEM,
           },
           userId,
         );
-      }
-    } catch (courierError) {
-      const bookingErrorMessage =
-        courierError.message || "Unknown courier booking error";
-      logger.warn("Courier booking failed - shipment created without AWB", {
-        service: "shipment-service",
-        shipmentId: shipment.id,
-        partnerId: selectedCourier.partnerId,
-        error: bookingErrorMessage,
-        code: courierError.code,
-      });
 
-      await prisma.shipment.update({
-        where: { id: shipment.id },
-        data: { bookingStatus: "PENDING_BOOKING" },
-      });
-      shipment.bookingStatus = "PENDING_BOOKING";
-      shipment._bookingError = bookingErrorMessage;
+        await createBookingResultAuditLog({
+          userId,
+          clientId,
+          shipmentId: shipment.id,
+          action: "CREATE_SHIPMENT_BOOKING_FAILED",
+          bookingSucceeded: false,
+          partnerId: selectedCourier.partnerId,
+          partnerName: selectedCourier.partnerName,
+          errorMessage: bookingErrorMessage,
+          req,
+        });
+      }
     }
 
     await prisma.auditLog.create({
@@ -582,6 +743,9 @@ async function createShipment(req, res) {
           paymentType,
           totalCost: totalCost.toString(),
           serviceType,
+          partnerId: shipment.partnerId || null,
+          partnerName: shipment.partnerName || null,
+          bookingStatus: shipment.bookingStatus,
           awbNumber: courierBookingResult?.awbNumber || null,
         },
         metadata: {
@@ -610,22 +774,30 @@ async function createShipment(req, res) {
               ? parseFloat(shipment.volumetricWeight)
               : null,
           },
-          courierBooking: courierBookingResult?.awbNumber
-            ? {
-                awbNumber: courierBookingResult.awbNumber,
-                trackingUrl: shipment.trackingUrl || null,
-                booked: true,
-              }
+          courierBooking: hasAssignedPartner
+            ? courierBookingResult?.awbNumber
+              ? {
+                  awbNumber: courierBookingResult.awbNumber,
+                  trackingUrl: shipment.trackingUrl || null,
+                  booked: true,
+                }
+              : {
+                  booked: false,
+                  message:
+                    shipment._bookingError ||
+                    "Courier booking pending - manual retry available",
+                }
             : {
                 booked: false,
                 message:
-                  shipment._bookingError ||
-                  "Courier booking pending - manual retry available",
+                  "Shipment created without partner. Assign a partner to continue.",
               },
         },
-        courierBookingResult?.awbNumber
-          ? "Shipment created and booked successfully"
-          : "Shipment created successfully (courier booking pending)",
+        hasAssignedPartner
+          ? courierBookingResult?.awbNumber
+            ? "Shipment created and booked successfully"
+            : "Shipment created successfully (courier booking pending)"
+          : "Shipment created successfully without partner assignment",
       ),
     );
   } catch (error) {
@@ -650,6 +822,484 @@ async function createShipment(req, res) {
       "SHIPMENT_CREATION_FAILED",
     );
     res.status(500).json(errorResponse);
+  }
+}
+
+/**
+ * Assign or change the shipment partner before booking.
+ */
+async function assignPartner(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const clientId = req.user.clientId;
+    const { id } = req.params;
+    const { partnerId, quoteSnapshot, pickupLocation = null } = req.body;
+
+    if (partnerId !== quoteSnapshot?.partnerId) {
+      throw new ValidationError("partnerId must match quoteSnapshot.partnerId");
+    }
+
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        clientId: true,
+        userId: true,
+        outletId: true,
+        status: true,
+        bookingStatus: true,
+        paymentType: true,
+        paymentStatus: true,
+        codAmount: true,
+        totalCost: true,
+        walletUserId: true,
+        walletTransactionId: true,
+        paymentReference: true,
+        refundTransactionId: true,
+        pickupName: true,
+        pickupPhone: true,
+        pickupEmail: true,
+        pickupLine1: true,
+        pickupCity: true,
+        pickupState: true,
+        pickupPincode: true,
+        deliveryName: true,
+        deliveryPhone: true,
+        deliveryEmail: true,
+        deliveryLine1: true,
+        deliveryCity: true,
+        deliveryState: true,
+        deliveryPincode: true,
+        productDescription: true,
+        hsnCode: true,
+        description: true,
+        value: true,
+        fragile: true,
+        weight: true,
+        length: true,
+        width: true,
+        height: true,
+        numberOfBoxes: true,
+        serviceType: true,
+        awbNumber: true,
+        partnerId: true,
+        partnerName: true,
+      },
+    });
+
+    if (!shipment) {
+      throw new NotFoundError("Shipment not found");
+    }
+
+    if (shipment.status !== "CREATED") {
+      throw new ValidationError(
+        "Partner can only be assigned while shipment status is CREATED",
+      );
+    }
+
+    if (shipment.awbNumber || shipment.bookingStatus === "BOOKED") {
+      throw new ConflictError(
+        "Partner cannot be changed after shipment booking",
+      );
+    }
+
+    if (
+      !["UNASSIGNED", "PENDING_BOOKING", "PENDING"].includes(
+        shipment.bookingStatus,
+      )
+    ) {
+      throw new ValidationError(
+        "Partner can only be assigned for unassigned or pending-booking shipments",
+      );
+    }
+
+    const metrics = buildCourierMetrics({
+      quoteSnapshot,
+      weight: toNumber(shipment.weight),
+      numberOfBoxes: shipment.numberOfBoxes || 1,
+      dimensions: {
+        length: toNumber(shipment.length),
+        width: toNumber(shipment.width),
+        height: toNumber(shipment.height),
+      },
+    });
+    const newTotalCost = metrics.totalCost;
+    const previousPartnerId = shipment.partnerId;
+    const previousPartnerName = shipment.partnerName;
+    const isReassignment = Boolean(previousPartnerId);
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+    let walletTransactionId = shipment.walletTransactionId || null;
+    let paymentReference = shipment.paymentReference || null;
+    let refundTransactionId = shipment.refundTransactionId || null;
+    let paymentStatus =
+      shipment.paymentType === "COD" ? "CONFIRMED" : shipment.paymentStatus;
+
+    if (shipment.paymentType === "PREPAID") {
+      const walletResolution =
+        await shipmentWalletService.resolveShipmentWalletTarget(shipment);
+      const walletUserId =
+        walletResolution.walletUserId || shipment.walletUserId;
+
+      if (!walletUserId) {
+        throw new ValidationError(
+          "Unable to resolve wallet user for partner assignment",
+        );
+      }
+
+      const oldTotalCost = toNumber(shipment.totalCost);
+
+      if (!isReassignment || shipment.bookingStatus === "UNASSIGNED") {
+        if (newTotalCost > 0) {
+          const paymentResult =
+            await paymentProcessingService.processShipmentPayment(
+              walletUserId,
+              newTotalCost,
+              shipment.id,
+              `Shipment charge for order ${shipment.orderId} after partner assignment`,
+              authToken,
+            );
+          walletTransactionId = paymentResult.walletTransactionId;
+          paymentReference = paymentResult.paymentReference;
+        }
+      } else {
+        const difference = parseFloat((newTotalCost - oldTotalCost).toFixed(2));
+
+        if (difference > 0) {
+          const paymentResult =
+            await paymentProcessingService.processShipmentPayment(
+              walletUserId,
+              difference,
+              shipment.id,
+              `Additional shipment charge for order ${shipment.orderId} after partner change`,
+              authToken,
+            );
+          walletTransactionId = paymentResult.walletTransactionId;
+          paymentReference = paymentResult.paymentReference;
+        } else if (difference < 0) {
+          const refundResult =
+            await paymentProcessingService.processShipmentRefund(
+              walletUserId,
+              Math.abs(difference),
+              shipment.id,
+              `Partner change refund for order ${shipment.orderId}`,
+              authToken,
+            );
+          refundTransactionId = refundResult.refundTransactionId;
+        }
+      }
+
+      paymentStatus = "CONFIRMED";
+    }
+
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        partnerId: quoteSnapshot.partnerId,
+        partnerName: quoteSnapshot.partnerName,
+        totalCost: newTotalCost,
+        quoteSnapshot,
+        estimatedDelivery: metrics.estimatedDelivery,
+        volumetricDivisor: metrics.divisor,
+        volumetricWeight: metrics.volumetricWeight,
+        chargeableWeight: metrics.chargeableWeight,
+        bookingStatus: "PENDING_BOOKING",
+        paymentStatus,
+        walletTransactionId,
+        paymentReference,
+        refundTransactionId,
+        partnerShipmentId: null,
+        trackingUrl: null,
+      },
+    });
+
+    await trackingService.createTrackingEvent(
+      shipment.id,
+      {
+        status: "CREATED",
+        message: isReassignment
+          ? `Partner changed from ${previousPartnerName} to ${quoteSnapshot.partnerName}`
+          : `Partner assigned: ${quoteSnapshot.partnerName}`,
+        eventMetadata: {
+          previousPartnerId: previousPartnerId || null,
+          previousPartnerName: previousPartnerName || null,
+          partnerId: quoteSnapshot.partnerId,
+          partnerName: quoteSnapshot.partnerName,
+          totalCost: newTotalCost,
+        },
+        source: trackingService.EVENT_SOURCES.SYSTEM,
+      },
+      userId,
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: isReassignment ? "CHANGE_PARTNER" : "ASSIGN_PARTNER",
+        resource: "Shipment",
+        resourceId: shipment.id,
+        changes: {
+          before: {
+            partnerId: previousPartnerId,
+            partnerName: previousPartnerName,
+            totalCost: shipment.totalCost,
+            bookingStatus: shipment.bookingStatus,
+          },
+          after: {
+            partnerId: quoteSnapshot.partnerId,
+            partnerName: quoteSnapshot.partnerName,
+            totalCost: newTotalCost,
+            bookingStatus: "PENDING_BOOKING",
+          },
+        },
+        metadata: {
+          source: "shipment-service",
+          pickupLocation,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        clientId,
+      },
+    });
+
+    let courierBookingResult = null;
+    let bookingErrorMessage = null;
+
+    try {
+      const bookingAttempt = await attemptCourierBooking({
+        shipmentId: shipment.id,
+        orderId: shipment.orderId,
+        partnerId: quoteSnapshot.partnerId,
+        pickupLocation,
+        pickupAddress: {
+          name: shipment.pickupName,
+          phone: shipment.pickupPhone,
+          email: shipment.pickupEmail || null,
+          address: shipment.pickupLine1,
+          city: shipment.pickupCity,
+          state: shipment.pickupState,
+          pincode: shipment.pickupPincode,
+        },
+        deliveryAddress: {
+          name: shipment.deliveryName,
+          phone: shipment.deliveryPhone,
+          email: shipment.deliveryEmail || null,
+          address: shipment.deliveryLine1,
+          city: shipment.deliveryCity,
+          state: shipment.deliveryState,
+          pincode: shipment.deliveryPincode,
+        },
+        packageDetails: {
+          weight: metrics.chargeableWeight,
+          length: toNumber(shipment.length),
+          width: toNumber(shipment.width),
+          height: toNumber(shipment.height),
+        },
+        paymentType: shipment.paymentType,
+        codAmount: shipment.codAmount ? toNumber(shipment.codAmount) : 0,
+        productDescription:
+          shipment.productDescription || shipment.description || "Package",
+        hsnCode: shipment.hsnCode || undefined,
+        declaredValue: shipment.value ? toNumber(shipment.value) : newTotalCost,
+        authToken,
+      });
+
+      courierBookingResult = bookingAttempt.courierBookingResult;
+
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          awbNumber: courierBookingResult.awbNumber,
+          partnerShipmentId: courierBookingResult.partnerShipmentId || null,
+          trackingUrl: bookingAttempt.trackingUrl,
+          status: "BOOKED",
+          bookingStatus: "BOOKED",
+        },
+      });
+
+      await trackingService.createTrackingEvent(
+        shipment.id,
+        {
+          status: "BOOKED",
+          message: `Shipment booked with courier. AWB: ${courierBookingResult.awbNumber}`,
+          eventMetadata: {
+            awbNumber: courierBookingResult.awbNumber,
+            courierPartnerId: quoteSnapshot.partnerId,
+            reassigned: isReassignment,
+          },
+          source: trackingService.EVENT_SOURCES.PARTNER,
+        },
+        userId,
+      );
+
+      await createBookingResultAuditLog({
+        userId,
+        clientId,
+        shipmentId: shipment.id,
+        action: isReassignment
+          ? "CHANGE_PARTNER_BOOKING_SUCCESS"
+          : "ASSIGN_PARTNER_BOOKING_SUCCESS",
+        bookingSucceeded: true,
+        partnerId: quoteSnapshot.partnerId,
+        partnerName: quoteSnapshot.partnerName,
+        awbNumber: courierBookingResult.awbNumber,
+        req,
+      });
+    } catch (courierError) {
+      bookingErrorMessage =
+        courierError.message || "Unknown courier booking error";
+      logger.warn("Courier booking failed after partner assignment", {
+        service: "shipment-service",
+        shipmentId: shipment.id,
+        partnerId: quoteSnapshot.partnerId,
+        error: bookingErrorMessage,
+      });
+
+      await trackingService.createTrackingEvent(
+        shipment.id,
+        {
+          status: "CREATED",
+          message: `Partner ${isReassignment ? "changed" : "assigned"} but booking is pending: ${bookingErrorMessage}`,
+          eventMetadata: {
+            partnerId: quoteSnapshot.partnerId,
+            partnerName: quoteSnapshot.partnerName,
+            bookingStatus: "PENDING_BOOKING",
+            error: bookingErrorMessage,
+          },
+          source: trackingService.EVENT_SOURCES.SYSTEM,
+        },
+        userId,
+      );
+
+      await createBookingResultAuditLog({
+        userId,
+        clientId,
+        shipmentId: shipment.id,
+        action: isReassignment
+          ? "CHANGE_PARTNER_BOOKING_FAILED"
+          : "ASSIGN_PARTNER_BOOKING_FAILED",
+        bookingSucceeded: false,
+        partnerId: quoteSnapshot.partnerId,
+        partnerName: quoteSnapshot.partnerName,
+        errorMessage: bookingErrorMessage,
+        req,
+      });
+    }
+
+    const updatedShipment = await prisma.shipment.findUnique({
+      where: { id: shipment.id },
+      include: {
+        trackingEvents: {
+          select: {
+            id: true,
+            status: true,
+            message: true,
+            location: true,
+            source: true,
+            timestamp: true,
+          },
+          orderBy: {
+            timestamp: "desc",
+          },
+        },
+        documents: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            url: true,
+            format: true,
+            source: true,
+            fetchedAt: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+      },
+    });
+
+    const formattedShipment = {
+      ...updatedShipment,
+      totalCost: parseFloat(updatedShipment.totalCost),
+      codAmount: updatedShipment.codAmount
+        ? parseFloat(updatedShipment.codAmount)
+        : null,
+      refundAmount: updatedShipment.refundAmount
+        ? parseFloat(updatedShipment.refundAmount)
+        : null,
+      weight: parseFloat(updatedShipment.weight),
+      length: parseFloat(updatedShipment.length),
+      width: parseFloat(updatedShipment.width),
+      height: parseFloat(updatedShipment.height),
+      value: updatedShipment.value ? parseFloat(updatedShipment.value) : null,
+    };
+
+    res.status(200).json(
+      APIResponse.success(
+        {
+          shipment: formattedShipment,
+          courierBooking: courierBookingResult?.awbNumber
+            ? {
+                awbNumber: courierBookingResult.awbNumber,
+                trackingUrl: formattedShipment.trackingUrl || null,
+                booked: true,
+              }
+            : {
+                booked: false,
+                message:
+                  bookingErrorMessage ||
+                  "Partner assigned successfully. Booking is pending.",
+              },
+        },
+        isReassignment
+          ? "Shipment partner updated successfully"
+          : "Shipment partner assigned successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to assign shipment partner", {
+      service: "shipment-service",
+      shipmentId: req.params?.id,
+      userId: req.user?.userId,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    if (
+      error instanceof ConflictError ||
+      error instanceof ValidationError ||
+      error instanceof NotFoundError
+    ) {
+      const statusCode =
+        error instanceof NotFoundError
+          ? 404
+          : error instanceof ConflictError
+            ? 409
+            : 400;
+      return res
+        .status(statusCode)
+        .json(
+          APIResponse.error(
+            error.message,
+            error.code || "PARTNER_ASSIGNMENT_FAILED",
+          ),
+        );
+    }
+
+    res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to assign partner to shipment",
+          "PARTNER_ASSIGNMENT_FAILED",
+        ),
+      );
   }
 }
 
@@ -931,6 +1581,7 @@ async function getShipments(req, res) {
           orderId: true,
           shipmentType: true,
           status: true,
+          bookingStatus: true,
           paymentType: true,
           paymentStatus: true,
           codAmount: true,
@@ -1994,20 +2645,17 @@ async function getShipmentQuotes(req, res) {
 
     const authToken = req.header("Authorization");
 
-    const [rateData, serviceabilityData] = await Promise.all([
-      partnerIntegrationService.calculateRates(rateParams, authToken),
-      partnerIntegrationService.checkServiceability(rateParams, authToken),
-    ]);
-
-    const serviceableMap = new Map();
-    if (Array.isArray(serviceabilityData)) {
-      serviceabilityData.forEach((s) =>
-        serviceableMap.set(s.partnerId, s.serviceable),
-      );
-    }
+    // Partner quote engine already applies pincode assignment, zone coverage,
+    // and pricing rules. A second serviceability pass used the stricter
+    // "distance zone matched" flag and dropped partners that still had valid
+    // WEIGHT / non-distance pricing — yielding empty quotes while pincodes
+    // were assigned. Trust calculateRates as the single source of truth here.
+    const rateData = await partnerIntegrationService.calculateRates(
+      rateParams,
+      authToken,
+    );
 
     const quotes = (rateData.rates || [])
-      .filter((rate) => serviceableMap.get(rate.partnerId) !== false)
       .map((rate) => {
         const divisor = rate.volumetricDivisor || 5000;
         const volWeight =
@@ -2053,7 +2701,8 @@ async function getShipmentQuotes(req, res) {
           volumetricWeight: parseFloat(volWeight.toFixed(3)),
           chargeableWeight: parseFloat(chargeableWt.toFixed(3)),
           actualWeight: weight,
-          serviceable: serviceableMap.get(rate.partnerId) !== false,
+          serviceable:
+            rate.isServiceable !== false && rate.serviceable !== false,
           ...(rate.discount && { discount: rate.discount }),
         };
       })
@@ -4022,6 +4671,7 @@ function normalizeWebhookEvent(provider, payload) {
 
 module.exports = {
   createShipment,
+  assignPartner,
   retryCourierBooking,
   refreshFromProvider,
   fetchCourierLabel,

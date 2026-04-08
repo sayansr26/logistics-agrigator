@@ -122,8 +122,8 @@ export default function ReviewPage() {
     setStage("confirm");
   }
 
-  async function handleConfirm() {
-    if (!selectedQuote || !selectedAddr) return;
+  async function handleCreateShipment(quote?: PartnerQuote | null) {
+    if (!selectedAddr) return;
     if (!store.rtoSameAsPickup && !selectedRtoAddr) return;
     try {
       const normalizePhone = (phone?: string) => {
@@ -224,12 +224,17 @@ export default function ReviewPage() {
         codAmount:
           store.paymentType === "COD" ? parseFloat(store.codAmount) : undefined,
         serviceType: store.serviceType,
-        selectedPartnerId: selectedQuote.partnerId,
-        quoteSnapshot: selectedQuote,
+        selectedPartnerId: quote?.partnerId,
+        quoteSnapshot: quote || undefined,
       };
 
-      await createShipment(payload).unwrap();
+      const result = await createShipment(payload).unwrap();
       store.resetForm();
+      const createdShipment = result?.data?.shipment;
+      if (!quote && createdShipment?.id) {
+        router.push(`/shipments/${createdShipment.id}`);
+        return;
+      }
       router.push("/shipments");
     } catch {
       // RTK handles error
@@ -392,18 +397,30 @@ export default function ReviewPage() {
             )}
 
             <div className="flex justify-end">
-              <Button
-                onClick={handleGetQuotes}
-                disabled={quotesLoading || !selectedAddr}
-                className="gap-2"
-              >
-                {quotesLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="w-4 h-4" />
-                )}
-                Get Partner Quotes
-              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => void handleCreateShipment(null)}
+                  disabled={creating || !selectedAddr}
+                >
+                  {creating && !selectedQuote ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : null}
+                  Create Without Partner
+                </Button>
+                <Button
+                  onClick={handleGetQuotes}
+                  disabled={quotesLoading || !selectedAddr}
+                  className="gap-2"
+                >
+                  {quotesLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
+                  Get Partner Quotes
+                </Button>
+              </div>
             </div>
           </>
         )}
@@ -417,7 +434,8 @@ export default function ReviewPage() {
                   <Truck className="h-5 w-5" /> Select Courier Partner
                 </CardTitle>
                 <CardDescription>
-                  Choose the best partner for your shipment
+                  Choose the best partner now, or create the shipment and assign
+                  later from shipment details.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -575,15 +593,27 @@ export default function ReviewPage() {
               <Button variant="outline" onClick={() => setStage("review")}>
                 Back to Review
               </Button>
-              <Button
-                onClick={() =>
-                  selectedQuote && selectQuoteAndProceed(selectedQuote)
-                }
-                disabled={!selectedQuote}
-              >
-                Proceed to Confirm
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => void handleCreateShipment(null)}
+                  disabled={creating}
+                >
+                  {creating && !selectedQuote ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : null}
+                  Create Without Partner
+                </Button>
+                <Button
+                  onClick={() =>
+                    selectedQuote && selectQuoteAndProceed(selectedQuote)
+                  }
+                  disabled={!selectedQuote}
+                >
+                  Proceed to Confirm
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -653,7 +683,7 @@ export default function ReviewPage() {
                 Change Partner
               </Button>
               <Button
-                onClick={handleConfirm}
+                onClick={() => void handleCreateShipment(selectedQuote)}
                 disabled={creating}
                 className="bg-green-600 hover:bg-green-700 gap-2"
               >
@@ -662,7 +692,7 @@ export default function ReviewPage() {
                 ) : (
                   <CheckCircle className="w-4 h-4" />
                 )}
-                Confirm & Book Shipment
+                Create & Book
               </Button>
             </div>
           </div>

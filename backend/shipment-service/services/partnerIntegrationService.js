@@ -271,13 +271,25 @@ class PartnerIntegrationService {
       if (redis) {
         const cached = await redis.get(cacheKey);
         if (cached) {
-          logger.info("Rate calculation cache hit", {
-            service: "shipment-service",
-            cacheKey,
-            fromPincode: rateParams.fromPincode,
-            toPincode: rateParams.toPincode,
-          });
-          return JSON.parse(cached);
+          const parsed = JSON.parse(cached);
+          const n = Array.isArray(parsed?.rates) ? parsed.rates.length : 0;
+          // Empty quote lists were cached historically; partner config fixes then
+          // left stale "no quotes" in Redis. Never serve or retain empty caches.
+          if (n === 0) {
+            await redis.del(cacheKey);
+            logger.info("Discarded stale empty rate cache", {
+              service: "shipment-service",
+              cacheKey,
+            });
+          } else {
+            logger.info("Rate calculation cache hit", {
+              service: "shipment-service",
+              cacheKey,
+              fromPincode: rateParams.fromPincode,
+              toPincode: rateParams.toPincode,
+            });
+            return parsed;
+          }
         }
       }
 
@@ -342,8 +354,12 @@ class PartnerIntegrationService {
           if (response.data && response.data.status === "success") {
             const rateData = response.data.data;
 
-            // Cache the successful response
-            if (redis) {
+            // Cache only non-empty quote lists so config/rule changes can recover
+            // without waiting for TTL after empty responses.
+            const rateCount = Array.isArray(rateData?.rates)
+              ? rateData.rates.length
+              : 0;
+            if (redis && rateCount > 0) {
               await redis.setEx(
                 cacheKey,
                 this.cacheTTL.rateCalculation,

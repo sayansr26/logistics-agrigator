@@ -13,7 +13,11 @@ const STEPS = [
     label: "Shipment Details",
     path: "/shipments/create/docket",
   },
-  { key: "review", label: "Select Partner", path: "/shipments/create/review" },
+  {
+    key: "review",
+    label: "Partner Selection",
+    path: "/shipments/create/review",
+  },
 ];
 
 export function CreateShipmentLayout({ children }) {
@@ -43,7 +47,8 @@ export function CreateShipmentLayout({ children }) {
               Create New Shipment
             </h1>
             <p className="text-muted-foreground mt-1">
-              Fill in the details below to create a new shipment
+              Fill in the details below to create a new shipment and optionally
+              assign a partner
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={handleReset}>

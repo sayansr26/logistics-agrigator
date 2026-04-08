@@ -1,6 +1,6 @@
 # Product Context - Logistics Aggregator Portal
 
-> Business context and user experience goals | Last Updated: December 2024
+> Business context and user experience goals | Last Updated: April 8, 2026
 
 ## Why This Project Exists
 
@@ -165,6 +165,10 @@ A unified logistics aggregation platform that:
 - Average response time
 - Error rate by endpoint
 - System resource utilization
+
+### Reliability — partner quotes (April 2026)
+
+On **shipment detail**, **Assign Partner** must load comparable rates without false validation failures: numeric fields from the shipment API are normalized before calling the quotes endpoint, and the UI separates **quote load/validation errors** from a **successful but empty** quote list so operators know whether to retry or adjust configuration.
 
 ---
 

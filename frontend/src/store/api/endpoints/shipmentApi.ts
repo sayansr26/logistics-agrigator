@@ -38,6 +38,13 @@ interface BoxPayload {
   height: number;
 }
 
+type ShipmentBookingStatus =
+  | "UNASSIGNED"
+  | "PENDING"
+  | "PENDING_BOOKING"
+  | "BOOKED"
+  | string;
+
 interface CreateShipmentRequest {
   orderId: string;
   shipmentType?: "B2B" | "B2C";
@@ -151,6 +158,13 @@ interface RetryCourierBookingRequest {
   pickupLocation?: string;
 }
 
+interface AssignPartnerRequest {
+  id: string;
+  partnerId: string;
+  quoteSnapshot: PartnerQuote;
+  pickupLocation?: string;
+}
+
 interface RetryCourierBookingResponse {
   status: string;
   data: {
@@ -208,7 +222,7 @@ interface Shipment {
   partnerId?: string;
   partnerName?: string;
   status: string;
-  bookingStatus?: string;
+  bookingStatus?: ShipmentBookingStatus;
   paymentType?: string;
   paymentStatus?: string;
   codAmount?: number;
@@ -303,6 +317,20 @@ interface ShipmentResponse {
   data: {
     shipment: Shipment;
     providerCapabilities?: ProviderCapabilities | null;
+  };
+}
+
+interface ShipmentMutationResponse {
+  status: string;
+  message: string;
+  data: {
+    shipment: Shipment;
+    courierBooking?: {
+      awbNumber?: string;
+      trackingUrl?: string | null;
+      booked: boolean;
+      message?: string;
+    };
   };
 }
 
@@ -443,13 +471,31 @@ export const shipmentApi = baseApi.injectEndpoints({
     /**
      * Create Shipment - Create a new shipment
      */
-    createShipment: builder.mutation<ShipmentResponse, CreateShipmentRequest>({
+    createShipment: builder.mutation<
+      ShipmentMutationResponse,
+      CreateShipmentRequest
+    >({
       query: (shipmentData) => ({
         url: "/api/v1/shipments",
         method: "POST",
         body: shipmentData,
       }),
       invalidatesTags: ["Shipment"],
+    }),
+
+    assignPartner: builder.mutation<
+      ShipmentMutationResponse,
+      AssignPartnerRequest
+    >({
+      query: ({ id, ...data }) => ({
+        url: `/api/v1/shipments/${id}/assign-partner`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Shipment", id },
+        { type: "Shipment", id: "LIST" },
+      ],
     }),
 
     /**
@@ -688,6 +734,7 @@ export const shipmentApi = baseApi.injectEndpoints({
 
 export const {
   useCreateShipmentMutation,
+  useAssignPartnerMutation,
   useGetShipmentsQuery,
   useGetShipmentByIdQuery,
   useUpdateShipmentMutation,
@@ -712,11 +759,13 @@ export const {
 
 export type {
   CreateShipmentRequest,
+  AssignPartnerRequest,
   UpdateShipmentRequest,
   RetryCourierBookingRequest,
   RetryCourierBookingResponse,
   Shipment,
   ShipmentResponse,
+  ShipmentMutationResponse,
   ShipmentsListResponse,
   TrackingEvent,
   TrackingResponse,
@@ -738,4 +787,5 @@ export type {
   RefreshFromProviderResponse,
   FetchCourierLabelResponse,
   CancelWithProviderResponse,
+  ShipmentBookingStatus,
 };

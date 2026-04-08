@@ -13,6 +13,7 @@ const {
 // Import controllers
 const {
   createShipment,
+  assignPartner,
   retryCourierBooking,
   refreshFromProvider,
   fetchCourierLabel,
@@ -54,6 +55,7 @@ const {
 // Import validation schemas
 const {
   createShipmentSchema,
+  assignPartnerSchema,
   updateShipmentSchema,
   trackingEventSchema,
   getShipmentsQuerySchema,
@@ -173,6 +175,16 @@ router.post(
   authMiddleware.requirePermission("shipment", "create", "own"),
   validate(createShipmentSchema),
   createShipment,
+);
+
+router.post(
+  "/:id/assign-partner",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  validate(assignPartnerSchema),
+  assignPartner,
 );
 
 /**

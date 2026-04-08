@@ -723,21 +723,17 @@ async function calculateRates(params) {
           }
         }
 
-        // Distance zone matching for pricing context
+        // Distance zone matching for pricing context (DISTANCE_BASE_WEIGHT rules).
+        // Do not hard-fail here: many partners price with WEIGHT / INVOICE_VALUE /
+        // ZONE_TO_ZONE_WEIGHT only. Missing distance slabs must not block quotes.
         const zoneResult = await distanceZoneService.getZoneForShipment(
           partner.id,
           fromPincode,
           toPincode,
         );
 
-        if (!zoneResult.matched && !skipServiceabilityCheck) {
-          return {
-            partnerId: partner.id,
-            partnerName: partner.displayName || partner.name,
-            serviceable: false,
-            reason: "No matching distance zone",
-          };
-        }
+        const distanceZoneUnmatched =
+          !zoneResult.matched && !skipServiceabilityCheck;
 
         // Resolve GEOLOGICAL zone IDs and pincode-type values for both sides
         const [
@@ -821,6 +817,32 @@ async function calculateRates(params) {
               },
             );
           }
+        }
+
+        if (distanceZoneUnmatched) {
+          const hasPriced =
+            totalRate > 0 ||
+            (Array.isArray(breakdownToUse) && breakdownToUse.length > 0);
+          if (!hasPriced) {
+            return {
+              partnerId: partner.id,
+              partnerName: partner.displayName || partner.name,
+              serviceable: false,
+              reason:
+                zoneResult.message ||
+                "No matching distance zone and no applicable non-distance charge rules",
+            };
+          }
+          logger.info(
+            "Quoted partner without distance-zone match (non-distance rules produced a rate)",
+            {
+              partnerId: partner.id,
+              fromPincode,
+              toPincode,
+              distanceKm: zoneResult.distanceKm,
+              totalRate,
+            },
+          );
         }
 
         return {

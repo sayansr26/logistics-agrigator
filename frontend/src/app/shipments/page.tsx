@@ -439,6 +439,12 @@ export default function ShipmentsPage() {
                             <div className="text-xs text-muted-foreground">
                               {shipment.partnerName || "Unassigned"}
                             </div>
+                            {!shipment.partnerName &&
+                              shipment.bookingStatus === "UNASSIGNED" && (
+                                <div className="text-xs text-muted-foreground">
+                                  Pending partner assignment
+                                </div>
+                              )}
                           </div>
                         </TableCell>
                         <TableCell className="text-sm">

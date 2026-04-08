@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   Truck,
   Package,
-  PackagePlus,
   Users,
   BarChart3,
   Settings,
@@ -74,13 +73,6 @@ const getNavigationSections = () => {
           title: "Shipments",
           href: "/shipments",
           icon: Package,
-          roles: ["superadmin", "admin", "outlet"],
-          disabled: false,
-        },
-        {
-          title: "Create Shipment",
-          href: "/shipments/create",
-          icon: PackagePlus,
           roles: ["superadmin", "admin", "outlet"],
           disabled: false,
         },

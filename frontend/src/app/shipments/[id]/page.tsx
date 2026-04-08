@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { SerializedError } from "@reduxjs/toolkit";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,8 @@ import {
   useGetShipmentByIdQuery,
   useCancelShipmentMutation,
   useDownloadLabelMutation,
+  useGetShipmentQuotesMutation,
+  useAssignPartnerMutation,
   useRetryCourierBookingMutation,
   useRefreshFromProviderMutation,
   useFetchCourierLabelMutation,
@@ -32,6 +36,7 @@ import {
 import type {
   TrackingEvent,
   ProviderAction,
+  PartnerQuote,
 } from "@/store/api/endpoints/shipmentApi";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -39,6 +44,7 @@ import {
   useGetOutletAddressesQuery,
 } from "@/store/api/endpoints/outletApi";
 import type { OutletAddress } from "@/store/api/endpoints/outletApi";
+import { formatValidationErrors, parseRTKError } from "@/utils/errorHandler";
 import {
   Package,
   Truck,
@@ -48,7 +54,6 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Plus,
   Download,
   MessageSquare,
   Phone,
@@ -63,6 +68,8 @@ import {
   RefreshCw,
   ExternalLink,
   Scale,
+  Building,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -133,6 +140,29 @@ function formatStatus(s: string) {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+/** Coerce shipment API fields (e.g. Decimal as string) for /shipments/quotes; invalid → undefined. */
+function quoteOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function quoteCoercedNumber(value: unknown, fallback: number): number {
+  const n = quoteOptionalNumber(value);
+  return n !== undefined ? n : fallback;
+}
+
+function shipmentQuotesLoadErrorMessage(err: unknown): string {
+  const parsed = parseRTKError(
+    err as FetchBaseQueryError | SerializedError | undefined,
+  );
+  const lines = formatValidationErrors(parsed.details);
+  if (lines.length) {
+    return `${parsed.message} ${lines.join(" · ")}`;
+  }
+  return parsed.message;
+}
+
 export default function ShipmentDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -148,6 +178,16 @@ export default function ShipmentDetailPage() {
     useCancelShipmentMutation();
   const [downloadLabel, { isLoading: downloading }] =
     useDownloadLabelMutation();
+  const [
+    getShipmentQuotes,
+    {
+      data: assignmentQuotesData,
+      isLoading: assignmentQuotesLoading,
+      error: assignmentQuotesError,
+    },
+  ] = useGetShipmentQuotesMutation();
+  const [assignPartner, { isLoading: assigningPartner }] =
+    useAssignPartnerMutation();
   const [retryCourierBooking, { isLoading: retrying }] =
     useRetryCourierBookingMutation();
   const [refreshFromProvider, { isLoading: refreshing }] =
@@ -184,6 +224,12 @@ export default function ShipmentDetailPage() {
   const [retryOpen, setRetryOpen] = useState(false);
   const [retryPickupLocation, setRetryPickupLocation] = useState("");
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [assignPartnerOpen, setAssignPartnerOpen] = useState(false);
+  const [selectedAssignmentQuote, setSelectedAssignmentQuote] =
+    useState<PartnerQuote | null>(null);
+  const [assignPartnerError, setAssignPartnerError] = useState<string | null>(
+    null,
+  );
 
   const [revalueOpen, setRevalueOpen] = useState(false);
   const [revalueWeight, setRevalueWeight] = useState("");
@@ -203,6 +249,71 @@ export default function ShipmentDetailPage() {
     // Prefer the outlet-address label/name (warehouse) over pickup contact name.
     setRetryPickupLocation(resolvedPickupLocation || "");
   }, [shipment?.id, resolvedPickupLocation, retryOpen]);
+
+  const handleLoadAssignmentQuotes = async () => {
+    if (!shipment) return;
+    setAssignPartnerError(null);
+    setSelectedAssignmentQuote(null);
+
+    try {
+      await getShipmentQuotes({
+        fromPincode: shipment.pickupPincode || "",
+        toPincode: shipment.deliveryPincode || "",
+        weight: quoteCoercedNumber(shipment.weight, 0),
+        numberOfBoxes: quoteCoercedNumber(shipment.numberOfBoxes, 1),
+        dimensions: {
+          length: quoteCoercedNumber(shipment.length, 0),
+          width: quoteCoercedNumber(shipment.width, 0),
+          height: quoteCoercedNumber(shipment.height, 0),
+        },
+        serviceType:
+          (shipment.serviceType as "STANDARD" | "EXPRESS" | "ECONOMY") ||
+          "STANDARD",
+        paymentType: (shipment.paymentType as "PREPAID" | "COD") || "PREPAID",
+        codAmount: quoteOptionalNumber(shipment.codAmount),
+        shipmentType: (shipment.shipmentType as "B2B" | "B2C") || "B2C",
+        declaredValue: quoteOptionalNumber(shipment.value),
+        isFragile: Boolean(shipment.fragile),
+        outletId: shipment.outletId,
+      }).unwrap();
+    } catch {
+      // handled by RTK
+    }
+  };
+
+  const handleOpenAssignPartner = async () => {
+    setAssignPartnerOpen(true);
+    await handleLoadAssignmentQuotes();
+  };
+
+  const handleAssignPartner = async () => {
+    if (!selectedAssignmentQuote || !shipment) return;
+    setAssignPartnerError(null);
+
+    try {
+      await assignPartner({
+        id,
+        partnerId: selectedAssignmentQuote.partnerId,
+        quoteSnapshot: selectedAssignmentQuote,
+        pickupLocation: resolvedPickupLocation || shipment.pickupName,
+      }).unwrap();
+      setAssignPartnerOpen(false);
+      setSelectedAssignmentQuote(null);
+      await refetch();
+    } catch (e) {
+      const err = e as {
+        data?: { error?: { message?: string } };
+        error?: { message?: string };
+        message?: string;
+      };
+      setAssignPartnerError(
+        err?.data?.error?.message ||
+          err?.error?.message ||
+          err?.message ||
+          "Failed to assign partner",
+      );
+    }
+  };
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this shipment?")) return;
@@ -429,6 +540,9 @@ export default function ShipmentDetailPage() {
   const isCancelledOrSpecial = ["CANCELLED", "RTO", "NDR", "HOLD"].includes(
     shipment.status,
   );
+  const assignmentQuotes = assignmentQuotesData?.data?.quotes || [];
+  const recommendedAssignmentQuote =
+    assignmentQuotesData?.data?.recommended || null;
   const progressPercentage = isCancelledOrSpecial
     ? 0
     : ((currentIndex + 1) / TRACKING_STEPS.length) * 100;
@@ -453,6 +567,18 @@ export default function ShipmentDetailPage() {
     { title: `#${shipment.awbNumber || shipment.orderId}` },
   ];
 
+  const canAssignPartner =
+    shipment.status === "CREATED" &&
+    !shipment.partnerId &&
+    !shipment.awbNumber &&
+    shipment.bookingStatus === "UNASSIGNED";
+  const canChangePartner =
+    shipment.status === "CREATED" &&
+    !!shipment.partnerId &&
+    !shipment.awbNumber &&
+    shipment.bookingStatus === "PENDING_BOOKING";
+  const isPendingPartnerAssignment =
+    shipment.bookingStatus === "UNASSIGNED" && !shipment.partnerId;
   const canRetryBooking =
     !shipment.awbNumber && shipment.bookingStatus === "PENDING_BOOKING";
   const enabledProviderActions = availableActions.filter((a) => a.enabled);
@@ -587,9 +713,15 @@ export default function ShipmentDetailPage() {
                     <div className="text-xs text-muted-foreground">
                       Total Cost
                     </div>
-                    <div className="text-xs font-bold">
-                      {formatCurrency(shipment.totalCost)}
-                    </div>
+                    {isPendingPartnerAssignment ? (
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Pending assignment
+                      </div>
+                    ) : (
+                      <div className="text-xs font-bold">
+                        {formatCurrency(shipment.totalCost)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -787,6 +919,11 @@ export default function ShipmentDetailPage() {
                       <div className="text-lg font-bold">
                         {shipment.partnerName || "Unassigned"}
                       </div>
+                      {isPendingPartnerAssignment && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Pending partner assignment
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -803,7 +940,12 @@ export default function ShipmentDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {chargeBreakdown && chargeBreakdown.length > 0 ? (
+                  {isPendingPartnerAssignment ? (
+                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      Charges will appear after a partner is assigned to this
+                      shipment.
+                    </div>
+                  ) : chargeBreakdown && chargeBreakdown.length > 0 ? (
                     <div className="rounded-xl border overflow-hidden">
                       <div className="divide-y">
                         {chargeBreakdown.map((cb, i) => (
@@ -848,9 +990,15 @@ export default function ShipmentDetailPage() {
                   <div className="p-6 rounded-xl bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900 border-2">
                     <div className="flex items-center justify-between">
                       <div className="text-lg font-semibold">Total Amount</div>
-                      <div className="text-3xl font-bold">
-                        {formatCurrency(shipment.totalCost)}
-                      </div>
+                      {isPendingPartnerAssignment ? (
+                        <div className="text-lg font-medium text-muted-foreground">
+                          Pending assignment
+                        </div>
+                      ) : (
+                        <div className="text-3xl font-bold">
+                          {formatCurrency(shipment.totalCost)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm text-muted-foreground mt-2">
                       Payment: {shipment.paymentType} · Status:{" "}
@@ -940,6 +1088,32 @@ export default function ShipmentDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {(canAssignPartner || canChangePartner) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start h-auto py-3 px-4"
+                    onClick={() => void handleOpenAssignPartner()}
+                    disabled={assignmentQuotesLoading || assigningPartner}
+                  >
+                    {assignmentQuotesLoading || assigningPartner ? (
+                      <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                    ) : (
+                      <Truck className="h-4 w-4 mr-3" />
+                    )}
+                    <div className="text-left">
+                      <div className="font-medium">
+                        {canAssignPartner ? "Assign Partner" : "Change Partner"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {canAssignPartner
+                          ? "Select a courier and book this shipment"
+                          : "Switch to another courier before booking"}
+                      </div>
+                    </div>
+                  </Button>
+                )}
+
                 {canRetryBooking && (
                   <Button
                     variant="outline"
@@ -1452,6 +1626,198 @@ export default function ShipmentDetailPage() {
                 "Retry Booking"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={assignPartnerOpen}
+        onOpenChange={(open) => {
+          setAssignPartnerOpen(open);
+          if (!open) {
+            setAssignPartnerError(null);
+            setSelectedAssignmentQuote(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {canAssignPartner ? "Assign Partner" : "Change Partner"}
+            </DialogTitle>
+            <DialogDescription>
+              Review the latest quotes and select the courier partner for this
+              shipment.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {assignmentQuotesLoading ? (
+              <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Loading partner quotes...
+              </div>
+            ) : assignmentQuotesError ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-6 text-center text-sm">
+                <AlertCircle className="h-8 w-8 mx-auto mb-3 text-destructive" />
+                <p className="font-medium text-destructive">
+                  Could not load partner quotes
+                </p>
+                <p className="mt-2 text-muted-foreground">
+                  {shipmentQuotesLoadErrorMessage(assignmentQuotesError)}
+                </p>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Fix the issue above, then tap Refresh Quotes. Pincode mapping
+                  alone does not guarantee a price; the quote API must succeed.
+                </p>
+              </div>
+            ) : assignmentQuotes.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                <AlertCircle className="h-8 w-8 mx-auto mb-3" />
+                <p className="font-medium text-foreground">
+                  No quotes returned for this shipment
+                </p>
+                <p className="mt-2">
+                  A partner may still be mapped to these pincodes, but the rate
+                  engine returned no prices. Typical causes: missing or invalid
+                  weight/dimensions on the shipment, no rate card for this lane
+                  or service type, or the partner marked not serviceable for
+                  this request.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {assignmentQuotes.map((quote) => {
+                  const isRecommended =
+                    recommendedAssignmentQuote?.partnerId === quote.partnerId;
+                  const isSelected =
+                    selectedAssignmentQuote?.partnerId === quote.partnerId;
+
+                  return (
+                    <button
+                      key={quote.partnerId}
+                      type="button"
+                      onClick={() => setSelectedAssignmentQuote(quote)}
+                      className={`w-full rounded-lg border p-4 text-left transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-muted-foreground/50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <Building className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">
+                                {quote.partnerName}
+                              </span>
+                              {isRecommended && (
+                                <Badge className="bg-green-100 text-green-800 text-xs gap-1">
+                                  <Star className="h-3 w-3" />
+                                  Best Value
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {quote.deliveryDays
+                                ? `${quote.deliveryDays} day${quote.deliveryDays !== 1 ? "s" : ""}`
+                                : "Est. delivery TBD"}{" "}
+                              · Chargeable: {quote.chargeableWeight} kg
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold">
+                            ₹
+                            {quote.totalAmount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Total Charges
+                          </div>
+                        </div>
+                      </div>
+
+                      {quote.chargeBreakdown &&
+                        quote.chargeBreakdown.length > 0 && (
+                          <div className="mt-3 rounded-md bg-muted/40 p-3">
+                            <div className="space-y-1.5 text-sm">
+                              {quote.chargeBreakdown.map((entry, index) => (
+                                <div
+                                  key={`${quote.partnerId}-${index}`}
+                                  className="flex items-center justify-between"
+                                >
+                                  <span className="text-muted-foreground">
+                                    {entry.name}
+                                  </span>
+                                  <span className="font-medium">
+                                    ₹
+                                    {entry.amount.toLocaleString("en-IN", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {assignPartnerError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {assignPartnerError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleLoadAssignmentQuotes()}
+              disabled={assignmentQuotesLoading || assigningPartner}
+            >
+              {assignmentQuotesLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refresh Quotes
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAssignPartnerOpen(false)}
+                disabled={assigningPartner}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleAssignPartner()}
+                disabled={!selectedAssignmentQuote || assigningPartner}
+              >
+                {assigningPartner ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : canAssignPartner ? (
+                  "Assign & Book"
+                ) : (
+                  "Change Partner"
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

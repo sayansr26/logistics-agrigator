@@ -160,6 +160,9 @@ Overall Project Progress          [███████████████
   - ✅ `quoteSnapshot.chargeBreakdown` updated with fresh breakdown after rerate
   - ✅ Frontend: disputed weight display, COD amount card, actual value display
   - ✅ Cancel order wallet refund for PREPAID payment mode
+- ✅ **Shipment quotes & assign-partner pipeline (April 8, 2026)**
+  - ✅ `getShipmentQuotes`: single path through `partnerIntegrationService.calculateRates` (removed duplicate serviceability filtering)
+  - ✅ Rate Redis: delete cache entry when stored `rates` is empty; do not write cache when `rates.length === 0`
 - ⏳ Bulk operations (planned)
 - ⏳ Bulk label printing (planned)
 
@@ -185,6 +188,10 @@ Overall Project Progress          [███████████████
   - ✅ Conditional charge gating: COD charges only for COD, FRAGILE only for fragile, INSURANCE via INVOICE_VALUE rules
   - ✅ `paymentType` forwarded to charge engine context
   - ✅ Duplicate detection on PincodeType/ChargesType creation uses canonical names
+- ✅ **Zone coverage & quote cache (April 8, 2026)**
+  - ✅ `zoneCoverageValidationService`: DISTANCE zone + milestones fallback when no `zone_pincodes` match (distance-priced partners)
+  - ✅ Zone serviceability Redis: cache key `serviceable:v2`; **only** cache `serviceable: true` (no long-lived negative cache)
+  - ✅ `quoteCalculationService`: charge engine behavior aligned with zone validation (distance mismatch does not always short-circuit before pricing)
 
 #### API Gateway (95% Complete)
 
@@ -254,6 +261,10 @@ Overall Project Progress          [███████████████
   - Normalized `getPartnerPincodes` frontend response handling to unwrap the backend envelope correctly
   - `builtin cd frontend && pnpm run build` passed successfully
   - Restarted local frontend container after the successful build to load the new bundle
+
+- ✅ **Shipment detail — Assign Partner quotes (April 8, 2026)**
+  - Coerces `declaredValue`, `codAmount`, weight/dimensions for `/shipments/quotes` so Joi accepts API-shaped values
+  - Assign Partner: surfaces RTK validation errors; distinguishes “could not load quotes” vs successful empty list
 
 - ✅ **Shipment Creation Wizard** (March 2026)
   - ✅ Multi-step form: Docket → Dimensions → Delivery → Invoice → Review & Book

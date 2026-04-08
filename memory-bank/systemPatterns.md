@@ -1,6 +1,6 @@
 # System Patterns - Logistics Aggregator Portal
 
-> Architecture and design patterns | Last Updated: March 28, 2026
+> Architecture and design patterns | Last Updated: April 8, 2026
 
 ## Architecture Overview
 
@@ -909,43 +909,34 @@ Admin clicks "Revalue Charges" on shipment detail
 - Tracking events use the shipment's current status to avoid invalid status transitions
 - Auth token must be explicitly forwarded to partner service (not automatically inherited)
 
-### 27. Strict Partner Eligibility Pattern (NEW - March 2026)
+### 27. Strict Partner Eligibility Pattern (March 2026, refined April 2026)
 
-**Partners only appear in rate quotes when they have active coverage for BOTH pickup and delivery pincodes.**
+**Partners only appear in rate quotes when they have active `PartnerPincodeAssign` for BOTH pickup and delivery pincodes AND each side passes zone coverage validation.**
 
-```javascript
-// quoteCalculationService.js
-async function hasPincodeAssignment(partnerId, pincode) {
-  return !!(await prisma.partnerPincodeAssign.findFirst({
-    where: { partnerId, pincode: { code: pincode }, isActive: true },
-  }));
-}
+Pincode assignment is enforced in `quoteCalculationService.js` via `hasPincodeAssignment()`.
 
-async function hasZoneCoverage(partnerId, pincode) {
-  return !!(await prisma.zone.findFirst({
-    where: {
-      partnerId,
-      isActive: true,
-      zonePincodes: { some: { pincode: { code: pincode } } },
-    },
-  }));
-}
+**Zone coverage** is delegated to `zoneCoverageValidationService.validatePincodeServiceability()`:
 
-// Both must pass for BOTH pincodes:
-const [pickupAssigned, deliveryAssigned] = await Promise.all([
-  hasPincodeAssignment(partnerId, fromPincode),
-  hasPincodeAssignment(partnerId, toPincode),
-]);
-const [pickupCovered, deliveryCovered] = await Promise.all([
-  hasZoneCoverage(partnerId, fromPincode),
-  hasZoneCoverage(partnerId, toPincode),
-]);
-```
+1. **Primary**: geographical coverage — any active zone with a `zone_pincodes` row linking that pincode.
+2. **DISTANCE fallback (April 2026)**: if no geo link exists but the partner has an active **DISTANCE** zone with **at least one milestone**, treat the pincode as covered. Many partners only maintain distance slabs + pincode assignment lists, not per-pincode `zone_pincodes` rows; without this fallback, quotes return empty despite valid charge rules.
+
+**Redis for zone coverage validation**: cache key includes `serviceable:v2` prefix; **only positive (`serviceable: true`) results are cached** — caching negative results caused hour-long “no quotes” after config fixes.
 
 **Bypassed during rerate** via `skipServiceabilityCheck: true` flag.
+
+### 28. Shipment Quote API & Rate Cache Pattern (April 2026)
+
+**`POST /api/v1/shipments/quotes`** (`getShipmentQuotes` in shipment-service) calls `partnerIntegrationService.calculateRates` only — the partner quote engine already applies eligibility; a second serviceability pass was removed to avoid stricter/divergent filtering.
+
+**Shipment-service Redis (`partnerIntegrationService.calculateRates`)**:
+
+- On **read**: if cached payload has `rates.length === 0`, **delete the key** and refetch (empty lists were previously cached for 5 minutes).
+- On **write**: **do not cache** responses whose `rates` array is empty — avoids sticky empties after partner-side fixes.
+
+**Partner `quoteCalculationService`**: if no distance-zone milestone matches, the engine still runs non-distance charge rules (e.g. WEIGHT / INVOICE_VALUE); only rejects when unmatched distance **and** no priced breakdown (see codebase).
 
 ---
 
 **Architecture Status**: Stable
-**Last Pattern Review**: March 28, 2026
-**Recent Additions**: Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Last Pattern Review**: April 8, 2026
+**Recent Additions**: Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern (DISTANCE fallback April 2026), Shipment Quote API & Rate Cache Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

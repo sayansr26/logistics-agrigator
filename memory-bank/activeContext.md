@@ -42,18 +42,18 @@ The primary focus is implementing a robust security layer and role-based access 
 
 ## Service Status Overview
 
-| Service              | Port | Status        | Completion | Current Focus                                            |
-| -------------------- | ---- | ------------- | ---------- | -------------------------------------------------------- |
-| **API Gateway**      | 3001 | ✅ Complete   | 95%        | Webhook path exemption added                             |
-| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                                       |
-| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API                                |
-| **Shipment Service** | 3004 | 🔄 Active     | 95%        | Revalue charges + cancel refund + rerate breakdown       |
-| **Partner Service**  | 3005 | 🔄 Active     | 100%       | Semantic type normalization + strict partner eligibility |
-| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed                        |
-| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending                                      |
-| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                                              |
-| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                                             |
-| **Frontend**         | 3000 | ✅ Production | 88%        | Shipment revalue UI + COD display + weight dispute       |
+| Service              | Port | Status        | Completion | Current Focus                                      |
+| -------------------- | ---- | ------------- | ---------- | -------------------------------------------------- |
+| **API Gateway**      | 3001 | ✅ Complete   | 95%        | Webhook path exemption added                       |
+| **Auth Service**     | 3002 | ✅ Production | 100%       | Reference standard                                 |
+| **User Service**     | 3003 | ✅ Production | 100%       | Internal outlet badge API                          |
+| **Shipment Service** | 3004 | 🔄 Active     | 95%        | Quotes cache + assign-partner pipeline + rerate    |
+| **Partner Service**  | 3005 | 🔄 Active     | 100%       | Zone coverage DISTANCE fallback + quote engine     |
+| **Wallet Service**   | 3006 | ✅ Complete   | 100%       | Shipment wallet integration fixed                  |
+| **License Service**  | 3009 | 🆕 New        | 30%        | Integration pending                                |
+| **Support Service**  | 3007 | ❌ Pending    | 0%         | Not started                                        |
+| **Platform Service** | 3008 | ❌ Pending    | 0%         | Shopify next                                       |
+| **Frontend**         | 3000 | ✅ Production | 88%        | Shipment revalue UI + COD display + weight dispute |
 
 ## Immediate Priorities
 
@@ -118,19 +118,20 @@ The primary focus is implementing a robust security layer and role-based access 
 3. **JWT + Redis Sessions**: Scalable auth pattern
 4. **HMAC for External APIs**: Partner and Wallet service auth
 5. **Canonical pincode search endpoint**: Use `GET /api/v1/geography/pincodes/search` for all search/autocomplete flows
-6. **Deprecated endpoint window**: `GET /api/v1/pincodes/search` remains temporary with deprecation headers and sunset date `2026-06-30T00:00:00.000Z`
-7. **External wallet uses phone as user ID**: The external wallet API (`wapi.websiteduniya.com`) identifies users by phone number, NOT by auth UUID. All inter-service wallet calls must use outlet phone.
-8. **Inter-service auth**: Services calling other services over Docker network must include `X-Internal-Request` header with `INTERNAL_SECRET` to bypass direct-access guards
-9. **Redis v4 API**: All Redis calls must use `setEx()` (camelCase) not `setex()` (lowercase) — Redis v4+ breaking change
-10. **Delhivery cancel payload**: `cancellation` must be string `"true"` (NOT boolean `true`) — Delhivery silently ignores boolean
-11. **Terminal status protection**: Never downgrade `CANCELLED`/`DELIVERED`/`RTO` to a lower status on provider refresh
-12. **Provider capability contract**: All courier adapters must implement `getCapabilities()` and `getAvailableActions(shipmentContext)` for dynamic UI
-13. **Webhook ingestion is public**: `/api/v1/shipments/webhook/:provider` is exempt from JWT auth in API Gateway
-14. **Semantic type normalization**: `PincodeType` and `ChargesType` names are normalized to canonical uppercase via `typeNameNormalizer.js` — `COD`, `cod`, `Cod` all treated as `COD`
-15. **skipServiceabilityCheck for rerate**: Existing shipments bypass pincode assignment and zone coverage validation during re-rate — only weight/dimension-based charge recalculation applies
-16. **quoteSnapshot updated on rerate**: When a shipment is re-rated, the `quoteSnapshot.chargeBreakdown` is overwritten with the new charges so the frontend Charges Summary is always current
-17. **COD rerate options**: For COD shipments with extra charges after rerate, admin can choose `DEDUCT_WALLET` (debit from wallet) or `UPDATE_COD` (increase COD amount to collect from customer)
-18. **Case-sensitive filenames in git**: Always match filename case exactly with import paths — macOS hides mismatches but Linux production builds fail
+6. **Quotes & Redis (April 2026)**: Partner zone-coverage cache stores **only** positive serviceability (`serviceable:v2` keys). Shipment-service partner rate cache **never stores empty `rates` arrays**; cached empties are deleted on read so partner fixes take effect without waiting for TTL
+7. **Deprecated endpoint window**: `GET /api/v1/pincodes/search` remains temporary with deprecation headers and sunset date `2026-06-30T00:00:00.000Z`
+8. **External wallet uses phone as user ID**: The external wallet API (`wapi.websiteduniya.com`) identifies users by phone number, NOT by auth UUID. All inter-service wallet calls must use outlet phone.
+9. **Inter-service auth**: Services calling other services over Docker network must include `X-Internal-Request` header with `INTERNAL_SECRET` to bypass direct-access guards
+10. **Redis v4 API**: All Redis calls must use `setEx()` (camelCase) not `setex()` (lowercase) — Redis v4+ breaking change
+11. **Delhivery cancel payload**: `cancellation` must be string `"true"` (NOT boolean `true`) — Delhivery silently ignores boolean
+12. **Terminal status protection**: Never downgrade `CANCELLED`/`DELIVERED`/`RTO` to a lower status on provider refresh
+13. **Provider capability contract**: All courier adapters must implement `getCapabilities()` and `getAvailableActions(shipmentContext)` for dynamic UI
+14. **Webhook ingestion is public**: `/api/v1/shipments/webhook/:provider` is exempt from JWT auth in API Gateway
+15. **Semantic type normalization**: `PincodeType` and `ChargesType` names are normalized to canonical uppercase via `typeNameNormalizer.js` — `COD`, `cod`, `Cod` all treated as `COD`
+16. **skipServiceabilityCheck for rerate**: Existing shipments bypass pincode assignment and zone coverage validation during re-rate — only weight/dimension-based charge recalculation applies
+17. **quoteSnapshot updated on rerate**: When a shipment is re-rated, the `quoteSnapshot.chargeBreakdown` is overwritten with the new charges so the frontend Charges Summary is always current
+18. **COD rerate options**: For COD shipments with extra charges after rerate, admin can choose `DEDUCT_WALLET` (debit from wallet) or `UPDATE_COD` (increase COD amount to collect from customer)
+19. **Case-sensitive filenames in git**: Always match filename case exactly with import paths — macOS hides mismatches but Linux production builds fail
 
 ## Current Blockers
 
@@ -147,6 +148,14 @@ The primary focus is implementing a robust security layer and role-based access 
   - **Partner pincode page contract cleanup**: `getPartnerPincodes` frontend query now unwraps the standard `{ status, data, meta }` envelope correctly, matching the backend response shape
   - **Verification**: `builtin cd frontend && pnpm run build` passed and the local frontend container was restarted after the build
   - **Known note**: `pnpm run type-check` still fails on unrelated pre-existing frontend TypeScript issues, so it was not used as the acceptance gate for this bug fix
+
+- ✅ **Assign Partner / Shipment quotes — BACKEND + FRONTEND**
+  - **Root cause (empty quotes with valid assignment)**: Zone coverage only honored `zone_pincodes` rows; partners using **DISTANCE** zones + milestones without per-pincode zone rows failed coverage → no rates. **Fix**: `zoneCoverageValidationService` treats pincode as covered when an active DISTANCE zone has milestones (geo match still preferred).
+  - **Root cause (sticky empties)**: Redis cached `serviceable: false` for an hour and shipment-service cached **empty** `rates` for 5 minutes — blocked recovery after config fixes. **Fix**: cache only **true** serviceability (`serviceable:v2`); on rate cache **read**, drop entries with `rates.length === 0`; on **write**, do not cache empty rate lists.
+  - **`getShipmentQuotes`**: Removed redundant second serviceability pass; **`calculateRates`** is the single filter for quote rows.
+  - **`quoteCalculationService`**: Still runs non-distance charge rules when distance zone does not match; rejects only when distance is required and unmatched **and** no priced breakdown (see code).
+  - **Frontend** (`shipments/[id]/page.tsx`): Coerces numeric fields sent to `POST /shipments/quotes` (`declaredValue`, `codAmount`, weight/dims) so Joi does not fail on string/Decimal shapes; Assign Partner dialog shows validation errors via `parseRTKError` / `formatValidationErrors`, with distinct copy for empty quotes vs load failure.
+  - **Verification**: `POST /api/v1/shipments/quotes` through API Gateway (`:3001`) with a fresh JWT after **restarting partner-service and shipment-service**.
 
 ### March 28, 2026
 

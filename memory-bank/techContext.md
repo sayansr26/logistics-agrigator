@@ -1,6 +1,6 @@
 # Tech Context - Logistics Aggregator Portal
 
-> Technologies, tools, and development setup | Last Updated: February 14, 2026
+> Technologies, tools, and development setup | Last Updated: April 8, 2026
 
 ## Technology Stack
 
@@ -382,6 +382,7 @@ docker exec -it logistics-redis redis-cli
 11. **Semantic Type Normalization**: PincodeType/ChargesType names are canonicalized via `typeNameNormalizer.js` — `COD`/`cod`/`Cod` → `COD`, `FRGILE` → `FRAGILE`. Applied at write (duplicate detection) and runtime (charge matching)
 12. **Case-Sensitive Filenames**: Git tracks filenames case-sensitively even on macOS. Always verify import paths match exact filename case — mismatches break Linux production builds
 13. **Joi stripUnknown**: Partner service validation uses `stripUnknown: true` — any field not explicitly in the Joi schema is silently removed from `req.body`. New fields (e.g., `skipServiceabilityCheck`) MUST be added to the schema
+14. **Quote-related Redis (April 2026)**: Partner-service zone serviceability cache uses a `v2` key prefix and caches **only** positive results. Shipment-service partner rate cache must **not** store empty `rates` arrays; if an empty payload is read from cache, invalidate and refetch
 
 ## Frontend Patterns (Updated January 2026)
 
