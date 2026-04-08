@@ -47,27 +47,6 @@ export interface PincodesListResponse {
   };
 }
 
-export interface SearchPincodeResult {
-  id: string;
-  code: string;
-}
-
-export interface PincodesSearchResponse {
-  status: string;
-  data: {
-    pincodes: SearchPincodeResult[];
-    pagination?: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    };
-  };
-  meta?: {
-    timestamp: string;
-  };
-}
-
 export interface ImportResult {
   partnerId: string;
   partnerName: string;
@@ -110,10 +89,12 @@ export const partnerPincodesApi = baseApi.injectEndpoints({
         url: `/api/v1/partners/${partnerId}/pincodes`,
         params,
       }),
+      transformResponse: (response: any): PincodesListResponse =>
+        response?.data || response,
       providesTags: (result) => [
-        { type: "PartnerPincode", id: "LIST" },
+        { type: "PartnerPincode" as const, id: "LIST" },
         ...(result?.pincodes || []).map((p) => ({
-          type: "PartnerPincode",
+          type: "PartnerPincode" as const,
           id: p.id,
         })),
       ],
@@ -180,44 +161,6 @@ export const partnerPincodesApi = baseApi.injectEndpoints({
       ],
     }),
 
-    // Search pincodes for autocomplete
-    searchPincodes: builder.query<
-      PincodesSearchResponse,
-      { q: string; limit?: number }
-    >({
-      query: ({ q, limit = 10 }) => ({
-        // Canonical endpoint: public geography pincode search
-        url: "/api/v1/geography/pincodes/search",
-        params: { q, limit },
-      }),
-      transformResponse: (response: any): PincodesSearchResponse => {
-        // Handle both envelope ({status,data,meta}) and unwrapped ({pincodes,pagination}) payloads
-        const payload =
-          response?.data && Array.isArray(response?.data?.pincodes)
-            ? response.data
-            : response;
-
-        const rawPincodes = Array.isArray(payload?.pincodes)
-          ? payload.pincodes
-          : [];
-
-        return {
-          status: response?.status || "success",
-          data: {
-            // Keep only fields needed by assign dialog to avoid shape drift issues
-            pincodes: rawPincodes
-              .filter((p: any) => p?.id && p?.code)
-              .map((p: any) => ({
-                id: p.id,
-                code: p.code,
-              })),
-            pagination: payload?.pagination,
-          },
-          meta: response?.meta,
-        };
-      },
-    }),
-
     // Import pincodes from Excel
     importPartnerPincodes: builder.mutation<
       ImportResult,
@@ -272,8 +215,6 @@ export const {
   useAssignPartnerPincodeMutation,
   useUpdatePartnerPincodeMutation,
   useDeletePartnerPincodeMutation,
-  useSearchPincodesQuery,
-  useLazySearchPincodesQuery,
   useImportPartnerPincodesMutation,
   useExportPartnerPincodesQuery,
   useLazyExportPartnerPincodesQuery,

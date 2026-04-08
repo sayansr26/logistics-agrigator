@@ -634,6 +634,7 @@ export const {
   useGetPincodesQuery,
   useGetPincodeDetailsQuery,
   useSearchPincodesQuery,
+  useLazySearchPincodesQuery,
   useSearchGeoMutation,
   useGetGeoHierarchyQuery,
   useToggleStateStatusMutation,

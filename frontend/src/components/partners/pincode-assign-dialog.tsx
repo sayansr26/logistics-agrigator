@@ -26,10 +26,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // RTK Query
-import {
-  useAssignPartnerPincodeMutation,
-  useLazySearchPincodesQuery,
-} from "@/store/api/endpoints/partnerPincodesApi";
+import { useAssignPartnerPincodeMutation } from "@/store/api/endpoints/partnerPincodesApi";
+import { useLazySearchPincodesQuery as useLazyGeoSearchPincodesQuery } from "@/store/api/endpoints/geoApi";
 
 interface PincodeType {
   id: string;
@@ -51,6 +49,20 @@ interface SearchResult {
   code: string;
 }
 
+function normalizeSearchResults(results: unknown): SearchResult[] {
+  if (!Array.isArray(results)) return [];
+
+  return results
+    .filter(
+      (result): result is { id: string; code: string } =>
+        typeof result?.id === "string" && typeof result?.code === "string",
+    )
+    .map((result) => ({
+      id: result.id,
+      code: result.code,
+    }));
+}
+
 export function PincodeAssignDialog({
   open,
   onOpenChange,
@@ -65,10 +77,11 @@ export function PincodeAssignDialog({
   const [typeValues, setTypeValues] = useState<Record<string, string>>({});
   const [showResults, setShowResults] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
 
   // Search pincodes
   const [triggerSearch, { data: searchResultsData, isFetching: isSearching }] =
-    useLazySearchPincodesQuery();
+    useLazyGeoSearchPincodesQuery();
 
   // Assign pincode mutation
   const [assignPincode, { isLoading: isAssigning }] =
@@ -88,13 +101,15 @@ export function PincodeAssignDialog({
 
       // Hide results if less than 4 characters
       if (value.length < 4) {
+        setActiveSearchQuery("");
         setShowResults(false);
         return;
       }
 
       // Set debounce timer (500ms)
       debounceTimerRef.current = setTimeout(() => {
-        triggerSearch({ q: value, limit: 10 });
+        setActiveSearchQuery(value);
+        triggerSearch({ code: value });
         setShowResults(true);
       }, 500);
     },
@@ -110,7 +125,10 @@ export function PincodeAssignDialog({
     };
   }, []);
 
-  const searchResults = searchResultsData?.data?.pincodes || [];
+  const searchResults =
+    activeSearchQuery === searchQuery
+      ? normalizeSearchResults(searchResultsData?.data)
+      : [];
 
   // Handle pincode selection
   const handleSelectPincode = (pincode: SearchResult) => {
@@ -123,6 +141,9 @@ export function PincodeAssignDialog({
   // Clear selection
   const handleClearSelection = () => {
     setSelectedPincode(null);
+    setSearchQuery("");
+    setActiveSearchQuery("");
+    setShowResults(false);
     setTypeValues({});
     setSubmitError(null);
   };
@@ -233,11 +254,14 @@ export function PincodeAssignDialog({
                 </div>
               )}
 
-              {showResults && !isSearching && searchResults.length === 0 && (
-                <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
-                  No pincodes found matching "{searchQuery}"
-                </div>
-              )}
+              {showResults &&
+                !isSearching &&
+                activeSearchQuery === searchQuery &&
+                searchResults.length === 0 && (
+                  <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
+                    No pincodes found matching "{searchQuery}"
+                  </div>
+                )}
             </div>
 
             {/* Selected Pincode Info */}

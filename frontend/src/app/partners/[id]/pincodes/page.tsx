@@ -166,7 +166,7 @@ export default function PartnerPincodesPage() {
   // Loading state
   if (isLoading) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
@@ -180,7 +180,7 @@ export default function PartnerPincodesPage() {
   // Error state
   if (error) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-96">
             <XCircle className="h-16 w-16 text-red-500 mb-4" />
@@ -188,7 +188,7 @@ export default function PartnerPincodesPage() {
               Failed to Load Pincodes
             </h3>
             <p className="text-muted-foreground mb-4">
-              {error?.data?.error?.message ||
+              {("data" in error && (error.data as any)?.error?.message) ||
                 "An error occurred while loading pincodes"}
             </p>
             <Button onClick={() => refetch()} variant="outline">
@@ -201,15 +201,13 @@ export default function PartnerPincodesPage() {
     );
   }
 
-  const pincodes = pincodesData?.data?.pincodes || [];
-  const pincodeTypes = pincodesData?.data?.pincodeTypes || [];
-  const pagination = pincodesData?.data?.pagination;
-  const totalPincodes = pagination?.data?.pagination?.total || 0;
-
-  console.log(pincodesData.data);
+  const pincodes = pincodesData?.pincodes || [];
+  const pincodeTypes = pincodesData?.pincodeTypes || [];
+  const pagination = pincodesData?.pagination;
+  const totalPincodes = pagination?.total || 0;
 
   return (
-    <DashboardLayout breadcrumbs={customBreadcrumbs}>
+    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="space-y-4">
         {/* Page Header */}
         <div className="flex justify-between items-center">
