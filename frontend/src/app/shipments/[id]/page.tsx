@@ -455,6 +455,15 @@ export default function ShipmentDetailPage() {
 
   const canRetryBooking =
     !shipment.awbNumber && shipment.bookingStatus === "PENDING_BOOKING";
+  const enabledProviderActions = availableActions.filter((a) => a.enabled);
+  const hasEnabledProviderCancel = enabledProviderActions.some(
+    (action) => action.action === "cancel",
+  );
+  const canCancelInternally = ["CREATED", "BOOKED", "PICKED_UP"].includes(
+    shipment.status,
+  );
+  const showInternalCancelAction =
+    canCancelInternally && !hasEnabledProviderCancel;
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -995,160 +1004,186 @@ export default function ShipmentDetailPage() {
                     </Button>
                   )}
 
-                {availableActions
-                  .filter((a) => a.enabled)
-                  .map((action) => {
-                    if (action.action === "refresh") {
-                      return (
+                {enabledProviderActions.map((action) => {
+                  if (action.action === "refresh") {
+                    return (
+                      <Button
+                        key={action.action}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start h-auto py-3 px-4"
+                        onClick={handleRefreshFromProvider}
+                        disabled={refreshing}
+                      >
+                        {refreshing ? (
+                          <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 mr-3" />
+                        )}
+                        <div className="text-left">
+                          <div className="font-medium">
+                            Refresh from Provider
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {action.description}
+                          </div>
+                        </div>
+                      </Button>
+                    );
+                  }
+
+                  if (action.action === "track" && shipment.trackingUrl) {
+                    return (
+                      <a
+                        key={action.action}
+                        href={shipment.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full block"
+                      >
                         <Button
-                          key={action.action}
                           variant="outline"
                           size="sm"
                           className="w-full justify-start h-auto py-3 px-4"
-                          onClick={handleRefreshFromProvider}
-                          disabled={refreshing}
                         >
-                          {refreshing ? (
-                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4 mr-3" />
-                          )}
+                          <ExternalLink className="h-4 w-4 mr-3" />
                           <div className="text-left">
-                            <div className="font-medium">
-                              Refresh from Provider
-                            </div>
+                            <div className="font-medium">Track Shipment</div>
                             <div className="text-xs text-muted-foreground">
                               {action.description}
                             </div>
                           </div>
                         </Button>
-                      );
-                    }
+                      </a>
+                    );
+                  }
 
-                    if (action.action === "track" && shipment.trackingUrl) {
-                      return (
-                        <a
-                          key={action.action}
-                          href={shipment.trackingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full block"
-                        >
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full justify-start h-auto py-3 px-4"
-                          >
-                            <ExternalLink className="h-4 w-4 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Track Shipment</div>
-                              <div className="text-xs text-muted-foreground">
-                                {action.description}
-                              </div>
-                            </div>
-                          </Button>
-                        </a>
-                      );
-                    }
-
-                    if (action.action === "label") {
-                      return (
-                        <Button
-                          key={action.action}
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start h-auto py-3 px-4"
-                          onClick={handleFetchCourierLabel}
-                          disabled={fetchingLabel}
-                        >
-                          {fetchingLabel ? (
-                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4 mr-3" />
-                          )}
-                          <div className="text-left">
-                            <div className="font-medium">
-                              Download Courier Label
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {action.description}
-                            </div>
+                  if (action.action === "label") {
+                    return (
+                      <Button
+                        key={action.action}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start h-auto py-3 px-4"
+                        onClick={handleFetchCourierLabel}
+                        disabled={fetchingLabel}
+                      >
+                        {fetchingLabel ? (
+                          <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-3" />
+                        )}
+                        <div className="text-left">
+                          <div className="font-medium">
+                            Download Courier Label
                           </div>
-                        </Button>
-                      );
-                    }
-
-                    if (action.action === "cancel") {
-                      return (
-                        <Button
-                          key={action.action}
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
-                          onClick={handleCancelWithProvider}
-                          disabled={
-                            cancellingProvider ||
-                            shipment.status === "CANCELLED" ||
-                            shipment.status === "DELIVERED"
-                          }
-                        >
-                          {cancellingProvider ? (
-                            <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                          ) : (
-                            <XCircle className="h-4 w-4 mr-3" />
-                          )}
-                          <div className="text-left">
-                            <div className="font-medium">Cancel Shipment</div>
-                            <div className="text-xs text-muted-foreground">
-                              {action.description}
-                            </div>
+                          <div className="text-xs text-muted-foreground">
+                            {action.description}
                           </div>
-                        </Button>
-                      );
-                    }
+                        </div>
+                      </Button>
+                    );
+                  }
 
-                    if (action.action === "edit") {
-                      return (
-                        <Button
-                          key={action.action}
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start h-auto py-3 px-4"
-                          onClick={() => router.push(`/shipments/${id}/edit`)}
-                        >
-                          <FileText className="h-4 w-4 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Edit Shipment</div>
-                            <div className="text-xs text-muted-foreground">
-                              {action.description}
-                            </div>
+                  if (action.action === "cancel") {
+                    return (
+                      <Button
+                        key={action.action}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
+                        onClick={handleCancelWithProvider}
+                        disabled={
+                          cancellingProvider ||
+                          shipment.status === "CANCELLED" ||
+                          shipment.status === "DELIVERED"
+                        }
+                      >
+                        {cancellingProvider ? (
+                          <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                        ) : (
+                          <XCircle className="h-4 w-4 mr-3" />
+                        )}
+                        <div className="text-left">
+                          <div className="font-medium">Cancel Shipment</div>
+                          <div className="text-xs text-muted-foreground">
+                            {action.description}
                           </div>
-                        </Button>
-                      );
-                    }
+                        </div>
+                      </Button>
+                    );
+                  }
 
-                    if (action.action === "pickup") {
-                      return (
-                        <Button
-                          key={action.action}
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start h-auto py-3 px-4"
-                          disabled
-                        >
-                          <Truck className="h-4 w-4 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Request Pickup</div>
-                            <div className="text-xs text-muted-foreground">
-                              {action.description}
-                            </div>
+                  if (action.action === "edit") {
+                    return (
+                      <Button
+                        key={action.action}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start h-auto py-3 px-4"
+                        onClick={() => router.push(`/shipments/${id}/edit`)}
+                      >
+                        <FileText className="h-4 w-4 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">Edit Shipment</div>
+                          <div className="text-xs text-muted-foreground">
+                            {action.description}
                           </div>
-                        </Button>
-                      );
-                    }
+                        </div>
+                      </Button>
+                    );
+                  }
 
-                    return null;
-                  })}
+                  if (action.action === "pickup") {
+                    return (
+                      <Button
+                        key={action.action}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start h-auto py-3 px-4"
+                        disabled
+                      >
+                        <Truck className="h-4 w-4 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">Request Pickup</div>
+                          <div className="text-xs text-muted-foreground">
+                            {action.description}
+                          </div>
+                        </div>
+                      </Button>
+                    );
+                  }
+
+                  return null;
+                })}
+
+                {showInternalCancelAction && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
+                    onClick={handleCancel}
+                    disabled={
+                      cancelling ||
+                      shipment.status === "CANCELLED" ||
+                      shipment.status === "DELIVERED"
+                    }
+                  >
+                    {cancelling ? (
+                      <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+                    ) : (
+                      <XCircle className="h-4 w-4 mr-3" />
+                    )}
+                    <div className="text-left">
+                      <div className="font-medium">Cancel Shipment</div>
+                      <div className="text-xs text-muted-foreground">
+                        {canRetryBooking
+                          ? "Cancel this pending booking and request refund"
+                          : "Cancel internally and request refund"}
+                      </div>
+                    </div>
+                  </Button>
+                )}
 
                 {/* Fallback actions when no provider capabilities loaded */}
                 {availableActions.length === 0 && !canRetryBooking && (
@@ -1191,29 +1226,6 @@ export default function ShipmentDetailPage() {
                         <div className="font-medium">Download Label</div>
                         <div className="text-xs text-muted-foreground">
                           PDF format
-                        </div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start h-auto py-3 px-4 text-red-600 hover:text-red-700"
-                      onClick={handleCancel}
-                      disabled={
-                        cancelling ||
-                        shipment.status === "CANCELLED" ||
-                        shipment.status === "DELIVERED"
-                      }
-                    >
-                      {cancelling ? (
-                        <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-                      ) : (
-                        <XCircle className="h-4 w-4 mr-3" />
-                      )}
-                      <div className="text-left">
-                        <div className="font-medium">Cancel Shipment</div>
-                        <div className="text-xs text-muted-foreground">
-                          Cancel and request refund
                         </div>
                       </div>
                     </Button>
