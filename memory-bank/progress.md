@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: March 28, 2026
+> Development status and changelog | Last Updated: April 8, 2026
 
 ## Overall Project Status
 
@@ -247,6 +247,14 @@ Overall Project Progress          [███████████████
 
 #### Completed Features (continued - March 2026)
 
+- ✅ **Partner Pincode Autocomplete Stabilization (April 8, 2026)**
+  - Removed duplicate RTK Query endpoint registration for `searchPincodes` from `partnerPincodesApi.ts`
+  - Partner pincode assign dialog now uses the canonical geography lazy search hook from `geoApi.ts`
+  - Added deterministic dialog behavior for stale-result prevention, close/reset handling, and latest-query-only empty state rendering
+  - Normalized `getPartnerPincodes` frontend response handling to unwrap the backend envelope correctly
+  - `builtin cd frontend && pnpm run build` passed successfully
+  - Restarted local frontend container after the successful build to load the new bundle
+
 - ✅ **Shipment Creation Wizard** (March 2026)
   - ✅ Multi-step form: Docket → Dimensions → Delivery → Invoice → Review & Book
   - ✅ B2B/B2C conditional rendering (single box vs multi-box + invoices)
@@ -337,6 +345,14 @@ Overall Project Progress          [███████████████
 ## Current Status
 
 ### This Week's Progress
+
+- ✅ **Partner Pincode Autocomplete Production Bug Fix (April 8, 2026)**
+  - Fixed frontend-only issue where `/api/v1/geography/pincodes/search` returned valid results in production but the partner assign dialog still showed "No pincodes found"
+  - Root cause was RTK Query endpoint-name collision: both `geoApi.ts` and `partnerPincodesApi.ts` injected `searchPincodes` into the shared `baseApi`, making runtime behavior bundle/load-order dependent
+  - Consolidated search usage onto the canonical geography endpoint and removed the duplicate partner-specific autocomplete wrapper
+  - Hardened dialog state management to prevent stale results from previous searches from masking newer valid results
+  - Kept scope limited to frontend source and response-shape cleanup around the touched partner pincode page
+  - Acceptance gate used: frontend production build and container restart; TypeScript type-check remains red due to unrelated existing errors
 
 - ✅ **End-to-End Shipment Creation Flow (March 17, 2026)**
   - Complete multi-step shipment creation wizard (Docket → Dimensions → Delivery → Invoice → Review)

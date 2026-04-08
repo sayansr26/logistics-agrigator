@@ -1,6 +1,6 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: March 28, 2026
+> Current work focus and priorities | Last Updated: April 8, 2026
 
 ## Current Sprint Focus
 
@@ -137,6 +137,16 @@ The primary focus is implementing a robust security layer and role-based access 
 1. **None currently identified**
 
 ## Recent Changes
+
+### April 8, 2026
+
+- ✅ **Partner Pincode Autocomplete Stabilization — FRONTEND FIX**
+  - **Root cause fixed**: Removed duplicate RTK Query endpoint injection for `searchPincodes` from `partnerPincodesApi.ts`; the canonical geography search endpoint now exists only once in `geoApi.ts`
+  - **Partner assign dialog hardened**: `partners/[id]/pincodes` now uses the canonical lazy geography search hook and normalizes results locally to `{ id, code }`
+  - **Deterministic search state**: Dialog clears stale search state when query length drops below 4, resets state on close, and only renders results and empty-state messaging for the active query
+  - **Partner pincode page contract cleanup**: `getPartnerPincodes` frontend query now unwraps the standard `{ status, data, meta }` envelope correctly, matching the backend response shape
+  - **Verification**: `builtin cd frontend && pnpm run build` passed and the local frontend container was restarted after the build
+  - **Known note**: `pnpm run type-check` still fails on unrelated pre-existing frontend TypeScript issues, so it was not used as the acceptance gate for this bug fix
 
 ### March 28, 2026
 
