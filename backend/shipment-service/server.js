@@ -228,7 +228,10 @@ app.get("/health", async (req, res) => {
   try {
     const axios = require("axios");
     const partnerStart = Date.now();
-    const partnerResponse = await axios.get("http://localhost:3005/health", {
+    const partnerServiceBaseURL =
+      process.env.PARTNER_SERVICE_URL || "http://localhost:3005";
+    const partnerHealthURL = `${partnerServiceBaseURL.replace(/\/$/, "")}/health`;
+    const partnerResponse = await axios.get(partnerHealthURL, {
       timeout: 5000,
     });
     const partnerTime = Date.now() - partnerStart;
