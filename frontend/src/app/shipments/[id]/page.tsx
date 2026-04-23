@@ -259,12 +259,24 @@ export default function ShipmentDetailPage() {
       await getShipmentQuotes({
         fromPincode: shipment.pickupPincode || "",
         toPincode: shipment.deliveryPincode || "",
-        weight: quoteCoercedNumber(shipment.weight, 0),
+        weight: quoteCoercedNumber(
+          shipment.disputedWeight ?? shipment.weight,
+          0,
+        ),
         numberOfBoxes: quoteCoercedNumber(shipment.numberOfBoxes, 1),
         dimensions: {
-          length: quoteCoercedNumber(shipment.length, 0),
-          width: quoteCoercedNumber(shipment.width, 0),
-          height: quoteCoercedNumber(shipment.height, 0),
+          length: quoteCoercedNumber(
+            shipment.disputedLength ?? shipment.length,
+            0,
+          ),
+          width: quoteCoercedNumber(
+            shipment.disputedWidth ?? shipment.width,
+            0,
+          ),
+          height: quoteCoercedNumber(
+            shipment.disputedHeight ?? shipment.height,
+            0,
+          ),
         },
         serviceType:
           (shipment.serviceType as "STANDARD" | "EXPRESS" | "ECONOMY") ||
