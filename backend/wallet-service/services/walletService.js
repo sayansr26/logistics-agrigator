@@ -290,6 +290,8 @@ async function debitWallet(userId, amount, reference, description = null) {
     const redis = getRedisClient();
     await redis.del(`wallet:${userId}`);
     await redis.del(`wallet_transactions:${userId}:*`);
+    await redis.del(`balance:${userId}`);
+    await redis.del(`wallet:${userId}:LOGISTICS`);
 
     logger.info("Wallet debited successfully", {
       userId,
@@ -393,6 +395,8 @@ async function creditWallet(userId, amount, reference, description = null) {
     const redis = getRedisClient();
     await redis.del(`wallet:${userId}`);
     await redis.del(`wallet_transactions:${userId}:*`);
+    await redis.del(`balance:${userId}`);
+    await redis.del(`wallet:${userId}:LOGISTICS`);
 
     logger.info("Wallet credited successfully", {
       userId,
@@ -484,6 +488,8 @@ async function loadBalance(
     const redis = getRedisClient();
     await redis.del(`wallet:${userId}`);
     await redis.del(`wallet_transactions:${userId}:*`);
+    await redis.del(`balance:${userId}`);
+    await redis.del(`wallet:${userId}:LOGISTICS`);
 
     logger.info("Balance loaded successfully", {
       userId,
