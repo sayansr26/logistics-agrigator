@@ -440,6 +440,7 @@ export default function ManageChannelsPage() {
     data: channelsData,
     isLoading: isLoadingChannels,
     error: channelsError,
+    refetch,
   } = useListPartnerChannelsQuery(partnerId, { skip: !partnerId });
 
   const [createChannels, { isLoading: isCreating }] =

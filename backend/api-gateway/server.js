@@ -990,6 +990,8 @@ app.use(
     "/api/v1/partners/:partnerId/channels",
     "/api/v1/partners/:partnerId/channel-mode",
     "/api/v1/channels",
+    "/api/v1/partners/:partnerId/carrier-accounts",
+    "/api/v1/carrier-accounts",
   ],
   createProxyMiddleware({
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",

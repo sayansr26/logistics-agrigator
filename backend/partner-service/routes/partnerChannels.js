@@ -29,8 +29,10 @@ router.use(authMiddleware.authenticate);
 // Authorization: Admin + Operations roles only
 router.use(authMiddleware.requireRole(["superadmin", "admin", "operations"]));
 
-// Apply rate limiting
-router.use(partnerManagementLimiter);
+// NOTE: partnerManagementLimiter (max 20 / 15min) is applied ONLY to the
+// mutation routes below — NOT router-wide — so channel GET/list reads (which
+// happen on every partner-detail page load) are not throttled by the strict
+// write limiter and don't trip "Too many partner management operations".
 
 // ==========================================
 // CHANNEL RETRIEVAL ROUTES
@@ -77,6 +79,7 @@ router.get(
  */
 router.post(
   "/partners/:partnerId/channels",
+  partnerManagementLimiter,
   validate(createChannelSchema, "body"),
   partnerChannelController.createChannels,
 );
@@ -89,6 +92,7 @@ router.post(
  */
 router.put(
   "/channels/:channelId",
+  partnerManagementLimiter,
   validate(updateChannelSchema, "body"),
   partnerChannelController.updateChannel,
 );
@@ -98,6 +102,10 @@ router.put(
  * @desc    Delete a channel
  * @access  Private (Admin, Operations)
  */
-router.delete("/channels/:channelId", partnerChannelController.deleteChannel);
+router.delete(
+  "/channels/:channelId",
+  partnerManagementLimiter,
+  partnerChannelController.deleteChannel,
+);
 
 module.exports = router;

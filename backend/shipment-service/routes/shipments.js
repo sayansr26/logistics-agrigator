@@ -30,6 +30,8 @@ const {
   checkServiceability,
   getShipmentQuotes,
   rerateShipment,
+  rerateShipmentPreview,
+  bulkRerateShipments,
   // New SHIP-004 endpoints
   trackByAwbNumber,
   recordDeliveryConfirmation,
@@ -64,6 +66,8 @@ const {
   serviceabilitySchema,
   shipmentQuoteSchema,
   rerateShipmentSchema,
+  rerateShipmentPreviewSchema,
+  bulkRerateSchema,
   // Phase 3: Lifecycle validation schemas
   refreshFromProviderSchema,
   fetchCourierLabelSchema,
@@ -997,6 +1001,46 @@ router.post(
   authMiddleware.requirePermission("shipment", "create", "own"),
   validate(shipmentQuoteSchema),
   getShipmentQuotes,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/rerate:
+ *   post:
+ *     tags: [Shipment Operations]
+ *     summary: Bulk re-rate shipments by AWB with new weight/dimensions/courier charge
+ *     security:
+ *       - bearerAuth: []
+ */
+// NOTE: must be registered BEFORE "/:id/rerate" — otherwise "/bulk/rerate"
+// is captured by the ":id" pattern (id="bulk").
+router.post(
+  "/bulk/rerate",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "all"),
+  validate(bulkRerateSchema),
+  bulkRerateShipments,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/{id}/rerate/preview:
+ *   post:
+ *     tags: [Shipment Operations]
+ *     summary: Preview a re-rate (dry-run) — no wallet mutation or DB write
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/:id/rerate/preview",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "update", "all"),
+  validate(rerateShipmentPreviewSchema),
+  rerateShipmentPreview,
 );
 
 /**

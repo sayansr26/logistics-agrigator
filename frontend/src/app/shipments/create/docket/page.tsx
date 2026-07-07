@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { sanitizeIndianPhone } from "@/lib/utils/phone";
+import { usePincodeAutoFill } from "@/hooks/usePincodeAutoFill";
 import { useRouter } from "next/navigation";
 import { CreateShipmentLayout } from "@/components/shipments/create/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +47,22 @@ export default function ShipmentDetailsPage() {
   const isAdminLike = isSystemAdmin();
 
   const store = useShipmentFormStore();
+
+  const onPincodeFill = useCallback(
+    (patch: Partial<{ city: string; state: string; area: string }>) => {
+      if (patch.city !== undefined) store.setField("city", patch.city);
+      if (patch.state !== undefined) store.setField("state", patch.state);
+      if (patch.area !== undefined) store.setField("area", patch.area);
+    },
+    // store.setField is stable from zustand
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const { isFetching: pinLoading, notFound: pinNotFound } = usePincodeAutoFill({
+    pincode: store.pincode,
+    current: { city: store.city, state: store.state, area: store.area },
+    onFill: onPincodeFill,
+  });
 
   // Outlets (admin/superadmin only)
   const {
@@ -518,27 +536,44 @@ export default function ShipmentDetailsPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label>Phone Number*</Label>
-                  <Input
-                    placeholder="9918380916"
-                    value={store.phoneNumber}
-                    onChange={(e) =>
-                      store.setField("phoneNumber", e.target.value)
-                    }
-                    className={
-                      store.errors.phoneNumber ? "border-destructive" : ""
-                    }
-                  />
+                  <div className="flex">
+                    <span className="inline-flex items-center px-2 rounded-l-md border border-r-0 border-input bg-muted text-xs text-muted-foreground">
+                      +91
+                    </span>
+                    <Input
+                      placeholder="9918380916"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={store.phoneNumber}
+                      onChange={(e) =>
+                        store.setField(
+                          "phoneNumber",
+                          sanitizeIndianPhone(e.target.value),
+                        )
+                      }
+                      className={`rounded-l-none ${store.errors.phoneNumber ? "border-destructive" : ""}`}
+                    />
+                  </div>
                   <FormError message={store.errors.phoneNumber} />
                 </div>
                 <div className="space-y-1">
                   <Label>Alternate Phone No</Label>
                   <Input
                     placeholder="Alternate Phone"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={store.alternatePhone}
                     onChange={(e) =>
-                      store.setField("alternatePhone", e.target.value)
+                      store.setField(
+                        "alternatePhone",
+                        sanitizeIndianPhone(e.target.value),
+                      )
+                    }
+                    className={
+                      store.errors.alternatePhone ? "border-destructive" : ""
                     }
                   />
+                  <FormError message={store.errors.alternatePhone} />
                 </div>
                 <div className="space-y-1">
                   <Label>Email</Label>
@@ -590,14 +625,31 @@ export default function ShipmentDetailsPage() {
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label>Pincode*</Label>
-                  <Input
-                    placeholder="110001"
-                    maxLength={6}
-                    value={store.pincode}
-                    onChange={(e) => store.setField("pincode", e.target.value)}
-                    className={store.errors.pincode ? "border-destructive" : ""}
-                  />
-                  <FormError message={store.errors.pincode} />
+                  <div className="relative">
+                    <Input
+                      placeholder="110001"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={store.pincode}
+                      onChange={(e) =>
+                        store.setField(
+                          "pincode",
+                          e.target.value.replace(/\D+/g, "").slice(0, 6),
+                        )
+                      }
+                      className={store.errors.pincode ? "border-destructive" : ""}
+                    />
+                    {pinLoading && (
+                      <Loader2 className="h-4 w-4 absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  {pinNotFound ? (
+                    <p className="text-xs text-muted-foreground">
+                      Pincode not found
+                    </p>
+                  ) : (
+                    <FormError message={store.errors.pincode} />
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label>Area*</Label>

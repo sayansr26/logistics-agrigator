@@ -2,7 +2,7 @@
 # Context: Root of project (has access to workspace files)
 # Usage: docker build -f frontend/Dockerfile.prod .
 
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /app
 
 # Install pnpm

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,14 +38,20 @@ export function NDRList({ onViewNDR, onEditNDR, className }: NDRListProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const { ndrs, loading, error, pagination, refetch, updateFilters } = useNDRs({
-    status:
-      statusFilter === "all"
-        ? undefined
-        : (statusFilter as "pending" | "resolved" | "escalated"),
-    page: currentPage,
-    limit: 10,
-  });
+  const ndrFilters = useMemo(
+    () => ({
+      status:
+        statusFilter === "all"
+          ? undefined
+          : (statusFilter as "pending" | "resolved" | "escalated"),
+      page: currentPage,
+      limit: 10,
+    }),
+    [statusFilter, currentPage],
+  );
+
+  const { ndrs, loading, error, pagination, refetch, updateFilters } =
+    useNDRs(ndrFilters);
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);

@@ -13,9 +13,11 @@ const paymentProcessingService = require("../services/paymentProcessingService")
 const shipmentWalletService = require("../services/shipmentWalletService");
 const trackingService = require("../services/trackingService");
 const bulkProcessingService = require("../services/bulkProcessingService");
+const bulkRerateService = require("../services/bulkRerateService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
+const weightCalc = require("../shared/utils/weightCalc");
 const DEFAULT_VOLUMETRIC_DIVISOR = 5000;
 
 /**
@@ -2786,6 +2788,221 @@ async function getShipmentQuotes(req, res) {
  * Dispute re-rate: record courier-validated weight/dimensions, recalculate,
  * refund old amount, charge new amount, or put on hold if balance insufficient.
  */
+/**
+ * Preview a re-rate (dry-run): recompute volumetric/chargeable weight, selling
+ * charge, courier cost and profit margin for new weight/dimensions WITHOUT any
+ * wallet mutation or DB write. Lets the UI show before/after before committing.
+ */
+async function rerateShipmentPreview(req, res) {
+  try {
+    const { id } = req.params;
+    const {
+      disputedWeight,
+      disputedLength,
+      disputedWidth,
+      disputedHeight,
+      courierCharge,
+    } = req.body;
+
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        orderId: true,
+        outletId: true,
+        status: true,
+        partnerId: true,
+        totalCost: true,
+        courierCost: true,
+        codAmount: true,
+        weight: true,
+        length: true,
+        width: true,
+        height: true,
+        numberOfBoxes: true,
+        volumetricDivisor: true,
+        volumetricWeight: true,
+        chargeableWeight: true,
+        paymentType: true,
+        pickupPincode: true,
+        deliveryPincode: true,
+        serviceType: true,
+        value: true,
+        fragile: true,
+      },
+    });
+
+    if (!shipment) {
+      throw new NotFoundError("Shipment not found");
+    }
+
+    const oldCost = parseFloat(shipment.totalCost);
+    const newWeight = disputedWeight || parseFloat(shipment.weight);
+    const newLength = disputedLength || parseFloat(shipment.length);
+    const newWidth = disputedWidth || parseFloat(shipment.width);
+    const newHeight = disputedHeight || parseFloat(shipment.height);
+    const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
+    const numBoxes = shipment.numberOfBoxes || 1;
+
+    const newVolWeight = weightCalc.computeVolumetric({
+      boxes: numBoxes,
+      length: newLength,
+      width: newWidth,
+      height: newHeight,
+      divisor,
+    });
+    const newChargeableWeight = weightCalc.computeChargeable(
+      newWeight,
+      newVolWeight,
+    );
+
+    const authToken = req.header("Authorization");
+    let newCost = oldCost;
+    let rateCourierCost = null;
+    try {
+      const rateData = await partnerIntegrationService.calculateRates(
+        {
+          fromPincode: shipment.pickupPincode,
+          toPincode: shipment.deliveryPincode,
+          weight: newChargeableWeight,
+          serviceType: shipment.serviceType,
+          dimensions: { length: newLength, width: newWidth, height: newHeight },
+          paymentMode: shipment.paymentType,
+          codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : 0,
+          declaredValue: shipment.value ? parseFloat(shipment.value) : 0,
+          isFragile: shipment.fragile || false,
+          outletId: shipment.outletId || undefined,
+          partnerId: shipment.partnerId,
+          skipServiceabilityCheck: true,
+        },
+        authToken,
+      );
+      const partnerRate = (rateData.rates || []).find(
+        (r) => r.partnerId === shipment.partnerId,
+      );
+      if (partnerRate) {
+        newCost = partnerRate.totalAmount;
+        if (
+          partnerRate.courierCost !== undefined &&
+          partnerRate.courierCost !== null
+        ) {
+          rateCourierCost = parseFloat(partnerRate.courierCost);
+        }
+      }
+    } catch (rateError) {
+      logger.warn("Rate recalculation failed during re-rate preview", {
+        service: "shipment-service",
+        shipmentId: id,
+        error: rateError.message,
+      });
+    }
+
+    let newCourierCost = null;
+    let newCourierCostSource = null;
+    if (courierCharge !== undefined && courierCharge !== null) {
+      newCourierCost = parseFloat(courierCharge);
+      newCourierCostSource = "MANUAL";
+    } else if (rateCourierCost !== null) {
+      newCourierCost = rateCourierCost;
+      newCourierCostSource = "RULE";
+    }
+    const newProfitMargin = weightCalc.computeProfitMargin(
+      newCost,
+      newCourierCost,
+    );
+    const difference = weightCalc.round(newCost - oldCost, 2);
+
+    res.json(
+      APIResponse.success(
+        {
+          before: {
+            weight: parseFloat(shipment.weight),
+            volumetricWeight: shipment.volumetricWeight
+              ? parseFloat(shipment.volumetricWeight)
+              : null,
+            chargeableWeight: shipment.chargeableWeight
+              ? parseFloat(shipment.chargeableWeight)
+              : null,
+            sellingCharge: oldCost,
+            courierCost: shipment.courierCost
+              ? parseFloat(shipment.courierCost)
+              : null,
+          },
+          after: {
+            weight: newWeight,
+            volumetricWeight: newVolWeight,
+            chargeableWeight: newChargeableWeight,
+            sellingCharge: newCost,
+            courierCost: newCourierCost,
+            profitMargin: newProfitMargin,
+            courierCostSource: newCourierCostSource,
+          },
+          difference,
+          paymentType: shipment.paymentType,
+          expectedWalletImpact:
+            shipment.paymentType === "PREPAID"
+              ? { refund: oldCost, charge: newCost, net: difference }
+              : null,
+        },
+        "Re-rate preview computed",
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to preview re-rate", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+    if (error instanceof NotFoundError) {
+      return res.status(404).json(APIResponse.error(error.message));
+    }
+    res.status(500).json(APIResponse.error("Failed to preview re-rate"));
+  }
+}
+
+/**
+ * Bulk re-rate shipments by AWB. Body: { reason, rows: [{ awbNumber, newWeight,
+ * newLength, newWidth, newHeight, courierCharge, codAction }] }. Returns a
+ * processing report (successful + failed records).
+ */
+async function bulkRerateShipments(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const clientId = req.user.clientId;
+    const { reason, rows } = req.body;
+    const authToken = req.header("Authorization");
+    const walletAuthToken = req.headers.authorization?.replace("Bearer ", "");
+
+    logger.info("Bulk re-rate requested", {
+      service: "shipment-service",
+      rowCount: rows?.length,
+      userId,
+    });
+
+    const report = await bulkRerateService.processBulkRerate(rows, reason, {
+      userId,
+      clientId,
+      authToken,
+      walletAuthToken,
+      ip: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+
+    res.json(
+      APIResponse.success(
+        report,
+        `Bulk re-rate processed: ${report.successCount} succeeded, ${report.failureCount} failed`,
+      ),
+    );
+  } catch (error) {
+    logger.error("Failed to process bulk re-rate", {
+      service: "shipment-service",
+      error: error.message,
+    });
+    res.status(500).json(APIResponse.error("Failed to process bulk re-rate"));
+  }
+}
+
 async function rerateShipment(req, res) {
   try {
     const userId = req.user.userId || req.user.id;
@@ -2798,6 +3015,7 @@ async function rerateShipment(req, res) {
       disputedHeight,
       reason,
       codAction,
+      courierCharge, // optional manual courier cost (client: "Courier Charges (Manual or API)")
     } = req.body;
 
     const shipment = await prisma.shipment.findUnique({
@@ -2852,14 +3070,23 @@ async function rerateShipment(req, res) {
     const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
     const numBoxes = shipment.numberOfBoxes || 1;
 
-    const newVolWeight =
-      (numBoxes * newLength * newWidth * newHeight) / divisor;
-    const newChargeableWeight = Math.max(newWeight, newVolWeight);
+    const newVolWeight = weightCalc.computeVolumetric({
+      boxes: numBoxes,
+      length: newLength,
+      width: newWidth,
+      height: newHeight,
+      divisor,
+    });
+    const newChargeableWeight = weightCalc.computeChargeable(
+      newWeight,
+      newVolWeight,
+    );
 
     // Recalculate rates with partner service
     const authToken = req.header("Authorization");
     let newCost = oldCost;
     let newBreakdown = null;
+    let rateCourierCost = null; // courier cost emitted by rate engine (cost-side rules), if any
     try {
       const rateData = await partnerIntegrationService.calculateRates(
         {
@@ -2886,6 +3113,13 @@ async function rerateShipment(req, res) {
         newCost = partnerRate.totalAmount;
         newBreakdown =
           partnerRate.breakdown || partnerRate.chargesBreakdown || [];
+        // Courier cost (purchase amount) if the rate engine emits a cost side
+        if (
+          partnerRate.courierCost !== undefined &&
+          partnerRate.courierCost !== null
+        ) {
+          rateCourierCost = parseFloat(partnerRate.courierCost);
+        }
       }
     } catch (rateError) {
       logger.warn("Rate recalculation failed during re-rate, using old cost", {
@@ -2896,6 +3130,23 @@ async function rerateShipment(req, res) {
     }
 
     const difference = newCost - oldCost;
+
+    // Courier cost & profit margin. Selling charge = newCost (customer-facing).
+    // Courier cost precedence: manual courierCharge > rate-engine cost side > unknown(null).
+    let newCourierCost = null;
+    let newCourierCostSource = null;
+    if (courierCharge !== undefined && courierCharge !== null) {
+      newCourierCost = parseFloat(courierCharge);
+      newCourierCostSource = "MANUAL";
+    } else if (rateCourierCost !== null) {
+      newCourierCost = rateCourierCost;
+      newCourierCostSource = "RULE";
+    }
+    const newProfitMargin = weightCalc.computeProfitMargin(
+      newCost,
+      newCourierCost,
+    );
+
     const walletAuthToken = req.headers.authorization?.replace("Bearer ", "");
     const walletResolution =
       await shipmentWalletService.resolveShipmentWalletTarget(shipment);
@@ -3024,6 +3275,14 @@ async function rerateShipment(req, res) {
       chargeableWeight: newChargeableWeight,
       volumetricWeight: newVolWeight,
     };
+
+    // Persist courier cost / profit margin when a courier cost was captured
+    // and the new selling charge actually took effect (not on hold).
+    if (!holdApplied && newCourierCost !== null) {
+      updateData.courierCost = newCourierCost;
+      updateData.profitMargin = newProfitMargin;
+      updateData.courierCostSource = newCourierCostSource;
+    }
 
     if (newBreakdown && newBreakdown.length > 0) {
       const chargeBreakdown = newBreakdown.map((entry) => {
@@ -3176,6 +3435,10 @@ async function rerateShipment(req, res) {
             oldCost,
             newCost,
             difference,
+            sellingCharge: holdApplied ? oldCost : newCost,
+            courierCost: newCourierCost,
+            profitMargin: holdApplied ? null : newProfitMargin,
+            courierCostSource: newCourierCostSource,
             refundTransactionId: refundTxId,
             chargeTransactionId: chargeTxId,
             holdApplied,
@@ -4688,6 +4951,8 @@ module.exports = {
   checkServiceability,
   getShipmentQuotes,
   rerateShipment,
+  rerateShipmentPreview,
+  bulkRerateShipments,
   // SHIP-004 endpoints
   trackByAwbNumber,
   recordDeliveryConfirmation,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { partnersApiService } from "@/services";
 import { Partner, PartnerResponse } from "@/types/partner";
-import { useAuthStore } from "@/store/auth-store";
+import { useAppSelector } from "@/store/hooks";
 
 interface UsePartnerReturn {
   partner: Partner | null;
@@ -15,7 +15,9 @@ export function usePartner(partnerId: string): UsePartnerReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { accessToken, isAuthenticated } = useAuthStore();
+  const { token: accessToken, isAuthenticated } = useAppSelector(
+    (state) => state.auth,
+  );
 
   const fetchPartner = async () => {
     if (!isAuthenticated || !accessToken || !partnerId) {

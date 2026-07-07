@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toE164Indian } from "@/lib/utils/phone";
+import { useCalculatePincodeDistanceMutation } from "@/store/api/endpoints/geoApi";
+import { useGetMyWalletInfoQuery } from "@/store/api/endpoints/walletApi";
 import { CreateShipmentLayout } from "@/components/shipments/create/layout";
 import {
   Card,
@@ -39,6 +43,8 @@ import {
   Loader2,
   AlertCircle,
   ArrowRight,
+  Wallet,
+  Route,
 } from "lucide-react";
 
 type ReviewStage = "review" | "quotes" | "confirm";
@@ -77,6 +83,26 @@ export default function ReviewPage() {
 
   const selectedAddr = addresses.find((a) => a.id === store.pickupAddressId);
   const selectedRtoAddr = addresses.find((a) => a.id === store.rtoAddressId);
+
+  // Wallet (always fetch; cached by RTK)
+  const { data: walletInfo } = useGetMyWalletInfoQuery();
+  const wallet =
+    (walletInfo as any)?.data?.wallet || (walletInfo as any)?.wallet;
+  const walletBalance: number = Number(wallet?.balance ?? 0);
+
+  // Distance — fire when we have both pincodes
+  const [calcDistance, { data: distanceData, isLoading: distanceLoading }] =
+    useCalculatePincodeDistanceMutation();
+  const fromPin = selectedAddr?.pincode;
+  const toPin = store.pincode;
+  useEffect(() => {
+    if (fromPin && /^\d{6}$/.test(toPin || "") && fromPin !== toPin) {
+      void calcDistance({ fromPincode: fromPin, toPincode: toPin }).catch(
+        () => {},
+      );
+    }
+  }, [fromPin, toPin, calcDistance]);
+  const distanceKm = distanceData?.data?.distance;
 
   const quotes = quotesData?.data?.quotes || [];
   const recommended = quotesData?.data?.recommended || null;
@@ -126,15 +152,9 @@ export default function ReviewPage() {
     if (!selectedAddr) return;
     if (!store.rtoSameAsPickup && !selectedRtoAddr) return;
     try {
-      const normalizePhone = (phone?: string) => {
-        const raw = (phone || "").trim();
-        if (!raw) return raw;
-        return raw.startsWith("+91") ? raw : `+91${raw}`;
-      };
-
       const pickupAddress = {
         name: selectedAddr.name,
-        phone: normalizePhone(selectedAddr.phone),
+        phone: toE164Indian(selectedAddr.phone || ""),
         email: selectedAddr.email,
         addressLine1: selectedAddr.addressLine1,
         addressLine2: selectedAddr.addressLine2,
@@ -147,9 +167,10 @@ export default function ReviewPage() {
 
       const deliveryAddress = {
         name: store.receiverName,
-        phone: store.phoneNumber.startsWith("+91")
-          ? store.phoneNumber
-          : `+91${store.phoneNumber}`,
+        phone: toE164Indian(store.phoneNumber),
+        alternatePhone: store.alternatePhone
+          ? toE164Indian(store.alternatePhone)
+          : undefined,
         email: store.email,
         addressLine1: store.address,
         addressLine2: "",
@@ -165,7 +186,7 @@ export default function ReviewPage() {
           ? undefined
           : {
               name: selectedRtoAddr.name,
-              phone: normalizePhone(selectedRtoAddr.phone),
+              phone: toE164Indian(selectedRtoAddr.phone || ""),
               addressLine1: selectedRtoAddr.addressLine1,
               addressLine2: selectedRtoAddr.addressLine2,
               landmark: selectedRtoAddr.landmark,
@@ -353,6 +374,62 @@ export default function ReviewPage() {
                       </span>
                     </div>
                   ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Distance + Wallet strip */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="py-4 flex items-center gap-3">
+                  <Route className="h-5 w-5 text-blue-500" />
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      Approx. Distance
+                    </p>
+                    {distanceLoading ? (
+                      <p className="text-sm flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Calculating…
+                      </p>
+                    ) : distanceKm != null ? (
+                      <p className="text-lg font-semibold">
+                        {distanceKm.toLocaleString("en-IN", {
+                          maximumFractionDigits: 0,
+                        })}{" "}
+                        km
+                        <span className="text-xs text-muted-foreground font-normal ml-2">
+                          via road
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Select pickup & delivery pincodes
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-4 flex items-center gap-3">
+                  <Wallet className="h-5 w-5 text-emerald-500" />
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      Wallet Balance
+                    </p>
+                    <p className="text-lg font-semibold">
+                      ₹
+                      {walletBalance.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                  <Link
+                    href="/wallet"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Top up
+                  </Link>
                 </CardContent>
               </Card>
             </div>
@@ -619,7 +696,13 @@ export default function ReviewPage() {
         )}
 
         {/* Confirm & Book */}
-        {stage === "confirm" && selectedQuote && (
+        {stage === "confirm" && selectedQuote && (() => {
+          const isPrepaid = store.paymentType === "PREPAID";
+          const shortBy = isPrepaid
+            ? Math.max(0, selectedQuote.totalAmount - walletBalance)
+            : 0;
+          const insufficient = isPrepaid && shortBy > 0;
+          return (
           <div className="space-y-4">
             <Card>
               <CardHeader>
@@ -654,6 +737,60 @@ export default function ReviewPage() {
                   </div>
                 </div>
 
+                {/* Wallet status */}
+                <div
+                  className={`mt-4 rounded-lg p-3 text-sm flex items-center justify-between ${
+                    insufficient
+                      ? "bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800"
+                      : "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    <span>
+                      Wallet: ₹
+                      {walletBalance.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  {isPrepaid ? (
+                    insufficient ? (
+                      <span className="text-red-700 dark:text-red-300 font-medium">
+                        Short by ₹
+                        {shortBy.toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        {" · "}
+                        <Link href="/wallet" className="underline">
+                          Top up
+                        </Link>
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+                        Sufficient — ₹{selectedQuote.totalAmount.toFixed(2)}{" "}
+                        will be debited
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-muted-foreground">
+                      COD — no wallet debit
+                    </span>
+                  )}
+                </div>
+
+                {distanceKm != null && (
+                  <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                    <Route className="h-3 w-3" /> Approx distance:{" "}
+                    {distanceKm.toLocaleString("en-IN", {
+                      maximumFractionDigits: 0,
+                    })}{" "}
+                    km
+                  </div>
+                )}
+
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                   <Row label="Order/Ref" value={store.referenceNo} />
                   <Row
@@ -684,7 +821,7 @@ export default function ReviewPage() {
               </Button>
               <Button
                 onClick={() => void handleCreateShipment(selectedQuote)}
-                disabled={creating}
+                disabled={creating || insufficient}
                 className="bg-green-600 hover:bg-green-700 gap-2"
               >
                 {creating ? (
@@ -692,11 +829,12 @@ export default function ReviewPage() {
                 ) : (
                   <CheckCircle className="w-4 h-4" />
                 )}
-                Create & Book
+                {insufficient ? "Insufficient Balance" : "Create & Book"}
               </Button>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
     </CreateShipmentLayout>
   );

@@ -62,6 +62,7 @@ model Partner {
   rates               PartnerRate[]
   serviceabilityCache ServiceabilityCache[]
   channelConfigs      PartnerChannelConfig[]
+  serviceChannels     PartnerServiceChannel[]
   chargesTypes        ChargesType[]
   pincodeAssigns      PartnerPincodeAssign[]
   chargeRules         ChargeRule[]
@@ -102,6 +103,54 @@ model PartnerChannelConfig {
   @@index([partnerId, isPrimary])
   @@index([partnerId, aggregatorType])
   @@map("partner_channel_configs")
+
+  // Carrier service channels (weight-slab shipping products) that reuse this credential channel
+  serviceChannels PartnerServiceChannel[]
+}
+
+// ========================================
+// CARRIER SERVICE CHANNELS (weight-slab shipping products / accounts)
+// e.g. "Delhivery Surface A" (0-5kg → Account 1), "Delhivery Air" (all weight → Account 3)
+// Distinct from PartnerChannelConfig (env/credential channel): this is a shipping
+// PRODUCT keyed by weight slab + account type, selected at rating/booking time.
+// ========================================
+
+enum CarrierServiceType {
+  SURFACE
+  AIR
+  EXPRESS
+}
+
+model PartnerServiceChannel {
+  id        String  @id @default(uuid()) @db.Uuid
+  partnerId String  @map("partner_id") // CUID to match Partner.id
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Optional link to a credential channel to reuse its API key / warehouse config
+  channelConfigId String?               @map("channel_config_id") @db.Uuid
+  channelConfig   PartnerChannelConfig? @relation(fields: [channelConfigId], references: [id], onDelete: SetNull)
+
+  channelName String             @map("channel_name") @db.VarChar(150) // e.g. "Delhivery Surface A"
+  accountRef  String             @map("account_ref") @db.VarChar(100) // e.g. "Account 1"
+  serviceType CarrierServiceType @default(SURFACE) @map("service_type")
+
+  // Weight slab (kg). maxWeight null = open-ended ("All Weight")
+  minWeight Decimal  @default(0) @map("min_weight") @db.Decimal(8, 3)
+  maxWeight Decimal? @map("max_weight") @db.Decimal(8, 3)
+
+  // Per-account credential override (apiKey, warehouseCode, etc.)
+  credentials Json?
+
+  isActive Boolean @default(true) @map("is_active")
+  priority Int     @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([partnerId, channelName])
+  @@index([partnerId, isActive])
+  @@index([partnerId, serviceType, isActive])
+  @@map("partner_service_channels")
 }
 
 model PartnerRate {
@@ -552,6 +601,14 @@ model ChargeRule {
   // ---- For WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT ----
   perKg       Decimal? @map("per_kg") @db.Decimal(10, 3)
   perKgCharge Decimal? @map("per_kg_charge") @db.Decimal(12, 2)
+
+  // ---- Cost side (what we PAY the courier), optional / backward compatible ----
+  // When configured the engine can emit a parallel courier-cost total alongside
+  // the selling charge so profit margin = selling - cost. All nullable so existing
+  // selling-only rules are unaffected.
+  costMinValue        Decimal? @map("cost_min_value") @db.Decimal(12, 2)
+  costPercentageValue Decimal? @map("cost_percentage_value") @db.Decimal(10, 4)
+  costPerKgCharge     Decimal? @map("cost_per_kg_charge") @db.Decimal(12, 2)
 
   // ---- For ZONE_TO_ZONE_WEIGHT ----
   fromZoneId String? @map("from_zone_id") @db.Uuid

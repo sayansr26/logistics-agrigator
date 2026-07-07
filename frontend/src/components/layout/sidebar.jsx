@@ -76,6 +76,13 @@ const getNavigationSections = () => {
           roles: ["superadmin", "admin", "outlet"],
           disabled: false,
         },
+        {
+          title: "Bulk Weight Update",
+          href: "/shipments/bulk-rerate",
+          icon: AlertTriangle,
+          roles: ["superadmin", "admin"],
+          disabled: false,
+        },
       ].filter(canSeeMenuItem),
     },
     {
@@ -179,6 +186,25 @@ const getNavigationSections = () => {
       ].filter(canSeeMenuItem),
     },
     {
+      title: "COD Remittance",
+      items: [
+        {
+          title: "COD Settlements",
+          href: "/cod/settlements",
+          icon: IndianRupee,
+          roles: ["superadmin", "admin", "accounts"],
+          disabled: false,
+        },
+        {
+          title: "COD Shipments",
+          href: "/cod/shipments",
+          icon: FileText,
+          roles: ["superadmin", "admin", "accounts"],
+          disabled: false,
+        },
+      ].filter(canSeeMenuItem),
+    },
+    {
       title: "My Account",
       items: [
         {
@@ -186,6 +212,13 @@ const getNavigationSections = () => {
           href: "/addresses",
           icon: MapPin,
           permission: "user:read:own",
+          roles: ["outlet"],
+          disabled: false,
+        },
+        {
+          title: "My Settlements",
+          href: "/cod/my-settlements",
+          icon: Wallet,
           roles: ["outlet"],
           disabled: false,
         },

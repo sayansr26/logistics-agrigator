@@ -62,6 +62,9 @@ export const API_ENDPOINTS = {
     TRACKING_EVENTS: "/api/v1/shipments",
     NDR: "/api/v1/shipments/ndr",
     BULK: "/api/v1/shipments/bulk",
+    BULK_RERATE: "/api/v1/shipments/bulk/rerate",
+    RERATE: "/api/v1/shipments", // + /:id/rerate
+    RERATE_PREVIEW: "/api/v1/shipments", // + /:id/rerate/preview
     LABELS: "/api/v1/shipments/labels",
     PICKUP: "/api/v1/shipments/pickup",
     PICKUP_SCHEDULES: "/api/v1/shipments/pickup/schedules",
@@ -79,6 +82,13 @@ export const API_ENDPOINTS = {
     PICKUP_GET_BY_SHIPMENT_ID: "/api/v1/shipments/pickup/get/by/shipment/id",
     PICKUP_GET_BY_PARTNER_ID: "/api/v1/shipments/pickup/get/by/partner/id",
   },
+  CARRIER_ACCOUNTS: {
+    // list/create: `/api/v1/partners/${partnerId}/carrier-accounts`
+    // select:      `/api/v1/partners/${partnerId}/carrier-accounts/select`
+    // update/del:  `/api/v1/carrier-accounts/${accountId}`
+    FOR_PARTNER: "/api/v1/partners", // + /:partnerId/carrier-accounts
+    BASE: "/api/v1/carrier-accounts",
+  },
   PARTNERS: {
     BASE: "/api/v1/partners",
     RATES: "/api/v1/partners/rates",
@@ -94,6 +104,22 @@ export const API_ENDPOINTS = {
     BASE: "/api/v1/wallet",
     BALANCE: "/api/v1/wallet/balance",
     TRANSACTIONS: "/api/v1/wallet/transactions",
+  },
+  COD: {
+    SHIPMENTS: "/api/v1/wallet/cod/shipments",
+    COLLECTIONS_MANUAL: "/api/v1/wallet/cod/collections/manual",
+    COLLECTIONS_IMPORT: "/api/v1/wallet/cod/collections/import",
+    COLLECTIONS_IMPORT_CSV: "/api/v1/wallet/cod/collections/import-csv",
+    RECONCILE_AUTO: "/api/v1/wallet/cod/reconcile/auto",
+    RECONCILE: "/api/v1/wallet/cod/reconcile",
+    REPORTS: "/api/v1/wallet/cod/reports", // + /:type
+  },
+  SETTLEMENT: {
+    BASE: "/api/v1/wallet/settlement",
+    GENERATE: "/api/v1/wallet/settlement/generate",
+    LIST: "/api/v1/wallet/settlement",
+    MY: "/api/v1/wallet/settlement/my",
+    // GET_BY_ID / ADJUSTMENTS / ACTIONS use `${BASE}/${id}...`
   },
   ZONES: {
     CREATE: "/api/v1/zones",

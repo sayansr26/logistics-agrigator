@@ -1,5 +1,5 @@
 # =============== PRODUCTION DOCKERFILE ===============
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY backend/platform-service ./backend/platform-service
 
 # Copy shared into service directory for relative imports
 RUN cp -r /app/shared /app/backend/platform-service/
-RUN cd backend/platform-service && npx prisma generate
+RUN cd backend/platform-service && npx prisma@5.22.0 generate
 
 # Create non-root user first
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001

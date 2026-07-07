@@ -148,3 +148,256 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+// ============================================================
+// COD REMITTANCE / SETTLEMENT MODULE
+// ============================================================
+
+enum CodCollectionStatus {
+  PENDING // delivered, COD not yet collected/reported by courier
+  COLLECTED // courier reported/collected the COD
+  REMITTED // settled/paid out to the customer
+
+  @@map("cod_collection_status")
+}
+
+enum CodSource {
+  API // auto-fetched from courier API
+  IMPORT // imported from courier Excel/CSV report
+  MANUAL // manual entry
+
+  @@map("cod_source")
+}
+
+enum ReconStatus {
+  UNRECONCILED
+  MATCHED
+  MISSING // expected COD not present in courier report
+  SHORT // courier reported less than expected
+  EXCESS // courier reported more than expected
+  DUPLICATE // duplicate collection for the same AWB
+  MANUAL // manually reconciled
+
+  @@map("recon_status")
+}
+
+enum SettlementStatus {
+  DRAFT
+  FINANCE_VERIFICATION
+  APPROVED
+  RELEASED
+  REJECTED
+  HOLD
+  CANCELLED
+
+  @@map("settlement_status")
+}
+
+enum SettlementPaymentMode {
+  WALLET_CREDIT
+  BANK_TRANSFER
+  UPI
+  MANUAL
+
+  @@map("settlement_payment_mode")
+}
+
+enum SettlementCycle {
+  DAILY
+  WEEKLY
+  T_PLUS_1
+  T_PLUS_2
+
+  @@map("settlement_cycle")
+}
+
+enum AdjustmentType {
+  LOST
+  DAMAGE
+  SHORT_COD
+  EXCESS_COD
+  CREDIT_NOTE
+  DEBIT_NOTE
+  MANUAL
+
+  @@map("adjustment_type")
+}
+
+/// Mirror of a delivered COD shipment used for remittance/settlement.
+model CodShipment {
+  id         String  @id @default(uuid()) @db.Uuid
+  shipmentId String  @unique @db.Uuid // source shipment-service id
+  awbNumber  String  @db.VarChar(50)
+  orderId    String  @db.VarChar(100)
+  invoiceNo  String? @db.VarChar(100)
+  userId     String  @db.Uuid // customer who owns the shipment
+  clientCode String  @default("DEFAULT") @db.VarChar(50)
+  partnerId  String? @db.VarChar(50)
+  partnerName String? @db.VarChar(100)
+
+  codAmount       Decimal             @db.Decimal(15, 2) // expected COD
+  collectedAmount Decimal?            @db.Decimal(15, 2) // reported/collected
+  collectionStatus CodCollectionStatus @default(PENDING)
+  reconStatus     ReconStatus         @default(UNRECONCILED)
+
+  deliveredAt  DateTime? @db.Timestamptz
+  settlementId String?   @db.Uuid // set when included in a settlement
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  reconciliations CodReconciliation[]
+  settlement      Settlement?         @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
+  @@index([awbNumber])
+  @@index([userId])
+  @@index([clientCode])
+  @@index([collectionStatus])
+  @@index([reconStatus])
+  @@index([settlementId])
+  @@map("cod_shipments")
+}
+
+/// A courier-reported COD collection (from API / import / manual).
+model CodCollection {
+  id                 String    @id @default(uuid()) @db.Uuid
+  awbNumber          String    @db.VarChar(50)
+  reportedAmount     Decimal   @db.Decimal(15, 2)
+  collectionDate     DateTime? @db.Timestamptz
+  source             CodSource @default(MANUAL)
+  courierReportId    String?   @db.VarChar(100)
+  matchedCodShipmentId String? @db.Uuid
+  verified           Boolean   @default(false)
+  verifiedBy         String?   @db.Uuid
+  verifiedAt         DateTime? @db.Timestamptz
+  metadata           Json?
+  createdAt          DateTime  @default(now()) @db.Timestamptz
+
+  @@index([awbNumber])
+  @@index([source])
+  @@index([matchedCodShipmentId])
+  @@index([verified])
+  @@map("cod_collections")
+}
+
+/// Reconciliation record comparing expected COD vs courier-reported amount.
+model CodReconciliation {
+  id             String      @id @default(uuid()) @db.Uuid
+  codShipmentId  String      @db.Uuid
+  collectionId   String?     @db.Uuid
+  expectedAmount Decimal     @db.Decimal(15, 2)
+  reportedAmount Decimal?    @db.Decimal(15, 2)
+  variance       Decimal     @default(0) @db.Decimal(15, 2)
+  status         ReconStatus @default(UNRECONCILED)
+  resolvedBy     String?     @db.Uuid
+  remarks        String?     @db.Text
+  createdAt      DateTime    @default(now()) @db.Timestamptz
+  updatedAt      DateTime    @updatedAt @db.Timestamptz
+
+  codShipment CodShipment @relation(fields: [codShipmentId], references: [id], onDelete: Cascade)
+
+  @@index([codShipmentId])
+  @@index([status])
+  @@map("cod_reconciliations")
+}
+
+/// A COD settlement to a customer, moving through the approval workflow.
+model Settlement {
+  id          String  @id @default(uuid()) @db.Uuid
+  settlementNo String @unique @db.VarChar(50)
+  userId      String  @db.Uuid
+  clientCode  String  @default("DEFAULT") @db.VarChar(50)
+
+  totalCod         Decimal @default(0) @db.Decimal(15, 2)
+  totalAdjustments Decimal @default(0) @db.Decimal(15, 2) // signed sum of adjustments
+  netPayable       Decimal @default(0) @db.Decimal(15, 2) // totalCod + totalAdjustments
+
+  status      SettlementStatus       @default(DRAFT)
+  paymentMode SettlementPaymentMode?
+  cycle       SettlementCycle?
+
+  approvedBy     String?   @db.Uuid
+  approvedAt     DateTime? @db.Timestamptz
+  releasedBy     String?   @db.Uuid
+  releasedAt     DateTime? @db.Timestamptz
+  rejectedReason String?   @db.Text
+  holdReason     String?   @db.Text
+  remarks        String?   @db.Text
+
+  payoutTransactionId String? @db.VarChar(100)
+  payoutReference     String? @db.VarChar(200)
+
+  createdBy String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  items       SettlementItem[]
+  adjustments SettlementAdjustment[]
+  codShipments CodShipment[]
+
+  @@index([userId])
+  @@index([clientCode])
+  @@index([status])
+  @@index([createdAt])
+  @@map("settlements")
+}
+
+/// Line item linking a COD shipment to a settlement.
+model SettlementItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  settlementId  String   @db.Uuid
+  codShipmentId String   @db.Uuid
+  awbNumber     String   @db.VarChar(50)
+  amount        Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now()) @db.Timestamptz
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementId, codShipmentId])
+  @@index([settlementId])
+  @@index([codShipmentId])
+  @@map("settlement_items")
+}
+
+/// Adjustment applied to a settlement (lost/damage/short/excess/credit/debit/manual).
+/// `amount` is signed: positive increases net payable to the customer, negative decreases.
+model SettlementAdjustment {
+  id           String         @id @default(uuid()) @db.Uuid
+  settlementId String?        @db.Uuid
+  userId       String?        @db.Uuid
+  clientCode   String?        @db.VarChar(50)
+  type         AdjustmentType
+  amount       Decimal        @db.Decimal(15, 2)
+  reason       String         @db.Text
+  referenceAwb String?        @db.VarChar(50)
+  createdBy    String?        @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz
+
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
+  @@index([settlementId])
+  @@index([type])
+  @@index([userId])
+  @@map("settlement_adjustments")
+}
+
+/// Configurable settlement cycle/rules per customer or courier.
+model SettlementRule {
+  id          String                @id @default(uuid()) @db.Uuid
+  scope       String                @default("CUSTOMER") @db.VarChar(20) // CUSTOMER | COURIER | GLOBAL
+  clientCode  String?               @db.VarChar(50)
+  userId      String?               @db.Uuid
+  partnerId   String?               @db.VarChar(50)
+  cycle       SettlementCycle       @default(T_PLUS_2)
+  paymentMode SettlementPaymentMode @default(WALLET_CREDIT)
+  autoRelease Boolean               @default(false)
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now()) @db.Timestamptz
+  updatedAt   DateTime              @updatedAt @db.Timestamptz
+
+  @@index([scope, isActive])
+  @@index([userId])
+  @@index([partnerId])
+  @@index([clientCode])
+  @@map("settlement_rules")
+}

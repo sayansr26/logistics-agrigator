@@ -1,12 +1,22 @@
 # ============================================================================
-# PRODUCTION DOCKER COMPOSE CONFIGURATION
+# PRODUCTION / UAT DOCKER COMPOSE CONFIGURATION
 # ============================================================================
-# This file is for PRODUCTION deployments only.
-# Usage:
-#   cp .env.production.example .env.production
-#   # Edit .env.production with your actual values
-#   docker-compose -f docker-compose.production.yml --env-file .env.production build
-#   docker-compose -f docker-compose.production.yml --env-file .env.production up -d
+# Each app service declares BOTH `image:` (a GHCR tag) and `build:` (local
+# Dockerfile.prod), so this one file drives two workflows:
+#
+#   Registry pull (server, no rebuild — see Makefile):
+#     make release-prod / release-uat     # build+push images from the Mac
+#     make deploy       / deploy-uat       # pull + up -d on the server
+#
+#   Build locally (test production images on the build machine):
+#     docker compose -f docker-compose.production.yml --env-file .env.production build
+#     docker compose -f docker-compose.production.yml --env-file .env.production up -d
+#
+# PROD and UAT coexist on one host: each uses its own COMPOSE_PROJECT_NAME
+# (separate networks + volumes), distinct container names, distinct IMAGE_TAG,
+# and distinct host ports (API_GATEWAY_HOST_PORT / FRONTEND_HOST_PORT). Internal
+# service ports and the frontend's "api-gateway:3001" rewrite are unchanged —
+# they resolve within each stack's own network.
 # ============================================================================
 
 services:
@@ -55,6 +65,7 @@ services:
   # API GATEWAY (External Port 3001)
   # ============================================================
   api-gateway:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-api-gateway:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: ./backend/api-gateway/Dockerfile.prod
@@ -80,7 +91,7 @@ services:
       - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
       - STAGING_ORIGINS=${STAGING_ORIGINS}
     ports:
-      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+      - "${API_GATEWAY_HOST_PORT:-3001}:${API_GATEWAY_PORT}"
     volumes:
       - ./logs:/app/logs
     depends_on:
@@ -96,6 +107,7 @@ services:
   # AUTH SERVICE (Internal)
   # ============================================================
   auth-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-auth-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: ./backend/auth-service/Dockerfile.prod
@@ -130,6 +142,7 @@ services:
   # USER SERVICE (Internal)
   # ============================================================
   user-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-user-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: ./backend/user-service/Dockerfile.prod
@@ -165,6 +178,7 @@ services:
   # SHIPMENT SERVICE (Internal)
   # ============================================================
   shipment-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-shipment-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/shipment-service/Dockerfile.prod
@@ -206,6 +220,7 @@ services:
   # PARTNER SERVICE (Internal)
   # ============================================================
   partner-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-partner-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/partner-service/Dockerfile.prod
@@ -255,6 +270,7 @@ services:
   # WALLET SERVICE (Internal)
   # ============================================================
   wallet-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-wallet-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/wallet-service/Dockerfile.prod
@@ -311,6 +327,7 @@ services:
   # SUPPORT SERVICE (Internal)
   # ============================================================
   support-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-support-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/support-service/Dockerfile.prod
@@ -347,6 +364,7 @@ services:
   # PLATFORM SERVICE (Internal)
   # ============================================================
   platform-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-platform-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/platform-service/Dockerfile.prod
@@ -386,6 +404,7 @@ services:
   # LICENSE SERVICE (Internal)
   # ============================================================
   license-service:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-license-service:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: backend/license-service/Dockerfile.prod
@@ -427,6 +446,7 @@ services:
   # FRONTEND (External Port 3000)
   # ============================================================
   frontend:
+    image: ${REGISTRY:-ghcr.io/sayansr26}/logistics-frontend:${IMAGE_TAG:-prod}
     build:
       context: .
       dockerfile: ./frontend/Dockerfile.prod
@@ -439,7 +459,7 @@ services:
       # Uses Docker service name for internal network communication
       - API_URL_INTERNAL=http://api-gateway:3001
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
     depends_on:
       - api-gateway
     networks:

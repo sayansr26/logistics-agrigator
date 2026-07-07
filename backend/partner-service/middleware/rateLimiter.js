@@ -10,7 +10,7 @@ const generateSecureKey = (req, identifier = "unknown") => {
 // Rate limiter for partner creation/updates (admin operations)
 const partnerManagementLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Limit each IP to 20 partner management operations per windowMs
+  max: 100, // Limit each IP to 100 partner management (write) operations per windowMs — applied to mutations only, not reads
   message: {
     status: "error",
     error: {

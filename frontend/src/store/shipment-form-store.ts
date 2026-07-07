@@ -267,6 +267,10 @@ export const useShipmentFormStore = create<ShipmentFormState>((set, get) => ({
     const s = get();
     const errs: FormErrors = {};
     if (!s.phoneNumber.trim()) errs.phoneNumber = "Phone number is required";
+    else if (!/^[6-9]\d{9}$/.test(s.phoneNumber))
+      errs.phoneNumber = "Enter a valid 10-digit Indian mobile number";
+    if (s.alternatePhone && !/^[6-9]\d{9}$/.test(s.alternatePhone))
+      errs.alternatePhone = "Enter a valid 10-digit Indian mobile number";
     if (!s.receiverName.trim()) errs.receiverName = "Receiver name is required";
     if (!s.address.trim()) errs.address = "Address is required";
     if (!s.pincode.trim() || !/^\d{6}$/.test(s.pincode))

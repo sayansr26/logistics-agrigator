@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logistics Portal — The Complete Journey</title>
+<style>
+  :root {
+    --paper:#F5F7FC; --surface:#FFFFFF; --surface-2:#EDF1F8; --raise:#FBFCFE;
+    --ink:#0F1622; --ink-2:#39435A; --muted:#6C7689; --line:#E2E7F1; --line-2:#D3DAE8;
+    --accent:#3B57D6; --accent-2:#6E82EE; --accent-ink:#2A3EA8;
+    --money:#B4750E; --money-soft:#F5E9D2;
+    --good:#1E9C57; --warn:#C6890F; --bad:#D0424D; --purple:#6E56CF; --slate:#7A8598;
+    --shadow:0 1px 2px rgba(15,22,34,.05), 0 8px 26px -14px rgba(15,22,34,.16);
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --r:14px; --r-sm:9px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0A0E16; --surface:#111826; --surface-2:#161F30; --raise:#18212F;
+      --ink:#EDF1FA; --ink-2:#B6C0D4; --muted:#8791A6; --line:#232C3E; --line-2:#2C3750;
+      --accent:#7C90F4; --accent-2:#9AA9F8; --accent-ink:#B7C3FA;
+      --money:#E3A94D; --money-soft:#2A2213;
+      --good:#37C079; --warn:#E0AA3E; --bad:#F0656F; --purple:#A48CFF; --slate:#93A0B6;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#F5F7FC; --surface:#FFFFFF; --surface-2:#EDF1F8; --raise:#FBFCFE;
+    --ink:#0F1622; --ink-2:#39435A; --muted:#6C7689; --line:#E2E7F1; --line-2:#D3DAE8;
+    --accent:#3B57D6; --accent-2:#6E82EE; --accent-ink:#2A3EA8; --money:#B4750E; --money-soft:#F5E9D2;
+    --good:#1E9C57; --warn:#C6890F; --bad:#D0424D; --purple:#6E56CF; --slate:#7A8598;
+    --shadow:0 1px 2px rgba(15,22,34,.05), 0 8px 26px -14px rgba(15,22,34,.16);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0A0E16; --surface:#111826; --surface-2:#161F30; --raise:#18212F;
+    --ink:#EDF1FA; --ink-2:#B6C0D4; --muted:#8791A6; --line:#232C3E; --line-2:#2C3750;
+    --accent:#7C90F4; --accent-2:#9AA9F8; --accent-ink:#B7C3FA; --money:#E3A94D; --money-soft:#2A2213;
+    --good:#37C079; --warn:#E0AA3E; --bad:#F0656F; --purple:#A48CFF; --slate:#93A0B6;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); line-height:1.6; -webkit-font-smoothing:antialiased;
+    font-size:16.5px;
+  }
+  .wrap { max-width:1060px; margin:0 auto; padding:0 24px; }
+  h1,h2,h3,h4 { text-wrap:balance; line-height:1.12; margin:0; letter-spacing:-0.018em; font-weight:800; }
+  p { margin:0; }
+  a { color:var(--accent-ink); }
+  .eyebrow {
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--accent-ink); font-weight:600; margin-bottom:14px;
+  }
+  .num { font-variant-numeric:tabular-nums; font-family:var(--mono); }
+  .lede { color:var(--ink-2); font-size:1.12rem; max-width:62ch; }
+
+  /* ---------- HERO ---------- */
+  header.hero {
+    position:relative; overflow:hidden; border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(120% 80% at 88% -20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--surface), var(--paper));
+  }
+  .hero-inner { padding:74px 0 62px; position:relative; z-index:2; }
+  .brandline { display:flex; align-items:center; gap:12px; margin-bottom:30px; }
+  .logo-badge {
+    width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+    background:linear-gradient(150deg, var(--accent), var(--accent-2)); color:#fff;
+    box-shadow:var(--shadow); flex:none;
+  }
+  .brandline b { font-weight:800; letter-spacing:-0.01em; }
+  .brandline span { color:var(--muted); font-size:.86rem; }
+  h1.title { font-size:clamp(2.4rem, 6vw, 4.05rem); letter-spacing:-0.035em; }
+  h1.title em { font-style:normal; color:var(--accent-ink); }
+  .hero .lede { margin-top:20px; font-size:1.2rem; }
+  .hero-meta { display:flex; flex-wrap:wrap; gap:10px; margin-top:30px; }
+  .chip {
+    display:inline-flex; align-items:center; gap:8px; padding:7px 13px; border-radius:999px;
+    background:var(--surface); border:1px solid var(--line); font-size:.82rem; color:var(--ink-2);
+    box-shadow:var(--shadow);
+  }
+  .chip b { color:var(--ink); font-weight:700; }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+
+  /* pipeline ribbon in hero */
+  .ribbon { position:absolute; inset:auto 0 0 0; height:150px; opacity:.5; z-index:1; }
+
+  /* ---------- SECTIONS ---------- */
+  section { padding:66px 0; border-bottom:1px solid var(--line); }
+  .sec-head { max-width:64ch; margin-bottom:38px; }
+  .sec-head h2 { font-size:clamp(1.7rem,3.4vw,2.4rem); }
+  .sec-head p { color:var(--ink-2); margin-top:14px; font-size:1.06rem; }
+
+  /* ---------- ROLE CARDS ---------- */
+  .grid { display:grid; gap:16px; }
+  .roles { grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); }
+  .card {
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+    padding:22px; box-shadow:var(--shadow); transition:transform .18s ease, border-color .18s ease;
+  }
+  .card:hover { transform:translateY(-3px); border-color:var(--line-2); }
+  .role-top { display:flex; align-items:center; gap:11px; margin-bottom:12px; }
+  .role-ico { width:34px; height:34px; border-radius:9px; display:grid; place-items:center; flex:none; color:#fff; }
+  .role h3 { font-size:1.06rem; }
+  .role .who { font-family:var(--mono); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .role p { color:var(--ink-2); font-size:.92rem; margin-top:4px; }
+  .role ul { margin:12px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .role li { font-size:.86rem; color:var(--ink-2); padding-left:18px; position:relative; }
+  .role li::before { content:""; position:absolute; left:2px; top:.62em; width:6px; height:6px; border-radius:2px; background:var(--accent); }
+
+  /* ---------- PIPELINE (master journey) ---------- */
+  .flowscroll { overflow-x:auto; padding-bottom:8px; }
+  .pipeline { display:flex; align-items:stretch; gap:0; min-width:940px; }
+  .stage { flex:1; min-width:96px; display:flex; flex-direction:column; align-items:center; text-align:center; position:relative; padding:0 4px; }
+  .stage .rail { position:absolute; top:26px; left:50%; width:100%; height:2px; background:var(--line-2); z-index:0; }
+  .stage:last-child .rail { display:none; }
+  .stage .node {
+    width:54px; height:54px; border-radius:15px; display:grid; place-items:center; z-index:1;
+    background:var(--surface); border:1.5px solid var(--line-2); color:var(--accent-ink); box-shadow:var(--shadow);
+  }
+  .stage.key .node { background:linear-gradient(150deg,var(--accent),var(--accent-2)); border-color:transparent; color:#fff; }
+  .stage.money .node { color:var(--money); border-color:color-mix(in srgb,var(--money) 45%, var(--line-2)); }
+  .stage h4 { font-size:.82rem; margin-top:12px; letter-spacing:-0.01em; }
+  .stage small { color:var(--muted); font-size:.72rem; margin-top:3px; display:block; }
+
+  /* ---------- JOURNEY (numbered steps) ---------- */
+  .journey { display:grid; grid-template-columns:1.15fr 1fr; gap:34px; align-items:start; }
+  @media (max-width:820px){ .journey { grid-template-columns:1fr; } }
+  .steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
+  .steps li { display:grid; grid-template-columns:auto 1fr; gap:16px; padding-bottom:22px; position:relative; }
+  .steps li:not(:last-child)::before { content:""; position:absolute; left:16px; top:34px; bottom:0; width:2px; background:var(--line); }
+  .stepno {
+    width:34px; height:34px; border-radius:50%; display:grid; place-items:center; z-index:1;
+    background:var(--surface); border:1.5px solid var(--accent); color:var(--accent-ink);
+    font-family:var(--mono); font-size:.82rem; font-weight:600; flex:none;
+  }
+  .steps h4 { font-size:1rem; }
+  .steps p { color:var(--ink-2); font-size:.92rem; margin-top:3px; }
+  .aside {
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+    padding:22px; box-shadow:var(--shadow); position:sticky; top:20px;
+  }
+  .aside .cap { font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin-bottom:16px; }
+
+  /* ---------- generic figure ---------- */
+  figure { margin:0; }
+  figcaption { color:var(--muted); font-size:.8rem; margin-top:10px; text-align:center; }
+
+  /* bar chart */
+  .bars { display:flex; flex-direction:column; gap:12px; }
+  .bar-row { display:grid; grid-template-columns:112px 1fr auto; align-items:center; gap:12px; }
+  .bar-row .lbl { font-size:.85rem; color:var(--ink-2); text-align:right; }
+  .track { height:20px; background:var(--surface-2); border-radius:6px; overflow:hidden; }
+  .fill { height:100%; border-radius:6px; transition:width .9s cubic-bezier(.2,.7,.2,1); }
+  .bar-row .val { font-family:var(--mono); font-size:.82rem; color:var(--ink); font-variant-numeric:tabular-nums; min-width:56px; text-align:right; }
+
+  /* wallet reconciliation */
+  .recon { display:flex; flex-direction:column; gap:10px; }
+  .txn { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 15px; border-radius:var(--r-sm); border:1px solid var(--line); background:var(--raise); }
+  .txn .side { display:flex; align-items:center; gap:11px; }
+  .txn .tag { font-family:var(--mono); font-size:10px; letter-spacing:.1em; padding:3px 8px; border-radius:5px; text-transform:uppercase; font-weight:600; }
+  .txn .amt { font-family:var(--mono); font-weight:700; font-variant-numeric:tabular-nums; }
+  .txn.net { border-style:dashed; background:transparent; }
+
+  /* donut */
+  .donut-wrap { display:flex; align-items:center; gap:22px; flex-wrap:wrap; justify-content:center; }
+  .legend { display:flex; flex-direction:column; gap:9px; }
+  .legend .li { display:flex; align-items:center; gap:9px; font-size:.86rem; color:var(--ink-2); }
+  .legend .sw { width:11px; height:11px; border-radius:3px; flex:none; }
+  .legend .n { margin-left:auto; font-family:var(--mono); color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  /* slab table */
+  .slab { width:100%; border-collapse:separate; border-spacing:0; font-size:.9rem; }
+  .slab th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600; padding:0 14px 10px; }
+  .slab td { padding:13px 14px; border-top:1px solid var(--line); color:var(--ink-2); }
+  .slab td:first-child { color:var(--ink); font-weight:600; }
+  .slab .acc { font-family:var(--mono); font-size:.82rem; color:var(--accent-ink); }
+  .wpill { font-family:var(--mono); font-size:.78rem; background:var(--surface-2); padding:3px 9px; border-radius:6px; color:var(--ink); }
+
+  /* state machine */
+  .fsm { overflow-x:auto; }
+  .fsm svg { display:block; min-width:640px; }
+
+  /* KPI dashboard */
+  .kpis { grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+  .kpi { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; box-shadow:var(--shadow); }
+  .kpi .k-top { display:flex; align-items:center; justify-content:space-between; }
+  .kpi .k-lbl { font-size:.82rem; color:var(--muted); }
+  .kpi .k-val { font-family:var(--mono); font-size:1.85rem; font-weight:700; letter-spacing:-0.02em; margin-top:8px; font-variant-numeric:tabular-nums; }
+  .kpi .k-sub { font-size:.78rem; color:var(--ink-2); margin-top:4px; }
+  .k-ico { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; }
+
+  .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  @media (max-width:820px){ .dash-grid { grid-template-columns:1fr; } }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:22px; box-shadow:var(--shadow); }
+  .panel h4 { font-size:1rem; }
+  .panel .sub { color:var(--muted); font-size:.8rem; margin:3px 0 18px; }
+
+  /* sparkline area */
+  .spark { width:100%; height:96px; display:block; }
+
+  /* two-up note callouts */
+  .callouts { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .callout { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:var(--r-sm); padding:16px 18px; background:var(--surface); }
+  .callout h4 { font-size:.95rem; }
+  .callout p { color:var(--ink-2); font-size:.88rem; margin-top:5px; }
+
+  footer { padding:52px 0 70px; color:var(--muted); font-size:.86rem; }
+  footer .fnote { max-width:60ch; }
+
+  .theme-toggle {
+    position:fixed; top:16px; right:16px; z-index:50; width:40px; height:40px; border-radius:11px;
+    background:var(--surface); border:1px solid var(--line); color:var(--ink-2); cursor:pointer;
+    display:grid; place-items:center; box-shadow:var(--shadow);
+  }
+  .theme-toggle:hover { color:var(--ink); border-color:var(--line-2); }
+  :focus-visible { outline:2.5px solid var(--accent); outline-offset:3px; border-radius:4px; }
+
+  .movingdot { transition:none; }
+  @media (prefers-reduced-motion: reduce) { .movingdot { animation:none !important; } .fill { transition:none; } }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeBtn" aria-label="Switch light / dark theme" title="Switch theme">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4l1.4-1.4M18 6l1.4-1.4"/></svg>
+</button>
+
+<header class="hero">
+  <svg class="ribbon" viewBox="0 0 1200 150" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 118 C 220 60, 360 150, 600 96 S 980 40, 1200 100" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="7 9" opacity=".5"/>
+    <path d="M0 140 C 260 100, 420 168, 640 120 S 1000 82, 1200 132" fill="none" stroke="var(--money)" stroke-width="1.6" stroke-dasharray="2 10" opacity=".45"/>
+  </svg>
+  <div class="wrap hero-inner">
+    <div class="brandline">
+      <span class="logo-badge" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18.5" r="1.7"/><circle cx="17.5" cy="18.5" r="1.7"/></svg>
+      </span>
+      <div>
+        <b>Logistics Portal</b><br>
+        <span>Multi-courier shipping &amp; COD control tower · India</span>
+      </div>
+    </div>
+    <div class="eyebrow">A guided tour · from order to money in the bank</div>
+    <h1 class="title">Everything a parcel does,<br><em>from booking to settlement.</em></h1>
+    <p class="lede">One panel runs the whole shipping operation: book a parcel across 75+ couriers, watch it move, re-weigh and re-price it when the courier does, then chase every rupee of cash-on-delivery back to the customer. Here's the complete journey — no jargon.</p>
+    <div class="hero-meta">
+      <span class="chip"><span class="dot" style="background:var(--accent)"></span> <b>8</b>&nbsp;user roles</span>
+      <span class="chip"><span class="dot" style="background:var(--good)"></span> <b>75+</b>&nbsp;courier partners</span>
+      <span class="chip"><span class="dot" style="background:var(--money)"></span> COD remittance &amp; wallet</span>
+      <span class="chip"><span class="dot" style="background:var(--purple)"></span> Auto weight re-rating</span>
+    </div>
+  </div>
+</header>
+
+<!-- WHO -->
+<section id="roles">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Who's at the controls</div>
+      <h2>The same panel, a different cockpit for each person</h2>
+      <p>What you see and can touch depends on your role. A finance user lives in settlements; a warehouse outlet only ever sees its own parcels and wallet. Access is fenced off automatically.</p>
+    </div>
+    <div class="grid roles">
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--accent)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><div><h3>Admin</h3><div class="who">Superadmin · Admin</div></div></div>
+        <p>Runs the platform. Configures couriers, pricing rules, roles and everything below.</p>
+        <ul><li>Onboard couriers &amp; rate cards</li><li>Manage every user &amp; outlet</li><li>See all shipments &amp; money</li></ul>
+      </div>
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--good)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6"/></svg></span><div><h3>Client</h3><div class="who">Business owner</div></div></div>
+        <p>The company using the portal under licence. Owns its team, wallet and shipments.</p>
+        <ul><li>Add sales / finance / support staff</li><li>Top up &amp; watch the wallet</li><li>Company-wide reports</li></ul>
+      </div>
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--money)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 5h16v14H4zM4 10h16M8 15h4"/></svg></span><div><h3>Finance</h3><div class="who">Accounts team</div></div></div>
+        <p>Owns the money flow. Reconciles COD, verifies and releases settlements.</p>
+        <ul><li>Import courier COD reports</li><li>Reconcile &amp; resolve mismatches</li><li>Approve &amp; release payouts</li></ul>
+      </div>
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--purple)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span><div><h3>Sales &amp; Support</h3><div class="who">Front-line staff</div></div></div>
+        <p>Sales books shipments for assigned customers; support handles tracking &amp; issues.</p>
+        <ul><li>Create &amp; track shipments</li><li>Handle failed-delivery cases</li><li>Read-only on wallet</li></ul>
+      </div>
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--slate)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 21v-8h6v8"/></svg></span><div><h3>Outlet</h3><div class="who">Customer / warehouse</div></div></div>
+        <p>The end shipper. Books its own parcels, tracks them, sees only its own money.</p>
+        <ul><li>Create &amp; track own shipments</li><li>View own wallet &amp; COD due</li><li>Download settlement statements</li></ul>
+      </div>
+      <div class="card role">
+        <div class="role-top"><span class="role-ico" style="background:var(--bad)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 2l3 6 6 .9-4.5 4.3 1 6-5.5-3-5.5 3 1-6L3 8.9 9 8z"/></svg></span><div><h3>Affiliate</h3><div class="who">Referral partner</div></div></div>
+        <p>Refers customers and earns commission. Sees performance, not operations.</p>
+        <ul><li>Referral analytics</li><li>Commission tracking</li></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MASTER PIPELINE -->
+<section id="pipeline">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">The big picture</div>
+      <h2>A parcel's whole life, in ten beats</h2>
+      <p>Every shipment travels this line. The blue stops are where a person acts; the amber stops are where money moves. Everything after "delivered" is about getting cash-on-delivery safely back to the shipper.</p>
+    </div>
+    <div class="flowscroll">
+      <div class="pipeline" id="pipeline">
+        <div class="stage key"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16v13H4zM4 7l2-3h12l2 3M9 12h6"/></svg></span><h4>Order in</h4><small>from store / manual</small></div>
+        <div class="stage key"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><h4>Book</h4><small>address · weight</small></div>
+        <div class="stage"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h12l3 3M15 12l3-3M3 7h9M3 17h9"/></svg></span><h4>Pick carrier</h4><small>compare rates</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16v12H4zM4 10h16M8 14h3"/></svg></span><h4>Wallet debit</h4><small>fee held</small></div>
+        <div class="stage"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16V8h11v8zM14 11h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/></svg></span><h4>Pickup</h4><small>AWB printed</small></div>
+        <div class="stage"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21c5-4 8-7 8-11a8 8 0 1 0-16 0c0 4 3 7 8 11z"/><circle cx="12" cy="10" r="2.4"/></svg></span><h4>In transit</h4><small>live tracking</small></div>
+        <div class="stage key"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></span><h4>Delivered</h4><small>proof captured</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><h4>COD collected</h4><small>cash at door</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5M4 18h9"/></svg></span><h4>Reconcile</h4><small>match &amp; verify</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16v12H4zM8 12h8M12 9v6"/></svg></span><h4>Settled</h4><small>paid to shipper</small></div>
+      </div>
+    </div>
+    <div class="grid callouts" style="margin-top:34px">
+      <div class="callout"><h4>Blue = a person acts</h4><p>Someone books, chooses a carrier, or approves a payout. The panel makes each of these a single, clear action.</p></div>
+      <div class="callout" style="border-left-color:var(--money)"><h4>Amber = money moves</h4><p>Booking fees, COD collection, and settlements. Every rupee is recorded, matched, and traceable end-to-end.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- JOURNEY 1: BOOK -->
+<section id="book">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Journey 01 · Book a shipment</div>
+      <h2>From "I need to ship this" to a printed label</h2>
+      <p>The booking wizard walks through the parcel step by step, then shows every courier's price side by side so the cheapest or fastest is one click away.</p>
+    </div>
+    <div class="journey">
+      <ol class="steps">
+        <li><span class="stepno">1</span><div><h4>Enter the delivery</h4><p>Who's it going to and where. Type a pincode and the city, state and serviceability fill themselves in.</p></div></li>
+        <li><span class="stepno">2</span><div><h4>Describe the parcel</h4><p>Weight, dimensions and value. The panel works out the <em>chargeable weight</em> automatically — the higher of actual and volumetric.</p></div></li>
+        <li><span class="stepno">3</span><div><h4>Add the invoice</h4><p>Contents, HSN and GST for a compliant shipping label and paperwork.</p></div></li>
+        <li><span class="stepno">4</span><div><h4>Compare &amp; pick a courier</h4><p>Live rates from every serviceable carrier, ranked. Choose on price, speed or COD support.</p></div></li>
+        <li><span class="stepno">5</span><div><h4>Confirm</h4><p>The fee is held from the wallet, the courier is booked, and an AWB tracking number is generated instantly.</p></div></li>
+      </ol>
+      <aside class="aside">
+        <div class="cap">Rate comparison · 3 kg to 560001</div>
+        <figure>
+          <div class="bars" id="rateBars">
+            <div class="bar-row"><span class="lbl">Delhivery&nbsp;Surface</span><div class="track"><div class="fill" style="background:var(--accent); width:64%"></div></div><span class="val">₹78</span></div>
+            <div class="bar-row"><span class="lbl">DTDC</span><div class="track"><div class="fill" style="background:var(--accent); width:70%"></div></div><span class="val">₹86</span></div>
+            <div class="bar-row"><span class="lbl">Ecom&nbsp;Express</span><div class="track"><div class="fill" style="background:var(--accent); width:80%"></div></div><span class="val">₹98</span></div>
+            <div class="bar-row"><span class="lbl">Blue&nbsp;Dart&nbsp;Air</span><div class="track"><div class="fill" style="background:var(--accent-2); width:100%"></div></div><span class="val">₹122</span></div>
+          </div>
+          <figcaption>Cheapest is picked by default — the shipper always sees the full field.</figcaption>
+        </figure>
+        <div class="txn" style="margin-top:18px"><div class="side"><span class="tag" style="background:var(--money-soft); color:var(--money)">Wallet</span><span style="font-size:.86rem;color:var(--ink-2)">Fee held on booking</span></div><span class="amt" style="color:var(--bad)">− ₹78</span></div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- JOURNEY 2: WEIGHT & MONEY -->
+<section id="weight">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Journey 02 · When the courier re-weighs</div>
+      <h2>The parcel weighed more. The panel sorts out the money.</h2>
+      <p>Couriers re-measure parcels at their hub. When the weight changes, the panel re-prices the shipment, works out the new profit, and squares the wallet automatically — no spreadsheets.</p>
+    </div>
+    <div class="journey">
+      <ol class="steps">
+        <li><span class="stepno">1</span><div><h4>New weight comes in</h4><p>Enter the courier's actual weight and dimensions — or upload a whole spreadsheet of them at once.</p></div></li>
+        <li><span class="stepno">2</span><div><h4>Charges recalculate</h4><p>Selling price, courier cost and profit margin all update together. Preview the before-and-after before committing.</p></div></li>
+        <li><span class="stepno">3</span><div><h4>Wallet auto-reconciles</h4><p>The old fee is refunded and the new one charged — so the shipper is only ever out the correct amount.</p></div></li>
+        <li><span class="stepno">4</span><div><h4>Do it in bulk</h4><p>Upload a CSV of AWBs and new weights; every parcel is re-rated and every wallet squared, with a pass/fail report.</p></div></li>
+      </ol>
+      <aside class="aside">
+        <div class="cap">₹120 → ₹150 re-rate · one parcel</div>
+        <div class="recon">
+          <div class="txn"><div class="side"><span class="tag" style="background:color-mix(in srgb,var(--good) 16%,transparent); color:var(--good)">Refund</span><span style="font-size:.86rem;color:var(--ink-2)">Old charge returned</span></div><span class="amt" style="color:var(--good)">+ ₹120</span></div>
+          <div class="txn"><div class="side"><span class="tag" style="background:color-mix(in srgb,var(--bad) 15%,transparent); color:var(--bad)">Charge</span><span style="font-size:.86rem;color:var(--ink-2)">New price applied</span></div><span class="amt" style="color:var(--bad)">− ₹150</span></div>
+          <div class="txn net"><div class="side"><span style="font-size:.86rem;color:var(--ink);font-weight:600">Net wallet change</span></div><span class="amt" style="color:var(--ink)">− ₹30</span></div>
+        </div>
+        <div class="cap" style="margin:22px 0 14px">Where the ₹150 goes</div>
+        <div class="donut-wrap">
+          <svg width="118" height="118" viewBox="0 0 42 42" aria-label="Selling price split: courier cost and profit">
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--surface-2)" stroke-width="6"></circle>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--money)" stroke-width="6" stroke-dasharray="68 32" stroke-dashoffset="25"></circle>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--good)" stroke-width="6" stroke-dasharray="32 68" stroke-dashoffset="-43"></circle>
+            <text x="21" y="20" text-anchor="middle" style="font:600 6px var(--mono); fill:var(--ink)">₹150</text>
+            <text x="21" y="26" text-anchor="middle" style="font:4px var(--sans); fill:var(--muted)">selling</text>
+          </svg>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--money)"></span>Courier cost<span class="n">₹102</span></div>
+            <div class="li"><span class="sw" style="background:var(--good)"></span>Your profit<span class="n">₹48</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- JOURNEY 3: CARRIER CHANNELS -->
+<section id="channels">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Journey 03 · Carrier channels</div>
+      <h2>One courier, many accounts — the panel routes each parcel to the right one</h2>
+      <p>A single carrier like Delhivery often has several accounts, each priced for a different weight band. Set the slabs once, and every booking is sent through the account that fits its chargeable weight.</p>
+    </div>
+    <div class="panel">
+      <table class="slab">
+        <thead><tr><th>Channel</th><th>Service</th><th>Weight slab</th><th>Routes to</th></tr></thead>
+        <tbody>
+          <tr><td>Delhivery Surface A</td><td>Surface</td><td><span class="wpill">0 – 5 kg</span></td><td class="acc">Account 1</td></tr>
+          <tr><td>Delhivery Surface B</td><td>Surface</td><td><span class="wpill">5 – 20 kg</span></td><td class="acc">Account 2</td></tr>
+          <tr><td>Delhivery Air</td><td>Air</td><td><span class="wpill">All weights</span></td><td class="acc">Account 3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid callouts" style="margin-top:24px">
+      <div class="callout"><h4>Set it once</h4><p>Define the slabs and accounts per courier. Admins manage them from the partner screen.</p></div>
+      <div class="callout" style="border-left-color:var(--good)"><h4>Automatic at booking</h4><p>A 3 kg parcel goes to <b>Surface A</b>; a 12 kg one to <b>Surface B</b> — chosen by weight, no thinking required.</p></div>
+      <div class="callout" style="border-left-color:var(--money)"><h4>Best rate wins</h4><p>Right account means right price, which protects the margin on every single shipment.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- JOURNEY 4: COD -->
+<section id="cod">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Journey 04 · Cash-on-delivery comes home</div>
+      <h2>The customer paid the courier. Now get that money to the shipper.</h2>
+      <p>This is the heart of the panel. Cash collected at thousands of doorsteps has to be matched to the right parcel, checked for shortfalls, and paid out — with a clean approval trail the whole way.</p>
+    </div>
+
+    <!-- swimlane -->
+    <div class="flowscroll" style="margin-bottom:40px">
+      <div class="pipeline" style="min-width:820px">
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><h4>Cash at door</h4><small>customer pays</small></div>
+        <div class="stage"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2h9l3 3v17H6zM9 8h6M9 12h6M9 16h4"/></svg></span><h4>Import report</h4><small>courier's CSV</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span><h4>Reconcile</h4><small>match by AWB</small></div>
+        <div class="stage key"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></span><h4>Finance approves</h4><small>verify → release</small></div>
+        <div class="stage money"><span class="rail"></span><span class="node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16v12H4zM8 12h8"/></svg></span><h4>Payout</h4><small>wallet / bank</small></div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <h4>Reconciliation catches every mismatch</h4>
+        <p class="sub">Courier report vs. what was expected, per parcel</p>
+        <div class="bars">
+          <div class="bar-row"><span class="lbl"><span class="dot" style="display:inline-block;background:var(--good)"></span>&nbsp;Matched</span><div class="track"><div class="fill" style="background:var(--good); width:100%"></div></div><span class="val">812</span></div>
+          <div class="bar-row"><span class="lbl"><span class="dot" style="display:inline-block;background:var(--warn)"></span>&nbsp;Short paid</span><div class="track"><div class="fill" style="background:var(--warn); width:9%"></div></div><span class="val">28</span></div>
+          <div class="bar-row"><span class="lbl"><span class="dot" style="display:inline-block;background:var(--purple)"></span>&nbsp;Excess</span><div class="track"><div class="fill" style="background:var(--purple); width:4%"></div></div><span class="val">11</span></div>
+          <div class="bar-row"><span class="lbl"><span class="dot" style="display:inline-block;background:var(--bad)"></span>&nbsp;Missing</span><div class="track"><div class="fill" style="background:var(--bad); width:6%"></div></div><span class="val">17</span></div>
+          <div class="bar-row"><span class="lbl"><span class="dot" style="display:inline-block;background:var(--slate)"></span>&nbsp;Duplicate</span><div class="track"><div class="fill" style="background:var(--slate); width:2%"></div></div><span class="val">4</span></div>
+        </div>
+        <p style="color:var(--ink-2);font-size:.86rem;margin-top:18px">Anything that isn't a clean match is flagged for a person to resolve — nothing quietly slips through.</p>
+      </div>
+
+      <div class="panel">
+        <h4>The settlement approval trail</h4>
+        <p class="sub">Every payout passes through these gates</p>
+        <div class="fsm">
+          <svg viewBox="0 0 640 250" role="img" aria-label="Settlement states: Draft to Finance verification to Approved to Released, with Hold, Reject and Cancel branches">
+            <defs>
+              <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="var(--muted)"/></marker>
+              <marker id="arwg" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="var(--good)"/></marker>
+            </defs>
+            <!-- happy path line -->
+            <line x1="92" y1="52" x2="196" y2="52" stroke="var(--good)" stroke-width="2" marker-end="url(#arwg)"/>
+            <line x1="330" y1="52" x2="404" y2="52" stroke="var(--good)" stroke-width="2" marker-end="url(#arwg)"/>
+            <line x1="516" y1="52" x2="560" y2="52" stroke="var(--good)" stroke-width="2" marker-end="url(#arwg)"/>
+            <!-- nodes row 1 -->
+            <g class="fsm-node"><rect x="16" y="34" width="76" height="36" rx="9" fill="var(--surface-2)" stroke="var(--line-2)"/><text x="54" y="57" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--ink)">Draft</text></g>
+            <g><rect x="196" y="34" width="134" height="36" rx="9" fill="color-mix(in srgb,var(--warn) 14%,transparent)" stroke="var(--warn)"/><text x="263" y="57" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--ink)">Finance verification</text></g>
+            <g><rect x="404" y="34" width="112" height="36" rx="9" fill="color-mix(in srgb,var(--accent) 14%,transparent)" stroke="var(--accent)"/><text x="460" y="57" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--ink)">Approved</text></g>
+            <g><rect x="560" y="34" width="72" height="36" rx="9" fill="color-mix(in srgb,var(--good) 18%,transparent)" stroke="var(--good)"/><text x="596" y="57" text-anchor="middle" style="font:700 11px var(--sans);fill:var(--ink)">Released</text></g>
+            <!-- branch: hold -->
+            <line x1="263" y1="70" x2="263" y2="120" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#arw)"/>
+            <g><rect x="214" y="122" width="98" height="34" rx="9" fill="var(--surface-2)" stroke="var(--line-2)"/><text x="263" y="144" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--ink)">On hold</text></g>
+            <line x1="214" y1="139" x2="96" y2="139" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arw)"/>
+            <text x="150" y="133" text-anchor="middle" style="font:9px var(--mono);fill:var(--muted)">reprocess</text>
+            <!-- branch: reject -->
+            <line x1="460" y1="70" x2="460" y2="188" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#arw)"/>
+            <g><rect x="410" y="190" width="100" height="34" rx="9" fill="color-mix(in srgb,var(--bad) 12%,transparent)" stroke="var(--bad)"/><text x="460" y="212" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--ink)">Rejected</text></g>
+            <!-- cancel -->
+            <g><rect x="16" y="122" width="98" height="34" rx="9" fill="var(--surface)" stroke="var(--line-2)" stroke-dasharray="3 3"/><text x="65" y="144" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--muted)">Cancelled</text></g>
+            <line x1="54" y1="70" x2="63" y2="120" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arw)"/>
+            <text x="330" y="240" text-anchor="middle" style="font:9.5px var(--sans);fill:var(--muted)">Green = the happy path · dashed = exceptions a person controls</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid callouts" style="margin-top:24px">
+      <div class="callout" style="border-left-color:var(--good)"><h4>Pay how you like</h4><p>Release to the shipper's wallet instantly, or record a bank / UPI transfer with its reference.</p></div>
+      <div class="callout" style="border-left-color:var(--money)"><h4>Adjust for reality</h4><p>Lost or damaged parcels, short collections, credit &amp; debit notes — all fold into the final payable.</p></div>
+      <div class="callout"><h4>Set it and forget it</h4><p>Auto-settlement runs on a schedule — daily, weekly, T+1 or T+2 — and can release payouts on its own.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dash">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">At a glance</div>
+      <h2>What the finance team sees on a Monday morning</h2>
+      <p>The numbers that matter, up top; the detail one click away. State is shown in colour as well as figures, so what needs attention stands out.</p>
+    </div>
+
+    <div class="grid kpis">
+      <div class="kpi"><div class="k-top"><span class="k-lbl">Pending settlement</span><span class="k-ico" style="background:color-mix(in srgb,var(--warn) 16%,transparent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span></div><div class="k-val">₹8.42L</div><div class="k-sub">63 settlements in workflow</div></div>
+      <div class="kpi"><div class="k-top"><span class="k-lbl">Released this month</span><span class="k-ico" style="background:color-mix(in srgb,var(--good) 16%,transparent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--good)" stroke-width="2" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></span></div><div class="k-val">₹41.7L</div><div class="k-sub">altogether 1,204 payouts</div></div>
+      <div class="kpi"><div class="k-top"><span class="k-lbl">On hold</span><span class="k-ico" style="background:color-mix(in srgb,var(--bad) 16%,transparent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--bad)" stroke-width="2" stroke-linecap="round"><path d="M10 4v16M14 4v16"/></svg></span></div><div class="k-val">9</div><div class="k-sub">need finance attention</div></div>
+      <div class="kpi"><div class="k-top"><span class="k-lbl">Shipments today</span><span class="k-ico" style="background:color-mix(in srgb,var(--accent) 16%,transparent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M3 16V8h11v8zM14 11h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.5"/><circle cx="17.5" cy="18" r="1.5"/></svg></span></div><div class="k-val">1,846</div><div class="k-sub">▲ 12% vs. last week</div></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <h4>Settlements by state</h4>
+        <p class="sub">Where the 63-in-flight sit right now</p>
+        <div class="donut-wrap" style="justify-content:flex-start">
+          <svg width="132" height="132" viewBox="0 0 42 42" aria-label="Settlements by state">
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--surface-2)" stroke-width="5.4"></circle>
+            <!-- Draft 30, Finance 22, Approved 16, Hold 8, Rejected 4 : offsets computed -->
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--slate)"  stroke-width="5.4" stroke-dasharray="30 70" stroke-dashoffset="25"></circle>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--warn)"  stroke-width="5.4" stroke-dasharray="22 78" stroke-dashoffset="-5"></circle>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--accent)" stroke-width="5.4" stroke-dasharray="16 84" stroke-dashoffset="-27"></circle>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--bad)"   stroke-width="5.4" stroke-dasharray="8 92"  stroke-dashoffset="-43"></circle>
+            <text x="21" y="20.5" text-anchor="middle" style="font:700 7px var(--mono); fill:var(--ink)">63</text>
+            <text x="21" y="26" text-anchor="middle" style="font:3.6px var(--sans); fill:var(--muted)">in flight</text>
+          </svg>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--slate)"></span>Draft<span class="n">19</span></div>
+            <div class="li"><span class="sw" style="background:var(--warn)"></span>Finance check<span class="n">14</span></div>
+            <div class="li"><span class="sw" style="background:var(--accent)"></span>Approved<span class="n">10</span></div>
+            <div class="li"><span class="sw" style="background:var(--bad)"></span>Rejected<span class="n">5</span></div>
+            <div class="li"><span class="sw" style="background:var(--surface-2);border:1px solid var(--line-2)"></span>Other<span class="n">15</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h4>COD collected by courier</h4>
+        <p class="sub">This month · ₹ lakh</p>
+        <div class="bars">
+          <div class="bar-row"><span class="lbl">Delhivery</span><div class="track"><div class="fill" style="background:var(--accent); width:100%"></div></div><span class="val">₹18.4L</span></div>
+          <div class="bar-row"><span class="lbl">Ecom Express</span><div class="track"><div class="fill" style="background:var(--accent); width:71%"></div></div><span class="val">₹13.1L</span></div>
+          <div class="bar-row"><span class="lbl">DTDC</span><div class="track"><div class="fill" style="background:var(--accent); width:52%"></div></div><span class="val">₹9.6L</span></div>
+          <div class="bar-row"><span class="lbl">Blue Dart</span><div class="track"><div class="fill" style="background:var(--accent-2); width:33%"></div></div><span class="val">₹6.1L</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div><h4>Shipments, last 14 days</h4><p class="sub">Daily volume · weekend dip is normal</p></div>
+        <div style="font-family:var(--mono);font-size:.82rem;color:var(--good)">▲ steady growth</div>
+      </div>
+      <svg class="spark" viewBox="0 0 560 96" preserveAspectRatio="none" aria-label="Shipment volume over the last 14 days, trending up">
+        <defs>
+          <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="var(--accent)" stop-opacity="0.30"/>
+            <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="0" y1="24" x2="560" y2="24"/><line x1="0" y1="60" x2="560" y2="60"/>
+        </g>
+        <path d="M0 70 L43 66 L86 72 L129 54 L172 58 L215 40 L258 48 L301 34 L344 44 L387 30 L430 46 L473 26 L516 34 L560 18 L560 96 L0 96 Z" fill="url(#area)"/>
+        <path d="M0 70 L43 66 L86 72 L129 54 L172 58 L215 40 L258 48 L301 34 L344 44 L387 30 L430 46 L473 26 L516 34 L560 18" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="560" cy="18" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="fnote"><b style="color:var(--ink)">That's the whole journey</b> — a parcel booked across any of 75+ couriers, tracked to the door, re-priced when its weight changes, and every rupee of cash-on-delivery matched, approved and paid back to the shipper.</p>
+    <p style="margin-top:14px">Logistics Portal · a walkthrough for everyone, not just engineers. Figures shown are illustrative.</p>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var root = document.documentElement;
+    var btn = document.getElementById('themeBtn');
+    function current(){
+      var set = root.getAttribute('data-theme');
+      if (set) return set;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    btn.addEventListener('click', function(){
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+    });
+
+    // animate bar fills in on first view
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      var fills = [].slice.call(document.querySelectorAll('.fill'));
+      fills.forEach(function(f){ var w = f.style.width; f.style.width='0'; requestAnimationFrame(function(){ setTimeout(function(){ f.style.width=w; }, 120); }); });
+    }
+  })();
+</script>
+
+</body>
+</html>

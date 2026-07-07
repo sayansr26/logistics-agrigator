@@ -18,6 +18,7 @@ backend/**/pnpm-lock.yaml
 .env.development.local
 .env.test.local
 .env.production
+.env.uat
 
 # Production builds
 dist/

@@ -15,8 +15,16 @@ export const shipmentFormSchema = z.object({
   productDescription: z.string().min(1, "Product description is required"),
 
   // Delivery Location Information
-  phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
-  alternatePhone: z.string().optional(),
+  phoneNumber: z
+    .string()
+    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"),
+  alternatePhone: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || /^[6-9]\d{9}$/.test(v),
+      "Enter a valid 10-digit Indian mobile number",
+    ),
   email: z.string().email("Invalid email address").optional(),
   receiverName: z
     .string()

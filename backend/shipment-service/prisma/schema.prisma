@@ -24,6 +24,15 @@ model Shipment {
   totalCost         Decimal        @map("total_cost") @db.Decimal(10, 2)
   currency          String         @default("INR") @db.VarChar(3)
 
+  // Cost / Profit split
+  // `totalCost` above is the customer-facing SELLING charge (source of truth).
+  // `courierCost` is what we pay the carrier (purchase amount); may come from
+  // the courier API, a manual entry, or a cost-side charge rule.
+  // `profitMargin` = totalCost (selling) - courierCost; null until courierCost captured.
+  courierCost       Decimal?       @map("courier_cost") @db.Decimal(10, 2)
+  profitMargin      Decimal?       @map("profit_margin") @db.Decimal(10, 2)
+  courierCostSource String?        @map("courier_cost_source") @db.VarChar(20) // API | MANUAL | RULE
+
   // Pickup Address
   pickupAddressId String? @map("pickup_address_id") @db.Uuid
   pickupName      String  @map("pickup_name") @db.VarChar(100)

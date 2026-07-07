@@ -2,7 +2,7 @@
 # Single-stage, optimized for production
 # Includes automated Prisma migrations on startup
 
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY backend/auth-service ./backend/auth-service
 RUN cp -r /app/shared /app/backend/auth-service/
 
 # Generate Prisma client (needed at build time)
-RUN cd backend/auth-service && npx prisma generate
+RUN cd backend/auth-service && npx prisma@5.22.0 generate
 
 # Create non-root user first
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001

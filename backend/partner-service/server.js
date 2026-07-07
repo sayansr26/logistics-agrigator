@@ -141,6 +141,8 @@ app.use("/api/v1/charges-types", require("./routes/chargesTypes"));
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));
 app.use("/api", require("./routes/partnerChannels")); // Also mount at /api for gateway compatibility
+app.use("/api/v1", require("./routes/carrierAccounts"));
+app.use("/api", require("./routes/carrierAccounts")); // Also mount at /api for gateway compatibility
 
 // Charges Rule Management Routes (NEW - replaces legacy charge packages)
 app.use("/api/v1/charges", require("./routes/charges"));

@@ -123,6 +123,10 @@ app.get("/openapi.json", (req, res) => {
 });
 
 // Routes
+// COD/settlement routers must be mounted BEFORE the general wallet router,
+// otherwise "/wallet/cod" / "/wallet/settlement" are captured by wallet's "/:userId".
+app.use("/api/v1/wallet/cod", require("./routes/cod"));
+app.use("/api/v1/wallet/settlement", require("./routes/settlement"));
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/payout", payoutRoutes);
 const adminLogsRoutes = require("./routes/adminLogs");
@@ -341,6 +345,13 @@ async function startServer() {
       logger.info(
         `Swagger docs: http://localhost:3001/swagger/wallet-service (via API Gateway)`,
       );
+
+      // Start the auto-settlement scheduler (no-op unless AUTO_SETTLEMENT_ENABLED=true)
+      try {
+        require("./services/settlementScheduler").start();
+      } catch (e) {
+        logger.warn("Failed to start settlement scheduler", { error: e.message });
+      }
     });
   } catch (error) {
     logger.error("Failed to start server:", error);

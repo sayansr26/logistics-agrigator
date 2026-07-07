@@ -1,13 +1,13 @@
 import { useEffect, useCallback } from "react";
 import { useNDRStore, useNDRSelectors, useNDRActions } from "@/store/ndrStore";
-import { useAuthStore } from "@/store/auth-store";
+import { useAppSelector } from "@/store/hooks";
 import { CreateNDRRequest, NDRFilters } from "@/types/shipment";
 
 /**
  * Hook for NDR data and actions
  */
 export function useNDR() {
-  const { accessToken } = useAuthStore();
+  const accessToken = useAppSelector((s) => s.auth.token);
   const selectors = useNDRSelectors();
   const actions = useNDRActions();
 
@@ -30,15 +30,21 @@ export function useNDR() {
 export function useNDRs(filters?: NDRFilters, autoFetch = true) {
   const { ndrs, loading, error, pagination, fetchNDRs, setFilters } = useNDR();
 
+  // Serialize filters so effect/callback deps are stable across renders
+  // (callers pass an inline object literal recreated every render).
+  const filtersKey = JSON.stringify(filters ?? {});
+
   useEffect(() => {
     if (autoFetch) {
       fetchNDRs(filters);
     }
-  }, [autoFetch, filters, fetchNDRs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFetch, filtersKey, fetchNDRs]);
 
   const refetch = useCallback(() => {
     fetchNDRs(filters);
-  }, [fetchNDRs, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchNDRs, filtersKey]);
 
   const updateFilters = useCallback(
     (newFilters: Partial<NDRFilters>) => {

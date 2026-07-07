@@ -413,7 +413,46 @@ const rerateShipmentSchema = Joi.object({
     .messages({
       "any.only": "codAction must be DEDUCT_WALLET or UPDATE_COD",
     }),
+
+  // Optional manual courier cost (purchase amount). When omitted, the courier
+  // cost is taken from the rate engine cost side if available, else left unknown.
+  courierCharge: Joi.number().min(0).precision(2).optional().messages({
+    "number.min": "Courier charge cannot be negative",
+  }),
 }).min(2);
+
+// Re-rate preview (dry-run) — all fields optional, no reason/wallet side effects
+const rerateShipmentPreviewSchema = Joi.object({
+  disputedWeight: Joi.number().positive().precision(3).optional(),
+  disputedLength: Joi.number().positive().precision(2).optional(),
+  disputedWidth: Joi.number().positive().precision(2).optional(),
+  disputedHeight: Joi.number().positive().precision(2).optional(),
+  courierCharge: Joi.number().min(0).precision(2).optional(),
+}).min(1);
+
+// Bulk re-rate — array of rows keyed by AWB number
+const bulkRerateRowSchema = Joi.object({
+  awbNumber: Joi.string().trim().min(1).required().messages({
+    "any.required": "awbNumber is required",
+    "string.empty": "awbNumber is required",
+  }),
+  newWeight: Joi.number().positive().precision(3).optional(),
+  newLength: Joi.number().positive().precision(2).optional(),
+  newWidth: Joi.number().positive().precision(2).optional(),
+  newHeight: Joi.number().positive().precision(2).optional(),
+  courierCharge: Joi.number().min(0).precision(2).optional(),
+  codAction: Joi.string().valid("DEDUCT_WALLET", "UPDATE_COD").optional(),
+}).or("newWeight", "newLength", "newWidth", "newHeight", "courierCharge");
+
+const bulkRerateSchema = Joi.object({
+  reason: Joi.string().trim().min(5).max(500).required().messages({
+    "string.min": "Reason must be at least 5 characters",
+  }),
+  rows: Joi.array().items(bulkRerateRowSchema).min(1).max(500).required().messages({
+    "array.min": "At least one row is required",
+    "array.max": "Maximum 500 rows per bulk re-rate",
+  }),
+});
 
 const assignPartnerSchema = Joi.object({
   partnerId: Joi.string().required().messages({
@@ -949,6 +988,8 @@ module.exports = {
   serviceabilitySchema,
   shipmentQuoteSchema,
   rerateShipmentSchema,
+  rerateShipmentPreviewSchema,
+  bulkRerateSchema,
   addressSchema,
   packageSchema,
   dimensionsSchema,
