@@ -27,28 +27,27 @@ USER nodejs
 RUN cd /app/frontend && pnpm build
 
 # =============== PRODUCTION RUNTIME SETUP ===============
-# Fix static assets 404 issue
-# Next.js standalone structure:
-#   .next/standalone/frontend/server.js
-#   .next/static/ (static assets remain here after build)
-# The server expects .next/static/ alongside server.js
+# With experimental.outputFileTracingRoot set to the monorepo root, Next emits
+# the monorepo standalone layout:
+#   .next/standalone/frontend/server.js   <-- entrypoint (run from standalone root)
+#   .next/standalone/node_modules/        <-- complete traced deps (incl. styled-jsx)
+# Static assets are not bundled in standalone and must be copied to
+# .next/standalone/frontend/.next/static; public to .next/standalone/frontend/public.
 USER root
 
-# CRITICAL: Copy static assets to the standalone structure
-# Standalone server expects .next/static/ relative to server.js
+# CRITICAL: Copy static assets next to the standalone server
 RUN mkdir -p /app/frontend/.next/standalone/frontend/.next && \
-    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/frontend/.next/
+    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/frontend/.next/static
 
 # Copy public assets (if exists - some projects don't have public folder)
-RUN mkdir -p /app/frontend/.next/standalone/frontend && \
-    if [ -d "/app/frontend/public" ]; then \
-        cp -r /app/frontend/public /app/frontend/.next/standalone/frontend/; \
+RUN if [ -d "/app/frontend/public" ]; then \
+        cp -r /app/frontend/public /app/frontend/.next/standalone/frontend/public; \
     fi
 
 # Set ownership
 RUN chown -R nodejs:nodejs /app
 
-# Run from standalone directory, execute frontend/server.js
+# Run from the standalone root; the server entry is frontend/server.js
 USER nodejs
 WORKDIR /app/frontend/.next/standalone
 

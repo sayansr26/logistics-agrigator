@@ -51,9 +51,12 @@ import {
   Trash2,
   Globe,
   Route,
+  Building,
+  Users,
 } from "lucide-react";
 import {
   useGetZoneByIdQuery,
+  useGetZoneGeographyQuery,
   useDeleteZoneMutation,
 } from "@/store/api/endpoints/zonesApi";
 
@@ -69,6 +72,12 @@ export default function ZoneDetailsPage() {
   const [deleteZone] = useDeleteZoneMutation();
 
   const zone = zoneData?.data;
+  const isGeological = zone?.zoneType === "GEOLOGICAL";
+
+  // Geography is only relevant for GEOLOGICAL zones
+  const { data: geographyData, isLoading: isLoadingGeography } =
+    useGetZoneGeographyQuery(zoneId, { skip: !zone || !isGeological });
+  const geography = geographyData?.data;
 
   const handleDeleteZone = async () => {
     setActionLoading(true);
@@ -156,7 +165,7 @@ export default function ZoneDetailsPage() {
     <DashboardLayout>
       <PageContainer>
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border p-6">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 rounded-lg border p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
@@ -230,12 +239,25 @@ export default function ZoneDetailsPage() {
             icon={Route}
             iconColor="text-purple-600"
           />
-          <StatsCard
-            title="Milestones"
-            value={zone.milestones?.length || 0}
-            icon={Route}
-            iconColor="text-blue-600"
-          />
+          {isGeological ? (
+            <StatsCard
+              title="Pincodes"
+              value={
+                geography?.summary?.totalPincodes ??
+                geography?.pincodes?.length ??
+                0
+              }
+              icon={MapPin}
+              iconColor="text-orange-600"
+            />
+          ) : (
+            <StatsCard
+              title="Milestones"
+              value={zone.milestones?.length || 0}
+              icon={Route}
+              iconColor="text-blue-600"
+            />
+          )}
           <StatsCard
             title="Created"
             value={new Date(zone.createdAt).toLocaleDateString("en-US", {
@@ -254,10 +276,17 @@ export default function ZoneDetailsPage() {
               <Globe className="h-4 w-4 mr-2" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="milestones">
-              <Route className="h-4 w-4 mr-2" />
-              Milestones
-            </TabsTrigger>
+            {isGeological ? (
+              <TabsTrigger value="geography">
+                <MapPin className="h-4 w-4 mr-2" />
+                Geography
+              </TabsTrigger>
+            ) : (
+              <TabsTrigger value="milestones">
+                <Route className="h-4 w-4 mr-2" />
+                Milestones
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <div className="mt-6">
@@ -299,85 +328,96 @@ export default function ZoneDetailsPage() {
               </DetailGrid>
             </TabsContent>
 
-            <TabsContent value="milestones" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <Route className="h-5 w-5" />
-                        Distance Milestones
-                      </CardTitle>
-                      <CardDescription>
-                        {zone.milestones?.length || 0} milestones configured
-                      </CardDescription>
+            {isGeological && (
+              <TabsContent value="geography" className="space-y-6">
+                <ZoneGeographySection
+                  geography={geography}
+                  isLoading={isLoadingGeography}
+                />
+              </TabsContent>
+            )}
+
+            {!isGeological && (
+              <TabsContent value="milestones" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Route className="h-5 w-5" />
+                          Distance Milestones
+                        </CardTitle>
+                        <CardDescription>
+                          {zone.milestones?.length || 0} milestones configured
+                        </CardDescription>
+                      </div>
+                      {zone.milestones?.length > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={() => router.push(`/zones/${zoneId}/edit`)}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Milestones
+                        </Button>
+                      )}
                     </div>
-                    {zone.milestones?.length > 0 && (
-                      <Button
-                        size="sm"
-                        onClick={() => router.push(`/zones/${zoneId}/edit`)}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Milestones
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {zone.milestones?.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {zone.milestones.map((milestone) => (
-                        <Card key={milestone.id} className="shadow-sm">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium flex items-center justify-between">
-                              <span className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                                  <span className="text-purple-600 font-bold">
-                                    {milestone.suffix}
+                  </CardHeader>
+                  <CardContent>
+                    {zone.milestones?.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {zone.milestones.map((milestone) => (
+                          <Card key={milestone.id} className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                                    <span className="text-purple-600 font-bold">
+                                      {milestone.suffix}
+                                    </span>
+                                  </div>
+                                  Zone {milestone.suffix}
+                                </span>
+                                <Badge variant="secondary" className="text-xs">
+                                  #{milestone.sortOrder}
+                                </Badge>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-muted-foreground">
+                                    Distance Range
+                                  </span>
+                                  <span className="font-medium">
+                                    {milestone.minKm} - {milestone.maxKm} km
                                   </span>
                                 </div>
-                                Zone {milestone.suffix}
-                              </span>
-                              <Badge variant="secondary" className="text-xs">
-                                #{milestone.sortOrder}
-                              </Badge>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">
-                                  Distance Range
-                                </span>
-                                <span className="font-medium">
-                                  {milestone.minKm} - {milestone.maxKm} km
-                                </span>
                               </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Route className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium mb-2">
-                        No milestones configured
-                      </p>
-                      <p className="text-sm mb-4">
-                        This zone doesn't have any distance milestones yet.
-                      </p>
-                      <Button
-                        onClick={() => router.push(`/zones/${zoneId}/edit`)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Add Milestones
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Route className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">
+                          No milestones configured
+                        </p>
+                        <p className="text-sm mb-4">
+                          This zone doesn't have any distance milestones yet.
+                        </p>
+                        <Button
+                          onClick={() => router.push(`/zones/${zoneId}/edit`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Add Milestones
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
           </div>
         </Tabs>
 
@@ -414,5 +454,139 @@ export default function ZoneDetailsPage() {
         </AlertDialog>
       </PageContainer>
     </DashboardLayout>
+  );
+}
+
+/**
+ * Geography coverage section for GEOLOGICAL zones.
+ * Renders states / cities / areas / pincodes as labeled chip groups.
+ */
+function ZoneGeographySection({ geography, isLoading }) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const states = geography?.states || [];
+  const cities = geography?.cities || [];
+  const areas = geography?.areas || [];
+  const pincodes = geography?.pincodes || [];
+
+  const totalCount =
+    states.length + cities.length + areas.length + pincodes.length;
+
+  const groups = [
+    {
+      key: "states",
+      title: "States",
+      icon: MapPin,
+      color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      items: states.map((s) => ({
+        id: s.state?.id,
+        label: s.state?.name,
+        sub: s.state?.code,
+      })),
+    },
+    {
+      key: "cities",
+      title: "Cities",
+      icon: Building,
+      color:
+        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      items: cities.map((c) => ({
+        id: c.city?.id,
+        label: c.city?.name,
+        sub: c.city?.state?.name,
+      })),
+    },
+    {
+      key: "areas",
+      title: "Areas",
+      icon: Users,
+      color:
+        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+      items: areas.map((a) => ({
+        id: a.area?.id,
+        label: a.area?.name,
+        sub: a.area?.city?.name,
+      })),
+    },
+    {
+      key: "pincodes",
+      title: "Pincodes",
+      icon: MapPin,
+      color:
+        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+      items: pincodes.map((p) => ({
+        id: p.pincode?.id || p.pincode?.code,
+        label: p.pincode?.code,
+        sub: p.pincode?.areaName,
+      })),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="h-5 w-5" />
+          Geographical Coverage
+        </CardTitle>
+        <CardDescription>
+          {states.length} states · {cities.length} cities · {areas.length} areas
+          · {pincodes.length} pincodes
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {totalCount === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Globe className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium mb-2">
+              No geographical coverage configured
+            </p>
+            <p className="text-sm">
+              This zone doesn't have any states, cities, areas, or pincodes yet.
+            </p>
+          </div>
+        ) : (
+          groups
+            .filter((g) => g.items.length > 0)
+            .map((group) => {
+              const Icon = group.icon;
+              return (
+                <div key={group.key} className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Icon className="h-4 w-4" />
+                    {group.title}
+                    <span className="text-muted-foreground">
+                      ({group.items.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {group.items.map((item) => (
+                      <Badge
+                        key={item.id}
+                        variant="secondary"
+                        className={group.color}
+                      >
+                        <Icon className="h-3 w-3 mr-1" />
+                        {item.label}
+                        {item.sub && (
+                          <span className="ml-1 opacity-70">({item.sub})</span>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+        )}
+      </CardContent>
+    </Card>
   );
 }

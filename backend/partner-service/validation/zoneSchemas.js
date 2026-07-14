@@ -265,6 +265,22 @@ const createZone = {
     // Zone type (GEOLOGICAL is default)
     zoneType: schemas.zoneType.default("GEOLOGICAL"),
 
+    // For GEOLOGICAL zones: single partner selection (optional).
+    // When omitted, the controller falls back to the authenticated
+    // user's partnerId. Forbidden for DISTANCE zones (they use partnerIds).
+    partnerId: Joi.string()
+      .pattern(cuidPattern)
+      .when("zoneType", {
+        is: "DISTANCE",
+        then: Joi.forbidden().messages({
+          "any.unknown": "partnerId is only allowed for GEOLOGICAL zones",
+        }),
+        otherwise: Joi.optional(),
+      })
+      .messages({
+        "string.pattern.base": "partnerId must be a valid partner ID",
+      }),
+
     // For DISTANCE zones: partner IDs (required when zoneType=DISTANCE)
     partnerIds: Joi.array()
       .items(schemas.partnerId)
@@ -297,11 +313,14 @@ const createZone = {
         }),
       }),
 
-    // For GEOLOGICAL zones: geographical associations (optional)
+    // For GEOLOGICAL zones: geographical associations (optional).
+    // NOTE: field names (states/cities/areas) MUST match what
+    // zoneService._associateGeography() consumes. states/cities/areas are
+    // arrays of UUIDs; pincodes are 6-digit code strings.
     geographical: Joi.object({
-      stateIds: Joi.array().items(schemas.uuid).optional(),
-      cityIds: Joi.array().items(schemas.uuid).optional(),
-      areaIds: Joi.array().items(schemas.uuid).optional(),
+      states: Joi.array().items(schemas.uuid).optional(),
+      cities: Joi.array().items(schemas.uuid).optional(),
+      areas: Joi.array().items(schemas.uuid).optional(),
       pincodes: Joi.array().items(schemas.pincode).optional(),
     }).when("zoneType", {
       is: "DISTANCE",

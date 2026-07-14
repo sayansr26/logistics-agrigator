@@ -120,6 +120,16 @@ export function ZoneForm({
   const [partnerSearch, setPartnerSearch] = useState("");
   const [showPartnerDropdown, setShowPartnerDropdown] = useState(false);
 
+  // Geographical search state for chips UI (State -> City -> Area -> Pincode)
+  const [stateSearch, setStateSearch] = useState("");
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [areaSearch, setAreaSearch] = useState("");
+  const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+  const [pincodeSearch, setPincodeSearch] = useState("");
+  const [showPincodeDropdown, setShowPincodeDropdown] = useState(false);
+
   // Loading states
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -420,20 +430,12 @@ export function ZoneForm({
         "Zone description must be between 10 and 500 characters";
     }
 
-    // Partner validation based on zone type
-    if (formData.zoneType === "zone-wise" && !formData.partnerId) {
-      newErrors.partnerId =
-        "Partner selection is required for geographical zones";
-    }
-
-    if (formData.zoneType === "distance-wise") {
-      if (
-        !formData.selectedPartnerIds ||
-        formData.selectedPartnerIds.length === 0
-      ) {
-        newErrors.selectedPartnerIds =
-          "At least one partner is required for distance zones";
-      }
+    // Partner validation - common to both zone types (multi-select)
+    if (
+      !formData.selectedPartnerIds ||
+      formData.selectedPartnerIds.length === 0
+    ) {
+      newErrors.selectedPartnerIds = "At least one partner is required";
     }
 
     // Zone-wise validation
@@ -582,8 +584,9 @@ export function ZoneForm({
                   states: formData.selectedStates.map((state) => state.id),
                   cities: formData.selectedCities.map((city) => city.id),
                   areas: formData.selectedAreas.map((area) => area.id),
+                  // Backend expects 6-digit pincode codes, not UUIDs
                   pincodes: formData.selectedPincodes.map(
-                    (pincode) => pincode.id,
+                    (pincode) => pincode.pincode || pincode.code,
                   ),
                   manualPincodes: formData.manualPincodes || [],
                 },
@@ -662,7 +665,7 @@ export function ZoneForm({
 
   // Handle state selection (multiple)
   const handleStateChange = (stateId, isChecked) => {
-    const state = states.find((s) => s.id === parseInt(stateId));
+    const state = states.find((s) => String(s.id) === String(stateId));
     if (state) {
       let newSelectedStates;
       if (isChecked) {
@@ -694,7 +697,7 @@ export function ZoneForm({
 
   // Handle city selection (multiple)
   const handleCityChange = (cityId, isChecked) => {
-    const city = cities.find((c) => c.id === parseInt(cityId));
+    const city = cities.find((c) => String(c.id) === String(cityId));
     if (city) {
       let newSelectedCities;
       if (isChecked) {
@@ -724,7 +727,7 @@ export function ZoneForm({
 
   // Handle area selection (multiple)
   const handleAreaChange = (areaId, isChecked) => {
-    const area = areas.find((a) => a.id === parseInt(areaId));
+    const area = areas.find((a) => String(a.id) === String(areaId));
     if (area) {
       let newSelectedAreas;
       if (isChecked) {
@@ -752,7 +755,7 @@ export function ZoneForm({
 
   // Handle pincode selection (multiple)
   const handlePincodeChange = (pincodeId, isChecked) => {
-    const pincode = pincodes.find((p) => p.id === parseInt(pincodeId));
+    const pincode = pincodes.find((p) => String(p.id) === String(pincodeId));
     if (pincode) {
       let newSelectedPincodes;
       if (isChecked) {
@@ -976,17 +979,66 @@ export function ZoneForm({
   };
 
   // Filter cities based on metro status
+  // Filter states by search term, excluding already-selected
+  const getFilteredStates = () => {
+    if (!states || states.length === 0) return [];
+    const selectedIds = formData.selectedStates.map((s) => String(s.id));
+    const q = stateSearch.trim().toLowerCase();
+    return states.filter((state) => {
+      const isNotSelected = !selectedIds.includes(String(state.id));
+      const matchesSearch =
+        !q ||
+        state.name?.toLowerCase().includes(q) ||
+        state.code?.toLowerCase().includes(q);
+      return isNotSelected && matchesSearch;
+    });
+  };
+
   const getFilteredCities = () => {
     if (!cities || cities.length === 0) return [];
 
-    switch (cityFilter) {
-      case "metro":
-        return cities.filter((city) => city.isMetro === true);
-      case "non-metro":
-        return cities.filter((city) => city.isMetro === false);
-      default:
-        return cities;
-    }
+    const selectedIds = formData.selectedCities.map((c) => String(c.id));
+    const q = citySearch.trim().toLowerCase();
+
+    return cities.filter((city) => {
+      if (selectedIds.includes(String(city.id))) return false;
+
+      // Metro filter
+      if (cityFilter === "metro" && city.isMetro !== true) return false;
+      if (cityFilter === "non-metro" && city.isMetro !== false) return false;
+
+      // Search filter
+      const matchesSearch = !q || city.name?.toLowerCase().includes(q);
+      return matchesSearch;
+    });
+  };
+
+  // Filter areas by search term, excluding already-selected
+  const getFilteredAreas = () => {
+    if (!areas || areas.length === 0) return [];
+    const selectedIds = formData.selectedAreas.map((a) => String(a.id));
+    const q = areaSearch.trim().toLowerCase();
+    return areas.filter((area) => {
+      const isNotSelected = !selectedIds.includes(String(area.id));
+      const matchesSearch = !q || area.name?.toLowerCase().includes(q);
+      return isNotSelected && matchesSearch;
+    });
+  };
+
+  // Filter area-derived pincodes by search term, excluding already-selected
+  const getFilteredPincodes = () => {
+    if (!pincodes || pincodes.length === 0) return [];
+    const selectedIds = formData.selectedPincodes.map((p) => String(p.id));
+    const q = pincodeSearch.trim().toLowerCase();
+    return pincodes.filter((pincode) => {
+      const isNotSelected = !selectedIds.includes(String(pincode.id));
+      const code = pincode.pincode || pincode.code || "";
+      const matchesSearch =
+        !q ||
+        String(code).toLowerCase().includes(q) ||
+        pincode.areaName?.toLowerCase().includes(q);
+      return isNotSelected && matchesSearch;
+    });
   };
 
   // Partner chips UI helper functions
@@ -1090,178 +1142,113 @@ export function ZoneForm({
 
               <div className="space-y-2">
                 <Label htmlFor="partnerId">
-                  Courier Partner
-                  {formData.zoneType === "distance-wise" ? "s" : ""} *
-                  {formData.zoneType === "distance-wise" && (
-                    <span className="text-xs text-muted-foreground ml-2">
-                      (Select multiple)
-                    </span>
-                  )}
+                  Courier Partners *
+                  <span className="text-xs text-muted-foreground ml-2">
+                    (Select one or more)
+                  </span>
                 </Label>
 
-                {/* Single select for Geological zones */}
-                {formData.zoneType === "zone-wise" && (
-                  <>
-                    <Select
-                      value={formData.partnerId}
-                      onValueChange={(value) =>
-                        updateFormData({ partnerId: value })
-                      }
-                      disabled={loadingPartners || partners.length === 0}
-                    >
-                      <SelectTrigger
-                        className={errors.partnerId ? "border-red-500" : ""}
-                      >
-                        <SelectValue
-                          placeholder={
-                            loadingPartners
-                              ? "Loading partners..."
-                              : partners.length === 0
-                                ? "No partners available"
-                                : "Select a courier partner"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
+                {/* Unified multi-select for both zone types - Chips UI */}
+                <div className="space-y-2">
+                  {/* Partner Search Input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search and select courier partners..."
+                      value={partnerSearch}
+                      onChange={(e) => {
+                        setPartnerSearch(e.target.value);
+                        setShowPartnerDropdown(true);
+                      }}
+                      onFocus={() => setShowPartnerDropdown(true)}
+                      onBlur={() => {
+                        // Delay hiding to allow click on dropdown items
+                        setTimeout(() => setShowPartnerDropdown(false), 200);
+                      }}
+                      className={`pl-10 ${errors.selectedPartnerIds ? "border-red-500" : ""}`}
+                    />
+                    {loadingPartners && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+
+                    {/* Partner Dropdown */}
+                    {showPartnerDropdown && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {loadingPartners ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            <span className="text-sm text-muted-foreground">
-                              Loading partners...
-                            </span>
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                            Loading partners...
                           </div>
-                        ) : partners.length === 0 ? (
-                          <div className="flex items-center justify-center py-4">
-                            <span className="text-sm text-muted-foreground">
-                              No partners available
-                            </span>
+                        ) : getFilteredPartners().length === 0 ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            {partnerSearch
+                              ? "No matching partners found"
+                              : formData.selectedPartnerIds?.length ===
+                                  partners.length
+                                ? "All partners selected"
+                                : "No partners available"}
                           </div>
                         ) : (
-                          partners.map((partner) => (
-                            <SelectItem key={partner.id} value={partner.id}>
+                          getFilteredPartners().map((partner) => (
+                            <button
+                              key={partner.id}
+                              type="button"
+                              onClick={() => handlePartnerSelect(partner.id)}
+                              className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                            >
                               <div className="flex items-center space-x-2">
-                                <Truck className="h-4 w-4 text-blue-600" />
-                                <span>{partner.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({partner.code})
+                                <Truck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                <span className="font-medium">
+                                  {partner.displayName || partner.name}
                                 </span>
+                                {partner.code && (
+                                  <span className="text-muted-foreground text-xs">
+                                    ({partner.code})
+                                  </span>
+                                )}
                               </div>
-                            </SelectItem>
+                              <Plus className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            </button>
                           ))
                         )}
-                      </SelectContent>
-                    </Select>
-                    {errors.partnerId && (
-                      <p className="text-sm text-red-500 mt-1">
-                        {errors.partnerId}
-                      </p>
-                    )}
-                  </>
-                )}
-
-                {/* Multi-select for Distance zones - Chips UI */}
-                {formData.zoneType === "distance-wise" && (
-                  <div className="space-y-2">
-                    {/* Partner Search Input */}
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search and select courier partners..."
-                        value={partnerSearch}
-                        onChange={(e) => {
-                          setPartnerSearch(e.target.value);
-                          setShowPartnerDropdown(true);
-                        }}
-                        onFocus={() => setShowPartnerDropdown(true)}
-                        onBlur={() => {
-                          // Delay hiding to allow click on dropdown items
-                          setTimeout(() => setShowPartnerDropdown(false), 200);
-                        }}
-                        className={`pl-10 ${errors.selectedPartnerIds ? "border-red-500" : ""}`}
-                      />
-                      {loadingPartners && (
-                        <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                      )}
-
-                      {/* Partner Dropdown */}
-                      {showPartnerDropdown && (
-                        <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {loadingPartners ? (
-                            <div className="p-3 text-center text-sm text-muted-foreground">
-                              <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                              Loading partners...
-                            </div>
-                          ) : getFilteredPartners().length === 0 ? (
-                            <div className="p-3 text-center text-sm text-muted-foreground">
-                              {partnerSearch
-                                ? "No matching partners found"
-                                : formData.selectedPartnerIds?.length ===
-                                    partners.length
-                                  ? "All partners selected"
-                                  : "No partners available"}
-                            </div>
-                          ) : (
-                            getFilteredPartners().map((partner) => (
-                              <button
-                                key={partner.id}
-                                type="button"
-                                onClick={() => handlePartnerSelect(partner.id)}
-                                className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <Truck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                  <span className="font-medium">
-                                    {partner.displayName || partner.name}
-                                  </span>
-                                  {partner.code && (
-                                    <span className="text-muted-foreground text-xs">
-                                      ({partner.code})
-                                    </span>
-                                  )}
-                                </div>
-                                <Plus className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Selected Partners Chips */}
-                    {formData.selectedPartnerIds?.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.selectedPartnerIds.map((partnerId) => (
-                          <Badge
-                            key={partnerId}
-                            variant="secondary"
-                            className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 cursor-pointer hover:bg-purple-200 dark:hover:bg-purple-900/50 pr-1"
-                          >
-                            <Truck className="h-3 w-3 mr-1" />
-                            {getPartnerDisplayName(partnerId)}
-                            <button
-                              type="button"
-                              onClick={() => handlePartnerRemove(partnerId)}
-                              className="ml-1 p-0.5 rounded-full hover:bg-purple-300 dark:hover:bg-purple-700"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
                       </div>
                     )}
-
-                    <p className="text-xs text-muted-foreground">
-                      {formData.selectedPartnerIds?.length > 0
-                        ? `${formData.selectedPartnerIds.length} partner(s) selected`
-                        : "Select one or more courier partners for this zone"}
-                    </p>
-                    {errors.selectedPartnerIds && (
-                      <p className="text-sm text-red-500 mt-1">
-                        {errors.selectedPartnerIds}
-                      </p>
-                    )}
                   </div>
-                )}
+
+                  {/* Selected Partners Chips */}
+                  {formData.selectedPartnerIds?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.selectedPartnerIds.map((partnerId) => (
+                        <Badge
+                          key={partnerId}
+                          variant="secondary"
+                          className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 cursor-pointer hover:bg-purple-200 dark:hover:bg-purple-900/50 pr-1"
+                        >
+                          <Truck className="h-3 w-3 mr-1" />
+                          {getPartnerDisplayName(partnerId)}
+                          <button
+                            type="button"
+                            onClick={() => handlePartnerRemove(partnerId)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-purple-300 dark:hover:bg-purple-700"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    {formData.selectedPartnerIds?.length > 0
+                      ? `${formData.selectedPartnerIds.length} partner(s) selected`
+                      : "Select one or more courier partners for this zone"}
+                  </p>
+                  {errors.selectedPartnerIds && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.selectedPartnerIds}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1311,29 +1298,28 @@ export function ZoneForm({
                 Zone Type *
               </Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Zone Wise - Coming Soon */}
+                {/* Zone Wise - Geographical */}
                 <div
-                  className="border-2 rounded-lg p-4 cursor-not-allowed transition-all border-border opacity-50 relative"
-                  title="Coming Soon"
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    formData.zoneType === "zone-wise"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-600"
+                      : "border-border hover:border-gray-400 dark:hover:border-gray-600"
+                  }`}
+                  onClick={() => updateFormData({ zoneType: "zone-wise" })}
                 >
-                  <div className="absolute top-2 right-2">
-                    <span className="text-xs bg-yellow-500 text-yellow-900 px-2 py-0.5 rounded-full font-medium">
-                      Coming Soon
-                    </span>
-                  </div>
                   <div className="flex items-center space-x-3">
                     <input
                       type="radio"
                       name="zoneType"
                       value="zone-wise"
-                      checked={false}
-                      disabled
-                      className="h-4 w-4 text-gray-400"
+                      checked={formData.zoneType === "zone-wise"}
+                      onChange={() => updateFormData({ zoneType: "zone-wise" })}
+                      className="h-4 w-4 text-blue-600"
                     />
                     <div className="flex items-center space-x-2">
-                      <Map className="h-5 w-5 text-gray-400" />
+                      <Map className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       <div>
-                        <div className="font-medium text-muted-foreground">
+                        <div className="font-medium text-foreground">
                           Zone Wise
                         </div>
                         <div className="text-sm text-muted-foreground">
@@ -1456,61 +1442,102 @@ export function ZoneForm({
             {/* Zone-wise Geographical Coverage */}
             {formData.zoneType === "zone-wise" && (
               <>
-                {/* State Selection */}
+                {/* State Selection - searchable multi-select */}
                 <div className="space-y-2">
                   <Label htmlFor="state">States *</Label>
-                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
-                    {loadingStates ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span>Loading states...</span>
-                      </div>
-                    ) : states.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        No states available (Debug: states.length ={" "}
-                        {states.length})
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {states.map((state) => (
-                          <div
-                            key={state.id}
-                            className="flex items-center space-x-3"
-                          >
-                            <input
-                              type="checkbox"
-                              id={`state-${state.id}`}
-                              checked={formData.selectedStates.some(
-                                (s) => s.id === state.id,
-                              )}
-                              onChange={(e) =>
-                                handleStateChange(state.id, e.target.checked)
-                              }
-                              className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                            />
-                            <label
-                              htmlFor={`state-${state.id}`}
-                              className="flex items-center space-x-2 cursor-pointer"
-                            >
-                              <MapPin className="h-4 w-4 text-blue-600" />
-                              <span className="text-sm">{state.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                ({state.code})
-                              </span>
-                            </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="state"
+                      placeholder="Search and select states..."
+                      value={stateSearch}
+                      onChange={(e) => {
+                        setStateSearch(e.target.value);
+                        setShowStateDropdown(true);
+                      }}
+                      onFocus={() => setShowStateDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowStateDropdown(false), 200)
+                      }
+                      disabled={loadingStates || states.length === 0}
+                      className={`pl-10 ${errors.selectedStates ? "border-red-500" : ""}`}
+                    />
+                    {loadingStates && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+
+                    {showStateDropdown && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {loadingStates ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                            Loading states...
                           </div>
-                        ))}
+                        ) : getFilteredStates().length === 0 ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            {stateSearch
+                              ? "No matching states found"
+                              : formData.selectedStates.length === states.length
+                                ? "All states selected"
+                                : "No states available"}
+                          </div>
+                        ) : (
+                          getFilteredStates().map((state) => (
+                            <button
+                              key={state.id}
+                              type="button"
+                              onClick={() => {
+                                handleStateChange(state.id, true);
+                                setStateSearch("");
+                                setShowStateDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <MapPin className="h-4 w-4 text-blue-600" />
+                                <span className="font-medium">
+                                  {state.name}
+                                </span>
+                                {state.code && (
+                                  <span className="text-muted-foreground text-xs">
+                                    ({state.code})
+                                  </span>
+                                )}
+                              </div>
+                              <Plus className="h-4 w-4 text-blue-600" />
+                            </button>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
+
                   {formData.selectedStates.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm text-muted-foreground">
-                        Selected:{" "}
-                        {formData.selectedStates.map((s) => s.name).join(", ")}
-                      </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.selectedStates.map((state) => (
+                        <Badge
+                          key={state.id}
+                          variant="secondary"
+                          className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 pr-1"
+                        >
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {state.name}
+                          <button
+                            type="button"
+                            onClick={() => handleStateChange(state.id, false)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-blue-300 dark:hover:bg-blue-700"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    {formData.selectedStates.length > 0
+                      ? `${formData.selectedStates.length} state(s) selected`
+                      : "Select one or more states to continue"}
+                  </p>
                   {errors.selectedStates && (
                     <p className="text-sm text-red-500 mt-1">
                       {errors.selectedStates}
@@ -1518,7 +1545,7 @@ export function ZoneForm({
                   )}
                 </div>
 
-                {/* City Selection */}
+                {/* City Selection - searchable multi-select */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="city">Cities *</Label>
@@ -1544,98 +1571,110 @@ export function ZoneForm({
                     )}
                   </div>
 
-                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
-                    {!formData.selectedStates.length ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        Select states first
-                      </div>
-                    ) : loadingCities ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span>Loading cities...</span>
-                      </div>
-                    ) : cities.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        No cities available
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {getFilteredCities().map((city) => (
-                          <div
-                            key={city.id}
-                            className="flex items-center space-x-3"
-                          >
-                            <input
-                              type="checkbox"
-                              id={`city-${city.id}`}
-                              checked={formData.selectedCities.some(
-                                (c) => c.id === city.id,
-                              )}
-                              onChange={(e) =>
-                                handleCityChange(city.id, e.target.checked)
-                              }
-                              className="h-4 w-4 text-green-600 rounded focus:ring-green-500"
-                            />
-                            <label
-                              htmlFor={`city-${city.id}`}
-                              className="flex items-center space-x-2 cursor-pointer flex-1"
-                            >
-                              <Building className="h-4 w-4 text-green-600" />
-                              <span className="text-sm">{city.name}</span>
-                              {city.isMetro && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  Metro
-                                </span>
-                              )}
-                              {city.population && (
-                                <span className="text-xs text-muted-foreground">
-                                  ({city.population.toLocaleString()})
-                                </span>
-                              )}
-                            </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="city"
+                      placeholder={
+                        !formData.selectedStates.length
+                          ? "Select states first"
+                          : "Search and select cities..."
+                      }
+                      value={citySearch}
+                      onChange={(e) => {
+                        setCitySearch(e.target.value);
+                        setShowCityDropdown(true);
+                      }}
+                      onFocus={() => setShowCityDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowCityDropdown(false), 200)
+                      }
+                      disabled={
+                        !formData.selectedStates.length ||
+                        loadingCities ||
+                        cities.length === 0
+                      }
+                      className={`pl-10 ${errors.selectedCities ? "border-red-500" : ""}`}
+                    />
+                    {loadingCities && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+
+                    {showCityDropdown && formData.selectedStates.length > 0 && (
+                      <div className="absolute z-40 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {loadingCities ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                            Loading cities...
                           </div>
-                        ))}
-                        {getFilteredCities().length === 0 &&
-                          cityFilter !== "all" && (
-                            <div className="text-center py-4 text-muted-foreground">
-                              No{" "}
-                              {cityFilter === "metro" ? "metro" : "non-metro"}{" "}
-                              cities found
-                            </div>
-                          )}
+                        ) : getFilteredCities().length === 0 ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            {citySearch
+                              ? "No matching cities found"
+                              : cityFilter !== "all"
+                                ? `No ${cityFilter === "metro" ? "metro" : "non-metro"} cities found`
+                                : "No cities available"}
+                          </div>
+                        ) : (
+                          getFilteredCities().map((city) => (
+                            <button
+                              key={city.id}
+                              type="button"
+                              onClick={() => {
+                                handleCityChange(city.id, true);
+                                setCitySearch("");
+                                setShowCityDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <Building className="h-4 w-4 text-green-600" />
+                                <span className="font-medium">{city.name}</span>
+                                {city.isMetro && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    Metro
+                                  </span>
+                                )}
+                              </div>
+                              <Plus className="h-4 w-4 text-green-600" />
+                            </button>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
+
                   {formData.selectedCities.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Selected Cities ({formData.selectedCities.length}):
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.selectedCities.map((city) => (
-                          <div
-                            key={city.id}
-                            className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm"
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.selectedCities.map((city) => (
+                        <Badge
+                          key={city.id}
+                          variant="secondary"
+                          className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 pr-1"
+                        >
+                          <Building className="h-3 w-3 mr-1" />
+                          {city.name}
+                          {city.isMetro && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 ml-1 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
+                              Metro
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCityChange(city.id, false)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-green-300 dark:hover:bg-green-700"
                           >
-                            <Building className="h-3 w-3" />
-                            <span>{city.name}</span>
-                            {city.isMetro && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
-                                Metro
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleCityChange(city.id, false)}
-                              className="text-green-600 hover:text-green-800 ml-1"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    {formData.selectedCities.length > 0
+                      ? `${formData.selectedCities.length} city(ies) selected`
+                      : "Select one or more cities to continue"}
+                  </p>
                   {errors.selectedCities && (
                     <p className="text-sm text-red-500 mt-1">
                       {errors.selectedCities}
@@ -1677,126 +1716,196 @@ export function ZoneForm({
                   )}
                 </div>
 
-                {/* Area Selection */}
+                {/* Area Selection - searchable multi-select */}
                 <div className="space-y-2">
                   <Label htmlFor="area">Areas (Optional)</Label>
-                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
-                    {!formData.selectedCities.length ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        Select cities first
-                      </div>
-                    ) : loadingAreas ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span>Loading areas...</span>
-                      </div>
-                    ) : areas.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        No areas available
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {areas.map((area) => (
-                          <div
-                            key={area.id}
-                            className="flex items-center space-x-3"
-                          >
-                            <input
-                              type="checkbox"
-                              id={`area-${area.id}`}
-                              checked={formData.selectedAreas.some(
-                                (a) => a.id === area.id,
-                              )}
-                              onChange={(e) =>
-                                handleAreaChange(area.id, e.target.checked)
-                              }
-                              className="h-4 w-4 text-purple-600 rounded focus:ring-purple-500"
-                            />
-                            <label
-                              htmlFor={`area-${area.id}`}
-                              className="flex items-center space-x-2 cursor-pointer"
-                            >
-                              <Users className="h-4 w-4 text-purple-600" />
-                              <span className="text-sm">{area.name}</span>
-                            </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="area"
+                      placeholder={
+                        !formData.selectedCities.length
+                          ? "Select cities first"
+                          : "Search and select areas..."
+                      }
+                      value={areaSearch}
+                      onChange={(e) => {
+                        setAreaSearch(e.target.value);
+                        setShowAreaDropdown(true);
+                      }}
+                      onFocus={() => setShowAreaDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowAreaDropdown(false), 200)
+                      }
+                      disabled={
+                        !formData.selectedCities.length ||
+                        loadingAreas ||
+                        areas.length === 0
+                      }
+                      className="pl-10"
+                    />
+                    {loadingAreas && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+
+                    {showAreaDropdown && formData.selectedCities.length > 0 && (
+                      <div className="absolute z-30 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {loadingAreas ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                            Loading areas...
                           </div>
-                        ))}
+                        ) : getFilteredAreas().length === 0 ? (
+                          <div className="p-3 text-center text-sm text-muted-foreground">
+                            {areaSearch
+                              ? "No matching areas found"
+                              : "No areas available"}
+                          </div>
+                        ) : (
+                          getFilteredAreas().map((area) => (
+                            <button
+                              key={area.id}
+                              type="button"
+                              onClick={() => {
+                                handleAreaChange(area.id, true);
+                                setAreaSearch("");
+                                setShowAreaDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <Users className="h-4 w-4 text-purple-600" />
+                                <span className="font-medium">{area.name}</span>
+                              </div>
+                              <Plus className="h-4 w-4 text-purple-600" />
+                            </button>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
+
                   {formData.selectedAreas.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm text-muted-foreground">
-                        Selected:{" "}
-                        {formData.selectedAreas.map((a) => a.name).join(", ")}
-                      </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.selectedAreas.map((area) => (
+                        <Badge
+                          key={area.id}
+                          variant="secondary"
+                          className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 pr-1"
+                        >
+                          <Users className="h-3 w-3 mr-1" />
+                          {area.name}
+                          <button
+                            type="button"
+                            onClick={() => handleAreaChange(area.id, false)}
+                            className="ml-1 p-0.5 rounded-full hover:bg-purple-300 dark:hover:bg-purple-700"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {/* Pincode Selection */}
+                {/* Pincode Selection - searchable multi-select */}
                 <div className="space-y-2">
                   <Label htmlFor="pincode">Pincodes *</Label>
-                  <div className="border border-border rounded-md p-3 max-h-48 overflow-y-auto">
-                    {!formData.selectedAreas.length ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        Select areas first
-                      </div>
-                    ) : loadingPincodes ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span>Loading pincodes...</span>
-                      </div>
-                    ) : pincodes.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground">
-                        No pincodes available
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {pincodes.map((pincode) => (
-                          <div
-                            key={pincode.id}
-                            className="flex items-center space-x-3"
-                          >
-                            <input
-                              type="checkbox"
-                              id={`pincode-${pincode.id}`}
-                              checked={formData.selectedPincodes.some(
-                                (p) => p.id === pincode.id,
-                              )}
-                              onChange={(e) =>
-                                handlePincodeChange(
-                                  pincode.id,
-                                  e.target.checked,
-                                )
-                              }
-                              className="h-4 w-4 text-orange-600 rounded focus:ring-orange-500"
-                            />
-                            <label
-                              htmlFor={`pincode-${pincode.id}`}
-                              className="flex items-center space-x-2 cursor-pointer"
-                            >
-                              <MapPin className="h-4 w-4 text-orange-600" />
-                              <span className="text-sm">{pincode.pincode}</span>
-                              {pincode.areaName && (
-                                <span className="text-xs text-muted-foreground">
-                                  ({pincode.areaName})
-                                </span>
-                              )}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="pincode"
+                      placeholder={
+                        !formData.selectedAreas.length
+                          ? "Select areas first"
+                          : "Search and select pincodes..."
+                      }
+                      value={pincodeSearch}
+                      onChange={(e) => {
+                        setPincodeSearch(e.target.value);
+                        setShowPincodeDropdown(true);
+                      }}
+                      onFocus={() => setShowPincodeDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowPincodeDropdown(false), 200)
+                      }
+                      disabled={
+                        !formData.selectedAreas.length ||
+                        loadingPincodes ||
+                        pincodes.length === 0
+                      }
+                      className={`pl-10 ${errors.selectedPincodes ? "border-red-500" : ""}`}
+                    />
+                    {loadingPincodes && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
                     )}
+
+                    {showPincodeDropdown &&
+                      formData.selectedAreas.length > 0 && (
+                        <div className="absolute z-20 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {loadingPincodes ? (
+                            <div className="p-3 text-center text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                              Loading pincodes...
+                            </div>
+                          ) : getFilteredPincodes().length === 0 ? (
+                            <div className="p-3 text-center text-sm text-muted-foreground">
+                              {pincodeSearch
+                                ? "No matching pincodes found"
+                                : "No pincodes available"}
+                            </div>
+                          ) : (
+                            getFilteredPincodes().map((pincode) => (
+                              <button
+                                key={pincode.id}
+                                type="button"
+                                onClick={() => {
+                                  handlePincodeChange(pincode.id, true);
+                                  setPincodeSearch("");
+                                  setShowPincodeDropdown(false);
+                                }}
+                                className="w-full px-3 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <MapPin className="h-4 w-4 text-orange-600" />
+                                  <span className="font-medium">
+                                    {pincode.pincode || pincode.code}
+                                  </span>
+                                  {pincode.areaName && (
+                                    <span className="text-muted-foreground text-xs">
+                                      ({pincode.areaName})
+                                    </span>
+                                  )}
+                                </div>
+                                <Plus className="h-4 w-4 text-orange-600" />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                   </div>
+
                   {formData.selectedPincodes.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm text-muted-foreground">
-                        Selected:{" "}
-                        {formData.selectedPincodes
-                          .map((p) => p.pincode)
-                          .join(", ")}
-                      </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.selectedPincodes.map((pincode) => (
+                        <Badge
+                          key={pincode.id}
+                          variant="secondary"
+                          className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 pr-1"
+                        >
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {pincode.pincode || pincode.code}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handlePincodeChange(pincode.id, false)
+                            }
+                            className="ml-1 p-0.5 rounded-full hover:bg-orange-300 dark:hover:bg-orange-700"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   )}
                   {errors.selectedPincodes && (

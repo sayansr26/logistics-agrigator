@@ -942,13 +942,16 @@ class ZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
+      // Verify zone exists. Scope by partner when a partnerId is provided
+      // (partner users); admin/superadmin/operations pass no partnerId and
+      // may read any zone's geography.
+      const where = { id: zoneId };
+      if (partnerId) {
+        where.partnerId = partnerId;
       }
 
-      // Verify zone exists and belongs to partner
       const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where,
         select: { id: true },
       });
 

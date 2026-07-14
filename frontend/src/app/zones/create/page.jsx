@@ -31,29 +31,31 @@ export default function CreateZonePage() {
         zoneType: backendZoneType,
       };
 
+      // Partner selection is common to both zone types (multi-select).
+      const partnerIds =
+        formData.selectedPartnerIds && formData.selectedPartnerIds.length > 0
+          ? formData.selectedPartnerIds
+          : formData.partnerId
+            ? [formData.partnerId]
+            : [];
+
       // Add type-specific data
       if (backendZoneType === "GEOLOGICAL") {
-        // For geological zones, use partnerId (singular)
-        zoneData.partnerId = formData.partnerId;
+        // Partner is selectable and sent as a single partnerId (the backend
+        // now accepts it for GEOLOGICAL, falling back to the auth user).
+        // Field names (states/cities/areas/pincodes) match the backend's
+        // geographical schema + service. pincodes are 6-digit codes.
+        zoneData.partnerId = partnerIds[0];
+        const geo = formData.geographical || {};
         zoneData.geographical = {
-          states: formData.selectedStates?.map((s) => s.id) || [],
-          cities: formData.selectedCities?.map((c) => c.id) || [],
-          areas: formData.selectedAreas?.map((a) => a.id) || [],
-          pincodes: formData.selectedPincodes?.map((p) => p.id) || [],
+          states: geo.states || [],
+          cities: geo.cities || [],
+          areas: geo.areas || [],
+          pincodes: [...(geo.pincodes || []), ...(geo.manualPincodes || [])],
         };
       } else {
         // For distance zones, use partnerIds (array) - backend requires this
-        // Support both single partnerId and multiple selectedPartnerIds
-        if (
-          formData.selectedPartnerIds &&
-          formData.selectedPartnerIds.length > 0
-        ) {
-          zoneData.partnerIds = formData.selectedPartnerIds;
-        } else if (formData.partnerId) {
-          zoneData.partnerIds = [formData.partnerId];
-        } else {
-          zoneData.partnerIds = [];
-        }
+        zoneData.partnerIds = partnerIds;
         // Convert distanceSlabs to milestones (backend only accepts minKm and maxKm)
         // suffix and sortOrder are generated server-side
         zoneData.milestones = formData.distanceSlabs.map((slab) => ({

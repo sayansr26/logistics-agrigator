@@ -146,6 +146,55 @@ interface ValidateCoverageResponse {
 }
 
 // ===========================
+// Zone Geography types
+// ===========================
+
+export interface ZoneGeographyState {
+  state?: { id: string; name: string; code: string; status?: boolean };
+}
+export interface ZoneGeographyCity {
+  city?: {
+    id: string;
+    name: string;
+    code?: string;
+    status?: boolean;
+    state?: { id: string; name: string; code: string };
+  };
+}
+export interface ZoneGeographyArea {
+  area?: {
+    id: string;
+    name: string;
+    code?: string;
+    status?: boolean;
+    city?: { id: string; name: string };
+  };
+}
+export interface ZoneGeographyPincode {
+  pincode?: {
+    id: string;
+    code: string;
+    areaName?: string;
+    district?: string;
+    status?: boolean;
+    state?: { id: string; name: string; code: string };
+    area?: { id: string; name: string; code?: string };
+  };
+}
+export interface ZoneGeographyResponse {
+  states: ZoneGeographyState[];
+  cities: ZoneGeographyCity[];
+  areas: ZoneGeographyArea[];
+  pincodes: ZoneGeographyPincode[];
+  summary?: {
+    totalStates: number;
+    totalCities: number;
+    totalAreas: number;
+    totalPincodes: number;
+  };
+}
+
+// ===========================
 // RTK Query API Definition
 // ===========================
 
@@ -192,6 +241,19 @@ export const zonesApi = baseApi.injectEndpoints({
       string
     >({
       query: (zoneId) => `/api/v1/zones/${zoneId}`,
+      providesTags: (result, error, id) => [{ type: "Zone", id }],
+    }),
+
+    /**
+     * Get Zone Geography - Fetch geographical associations for a GEOLOGICAL zone
+     * Backend returns { states, cities, areas, pincodes, summary } where each
+     * item is a join row (e.g. states[i].state.{id,name,code}).
+     */
+    getZoneGeography: builder.query<
+      { status: string; data: ZoneGeographyResponse; meta?: any },
+      string
+    >({
+      query: (zoneId) => `/api/v1/zones/${zoneId}/geography`,
       providesTags: (result, error, id) => [{ type: "Zone", id }],
     }),
 
@@ -268,6 +330,7 @@ export const {
   useCreateZoneMutation,
   useGetZonesQuery,
   useGetZoneByIdQuery,
+  useGetZoneGeographyQuery,
   useUpdateZoneMutation,
   useDeleteZoneMutation,
   useGetPartnerZonesQuery,

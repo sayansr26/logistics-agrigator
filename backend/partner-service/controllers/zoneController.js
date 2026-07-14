@@ -111,8 +111,37 @@ async function createZone(req, res) {
         );
     }
 
-    // Handle GEOLOGICAL zone creation (default)
-    const partnerId = req.user?.partnerId;
+    // Handle GEOLOGICAL zone creation (default).
+    // Determine the target partner. Only privileged roles may create a zone
+    // for an arbitrary partner; regular partner users are locked to their own
+    // token partner. A regular user attempting to specify a different partner
+    // is rejected (prevents cross-tenant IDOR).
+    const userRole = req.user?.role;
+    const canAssignAnyPartner = DISTANCE_ZONE_ROLES.includes(userRole);
+
+    let partnerId;
+    if (canAssignAnyPartner) {
+      partnerId = zoneData.partnerId || req.user?.partnerId;
+    } else {
+      if (zoneData.partnerId && zoneData.partnerId !== req.user?.partnerId) {
+        logger.warn("Cross-partner GEOLOGICAL zone creation blocked", {
+          userId: req.user?.id,
+          userRole,
+          requestedPartnerId: zoneData.partnerId,
+          userPartnerId: req.user?.partnerId,
+          ip: req.ip,
+        });
+        return res
+          .status(403)
+          .json(
+            APIResponse.error(
+              "Forbidden: not authorized to create zones for another partner",
+              "FORBIDDEN",
+            ),
+          );
+      }
+      partnerId = req.user?.partnerId;
+    }
 
     if (!partnerId) {
       logger.warn("Partner ID missing from request for GEOLOGICAL zone", {
@@ -639,10 +668,17 @@ async function getZoneGeography(req, res) {
   try {
     // Extract partnerId from authenticated user
     const partnerId = req.user?.partnerId;
+    const userRole = req.user?.role;
 
-    if (!partnerId) {
+    // Allow admin/superadmin/operations to view any zone's geography without
+    // a partnerId; partner-scoped users must have one.
+    if (
+      !partnerId &&
+      !["superadmin", "admin", "operations"].includes(userRole)
+    ) {
       logger.warn("Partner ID missing from request", {
         userId: req.user?.id,
+        userRole,
         ip: req.ip,
       });
       return res

@@ -40,12 +40,18 @@ BACKEND_SERVICES = api-gateway auth-service user-service shipment-service \
                    partner-service wallet-service support-service \
                    platform-service license-service
 
+# Services that own a Prisma schema (api-gateway has none). Order follows
+# dependency order used by scripts/init-databases.sh.
+PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
+                  shipment-service support-service platform-service license-service
+
 .PHONY: help login release release-prod release-uat release release-backend \
         release-frontend deploy deploy-uat pull pull-uat up down down-uat \
         restart restart-uat ps ps-uat logs logs-uat \
         logs-api-gateway logs-auth logs-user logs-shipment logs-partner \
         logs-wallet logs-support logs-platform logs-license logs-frontend \
-        logs-db logs-redis psql backup dev dev-down dev-logs
+        logs-db logs-redis psql backup db-init migrate migrate-all db-sync \
+        seed import-pincodes load-pincodes seed-geo dev dev-down dev-logs
 
 help:
 	@echo "logistics-agrigator Docker targets:"
@@ -73,6 +79,16 @@ help:
 	@echo "  make down | down-uat        Stop and remove containers (keeps volumes)"
 	@echo "  make psql                   Open psql shell in the postgres container"
 	@echo "  make backup                 pg_dump each DB to ./backups/<db>-<timestamp>.sql.gz"
+	@echo ""
+	@echo "  Data & DB (exec into the running stack; ENV_FILE=.env.uat for UAT):"
+	@echo "  make db-init                Create DBs + migrate + db-sync + seed (full init)"
+	@echo "  make migrate-all            Deploy committed Prisma migrations for every service"
+	@echo "  make db-sync                Force schema to match schema.prisma (prisma db push)"
+	@echo "  make migrate SERVICE=<svc>  Apply Prisma migrations for one service"
+	@echo "  make seed                   Seed permissions/roles/superadmin (auth-service)"
+	@echo "  make import-pincodes        Import pincode data (partner-service)"
+	@echo "  make load-pincodes          Load pincode data (partner-service)"
+	@echo "  make seed-geo               Seed geographical data (partner-service)"
 	@echo ""
 	@echo "  Local dev (BUILD MACHINE — full source, builds locally):"
 	@echo "  make dev            Start the dev stack (docker-compose.yml, --profile all-services)"
@@ -221,6 +237,96 @@ backup:
 	    || { echo "!!! Dump FAILED for $$db"; rm -f "$$out"; }; \
 	done; \
 	echo ">>> Backups written to ./backups/"
+
+# ============================================================================
+# Data & DB operations (exec into the running stack; ENV_FILE selects PROD/UAT)
+# ============================================================================
+# All run against the live containers — no source needed on the server. Add
+# ENV_FILE=.env.uat (or use the running-stack env) to target UAT.
+
+# Full DB init — mirrors `pnpm db:init` (scripts/init-databases.sh) for the
+# server, no source needed:
+#   1. (Re)create the per-service databases from the init SQL already mounted in
+#      the postgres container (idempotent — "already exists" errors are harmless).
+#   2. Deploy Prisma migrations for every Prisma service.
+# Seeds (e.g. the auth-service superadmin) run automatically at container start
+# via scripts/production-entrypoint.sh, so they are not repeated here.
+db-init:
+	@echo ">>> Step 1: (re)creating per-service databases"
+	-$(COMPOSE_PROD) exec -T postgres sh -c \
+	  'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /docker-entrypoint-initdb.d/init-databases.sql'
+	@echo ""
+	@echo ">>> Step 2: deploying committed migrations (all services)"
+	@$(MAKE) --no-print-directory migrate-all ENV_FILE=$(ENV_FILE)
+	@echo ""
+	@echo ">>> Step 3: syncing schema for changes with no migration (db push)"
+	@$(MAKE) --no-print-directory db-sync ENV_FILE=$(ENV_FILE)
+	@echo ""
+	@echo ">>> Step 4: seeding (permissions, roles, superadmin)"
+	@$(MAKE) --no-print-directory seed ENV_FILE=$(ENV_FILE)
+	@echo ""
+	@echo ">>> db-init complete"
+
+# Deploy committed Prisma migrations for EVERY Prisma service (migrations also
+# self-run at container start; this is a manual re-apply for the whole stack).
+migrate-all:
+	@for svc in $(PRISMA_SERVICES); do \
+	  echo ">>> migrate deploy: $$svc"; \
+	  $(COMPOSE_PROD) exec -T $$svc npx prisma@5.22.0 migrate deploy \
+	    --schema=backend/$$svc/prisma/schema.prisma \
+	    || echo "  !! migrate failed for $$svc (continuing)"; \
+	done
+
+# Force the DB schema to match schema.prisma for changes that have NO migration
+# file (prisma db push). This is how `pnpm db:init` (scripts/init-databases.sh)
+# picks up schema edits that were never turned into a migration — e.g. the
+# shipments.shipment_type column and the charge_discount_packages table.
+# Run AFTER migrate-all so committed migrations apply first, then this fills the
+# gap. WARNING: --accept-data-loss allows db push to DROP columns/tables that
+# were removed from the schema. The current drift is additive, but review before
+# running against a database with real data you cannot lose.
+db-sync:
+	@for svc in $(PRISMA_SERVICES); do \
+	  echo ">>> db push (schema sync): $$svc"; \
+	  $(COMPOSE_PROD) exec -T $$svc npx prisma@5.22.0 db push \
+	    --schema=backend/$$svc/prisma/schema.prisma \
+	    --accept-data-loss --skip-generate \
+	    || echo "  !! db push failed for $$svc (continuing)"; \
+	done
+
+# Run seed scripts for every Prisma service that ships one (backend/<svc>/prisma/
+# seed.js). auth-service seeds permissions, role-permission mappings, and the
+# default superadmin (admin@logistics.com / Admin@123456). Idempotent (upserts)
+# and best-effort — services without a seed.js are skipped.
+seed:
+	@for svc in $(PRISMA_SERVICES); do \
+	  if $(COMPOSE_PROD) exec -T $$svc sh -c "test -f backend/$$svc/prisma/seed.js" 2>/dev/null; then \
+	    echo ">>> seeding: $$svc"; \
+	    $(COMPOSE_PROD) exec -T $$svc sh -c "cd backend/$$svc/prisma && node seed.js" \
+	      || echo "  !! seed failed for $$svc (continuing)"; \
+	  else \
+	    echo ">>> no seed for $$svc (skip)"; \
+	  fi; \
+	done
+
+# Apply Prisma migrations for ONE service. Usage: make migrate SERVICE=license-service
+migrate:
+	@if [ -z "$(SERVICE)" ]; then \
+	  echo "Usage: make migrate SERVICE=<name>  (e.g. auth-service, license-service, partner-service)"; \
+	  exit 1; \
+	fi
+	$(COMPOSE_PROD) exec $(SERVICE) npx prisma@5.22.0 migrate deploy \
+	  --schema=backend/$(SERVICE)/prisma/schema.prisma
+
+# Partner-service data loaders (mirror the package.json *:prod scripts).
+import-pincodes:
+	$(COMPOSE_PROD) exec partner-service node backend/partner-service/scripts/import-pincode-data.js
+
+load-pincodes:
+	$(COMPOSE_PROD) exec partner-service node backend/partner-service/scripts/load-pincode-data.js
+
+seed-geo:
+	$(COMPOSE_PROD) exec partner-service node backend/partner-service/prisma/seed-geographical-data.js
 
 # ============================================================================
 # Local dev — BUILD MACHINE (full source; builds locally, no registry).
