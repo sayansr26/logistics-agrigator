@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 interface DetailHeaderProps {
   title: string;
   subtitle?: string;
+  description?: string;
+  badges?: ReactNode;
   backHref?: string;
   backLabel?: string;
   status?: {
@@ -38,6 +40,8 @@ interface DetailHeaderProps {
 export function DetailHeader({
   title,
   subtitle,
+  description,
+  badges,
   backHref,
   backLabel = "Back",
   status,
@@ -76,8 +80,10 @@ export function DetailHeader({
               {status.label}
             </Badge>
           )}
+          {badges}
         </div>
         {subtitle && <p className="text-muted-foreground">{subtitle}</p>}
+        {description && <p className="text-muted-foreground">{description}</p>}
       </div>
       <div className="flex items-center gap-2">
         {actions}
@@ -152,13 +158,14 @@ interface DetailItemProps {
   label: string;
   value: ReactNode;
   className?: string;
+  mono?: boolean;
 }
 
-export function DetailItem({ label, value, className }: DetailItemProps) {
+export function DetailItem({ label, value, className, mono }: DetailItemProps) {
   return (
     <div className={cn("space-y-1", className)}>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="font-medium">{value || "—"}</p>
+      <p className={cn("font-medium", mono && "font-mono")}>{value || "—"}</p>
     </div>
   );
 }

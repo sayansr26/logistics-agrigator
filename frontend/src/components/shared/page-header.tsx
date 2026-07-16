@@ -17,6 +17,12 @@ interface PageHeaderProps {
     onClick?: () => void;
     icon?: ReactNode;
   };
+  secondaryAction?: {
+    label: string;
+    href?: string;
+    onClick?: () => void;
+    icon?: ReactNode;
+  };
 }
 
 export function PageHeader({
@@ -26,6 +32,7 @@ export function PageHeader({
   backLabel = "Back",
   actions,
   primaryAction,
+  secondaryAction,
 }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between">
@@ -44,6 +51,20 @@ export function PageHeader({
       </div>
       <div className="flex items-center gap-2">
         {actions}
+        {secondaryAction &&
+          (secondaryAction.href ? (
+            <Button asChild variant="outline">
+              <Link href={secondaryAction.href}>
+                {secondaryAction.icon}
+                {secondaryAction.label}
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={secondaryAction.onClick}>
+              {secondaryAction.icon}
+              {secondaryAction.label}
+            </Button>
+          ))}
         {primaryAction &&
           (primaryAction.href ? (
             <Button asChild>

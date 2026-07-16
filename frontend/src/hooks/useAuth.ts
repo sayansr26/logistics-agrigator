@@ -91,9 +91,14 @@ export function useAuth() {
           }),
         );
 
-        // Store permissions from login response into Redux permission slice
-        if (response.data.user.permissions) {
-          dispatch(setPermissions(response.data.user.permissions));
+        // Store permissions from login response into Redux permission slice.
+        // Permissions arrive on the user object from the JWT token but are not
+        // part of the base User type returned by the auth API, so narrow here.
+        const userWithPermissions = response.data.user as User & {
+          permissions?: string[];
+        };
+        if (userWithPermissions.permissions) {
+          dispatch(setPermissions(userWithPermissions.permissions));
         }
 
         return response;

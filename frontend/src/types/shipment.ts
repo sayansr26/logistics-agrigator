@@ -268,6 +268,14 @@ export interface NDRReason {
   isActive: boolean;
 }
 
+export interface NDRFilters {
+  status?: "pending" | "resolved" | "escalated";
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface NDRReport {
   id: string;
   shipmentId: string;

@@ -236,10 +236,13 @@ export const walletApi = baseApi.injectEndpoints({
       ClientWalletsResponse,
       GetClientWalletsParams | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/wallet/admin/client-wallets",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetClientWalletsParams = arg || {};
+        return {
+          url: "/api/v1/wallet/admin/client-wallets",
+          params,
+        };
+      },
       transformResponse: (response: any) => response.data || response,
       providesTags: [{ type: "Wallet", id: "LIST" }],
     }),
@@ -251,10 +254,13 @@ export const walletApi = baseApi.injectEndpoints({
       ClientTransactionsResponse,
       GetClientTransactionsParams | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/wallet/admin/client-transactions",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetClientTransactionsParams = arg || {};
+        return {
+          url: "/api/v1/wallet/admin/client-transactions",
+          params,
+        };
+      },
       transformResponse: (response: any) => response.data || response,
       providesTags: [{ type: "Wallet", id: "TRANSACTIONS" }],
     }),
@@ -367,10 +373,13 @@ export const walletApi = baseApi.injectEndpoints({
       MyTransactionsResponse,
       GetMyTransactionsParams | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/wallet/my/transactions",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetMyTransactionsParams = arg || {};
+        return {
+          url: "/api/v1/wallet/my/transactions",
+          params,
+        };
+      },
       transformResponse: (response: any) => response.data || response,
       providesTags: [{ type: "Wallet", id: "MY_TRANSACTIONS" }],
     }),

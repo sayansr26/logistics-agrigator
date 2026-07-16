@@ -1,11 +1,34 @@
 // Authentication Types
+
+// Real system roles from the 11-role RBAC hierarchy. Kept as a union for
+// autocomplete/documentation, but widened with `(string & {})` so values that
+// flow in as a plain `string` (e.g. from the Redux auth store / JWT payload)
+// remain assignable without a cast.
+export type UserRole =
+  | "superadmin"
+  | "admin"
+  | "client"
+  | "accounts"
+  | "sales"
+  | "support"
+  | "customer"
+  | "customer_account"
+  | "customer_sales"
+  | "customer_support"
+  | "affiliate"
+  // Legacy/aggregate role labels still referenced in parts of the UI
+  | "finance"
+  | "operations"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "finance" | "operations" | "client" | "support";
+  role: UserRole;
   clientId?: string;
-  permissions: string[];
+  permissions?: string[];
 }
 
 export interface AuthTokens {
@@ -23,7 +46,7 @@ export interface RegisterData {
   email: string;
   password: string;
   name: string;
-  role?: "admin" | "finance" | "operations" | "client" | "support";
+  role?: UserRole;
   clientId?: string;
 }
 

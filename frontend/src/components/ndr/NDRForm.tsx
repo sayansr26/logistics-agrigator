@@ -83,7 +83,12 @@ export function NDRForm({
     clearError();
 
     try {
-      const result = await createNDR(data);
+      const result = await createNDR({
+        shipmentId: data.shipmentId,
+        reason: data.reason,
+        reasonCode: data.reasonCode,
+        description: data.description,
+      });
 
       if (result.success) {
         setSubmitSuccess(true);

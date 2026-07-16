@@ -12,12 +12,7 @@ import { baseApi } from "../baseApi";
 // ===========================
 
 type OutletBadge =
-  | "BASIC"
-  | "BRONZE"
-  | "SILVER"
-  | "GOLD"
-  | "PLATINUM"
-  | "DIAMOND";
+  "BASIC" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
 
 // ===========================
 // Request/Response Interfaces
@@ -214,17 +209,17 @@ export const outletApi = baseApi.injectEndpoints({
      * GET /api/v1/outlets
      */
     listOutlets: builder.query<OutletsListResponse, GetOutletsParams | void>({
-      query: (params) => {
+      query: (arg) => {
+        const params: GetOutletsParams = arg || {};
         const searchParams = new URLSearchParams();
-        if (params?.page) searchParams.append("page", params.page.toString());
-        if (params?.limit)
-          searchParams.append("limit", params.limit.toString());
-        if (params?.search) searchParams.append("search", params.search);
-        if (params?.isActive !== undefined)
+        if (params.page) searchParams.append("page", params.page.toString());
+        if (params.limit) searchParams.append("limit", params.limit.toString());
+        if (params.search) searchParams.append("search", params.search);
+        if (params.isActive !== undefined)
           searchParams.append("isActive", params.isActive.toString());
-        if (params?.badge) searchParams.append("badge", params.badge);
-        if (params?.sortBy) searchParams.append("sortBy", params.sortBy);
-        if (params?.sortOrder)
+        if (params.badge) searchParams.append("badge", params.badge);
+        if (params.sortBy) searchParams.append("sortBy", params.sortBy);
+        if (params.sortOrder)
           searchParams.append("sortOrder", params.sortOrder);
 
         return {

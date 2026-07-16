@@ -145,7 +145,7 @@ export const logsApi = baseApi.injectEndpoints({
       query: () => ({
         url: "/api/v1/audit-log-actions",
       }),
-      providesTags: ["AuditLogActions"],
+      providesTags: ["AuditLog"],
     }),
   }),
 });

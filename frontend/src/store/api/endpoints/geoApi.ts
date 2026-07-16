@@ -102,6 +102,8 @@ interface CitiesResponse {
     pagination?: {
       page: number;
       limit: number;
+      total?: number;
+      totalPages?: number;
     };
   };
 }
@@ -127,6 +129,8 @@ interface AreasResponse {
     pagination?: {
       page: number;
       limit: number;
+      total?: number;
+      totalPages?: number;
     };
   };
 }
@@ -176,6 +180,8 @@ interface PincodesResponse {
     pagination?: {
       page: number;
       limit: number;
+      total?: number;
+      totalPages?: number;
     };
   };
 }
@@ -312,10 +318,13 @@ export const geoApi = baseApi.injectEndpoints({
       GeoEntitiesListResponse,
       GetGeoEntitiesParams | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/geographical",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetGeoEntitiesParams = arg || {};
+        return {
+          url: "/api/v1/geographical",
+          params,
+        };
+      },
       providesTags: (result) =>
         result?.data?.entities
           ? [
@@ -394,10 +403,13 @@ export const geoApi = baseApi.injectEndpoints({
      * Get Cities - Fetch cities (optionally filtered by state)
      */
     getCities: builder.query<CitiesResponse, GetCitiesParams | void>({
-      query: (params = {}) => ({
-        url: "/api/v1/geography/cities",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetCitiesParams = arg || {};
+        return {
+          url: "/api/v1/geography/cities",
+          params,
+        };
+      },
       providesTags: [{ type: "Geo", id: "CITIES" }],
     }),
 
@@ -405,10 +417,13 @@ export const geoApi = baseApi.injectEndpoints({
      * Get Areas - Fetch areas (optionally filtered by city/state)
      */
     getAreas: builder.query<AreasResponse, GetAreasParams | void>({
-      query: (params = {}) => ({
-        url: "/api/v1/geography/areas",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetAreasParams = arg || {};
+        return {
+          url: "/api/v1/geography/areas",
+          params,
+        };
+      },
       providesTags: [{ type: "Geo", id: "AREAS" }],
     }),
 
@@ -416,10 +431,13 @@ export const geoApi = baseApi.injectEndpoints({
      * Get Pincodes - Fetch pincodes with filters
      */
     getPincodes: builder.query<PincodesResponse, GetPincodesParams | void>({
-      query: (params = {}) => ({
-        url: "/api/v1/geography/pincodes",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetPincodesParams = arg || {};
+        return {
+          url: "/api/v1/geography/pincodes",
+          params,
+        };
+      },
       providesTags: [{ type: "Geo", id: "PINCODES" }],
     }),
 
@@ -635,7 +653,6 @@ export const {
   useGetPincodeDetailsQuery,
   useSearchPincodesQuery,
   useLazySearchPincodesQuery,
-  useSearchGeoMutation,
   useGetGeoHierarchyQuery,
   useToggleStateStatusMutation,
   useToggleCityStatusMutation,

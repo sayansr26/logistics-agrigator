@@ -327,6 +327,7 @@ export default function GeographyPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Switch
+                                id={`state-status-${state.id}`}
                                 checked={state.status}
                                 onCheckedChange={() =>
                                   handleToggleClick(
@@ -413,6 +414,7 @@ export default function GeographyPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Switch
+                                id={`city-status-${city.id}`}
                                 checked={city.status}
                                 onCheckedChange={() =>
                                   handleToggleClick(
@@ -433,10 +435,10 @@ export default function GeographyPage() {
                     )}
                   </TableBody>
                 </Table>
-                {citiesData?.meta?.pagination?.totalPages > 1 && (
+                {(citiesData?.meta?.pagination?.totalPages ?? 0) > 1 && (
                   <DataTablePagination
                     currentPage={citiesPage}
-                    totalPages={citiesData.meta.pagination.totalPages}
+                    totalPages={citiesData?.meta?.pagination?.totalPages ?? 0}
                     onPageChange={setCitiesPage}
                     totalItems={totalCities}
                     pageSize={itemsPerPage}
@@ -499,6 +501,7 @@ export default function GeographyPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Switch
+                                id={`area-status-${area.id}`}
                                 checked={area.status}
                                 onCheckedChange={() =>
                                   handleToggleClick(
@@ -519,10 +522,10 @@ export default function GeographyPage() {
                     )}
                   </TableBody>
                 </Table>
-                {areasData?.meta?.pagination?.totalPages > 1 && (
+                {(areasData?.meta?.pagination?.totalPages ?? 0) > 1 && (
                   <DataTablePagination
                     currentPage={areasPage}
-                    totalPages={areasData.meta.pagination.totalPages}
+                    totalPages={areasData?.meta?.pagination?.totalPages ?? 0}
                     onPageChange={setAreasPage}
                     totalItems={totalAreas}
                     pageSize={itemsPerPage}
@@ -583,6 +586,7 @@ export default function GeographyPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Switch
+                                id={`pincode-status-${pincode.id}`}
                                 checked={pincode.status}
                                 onCheckedChange={() =>
                                   handleToggleClick(
@@ -603,10 +607,10 @@ export default function GeographyPage() {
                     )}
                   </TableBody>
                 </Table>
-                {pincodesData?.meta?.pagination?.totalPages > 1 && (
+                {(pincodesData?.meta?.pagination?.totalPages ?? 0) > 1 && (
                   <DataTablePagination
                     currentPage={pincodesPage}
-                    totalPages={pincodesData.meta.pagination.totalPages}
+                    totalPages={pincodesData?.meta?.pagination?.totalPages ?? 0}
                     onPageChange={setPincodesPage}
                     totalItems={totalPincodes}
                     pageSize={itemsPerPage}

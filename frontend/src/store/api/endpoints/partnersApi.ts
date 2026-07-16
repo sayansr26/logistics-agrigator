@@ -297,10 +297,13 @@ export const partnersApi = baseApi.injectEndpoints({
      * Get Partners - Fetch list of courier partners
      */
     getPartners: builder.query<PartnersListResponse, GetPartnersParams | void>({
-      query: (params = {}) => ({
-        url: "/api/v1/partners",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetPartnersParams = arg || {};
+        return {
+          url: "/api/v1/partners",
+          params,
+        };
+      },
       providesTags: (result) =>
         result?.data?.partners
           ? [

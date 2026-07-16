@@ -11,6 +11,7 @@ export interface ChargesType {
   partner?: {
     id: string;
     name: string;
+    displayName?: string;
     code: string;
   };
 }

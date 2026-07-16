@@ -152,7 +152,7 @@ export function Header({ className }: HeaderProps) {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
-                <Sidebar />
+                <Sidebar className="" />
               </SheetContent>
             </Sheet>
 

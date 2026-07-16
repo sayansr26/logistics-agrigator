@@ -469,10 +469,7 @@ export default function ShipmentDetailPage() {
       }
 
       const result = await rerateShipment({ id, data: payload }).unwrap();
-      const msg =
-        result?.message ||
-        result?.data?.message ||
-        "Charges revalued successfully";
+      const msg = result?.message || "Charges revalued successfully";
       setRevalueSuccess(msg);
       await refetch();
       setTimeout(() => {

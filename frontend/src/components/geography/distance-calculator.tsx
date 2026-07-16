@@ -90,7 +90,7 @@ export function DistanceCalculator({
   const [toLng, setToLng] = useState("");
 
   // Fetch geographical data
-  const { data: statesData } = useGetStatesQuery({ page: 1, limit: 100 });
+  const { data: statesData } = useGetStatesQuery();
   const { data: citiesData } = useGetCitiesQuery({
     page: 1,
     limit: 100,

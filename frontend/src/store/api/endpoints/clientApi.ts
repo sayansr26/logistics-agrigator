@@ -39,10 +39,14 @@ export const clientApi = baseApi.injectEndpoints({
       ClientsListResponse,
       { page?: number; limit?: number; isActive?: boolean } | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/clients",
-        params,
-      }),
+      query: (arg) => {
+        const params: { page?: number; limit?: number; isActive?: boolean } =
+          arg || {};
+        return {
+          url: "/api/v1/clients",
+          params,
+        };
+      },
       providesTags: ["Client"],
     }),
   }),

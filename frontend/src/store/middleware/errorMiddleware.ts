@@ -8,7 +8,7 @@
  * - Handle 500 errors (show server error)
  */
 
-import { isRejectedWithValue, Middleware } from "@reduxjs/toolkit";
+import { isAction, isRejectedWithValue, Middleware } from "@reduxjs/toolkit";
 import { addNotification } from "../slices/uiSlice";
 import {
   parseRTKError,
@@ -184,7 +184,7 @@ function handleGenericError(store: any, error: any) {
  */
 export const successMiddleware: Middleware = (store) => (next) => (action) => {
   // Check if action is a fulfilled mutation
-  if (action.type && action.type.endsWith("/fulfilled")) {
+  if (isAction(action) && action.type.endsWith("/fulfilled")) {
     // Extract endpoint name from action type
     // Example: "api/createShipment/fulfilled" -> "createShipment"
     const endpointMatch = action.type.match(/\/(\w+)\/fulfilled$/);

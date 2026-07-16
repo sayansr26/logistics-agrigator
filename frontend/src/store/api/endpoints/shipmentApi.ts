@@ -39,11 +39,7 @@ interface BoxPayload {
 }
 
 type ShipmentBookingStatus =
-  | "UNASSIGNED"
-  | "PENDING"
-  | "PENDING_BOOKING"
-  | "BOOKED"
-  | string;
+  "UNASSIGNED" | "PENDING" | "PENDING_BOOKING" | "BOOKED" | string;
 
 interface CreateShipmentRequest {
   orderId: string;
@@ -151,6 +147,9 @@ interface UpdateShipmentRequest {
   shipmentValue?: number;
   description?: string;
   isFragile?: boolean;
+  status?: string;
+  specialInstructions?: string;
+  estimatedDelivery?: string;
 }
 
 interface RetryCourierBookingRequest {
@@ -505,10 +504,13 @@ export const shipmentApi = baseApi.injectEndpoints({
       ShipmentsListResponse,
       GetShipmentsParams | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/shipments",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetShipmentsParams = arg || {};
+        return {
+          url: "/api/v1/shipments",
+          params,
+        };
+      },
       providesTags: (result) =>
         result?.data?.shipments
           ? [

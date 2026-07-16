@@ -11,16 +11,28 @@ export function useNDR() {
   const selectors = useNDRSelectors();
   const actions = useNDRActions();
 
+  // Additional store fields not exposed by the selector/action hooks
+  const setAccessToken = useNDRStore((state) => state.setAccessToken);
+  const creating = useNDRStore((state) => state.creating);
+  const updating = useNDRStore((state) => state.updating);
+  const fetchingStats = useNDRStore((state) => state.fetchingStats);
+  const currentNDR = useNDRStore((state) => state.currentNDR);
+
   // Set access token when it changes
   useEffect(() => {
     if (accessToken) {
-      actions.setAccessToken(accessToken);
+      setAccessToken(accessToken);
     }
-  }, [accessToken, actions]);
+  }, [accessToken, setAccessToken]);
 
   return {
     ...selectors,
     ...actions,
+    setAccessToken,
+    creating,
+    updating,
+    fetchingStats,
+    currentNDR,
   };
 }
 

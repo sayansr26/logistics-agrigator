@@ -347,7 +347,7 @@ function AddressesPageContent() {
   if (isAdmin && !outletId) {
     return (
       <DashboardLayout
-        breadcrumbs={[
+        customBreadcrumbs={[
           { title: "Dashboard", href: "/dashboard" },
           { title: "Outlets", href: "/outlets" },
           { title: "Addresses" },
@@ -385,7 +385,7 @@ function AddressesPageContent() {
     : "Manage your pickup and delivery addresses";
 
   return (
-    <DashboardLayout breadcrumbs={customBreadcrumbs}>
+    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

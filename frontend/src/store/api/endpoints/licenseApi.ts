@@ -38,10 +38,14 @@ export const licenseApi = baseApi.injectEndpoints({
       LicensesListResponse,
       { page?: number; limit?: number; status?: string } | void
     >({
-      query: (params = {}) => ({
-        url: "/api/v1/licenses",
-        params,
-      }),
+      query: (arg) => {
+        const params: { page?: number; limit?: number; status?: string } =
+          arg || {};
+        return {
+          url: "/api/v1/licenses",
+          params,
+        };
+      },
       providesTags: ["License"],
     }),
   }),

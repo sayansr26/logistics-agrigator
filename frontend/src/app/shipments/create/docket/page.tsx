@@ -19,7 +19,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormError } from "@/components/ui/form-error";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import {
+  useShipmentFormStore,
+  type ShipmentFormState,
+} from "@/store/shipment-form-store";
 import { useRole } from "@/hooks/useRole";
 import {
   useListOutletsQuery,
@@ -637,7 +640,9 @@ export default function ShipmentDetailsPage() {
                           e.target.value.replace(/\D+/g, "").slice(0, 6),
                         )
                       }
-                      className={store.errors.pincode ? "border-destructive" : ""}
+                      className={
+                        store.errors.pincode ? "border-destructive" : ""
+                      }
                     />
                     {pinLoading && (
                       <Loader2 className="h-4 w-4 absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
@@ -711,7 +716,7 @@ function InvoicesSection({
   store,
 }: {
   isB2B: boolean;
-  store: ReturnType<typeof useShipmentFormStore>;
+  store: ShipmentFormState;
 }) {
   // B2C: always exactly 1 row, auto-init if empty
   if (!isB2B) {
@@ -913,7 +918,7 @@ function DimensionsSection({
   store,
 }: {
   isB2B: boolean;
-  store: ReturnType<typeof useShipmentFormStore>;
+  store: ShipmentFormState;
 }) {
   // B2C: single fixed row, no add/remove
   if (!isB2B) {

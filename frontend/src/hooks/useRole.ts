@@ -92,7 +92,7 @@ export function useRole() {
    * @param roles - Array of roles to check
    */
   const hasRole = useCallback(
-    (roles: string[] | SystemRole[]): boolean => {
+    (roles: Array<string | SystemRole>): boolean => {
       if (!currentRole) return false;
       return roles.includes(currentRole);
     },

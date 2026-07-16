@@ -179,10 +179,13 @@ export const userApi = baseApi.injectEndpoints({
      * Get Users - Fetch list of users with pagination and filters
      */
     getUsers: builder.query<UsersListResponse, GetUsersParams | void>({
-      query: (params = {}) => ({
-        url: "/api/v1/users",
-        params,
-      }),
+      query: (arg) => {
+        const params: GetUsersParams = arg || {};
+        return {
+          url: "/api/v1/users",
+          params,
+        };
+      },
       providesTags: (result) =>
         result?.data?.users
           ? [

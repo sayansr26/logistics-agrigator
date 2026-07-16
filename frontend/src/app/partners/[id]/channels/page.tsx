@@ -574,7 +574,7 @@ export default function ManageChannelsPage() {
   // Loading
   if (isLoadingPartner || isLoadingChannels) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <div className="flex items-center justify-center h-96">
           <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
         </div>
@@ -585,7 +585,7 @@ export default function ManageChannelsPage() {
   // Error
   if (channelsError) {
     return (
-      <DashboardLayout breadcrumbs={customBreadcrumbs}>
+      <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-96">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
@@ -608,7 +608,7 @@ export default function ManageChannelsPage() {
   const primaryChannel = channels.find((c) => c.isPrimary);
 
   return (
-    <DashboardLayout breadcrumbs={customBreadcrumbs}>
+    <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">
