@@ -21,9 +21,7 @@ scripts/
 # Node.js
 node_modules/
 npm-debug.log*
-pnpm-debug.log*
 package-lock.json
-pnpm-lock.yaml
 
 # Next.js specific
 .next/

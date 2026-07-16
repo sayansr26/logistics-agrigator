@@ -63,16 +63,16 @@ memory-bank/
 
 **`builtin cd`**: The shell uses zoxide which overrides `cd`. Always use `builtin cd` when changing directories in Bash commands.
 
-**`builtin` is ONLY for `cd`**: NEVER prefix any other command with `builtin`. Commands like `pnpm`, `docker-compose`, `node`, `npm`, etc. must be run directly without `builtin`.
+**`builtin` is ONLY for `cd`**: NEVER prefix any other command with `builtin`. Commands like `yarn`, `docker-compose`, `node`, `npm`, etc. must be run directly without `builtin`.
 
 ```bash
 # ✅ CORRECT
 builtin cd /path/to/dir
-pnpm run build
+yarn run build
 docker restart logistics-frontend
 
 # ❌ WRONG — will fail with "no such builtin"
-builtin pnpm run build
+builtin yarn run build
 builtin docker restart logistics-frontend
 ```
 
@@ -80,13 +80,13 @@ builtin docker restart logistics-frontend
 
 ```bash
 # Initial Setup
-pnpm run fresh:install          # Complete fresh installation
-pnpm run setup:dev              # Auto-create .env files + dependencies
+yarn run fresh:install          # Complete fresh installation
+yarn run setup:dev              # Auto-create .env files + dependencies
 
 # Development
-pnpm run dev                    # Start all services
-pnpm run dev:frontend           # Frontend + API Gateway only
-pnpm run dev:backend            # Backend services only
+yarn run dev                    # Start all services
+yarn run dev:frontend           # Frontend + API Gateway only
+yarn run dev:backend            # Backend services only
 
 # Docker Management
 docker-compose ps               # View running containers
@@ -94,14 +94,14 @@ docker-compose logs [service]   # View service logs
 docker-compose restart [service] # Restart specific service
 
 # Database Operations
-pnpm run prisma:studio          # Visual database browser
-pnpm run prisma:generate        # Generate Prisma clients
-pnpm run migrate:deploy         # Deploy migrations
+yarn run prisma:studio          # Visual database browser
+yarn run prisma:generate        # Generate Prisma clients
+yarn run migrate:deploy         # Deploy migrations
 
 # Testing & Validation
-pnpm run test                   # Run all tests
-pnpm run lint                   # Lint all code
-pnpm run health                 # Health check all services
+yarn run test                   # Run all tests
+yarn run lint                   # Lint all code
+yarn run health                 # Health check all services
 ```
 
 ## Architecture Patterns
@@ -113,7 +113,7 @@ pnpm run health                 # Health check all services
 - **Cache**: Redis 7+ for sessions, permissions, API responses
 - **Auth**: JWT with Redis sessions, 11-role RBAC system
 - **Frontend**: Next.js 14, TypeScript, Tailwind, Redux Toolkit + RTK Query
-- **Package Manager**: PNPM 8+ monorepo workspace
+- **Package Manager**: yarn monorepo workspace
 - **Container**: Docker with Docker Compose orchestration
 
 ## Project Structure
@@ -378,7 +378,7 @@ echo "✓ Error handling implemented"
 cd frontend
 
 # 1. Run build (MUST SUCCEED or identify PRE-EXISTING errors)
-pnpm run build
+yarn run build
 
 # Build Success Criteria:
 # ✅ "Compiled successfully" appears

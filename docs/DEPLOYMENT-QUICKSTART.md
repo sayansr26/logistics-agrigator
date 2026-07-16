@@ -11,11 +11,11 @@ ssh root@103.17.193.231
 # Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
 
-# Install Docker Compose, Node.js, PNPM, Git
+# Install Docker Compose, Node.js, yarn, Git
 apt install -y docker-compose
 curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 apt install -y nodejs git
-npm install -g pnpm@8.15.1
+npm install -g yarn
 ```
 
 ### 2. Create Deployment User

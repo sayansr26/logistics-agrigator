@@ -30,12 +30,12 @@ Run Migrations → Health Checks → ✅ Deployed
 - Checks if `.env` file exists
 - If not found:
   - Copies from `.env.example`
-  - Runs `pnpm setup:dev` for initial setup
+  - Runs `yarn setup:dev` for initial setup
 - If found: continues deployment
 
 ### 3. **Dependencies**
 
-- Installs/updates all dependencies with `pnpm install`
+- Installs/updates all dependencies with `yarn install`
 - Uses frozen lockfile for consistency
 
 ### 4. **Docker Rebuild** (Complete Rebuild Every Time)
@@ -86,8 +86,8 @@ Run Migrations → Health Checks → ✅ Deployed
    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
    apt install -y nodejs
 
-   # Install PNPM
-   npm install -g pnpm@8.15.1
+   # Install yarn
+   npm install -g yarn
 
    # Install Git
    apt install -y git
@@ -195,7 +195,7 @@ docker-compose logs -f auth-service
 
 ✅ **All Docker Images** - Built from scratch with `--no-cache`
 ✅ **All Containers** - Stopped, removed, and recreated
-✅ **Dependencies** - Reinstalled/updated with PNPM
+✅ **Dependencies** - Reinstalled/updated with yarn
 ✅ **Database Schema** - Migrations applied
 
 This ensures:
@@ -398,7 +398,7 @@ docker-compose up -d
 1. **Test Locally First**
 
    ```bash
-   pnpm run dev
+   yarn run dev
    # Test your changes
    ```
 

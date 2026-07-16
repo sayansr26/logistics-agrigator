@@ -77,10 +77,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All "Cannot find module" errors fixed across all services
   - Volume mount conflicts resolved for stable dependency management
   - 100% service uptime with proper startup sequences
-- **Development Workflow**: Seamless development with all PNPM commands working perfectly
-  - `pnpm run dev` - Full stack development
-  - `pnpm run dev:backend` - Backend services only
-  - `pnpm run dev:frontend` - Frontend only
+- **Development Workflow**: Seamless development with all yarn commands working perfectly
+  - `yarn run dev` - Full stack development
+  - `yarn run dev:backend` - Backend services only
+  - `yarn run dev:frontend` - Frontend only
   - Service-specific development commands operational
 - **Homepage Behavior**: Now redirects to login page for proper app flow
 - **Navigation Structure**: Updated to reflect real logistics application requirements
@@ -148,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Infrastructure Status**: 100% operational with maximum development velocity
 - **Docker Environment**: Complete stability with no container crashes
-- **Development Workflow**: Seamless PNPM commands and hot reloading
+- **Development Workflow**: Seamless yarn commands and hot reloading
 - **Service Communication**: All inter-service calls working properly
 - **Database Architecture**: Prisma ORM fully operational across all services
 

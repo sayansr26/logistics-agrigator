@@ -19,7 +19,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 
 # Environment files
 .env
@@ -56,7 +55,6 @@ commitlint.config.js
 # Package files
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 
 # Git
 .git/

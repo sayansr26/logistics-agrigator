@@ -259,7 +259,7 @@ Overall Project Progress          [███████████████
   - Partner pincode assign dialog now uses the canonical geography lazy search hook from `geoApi.ts`
   - Added deterministic dialog behavior for stale-result prevention, close/reset handling, and latest-query-only empty state rendering
   - Normalized `getPartnerPincodes` frontend response handling to unwrap the backend envelope correctly
-  - `builtin cd frontend && pnpm run build` passed successfully
+  - `builtin cd frontend && yarn run build` passed successfully
   - Restarted local frontend container after the successful build to load the new bundle
 
 - ✅ **Shipment detail — Assign Partner quotes (April 8, 2026)**
@@ -291,7 +291,7 @@ Overall Project Progress          [███████████████
 - ✅ Docker Compose setup
 - ✅ PostgreSQL with per-service databases
 - ✅ Redis for sessions and caching
-- ✅ PNPM monorepo configuration
+- ✅ yarn monorepo configuration
 - ✅ Shared library structure
 - ✅ Environment configuration
 - ✅ Health check endpoints
@@ -469,7 +469,7 @@ Overall Project Progress          [███████████████
   - Updated frontend partner pincode search endpoint to geography API with response normalization transform
 
 - ✅ **Database Init and Migration Recovery (February 14, 2026)**
-  - Hardened `pnpm run db:init` flow via `scripts/init-databases.sh`:
+  - Hardened `yarn run db:init` flow via `scripts/init-databases.sh`:
     - environment-aware compose/env-file selection for dev vs production
     - strict fail-fast behavior to avoid partial migrations
     - deploy committed migrations only (no migration generation in init path)
@@ -498,7 +498,7 @@ Overall Project Progress          [███████████████
   - Added `import:pincodes:prod` script for production environment
   - Added `load:pincodes` and `load:pincodes:prod` scripts
   - Added `seed:geo` and `seed:geo:prod` scripts
-  - Commands: `pnpm run import:pincodes` or `pnpm run import:pincodes:prod`
+  - Commands: `yarn run import:pincodes` or `yarn run import:pincodes:prod`
 
 - ✅ Outlet module backend complete
 - ✅ Outlet module frontend complete
@@ -1037,7 +1037,7 @@ Overall Project Progress          [███████████████
   - seed:geo - Seed geographical data (dev)
   - seed:geo:prod - Seed geographical data (production)
 
-  Usage: pnpm run import:pincodes:prod
+  Usage: yarn run import:pincodes:prod
   Command: docker-compose -f docker-compose.production.yml exec partner-service node scripts/import-pincode-data.js
 ```
 

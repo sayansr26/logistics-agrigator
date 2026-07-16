@@ -4,14 +4,18 @@
 echo "🧪 Running tests before push..."
 
 # Run tests only in workspaces that define them
-pnpm -r --if-present test
+for service in backend/* frontend; do
+  if [ -f "$service/package.json" ] && grep -q '"test"' "$service/package.json"; then
+    yarn --cwd "$service" test || exit 1
+  fi
+done
 
-# Run type checking for TypeScript projects  
+# Run type checking for TypeScript projects
 echo "🔍 Type checking..."
 
 for service in backend/*; do
   if [ -f "$service/package.json" ] && grep -q '"type-check"' "$service/package.json"; then
-    pnpm --dir "$service" run type-check
+    yarn --cwd "$service" type-check || exit 1
   fi
 done
 
@@ -23,11 +27,11 @@ echo "ℹ️  Skipping frontend type-check in pre-push; enforcing frontend build
 # Run build to ensure packages that define a build script still compile
 echo "🏗️ Build check..."
 
-pnpm --dir frontend run build
+yarn --cwd frontend build || exit 1
 
 for service in backend/*; do
   if [ -f "$service/package.json" ] && grep -q '"build"' "$service/package.json"; then
-    pnpm --dir "$service" run build
+    yarn --cwd "$service" build || exit 1
   fi
 done
 

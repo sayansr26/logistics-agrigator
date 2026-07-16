@@ -539,9 +539,7 @@ enum ChargeCalcType {
 ```json
 {
   "status": "success",
-  "data": {
-    /* actual payload */
-  },
+  "data": {/* actual payload */},
   "meta": { "timestamp": "..." }
 }
 ```
@@ -745,7 +743,7 @@ Redis Cache Structure:
 1. **Prisma ORM**: Type-safe database operations, migration management
 2. **JWT + Redis**: Scalable auth with session management
 3. **UUID**: Database IDs for security and distribution
-4. **PNPM Workspace**: Monorepo for shared code management
+4. **yarn Workspace**: Monorepo for shared code management
 5. **Docker Compose**: Consistent development environment
 6. **Winston**: Structured logging with file rotation
 7. **Geography endpoint canonicalization**: Pincode search standard is `/api/v1/geography/pincodes/search`; old `/api/v1/pincodes/search` is temporary/deprecated

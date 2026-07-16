@@ -6,14 +6,14 @@ This guide covers all the automation scripts available in the Logistics Aggregat
 
 | Command                   | Description              | Use Case                        |
 | ------------------------- | ------------------------ | ------------------------------- |
-| `pnpm run cleanup`        | Clean all artifacts      | When having dependency issues   |
-| `pnpm run cleanup:deep`   | Deep clean + Docker      | When Docker is acting up        |
-| `pnpm run setup:dev`      | Full stack setup         | First time setup or fresh start |
-| `pnpm run setup:frontend` | Frontend only setup      | Frontend development only       |
-| `pnpm run setup:backend`  | Backend only setup       | Backend development only        |
-| `pnpm run fresh:install`  | Cleanup + Full setup     | Complete fresh installation     |
-| `pnpm run fresh:frontend` | Cleanup + Frontend setup | Fresh frontend installation     |
-| `pnpm run fresh:backend`  | Cleanup + Backend setup  | Fresh backend installation      |
+| `yarn run cleanup`        | Clean all artifacts      | When having dependency issues   |
+| `yarn run cleanup:deep`   | Deep clean + Docker      | When Docker is acting up        |
+| `yarn run setup:dev`      | Full stack setup         | First time setup or fresh start |
+| `yarn run setup:frontend` | Frontend only setup      | Frontend development only       |
+| `yarn run setup:backend`  | Backend only setup       | Backend development only        |
+| `yarn run fresh:install`  | Cleanup + Full setup     | Complete fresh installation     |
+| `yarn run fresh:frontend` | Cleanup + Frontend setup | Fresh frontend installation     |
+| `yarn run fresh:backend`  | Cleanup + Backend setup  | Fresh backend installation      |
 
 ## 🚀 Getting Started
 
@@ -25,18 +25,18 @@ git clone <repository-url>
 cd logistics-main
 
 # Complete automated setup
-pnpm run setup:dev
+yarn run setup:dev
 
 # Start development
 # The setup script will guide you to run:
-# pnpm run dev
+# yarn run dev
 ```
 
 ### Troubleshooting Issues
 
 ```bash
 # If you're having any issues, start fresh:
-pnpm run fresh:install
+yarn run fresh:install
 
 # This will:
 # 1. Clean everything
@@ -48,18 +48,17 @@ pnpm run fresh:install
 
 ## 🧹 Cleanup Scripts
 
-### `pnpm run cleanup`
+### `yarn run cleanup`
 
 **What it does:**
 
 - ✅ Removes all `node_modules` directories
-- ✅ Removes all lock files (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`)
+- ✅ Removes all lock files (`package-lock.json`, `yarn.lock`)
 - ✅ Removes all build directories (`.next`, `dist`, `build`)
 - ✅ Removes all cache directories (`.turbo`, `.eslintcache`)
 - ✅ Removes temporary files (`*.log`, `*.tmp`, `.DS_Store`)
 - ✅ Stops and removes Docker containers
 - ✅ Cleans Docker build cache
-- ✅ Cleans pnpm store cache
 
 **When to use:**
 
@@ -68,7 +67,7 @@ pnpm run fresh:install
 - Cache problems
 - Before fresh installation
 
-### `pnpm run cleanup:deep`
+### `yarn run cleanup:deep`
 
 **Additional actions:**
 
@@ -82,7 +81,7 @@ pnpm run fresh:install
 
 ## 🚀 Setup Scripts
 
-### `pnpm run setup:dev` (Full Stack)
+### `yarn run setup:dev` (Full Stack)
 
 **What it does:**
 
@@ -95,7 +94,7 @@ pnpm run fresh:install
   - `backend/platform-service/.env`
   - `backend/api-gateway/.env`
 - ✅ Creates `frontend/.env.local`
-- ✅ Installs all dependencies with pnpm
+- ✅ Installs all dependencies with yarn
 - ✅ Generates Prisma clients for all services
 
 **Environment Configuration:**
@@ -115,7 +114,7 @@ pnpm run fresh:install
 - **Platform Service**: Shopify/Amazon/WooCommerce/Magento API credentials
 - **API Gateway**: CORS settings, rate limiting, load balancing, circuit breaker
 
-### `pnpm run setup:frontend` (Frontend Only)
+### `yarn run setup:frontend` (Frontend Only)
 
 **What it does:**
 
@@ -126,7 +125,7 @@ pnpm run fresh:install
   - External service URLs
 - ✅ Installs dependencies
 
-### `pnpm run setup:backend` (Backend Only)
+### `yarn run setup:backend` (Backend Only)
 
 **What it does:**
 
@@ -139,28 +138,28 @@ pnpm run fresh:install
 
 These combine cleanup + setup for complete fresh installations:
 
-### `pnpm run fresh:install`
+### `yarn run fresh:install`
 
 ```bash
 # Equivalent to:
-pnpm run cleanup
-pnpm run setup:dev
+yarn run cleanup
+yarn run setup:dev
 ```
 
-### `pnpm run fresh:frontend`
+### `yarn run fresh:frontend`
 
 ```bash
 # Equivalent to:
-pnpm run cleanup
-pnpm run setup:frontend
+yarn run cleanup
+yarn run setup:frontend
 ```
 
-### `pnpm run fresh:backend`
+### `yarn run fresh:backend`
 
 ```bash
 # Equivalent to:
-pnpm run cleanup
-pnpm run setup:backend
+yarn run cleanup
+yarn run setup:backend
 ```
 
 ## 📁 Generated Environment Files
@@ -235,45 +234,45 @@ BCRYPT_ROUNDS=12
 
 ```bash
 # Option 1: Fresh start (recommended for first time)
-pnpm run fresh:install
+yarn run fresh:install
 
 # Option 2: If already set up
-pnpm run dev
+yarn run dev
 ```
 
 ### Frontend Development Only
 
 ```bash
 # Setup frontend only
-pnpm run setup:frontend
+yarn run setup:frontend
 
 # Start frontend
-pnpm run dev:frontend
+yarn run dev:frontend
 ```
 
 ### Backend Development Only
 
 ```bash
 # Setup backend only
-pnpm run setup:backend
+yarn run setup:backend
 
 # Start backend services
-pnpm run dev:backend
+yarn run dev:backend
 ```
 
 ### Fixing Dependency Issues
 
 ```bash
 # Clean and reinstall everything
-pnpm run fresh:install
+yarn run fresh:install
 ```
 
 ### Fixing Docker Issues
 
 ```bash
 # Deep clean including Docker
-pnpm run cleanup:deep
-pnpm run setup:dev
+yarn run cleanup:deep
+yarn run setup:dev
 ```
 
 ### Updating Environment Files
@@ -303,12 +302,12 @@ chmod +x scripts/cleanup.sh
 chmod +x scripts/setup.sh
 ```
 
-### pnpm Requirement
+### yarn Requirement
 
-These scripts require pnpm. Install it if needed:
+These scripts require yarn. Install it if needed:
 
 ```bash
-npm install -g pnpm@8.15.1
+npm install -g yarn
 ```
 
 ## 🔍 Troubleshooting
@@ -330,12 +329,12 @@ docker --version
 docker ps
 ```
 
-### pnpm not found
+### yarn not found
 
-Install pnpm globally:
+Install yarn globally:
 
 ```bash
-npm install -g pnpm@8.15.1
+npm install -g yarn
 ```
 
 ### .env files not created
@@ -351,7 +350,7 @@ Try forcing recreation:
 Regenerate Prisma clients:
 
 ```bash
-pnpm -r run generate
+yarn -r run generate
 ```
 
 ## 📚 Additional Resources

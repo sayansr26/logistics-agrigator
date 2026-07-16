@@ -1107,7 +1107,7 @@ Nodes (16): bcrypt, { getRedisClient }, jwt, getRedisClient(), redis, redisUtils
 ### Community 99 - "Cluster 99"
 
 Cohesion: 0.11
-Nodes (20): auth-service Express server, auth-service src/index entry, API Gateway-only access pattern, concept_microservices, concept_monorepo_pnpm, 11-Role RBAC permission system, logisticsagrigator_package_file, logisticsagrigator_pnpmworkspace_file (+12 more)
+Nodes (20): auth-service Express server, auth-service src/index entry, API Gateway-only access pattern, concept_microservices, concept_monorepo_yarn, 11-Role RBAC permission system, logisticsagrigator_package_file, logisticsagrigator_yarnworkspace_file (+12 more)
 
 ### Community 100 - "Cluster 100"
 

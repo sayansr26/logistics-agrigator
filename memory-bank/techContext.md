@@ -37,7 +37,7 @@
 | -------------- | -------------------------- |
 | Docker         | Containerization           |
 | Docker Compose | Service orchestration      |
-| PNPM           | Package manager (monorepo) |
+| yarn           | Package manager (monorepo) |
 | Husky          | Git hooks                  |
 | Commitlint     | Commit message linting     |
 | ESLint         | Code linting               |
@@ -50,12 +50,12 @@
 ```bash
 # Required software
 - Node.js 18+ (LTS recommended)
-- PNPM 8.15.1+
+- yarn
 - Docker Desktop (or Docker Engine + Docker Compose)
 - Git
 
-# Install PNPM globally
-npm install -g pnpm@8.15.1
+# Install yarn globally
+npm install -g yarn
 ```
 
 ### Project Structure
@@ -85,25 +85,25 @@ logistics-agrigator/
 
 ```bash
 # Initial setup
-pnpm run fresh:install          # Complete fresh installation
-pnpm run setup:dev              # Auto-create .env + dependencies
+yarn run fresh:install          # Complete fresh installation
+yarn run setup:dev              # Auto-create .env + dependencies
 
 # Development
-pnpm run dev                    # Start all services
-pnpm run dev:frontend           # Frontend only
-pnpm run dev:backend            # Backend only
-pnpm run stop                   # Stop all services
+yarn run dev                    # Start all services
+yarn run dev:frontend           # Frontend only
+yarn run dev:backend            # Backend only
+yarn run stop                   # Stop all services
 
 # Database
-pnpm run prisma:studio          # Visual database browser
-pnpm run prisma:generate        # Generate Prisma clients
-pnpm run migrate:deploy:all     # Deploy all migrations
-pnpm run db:init                # Container-aware migration + seed bootstrap
+yarn run prisma:studio          # Visual database browser
+yarn run prisma:generate        # Generate Prisma clients
+yarn run migrate:deploy:all     # Deploy all migrations
+yarn run db:init                # Container-aware migration + seed bootstrap
 
 # Logs & Health
-pnpm run logs                   # All service logs
-pnpm run logs:backend           # Backend logs only
-pnpm run health                 # Health check all services
+yarn run logs                   # All service logs
+yarn run logs:backend           # Backend logs only
+yarn run health                 # Health check all services
 ```
 
 ## Environment Configuration
@@ -278,21 +278,21 @@ const signature = crypto
 
 ```bash
 # Run service tests
-docker exec logistics-auth-service pnpm test
+docker exec logistics-auth-service yarn test
 
 # Run with coverage
-docker exec logistics-auth-service pnpm run test:coverage
+docker exec logistics-auth-service yarn run test:coverage
 
 # Integration tests
-docker exec logistics-auth-service pnpm run test:integration
+docker exec logistics-auth-service yarn run test:integration
 ```
 
 ### Frontend Testing
 
 ```bash
 cd frontend
-pnpm test              # Unit tests
-pnpm run test:e2e      # End-to-end tests
+yarn test              # Unit tests
+yarn run test:e2e      # End-to-end tests
 ```
 
 ## Code Quality Tools
@@ -328,8 +328,8 @@ module.exports = {
 
 ```bash
 # .husky/pre-commit
-pnpm run lint:staged
-pnpm run commitlint
+yarn run lint:staged
+yarn run commitlint
 ```
 
 ## Debugging Tips
@@ -353,7 +353,7 @@ curl http://localhost:3003/health  # User Service
 
 ```bash
 # Prisma Studio (visual browser)
-pnpm run prisma:studio
+yarn run prisma:studio
 
 # Direct psql access
 docker exec -it logistics-postgres psql -U logistics -d logistics_auth
@@ -481,5 +481,5 @@ const handleDelete = (item) => {
 
 **Environment**: Development  
 **Node Version**: 18.x LTS  
-**Package Manager**: PNPM 8.15.1  
+**Package Manager**: yarn  
 **Last Updated**: March 28, 2026

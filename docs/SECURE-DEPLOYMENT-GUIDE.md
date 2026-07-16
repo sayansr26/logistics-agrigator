@@ -43,7 +43,7 @@ The **Logistics Secure Docker Builder** is a zero-source-code distribution syste
 
 1. Docker 20.10+ installed
 2. Node.js 18+ installed
-3. License Service running (`pnpm run dev:license`)
+3. License Service running (`yarn run dev:license`)
 4. Private Docker registry configured
 
 ### Step 1: Generate License
@@ -105,7 +105,7 @@ curl -X POST http://localhost:3002/auth/register \
 
 ```bash
 # Run the secure build CLI
-pnpm run secure:generate-config
+yarn run secure:generate-config
 
 # Answer the prompts:
 # - Client ID (UUID)
@@ -116,7 +116,7 @@ pnpm run secure:generate-config
 # - License Server URL
 
 # Build the secure image
-pnpm run secure:build --config build-config.json
+yarn run secure:build --config build-config.json
 ```
 
 #### Programmatic Mode
@@ -140,14 +140,14 @@ cat > client-config.json << EOF
 EOF
 
 # Build the image
-pnpm run secure:build --config client-config.json
+yarn run secure:build --config client-config.json
 ```
 
 ### Step 3: Push to Registry
 
 ```bash
 # Push to configured registry
-pnpm run secure:push logistics/secure-abc:v1 \
+yarn run secure:push logistics/secure-abc:v1 \
   --registry registry.logistics.io \
   --username admin \
   --password <registry-password>
@@ -395,14 +395,14 @@ _0x2d8f05['push'](_0x2d8f05['shift']());}};_0x529e49(++_0x4a3b12);
 
 ```bash
 # Generate configuration interactively
-pnpm run secure:generate-config
+yarn run secure:generate-config
 
 # Build secure image
-pnpm run secure:build --config <config-file>
-pnpm run secure:build --interactive
+yarn run secure:build --config <config-file>
+yarn run secure:build --interactive
 
 # Build with custom options
-pnpm run secure:build \
+yarn run secure:build \
   --config config.json \
   --output my-image:latest \
   --registry my-registry.com \
@@ -413,7 +413,7 @@ pnpm run secure:build \
 
 ```bash
 # Push to registry
-pnpm run secure:push <image> \
+yarn run secure:push <image> \
   --registry <url> \
   --username <user> \
   --password <pass>
@@ -423,8 +423,8 @@ pnpm run secure:push <image> \
 
 ```bash
 # Test run locally
-pnpm run secure:run <image>
-pnpm run secure:run <image> --detached
+yarn run secure:run <image>
+yarn run secure:run <image> --detached
 ```
 
 ## File Structure

@@ -81,12 +81,12 @@ logistics/
 ### Prerequisites
 
 - **Docker & Docker Compose** (recommended for development)
-- **Node.js 18+** and **PNPM 8+** (for local development)
+- **Node.js 18+** and **yarn** (for local development)
 - **Git** for version control
 
 ```bash
-# Install PNPM globally (if not already installed)
-npm install -g pnpm@8.15.1
+# Install yarn globally (if not already installed)
+npm install -g yarn
 ```
 
 ### 🛠️ Development Scripts
@@ -97,42 +97,42 @@ We provide comprehensive scripts for easy development setup and maintenance:
 
 ```bash
 # Clean all dependencies, build files, and artifacts
-pnpm run cleanup
+yarn run cleanup
 
 # Deep cleanup (includes Docker system prune)
-pnpm run cleanup:deep
+yarn run cleanup:deep
 ```
 
 #### 🚀 Setup Scripts
 
 ```bash
 # Full stack setup (auto-creates .env files + installs dependencies)
-pnpm run setup:dev
+yarn run setup:dev
 
 # Frontend only setup
-pnpm run setup:frontend
+yarn run setup:frontend
 
 # Backend only setup
-pnpm run setup:backend
+yarn run setup:backend
 ```
 
 #### 🔄 Fresh Install (Cleanup + Setup)
 
 ```bash
 # Complete fresh installation
-pnpm run fresh:install
+yarn run fresh:install
 
 # Fresh frontend installation
-pnpm run fresh:frontend
+yarn run fresh:frontend
 
 # Fresh backend installation
-pnpm run fresh:backend
+yarn run fresh:backend
 ```
 
 **✨ What the setup scripts do:**
 
 - ✅ Auto-create `.env` files for all services
-- ✅ Install all dependencies with pnpm
+- ✅ Install all dependencies with yarn
 - ✅ Generate Prisma clients
 - ✅ Configure service-specific databases
 - ✅ Set up inter-service communication URLs
@@ -145,26 +145,26 @@ git clone <repository-url>
 cd logistics
 
 # 🚀 NEW: Use our automated setup script
-pnpm run setup:dev
+yarn run setup:dev
 
 # OR manual setup (old way)
 # cp .env.example .env
 # Edit .env with your specific configurations
-# pnpm install
+# yarn install
 ```
 
 ### 2. Start Development Environment
 
 ```bash
 # Start all services (includes automatic database setup)
-pnpm run dev
+yarn run dev
 
 # Or choose your development focus:
-pnpm run dev:frontend         # Frontend-only development
-pnpm run dev:backend          # Backend-only development
+yarn run dev:frontend         # Frontend-only development
+yarn run dev:backend          # Backend-only development
 
 # View logs
-pnpm run logs
+yarn run logs
 ```
 
 ### 3. Access Applications
@@ -172,7 +172,7 @@ pnpm run logs
 - **Frontend**: http://localhost:3000
 - **API Gateway**: http://localhost:8000
 - **Health Check**: http://localhost:8000/health
-- **Prisma Studio**: `pnpm run prisma:studio` (Port 5555)
+- **Prisma Studio**: `yarn run prisma:studio` (Port 5555)
 
 ## 🗄️ Database Management with Prisma
 
@@ -180,10 +180,10 @@ pnpm run logs
 
 ```bash
 # Visual database browser
-pnpm run prisma:studio
+yarn run prisma:studio
 
 # Generate Prisma clients for all services
-pnpm run prisma:generate
+yarn run prisma:generate
 
 # Create new migration (per service)
 docker-compose exec auth-service npx prisma migrate dev --name "description"
@@ -303,51 +303,51 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 
 ```bash
 # Complete development environment (frontend + backend + databases)
-pnpm run dev                    # Start all services
-pnpm run dev:detached          # Start all in background
-pnpm run stop                   # Stop all services
-pnpm run clean                  # Clean environment & rebuild
+yarn run dev                    # Start all services
+yarn run dev:detached          # Start all in background
+yarn run stop                   # Stop all services
+yarn run clean                  # Clean environment & rebuild
 ```
 
 #### **Focused Development**
 
 ```bash
 # Frontend developers (UI/React/Next.js focus)
-pnpm run setup:frontend        # One-command frontend setup
-pnpm run dev:frontend          # Start frontend-only
-pnpm run stop:frontend         # Stop frontend services
+yarn run setup:frontend        # One-command frontend setup
+yarn run dev:frontend          # Start frontend-only
+yarn run stop:frontend         # Stop frontend services
 
 # Backend developers (API/Database/Prisma focus)
-pnpm run setup:backend         # One-command backend setup
-pnpm run dev:backend           # Start backend services + databases
-pnpm run stop:backend          # Stop backend services
+yarn run setup:backend         # One-command backend setup
+yarn run dev:backend           # Start backend services + databases
+yarn run stop:backend          # Stop backend services
 
 # Include future services (Shipment, Support, Platform)
-pnpm run dev:backend:full      # Start all backend services
+yarn run dev:backend:full      # Start all backend services
 ```
 
 #### **Service Monitoring**
 
 ```bash
 # View logs by category
-pnpm run logs                   # All services
-pnpm run logs:frontend         # Frontend only
-pnpm run logs:backend          # Backend only
+yarn run logs                   # All services
+yarn run logs:frontend         # Frontend only
+yarn run logs:backend          # Backend only
 
 # View logs by service
-pnpm run logs:auth             # Auth service
-pnpm run logs:user             # User service
-pnpm run logs:api              # API Gateway
+yarn run logs:auth             # Auth service
+yarn run logs:user             # User service
+yarn run logs:api              # API Gateway
 ```
 
 ### Database Operations
 
 ```bash
 # Access Prisma Studio (Visual Database Browser)
-pnpm run prisma:studio
+yarn run prisma:studio
 
 # Generate Prisma clients for all services
-pnpm run prisma:generate
+yarn run prisma:generate
 
 # Create and apply migrations (service-specific)
 docker-compose exec auth-service npx prisma migrate dev
@@ -362,19 +362,19 @@ docker-compose exec user-service npx prisma migrate deploy
 
 ```bash
 # Run all workspace tests
-pnpm run test
+yarn run test
 
 # Run service-specific tests
-docker-compose exec auth-service pnpm test
-docker-compose exec user-service pnpm test
-docker-compose exec frontend pnpm test
+docker-compose exec auth-service yarn test
+docker-compose exec user-service yarn test
+docker-compose exec frontend yarn test
 
 # Run integration tests
-docker-compose exec auth-service pnpm run test:integration
+docker-compose exec auth-service yarn run test:integration
 
 # Run tests with coverage
-pnpm run test:coverage          # All workspaces
-docker-compose exec auth-service pnpm run test:coverage
+yarn run test:coverage          # All workspaces
+docker-compose exec auth-service yarn run test:coverage
 ```
 
 ## 🔒 Security Features
@@ -401,9 +401,9 @@ docker-compose exec auth-service pnpm run test:coverage
 ### Service Health
 
 ```bash
-# PNPM health check commands
-pnpm run health                 # Backend API health
-pnpm run health:frontend       # Frontend health
+# yarn health check commands
+yarn run health                 # Backend API health
+yarn run health:frontend       # Frontend health
 
 # Direct curl commands
 curl http://localhost:3001/health   # API Gateway

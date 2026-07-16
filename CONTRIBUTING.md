@@ -141,9 +141,9 @@ git commit -m "feat(database): add user profile schema with audit logging"
 
 ```bash
 # Ensure code quality
-pnpm run lint              # Fix linting issues
-pnpm run type-check        # Fix TypeScript errors
-pnpm test                  # Ensure all tests pass
+yarn run lint              # Fix linting issues
+yarn run type-check        # Fix TypeScript errors
+yarn test                  # Ensure all tests pass
 
 # For backend changes with Prisma:
 npx prisma generate       # Update Prisma client
@@ -491,7 +491,7 @@ const userValidationSchema = Joi.object({
     "CLIENT",
     "FINANCE",
     "OPERATIONS",
-    "SUPPORT"
+    "SUPPORT",
   ),
 });
 

@@ -1106,13 +1106,13 @@
       "norm_label": "node"
     },
     {
-      "label": "pnpm",
+      "label": "yarn",
       "file_type": "code",
       "source_file": "package.json",
       "source_location": "L98",
-      "id": "logistics_agrigator_package_engines_pnpm",
+      "id": "logistics_agrigator_package_engines_yarn",
       "community": 89,
-      "norm_label": "pnpm"
+      "norm_label": "yarn"
     },
     {
       "label": "packageManager",
@@ -49735,8 +49735,8 @@
     },
     {
       "file_type": "code",
-      "name": "pnpm-workspace.yaml",
-      "path": "pnpm-workspace.yaml",
+      "name": "yarn-workspace.yaml",
+      "path": "yarn-workspace.yaml",
       "summary": "PNPM workspace configuration listing backend services and frontend packages",
       "id": "logisticsagrigator_pnpmworkspace_file",
       "community": 99,

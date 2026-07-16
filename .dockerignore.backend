@@ -19,9 +19,7 @@ scripts/
 # Node.js
 node_modules/
 npm-debug.log*
-pnpm-debug.log*
 package-lock.json
-pnpm-lock.yaml
 
 # Environment files
 .env*

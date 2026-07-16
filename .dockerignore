@@ -31,16 +31,11 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-.pnpm-debug.log*
 .npm/
 .yarn/
-.pnpm-store/
 
 # Package lock files
 package-lock.json
-pnpm-lock.yaml
-**/pnpm-lock.yaml
 # Yarn workspace: the ROOT yarn.lock IS needed in the build context so the
 # prod Dockerfiles can `COPY package.json yarn.lock ./` and run a frozen
 # install. Exclude stray service-level lockfiles, keep the root one.

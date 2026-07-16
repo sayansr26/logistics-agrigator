@@ -129,7 +129,7 @@ curl: (7) Failed to connect to localhost
 
 ```bash
 # Start all services
-pnpm run dev
+yarn run dev
 
 # Check health
 curl http://localhost:3002/health  # Auth service

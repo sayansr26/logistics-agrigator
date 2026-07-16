@@ -14,7 +14,7 @@ If you remember one thing: **base URL is the gateway, auth is a JWT bearer, resp
 
 ## Quick start — your first call
 
-After running `pnpm run dev` (see Local dev below), log in via the auth-service and grab a JWT. Then:
+After running `yarn run dev` (see Local dev below), log in via the auth-service and grab a JWT. Then:
 
 ```bash
 curl http://localhost:3001/api/v1/shipments?page=1&limit=10 \
@@ -26,12 +26,16 @@ A 200 response looks like:
 ```json
 {
   "status": "success",
-  "data": { "shipments": [ /* ... */ ] },
+  "data": { "shipments": [/* ... */] },
   "meta": {
     "timestamp": "2026-05-21T10:00:00Z",
     "pagination": {
-      "page": 1, "limit": 10, "totalCount": 152,
-      "totalPages": 16, "hasNext": true, "hasPrev": false
+      "page": 1,
+      "limit": 10,
+      "totalCount": 152,
+      "totalPages": 16,
+      "hasNext": true,
+      "hasPrev": false
     }
   }
 }
@@ -69,10 +73,10 @@ Token storage convention in the existing frontend is `localStorage.getItem('acce
 
 ```js
 prepareHeaders: (headers) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) headers.set('authorization', `Bearer ${token}`);
+  const token = localStorage.getItem("accessToken");
+  if (token) headers.set("authorization", `Bearer ${token}`);
   return headers;
-}
+};
 ```
 
 ## Permissions — what the user can see
@@ -162,33 +166,36 @@ The codebase is mid-migration from Zustand stores to Redux Toolkit + RTK Query (
 The shipment slice belongs in `frontend/src/api/shipmentApi.js`. A trimmed shape to get you started:
 
 ```js
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 export const shipmentApi = createApi({
-  reducerPath: 'shipmentApi',
+  reducerPath: "shipmentApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: 'http://localhost:3001/api/v1',
+    baseUrl: "http://localhost:3001/api/v1",
     prepareHeaders: (headers) => {
-      const token = localStorage.getItem('accessToken');
-      if (token) headers.set('authorization', `Bearer ${token}`);
+      const token = localStorage.getItem("accessToken");
+      if (token) headers.set("authorization", `Bearer ${token}`);
       return headers;
     },
   }),
-  tagTypes: ['Shipment', 'ShipmentList'],
+  tagTypes: ["Shipment", "ShipmentList"],
   endpoints: (b) => ({
     listShipments: b.query({
-      query: (params) => ({ url: '/shipments', params }),
-      transformResponse: (r) => ({ items: r.data.shipments, pagination: r.meta.pagination }),
-      providesTags: ['ShipmentList'],
+      query: (params) => ({ url: "/shipments", params }),
+      transformResponse: (r) => ({
+        items: r.data.shipments,
+        pagination: r.meta.pagination,
+      }),
+      providesTags: ["ShipmentList"],
     }),
     getShipment: b.query({
       query: (id) => `/shipments/${id}`,
       transformResponse: (r) => r.data.shipment,
-      providesTags: (_, __, id) => [{ type: 'Shipment', id }],
+      providesTags: (_, __, id) => [{ type: "Shipment", id }],
     }),
     createShipment: b.mutation({
-      query: (body) => ({ url: '/shipments', method: 'POST', body }),
-      invalidatesTags: ['ShipmentList'],
+      query: (body) => ({ url: "/shipments", method: "POST", body }),
+      invalidatesTags: ["ShipmentList"],
     }),
   }),
 });
@@ -203,9 +210,9 @@ For pages, follow Next.js 14 app router conventions already used in `frontend/sr
 From the repo root:
 
 ```bash
-pnpm run fresh:install      # one-time, installs everything and creates .env files
-pnpm run dev                # starts every service + frontend
-pnpm run dev:frontend       # frontend + gateway only (faster iteration)
+yarn run fresh:install      # one-time, installs everything and creates .env files
+yarn run dev                # starts every service + frontend
+yarn run dev:frontend       # frontend + gateway only (faster iteration)
 ```
 
 Useful checks once it's up:
@@ -215,7 +222,7 @@ docker-compose ps                                    # everything green?
 docker-compose logs -f shipment-service              # tail the service
 curl http://localhost:3001/health | jq               # gateway health
 curl http://localhost:3004/health | jq               # service health (direct)
-pnpm run prisma:studio                               # browse the DB
+yarn run prisma:studio                               # browse the DB
 ```
 
 The frontend dev server runs at `http://localhost:3000` and talks to `http://localhost:3001` for the API. If the gateway is down, every shipment request will fail — check `docker-compose ps` first when something's broken.
@@ -252,7 +259,7 @@ Beyond that, the broader Redux migration (`frontend/FRONTEND_ARCHITECTURE_TASK.m
 
 Before your first PR:
 
-- [ ] Repo running locally — `pnpm run dev` brings up the gateway, services, and frontend without errors
+- [ ] Repo running locally — `yarn run dev` brings up the gateway, services, and frontend without errors
 - [ ] Logged in via auth-service and successfully called `GET /api/v1/shipments` with curl
 - [ ] Read `docs/API-Specifications.md` end-to-end for shipments
 - [ ] Read `backend/auth-service/` route + controller pair to understand the reference pattern

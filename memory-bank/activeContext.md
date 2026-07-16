@@ -146,8 +146,8 @@ The primary focus is implementing a robust security layer and role-based access 
   - **Partner assign dialog hardened**: `partners/[id]/pincodes` now uses the canonical lazy geography search hook and normalizes results locally to `{ id, code }`
   - **Deterministic search state**: Dialog clears stale search state when query length drops below 4, resets state on close, and only renders results and empty-state messaging for the active query
   - **Partner pincode page contract cleanup**: `getPartnerPincodes` frontend query now unwraps the standard `{ status, data, meta }` envelope correctly, matching the backend response shape
-  - **Verification**: `builtin cd frontend && pnpm run build` passed and the local frontend container was restarted after the build
-  - **Known note**: `pnpm run type-check` still fails on unrelated pre-existing frontend TypeScript issues, so it was not used as the acceptance gate for this bug fix
+  - **Verification**: `builtin cd frontend && yarn run build` passed and the local frontend container was restarted after the build
+  - **Known note**: `yarn run type-check` still fails on unrelated pre-existing frontend TypeScript issues, so it was not used as the acceptance gate for this bug fix
 
 - ✅ **Assign Partner / Shipment quotes — BACKEND + FRONTEND**
   - **Root cause (empty quotes with valid assignment)**: Zone coverage only honored `zone_pincodes` rows; partners using **DISTANCE** zones + milestones without per-pincode zone rows failed coverage → no rates. **Fix**: `zoneCoverageValidationService` treats pincode as covered when an active DISTANCE zone has milestones (geo match still preferred).
@@ -396,8 +396,8 @@ The primary focus is implementing a robust security layer and role-based access 
 - ✅ **Pincode Import Scripts Added**
   - Added npm scripts to root `package.json` for easy pincode data import
   - Scripts work for both dev and production environments
-  - `pnpm run import:pincodes` - Dev environment
-  - `pnpm run import:pincodes:prod` - Production environment
+  - `yarn run import:pincodes` - Dev environment
+  - `yarn run import:pincodes:prod` - Production environment
 
 ### January 2026
 
