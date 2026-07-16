@@ -4,14 +4,14 @@ FROM node:20-alpine
 WORKDIR /app
 
 RUN apk add --no-cache openssl
-RUN npm install -g pnpm@8.15.1
 
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY package.json yarn.lock ./
+COPY shared/package.json ./shared/package.json
+COPY backend/api-gateway/package.json ./backend/api-gateway/package.json
+
+RUN yarn install --frozen-lockfile --production --ignore-scripts
+
 COPY shared ./shared
-COPY backend/api-gateway/package.json ./backend/api-gateway/
-
-RUN cd backend/api-gateway && pnpm install --prod --frozen-lockfile --ignore-scripts
-
 COPY backend/api-gateway ./backend/api-gateway
 
 # Copy shared into service directory for relative imports

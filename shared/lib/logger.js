@@ -12,17 +12,14 @@ try {
   try {
     DailyRotateFile = require("winston-daily-rotate-file");
   } catch (rotateError) {
-    // Try alternative resolution paths for Docker/PNPM environment
+    // Try alternative resolution paths for Docker/Yarn environment
     const possiblePaths = [
-      // Direct path to pnpm symlink
+      // Direct path in local node_modules
       path.resolve(__dirname, "../node_modules/winston-daily-rotate-file"),
       // Absolute container path
       "/app/shared/node_modules/winston-daily-rotate-file",
-      // Resolve through pnpm structure
-      path.resolve(
-        __dirname,
-        "../node_modules/.pnpm/winston-daily-rotate-file@4.7.1_winston@3.17.0/node_modules/winston-daily-rotate-file",
-      ),
+      // Hoisted to the workspace root node_modules (Yarn hoisting)
+      path.resolve(__dirname, "../../node_modules/winston-daily-rotate-file"),
     ];
 
     let moduleLoaded = false;

@@ -9,18 +9,16 @@ WORKDIR /app
 # Install runtime dependencies only (not build tools)
 RUN apk add --no-cache openssl bash
 
-# Install pnpm
-RUN npm install -g pnpm@8.15.1
+# Copy root workspace manifest + lockfile and needed workspace package.jsons
+COPY package.json yarn.lock ./
+COPY shared/package.json ./shared/package.json
+COPY backend/auth-service/package.json ./backend/auth-service/package.json
 
-# Copy workspace files
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+# Install dependencies at the workspace root (production only)
+RUN yarn install --frozen-lockfile --production --ignore-scripts
+
+# Copy shared library sources
 COPY shared ./shared
-
-# Copy service package.json
-COPY backend/auth-service/package.json ./backend/auth-service/
-
-# Install dependencies (production only + Prisma CLI for migrations)
-RUN cd backend/auth-service && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Copy service source (includes prisma directory)
 COPY backend/auth-service ./backend/auth-service

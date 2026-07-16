@@ -6,9 +6,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
-yarn.lock
-# pnpm-lock.yaml - Keep root lockfile, ignore service-level lockfiles
-backend/**/pnpm-lock.yaml
+# Yarn workspaces: keep the ROOT yarn.lock (tracked), ignore stray
+# service-level lockfiles — only the root lockfile governs the workspace.
+backend/**/yarn.lock
+frontend/yarn.lock
+shared/yarn.lock
+# Legacy pnpm lockfiles (repo migrated off pnpm) — ignore any that reappear.
+pnpm-lock.yaml
+**/pnpm-lock.yaml
 .pnpm-store/
 **/.pnpm-store/
 

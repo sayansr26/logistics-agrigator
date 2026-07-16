@@ -244,7 +244,7 @@ backup:
 # All run against the live containers — no source needed on the server. Add
 # ENV_FILE=.env.uat (or use the running-stack env) to target UAT.
 
-# Full DB init — mirrors `pnpm db:init` (scripts/init-databases.sh) for the
+# Full DB init — mirrors `yarn db:init` (scripts/init-databases.sh) for the
 # server, no source needed:
 #   1. (Re)create the per-service databases from the init SQL already mounted in
 #      the postgres container (idempotent — "already exists" errors are harmless).
@@ -278,7 +278,7 @@ migrate-all:
 	done
 
 # Force the DB schema to match schema.prisma for changes that have NO migration
-# file (prisma db push). This is how `pnpm db:init` (scripts/init-databases.sh)
+# file (prisma db push). This is how `yarn db:init` (scripts/init-databases.sh)
 # picks up schema edits that were never turned into a migration — e.g. the
 # shipments.shipment_type column and the charge_discount_packages table.
 # Run AFTER migrate-all so committed migrations apply first, then this fills the

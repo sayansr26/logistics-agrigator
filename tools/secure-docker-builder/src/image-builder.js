@@ -180,8 +180,8 @@ FROM node:18-alpine AS builder
 # Build stage - compile and minimize
 WORKDIR /build
 COPY backend/${service}/package*.json ./
-COPY backend/${service}/pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install --production
+COPY backend/${service}/yarn.lock* ./
+RUN yarn install --production
 
 COPY backend/${service} .
 COPY shared /shared
@@ -263,15 +263,12 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm@8.15.1
-
 # Copy package files
 COPY frontend/package*.json ./
-COPY frontend/pnpm-lock.yaml* ./
+COPY frontend/yarn.lock* ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN yarn install --frozen-lockfile
 
 # Copy source code
 COPY frontend .
@@ -279,15 +276,12 @@ COPY frontend .
 # Build Next.js application
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm run build
+RUN yarn build
 
 # Production stage
 FROM node:18-alpine
 
 WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm@8.15.1
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \\
@@ -295,10 +289,10 @@ RUN addgroup -g 1001 -S nodejs && \\
 
 # Copy package files
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/pnpm-lock.yaml* ./
+COPY --from=builder /app/yarn.lock* ./
 
 # Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile
+RUN yarn install --production --frozen-lockfile
 
 # Copy built Next.js application
 COPY --from=builder --chown=nodejs:nodejs /app/.next ./.next
@@ -317,7 +311,7 @@ RUN echo '#!/bin/sh' > /app/check-license.sh && \\
 # Create startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \\
     echo '/app/check-license.sh || exit 1' >> /app/start.sh && \\
-    echo 'exec pnpm start' >> /app/start.sh && \\
+    echo 'exec yarn start' >> /app/start.sh && \\
     chmod +x /app/start.sh
 
 USER nodejs

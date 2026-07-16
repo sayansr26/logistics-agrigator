@@ -1,27 +1,25 @@
 # =============== PRODUCTION BUILD ===============
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm@8.15.1
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
-# Copy workspace files (needed for pnpm to resolve dependencies)
-COPY --chown=nodejs:nodejs pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY --chown=nodejs:nodejs shared ./shared
+# Copy workspace files (needed for yarn to resolve dependencies)
+COPY --chown=nodejs:nodejs package.json yarn.lock ./
+COPY --chown=nodejs:nodejs shared/package.json ./shared/package.json
 COPY --chown=nodejs:nodejs frontend/package.json ./frontend/
 
 # Install all dependencies
-RUN pnpm install --frozen-lockfile
+RUN yarn install --frozen-lockfile
 
-# Copy frontend source
+# Copy shared and frontend source
+COPY --chown=nodejs:nodejs shared ./shared
 COPY --chown=nodejs:nodejs frontend ./frontend
 
 # Build frontend
 USER nodejs
-RUN cd /app/frontend && pnpm build
+RUN cd /app/frontend && yarn build
 
 # Set up production runtime
 USER root

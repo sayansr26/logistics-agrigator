@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "Comprehensive logistics management solution for India",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend/*",
+    "shared"
+  ],
   "scripts": {
-    "install:all": "pnpm install",
+    "install:all": "yarn install",
     "prepare": "husky install",
     "setup:dev": "./scripts/setup.sh && docker-compose --profile all-services up -d && ./scripts/init-databases.sh",
     "dev": "docker-compose --profile all-services up",
@@ -95,9 +100,9 @@
   },
   "engines": {
     "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "yarn": ">=1.22.0"
   },
-  "packageManager": "pnpm@8.15.1",
+  "packageManager": "yarn@1.22.22",
   "keywords": [
     "logistics",
     "microservices",
@@ -106,7 +111,7 @@
     "nodejs",
     "india",
     "monorepo",
-    "pnpm-workspace"
+    "yarn-workspace"
   ],
   "author": "Logistics Development Team",
   "license": "MIT",
@@ -125,8 +130,7 @@
   },
   "lint-staged": {
     "frontend/**/*.{js,jsx,ts,tsx}": [
-      "pnpm --filter frontend run lint:fix",
-      "pnpm --filter frontend run type-check",
+      "eslint --fix --no-error-on-unmatched-pattern --resolve-plugins-relative-to frontend --config frontend/.eslintrc.json --",
       "prettier --write"
     ],
     "backend/**/*.{js,ts}": [

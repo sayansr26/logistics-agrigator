@@ -38,7 +38,7 @@ check_dependencies() {
     # Verify critical packages are actually installed
     if [ -f "/app/package.json" ]; then
         # Check for express (common dependency)
-        if ! pnpm list express >/dev/null 2>&1; then
+        if ! yarn list --pattern express >/dev/null 2>&1; then
             echo "⚠️  Critical dependencies missing"
             return 1
         fi
@@ -57,7 +57,7 @@ install_dependencies() {
         echo "📥 Installing dependencies (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
 
         # Try frozen lockfile first (faster and more reliable)
-        if pnpm install --frozen-lockfile 2>/dev/null; then
+        if yarn install --frozen-lockfile 2>/dev/null; then
             echo "✅ Dependencies installed successfully (frozen lockfile)"
             return 0
         fi
@@ -65,7 +65,7 @@ install_dependencies() {
         echo "⚠️  Frozen lockfile failed, trying regular install..."
 
         # Fall back to regular install if frozen fails
-        if pnpm install --no-frozen-lockfile; then
+        if yarn install; then
             echo "✅ Dependencies installed successfully (regular install)"
             return 0
         fi
@@ -107,7 +107,7 @@ main() {
     echo "  Dependency Synchronization System"
     echo "  Service: $SERVICE_NAME"
     echo "  Node: $(node --version)"
-    echo "  PNPM: $(pnpm --version)"
+    echo "  Yarn: $(yarn --version)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     # Always check dependencies on startup
@@ -115,7 +115,7 @@ main() {
         echo ""
         echo "🔄 Dependencies are out of sync, installing..."
 
-        # Remove package-lock.json if it exists (we use pnpm)
+        # Remove package-lock.json if it exists (we use yarn)
         rm -f /app/package-lock.json
 
         # Install dependencies with retry logic

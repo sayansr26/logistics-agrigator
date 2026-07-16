@@ -19,7 +19,7 @@ services:
     # - /app/.next
     networks:
       - frontend-network
-    command: pnpm run dev
+    command: yarn dev
     # healthcheck:
     #   test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
     #   interval: 30s

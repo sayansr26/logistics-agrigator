@@ -79,7 +79,7 @@ services:
         condition: service_healthy
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - api-gateway
@@ -163,7 +163,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - user-service
@@ -208,7 +208,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - shipment-service
@@ -265,7 +265,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - partner-service
@@ -334,7 +334,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - wallet-service
@@ -377,7 +377,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - support-service
@@ -423,7 +423,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - platform-service
@@ -473,7 +473,7 @@ services:
         condition: service_started
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - license-service
@@ -497,7 +497,7 @@ services:
       - api-gateway
     networks:
       - logistics-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - all-services
       - frontend

@@ -68,7 +68,7 @@ services:
         condition: service_healthy
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
 
   # Auth Service
   auth-service:
@@ -98,7 +98,7 @@ services:
         condition: service_healthy
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
 
   # User Service (Development Ready)
   user-service:
@@ -129,7 +129,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
 
   # Shipment Service (Future)
   shipment-service:
@@ -164,7 +164,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - future-services
 
@@ -218,7 +218,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - future-services
 
@@ -278,7 +278,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - future-services
 
@@ -313,7 +313,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - future-services
 
@@ -350,7 +350,7 @@ services:
         condition: service_started
     networks:
       - backend-network
-    command: pnpm run dev
+    command: yarn dev
     profiles:
       - future-services
 
@@ -362,5 +362,5 @@ networks:
   backend-network:
     driver: bridge
 # Usage Examples:
-# pnpm run dev:backend              # Start core backend services
-# pnpm run dev:backend:full         # Start all backend services (including future ones)
+# yarn dev:backend              # Start core backend services
+# yarn dev:backend:full         # Start all backend services (including future ones)

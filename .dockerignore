@@ -37,12 +37,17 @@ pnpm-debug.log*
 .yarn/
 .pnpm-store/
 
-# Package lock files (not needed in container)
+# Package lock files
 package-lock.json
-yarn.lock
 pnpm-lock.yaml
-# Exception: root pnpm-lock.yaml needed for production frontend build
-!/pnpm-lock.yaml
+**/pnpm-lock.yaml
+# Yarn workspace: the ROOT yarn.lock IS needed in the build context so the
+# prod Dockerfiles can `COPY package.json yarn.lock ./` and run a frozen
+# install. Exclude stray service-level lockfiles, keep the root one.
+backend/**/yarn.lock
+frontend/yarn.lock
+shared/yarn.lock
+!/yarn.lock
 
 # Environment and Configuration
 .env

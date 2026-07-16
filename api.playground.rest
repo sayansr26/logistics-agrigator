@@ -1,0 +1,4408 @@
+###############################################################################
+#  LOGISTICS AGGREGATOR PORTAL — API PLAYGROUND
+#  WebStorm / IntelliJ HTTP Client  ( .rest )
+#
+#  All requests route THROUGH the API Gateway  ->  {{baseUrl}} = http://localhost:3001
+#  Select the "dev" environment (top-right run-config dropdown) before running.
+#
+#  1) Run "Login" first — it auto-captures {{authToken}} into the environment.
+#  2) Every {{...}} auth: bearer request reuses that token automatically.
+#  3) Path IDs use env vars: set {{id}} (generic) or {{userId}}/{{partnerId}}/
+#     {{clientId}}/{{shipmentId}}/{{licenseId}} in http-client.env.json.
+#     WebStorm rejects literal { } in a URL — always use {{...}} variables.
+#
+#  Env vars live in http-client.env.json  (baseUrl, email, password, ids...)
+###############################################################################
+
+@contentType = application/json
+
+###############################################################################
+#  >>> START HERE : LOGIN  (captures {{authToken}} + {{refreshToken}})
+###############################################################################
+
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+    if (response.status === 200 && response.body.data) {
+        client.global.set("authToken", response.body.data.accessToken);
+        client.global.set("refreshToken", response.body.data.refreshToken);
+        client.log("Auth token captured for user: " + response.body.data.user.email);
+    } else {
+        client.log("Login failed - check credentials in http-client.env.json");
+    }
+%}
+
+
+
+###############################################################################
+#  AUTH SERVICE  (login, users, permissions)  — port 3002
+#  26 endpoints
+###############################################################################
+
+### Register a new user account (public, rate-limited)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: {{contentType}}
+
+{
+  "email": "rahul.sharma@shipfast.in",
+  "password": "SecurePass@123",
+  "name": "Rahul Sharma",
+  "phone": "+919812345678"
+}
+
+
+### Authenticate user with email and password, returns JWT tokens
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "rahul.sharma@shipfast.in",
+  "password": "SecurePass@123",
+  "remember": true
+}
+
+
+### Refresh access token using a valid refresh token
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: {{contentType}}
+
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refreshtoken.sample"
+}
+
+
+### Logout user and invalidate tokens
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/auth/logout
+Content-Type: {{contentType}}
+
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refreshtoken.sample",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.accesstoken.sample"
+}
+
+
+### Logout user from all devices and invalidate all sessions
+POST {{baseUrl}}/api/v1/auth/logout-all
+Authorization: Bearer {{authToken}}
+
+
+### Remove expired sessions from the database (requires user:manage:all)
+POST {{baseUrl}}/api/v1/auth/admin/cleanup-sessions
+Authorization: Bearer {{authToken}}
+
+
+### Add a token to the blacklist to prevent its usage (requires user:manage:all)
+POST {{baseUrl}}/api/v1/auth/admin/blacklist-token
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.token.toblacklist"
+}
+
+
+### Get basic info about the currently authenticated user
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{authToken}}
+
+
+### Get enriched user profile with capabilities and permissions
+GET {{baseUrl}}/api/v1/auth/profile
+Authorization: Bearer {{authToken}}
+
+
+### List all users with pagination, filtering and search (requires user:manage:all)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?role=
+#      ?isActive=
+#      ?search=
+#      ?sortBy=
+#      ?sortOrder=
+GET {{baseUrl}}/api/v1/users
+Authorization: Bearer {{authToken}}
+
+
+### Create a new user account (requires user:manage:all)
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "priya.nair@courierhub.in",
+  "password": "StrongPass@456",
+  "firstName": "Priya",
+  "lastName": "Nair",
+  "phone": "+919845098765",
+  "role": "client",
+  "clientId": "7c2f9a3e-1b4d-4e6a-9f10-2a3b4c5d6e7f",
+  "accessLevel": "FULL",
+  "isActive": true
+}
+
+
+### Get detailed information about a specific user by ID (requires user:manage:all)
+GET {{baseUrl}}/api/v1/users/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update user information including role, status and details (requires user:manage:all)
+PUT {{baseUrl}}/api/v1/users/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "priya.nair@courierhub.in",
+  "role": "sales",
+  "commissionRate": 5.5,
+  "commissionType": "PERCENTAGE",
+  "isActive": true
+}
+
+
+### Permanently delete a user account (requires user:manage:all)
+DELETE {{baseUrl}}/api/v1/users/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Deactivate a user account (requires user:manage:all)
+POST {{baseUrl}}/api/v1/users/{{id}}/deactivate
+Authorization: Bearer {{authToken}}
+
+
+### Activate a user account (requires user:manage:all)
+POST {{baseUrl}}/api/v1/users/{{id}}/activate
+Authorization: Bearer {{authToken}}
+
+
+### Create user via internal service-to-service call, requires x-internal-request secret plus JWT
+#  (internal — needs x-internal-request secret header)
+POST {{baseUrl}}/api/v1/auth/internal/users
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+Content-Type: {{contentType}}
+
+{
+  "email": "service.user@wallet.internal",
+  "password": "InternalPass@789",
+  "firstName": "Wallet",
+  "lastName": "Service",
+  "phone": "+919900112233",
+  "role": "accounts",
+  "isActive": true
+}
+
+
+### Update user via internal service-to-service call, requires x-internal-request secret plus JWT
+#  (internal — needs x-internal-request secret header)
+PUT {{baseUrl}}/api/v1/auth/internal/users/{{id}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+Content-Type: {{contentType}}
+
+{
+  "email": "service.user@wallet.internal",
+  "firstName": "Wallet",
+  "lastName": "Service",
+  "phone": "+919900112233",
+  "isActive": false
+}
+
+
+### Get effective (role plus override) permissions for a user; used internally by other services
+GET {{baseUrl}}/api/v1/permissions/user/{{userId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get all available permissions in the system with optional filtering (requires permission:read:all)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?module=
+#      ?isActive=
+GET {{baseUrl}}/api/v1/permissions
+Authorization: Bearer {{authToken}}
+
+
+### Get all permissions assigned to a specific role (requires permission:read:all)
+GET {{baseUrl}}/api/v1/permissions/role/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get audit logs from database with cursor pagination (superadmin, internal secret required)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?action=
+#      ?resource=
+#      ?userId=
+#      ?clientId=
+#      ?search=
+GET {{baseUrl}}/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get runtime logs from Winston log files (superadmin, internal secret required)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?level=
+#      ?file=
+GET {{baseUrl}}/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### List available Winston log files (superadmin, internal secret required)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/admin/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Health check reporting service, postgres and redis status (direct service port 3002, not proxied)
+#  (public — no auth required)
+GET {{baseUrl}}/health
+
+
+### OpenAPI/Swagger JSON spec, requires x-internal-request header (direct service port 3002)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  USER SERVICE  (profiles, clients, outlets, affiliates, dashboard)  — port 3003
+#  86 endpoints
+###############################################################################
+
+### User-service health check with DB/Redis/auth dependency status (direct service port 3003, not proxied)
+#  (public — no auth required)
+GET {{baseUrl}}/health
+
+
+### Swagger JSON spec, requires x-internal-request header (direct service port 3003)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api-docs.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### OpenAPI JSON, requires x-internal-request header (direct service port 3003)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Public test endpoint, no auth (maps to /api/test/public)
+#  (public — no auth required)
+GET {{baseUrl}}/api/v1/user/test/public
+
+
+### Authenticated test endpoint returning user context
+GET {{baseUrl}}/api/v1/user/test/authenticated
+Authorization: Bearer {{authToken}}
+
+
+### Authenticated test endpoint enriched with profile data
+GET {{baseUrl}}/api/v1/user/test/with-profile
+Authorization: Bearer {{authToken}}
+
+
+### Admin-only test endpoint
+GET {{baseUrl}}/api/v1/user/test/admin-only
+Authorization: Bearer {{authToken}}
+
+
+### Client/operations/admin access test endpoint
+GET {{baseUrl}}/api/v1/user/test/client-access
+Authorization: Bearer {{authToken}}
+
+
+### Pagination query validation test endpoint
+#  (public — no auth required)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?sortBy=
+#      ?sortOrder=
+GET {{baseUrl}}/api/v1/user/test/pagination
+
+
+### Create a user profile for the authenticated user
+POST {{baseUrl}}/api/v1/user/profiles
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "7c1e5d2a-4f3b-4a91-9c2e-1a2b3c4d5e6f",
+  "firstName": "Ravi",
+  "lastName": "Sharma",
+  "email": "ravi.sharma@example.in",
+  "phone": "+919876543210",
+  "timezone": "Asia/Kolkata",
+  "language": "en",
+  "clientId": "CLIENT_001"
+}
+
+
+### Get current authenticated user's profile
+GET {{baseUrl}}/api/v1/user/profiles/me
+Authorization: Bearer {{authToken}}
+
+
+### Get user profile by auth user ID (returns null if none)
+GET {{baseUrl}}/api/v1/user/profiles/user/{{userId}}
+Authorization: Bearer {{authToken}}
+
+
+### List user profiles with pagination and filters
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?sortBy=
+#      ?sortOrder=
+#      ?clientId=
+#      ?isActive=
+#      ?isVerified=
+GET {{baseUrl}}/api/v1/user/profiles
+Authorization: Bearer {{authToken}}
+
+
+### Get aggregate profile statistics
+GET {{baseUrl}}/api/v1/user/profiles/stats
+Authorization: Bearer {{authToken}}
+
+
+### Get a user profile by profile ID
+GET {{baseUrl}}/api/v1/user/profiles/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a user profile
+PUT {{baseUrl}}/api/v1/user/profiles/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "firstName": "Ravi",
+  "lastName": "Verma",
+  "phone": "+919812345678",
+  "timezone": "Asia/Kolkata",
+  "language": "en"
+}
+
+
+### Soft delete a user profile
+DELETE {{baseUrl}}/api/v1/user/profiles/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Admin: list all profiles across all clients
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?clientId=
+#      ?isActive=
+#      ?isVerified=
+GET {{baseUrl}}/api/v1/user/admin/profiles
+Authorization: Bearer {{authToken}}
+
+
+### Admin: mark a user profile as verified
+PUT {{baseUrl}}/api/v1/user/admin/profiles/{{id}}/verify
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Admin: toggle a user profile active status
+PUT {{baseUrl}}/api/v1/user/admin/profiles/{{id}}/activate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Support: search profiles for customer assistance
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?clientId=
+GET {{baseUrl}}/api/v1/user/support/profiles/search
+Authorization: Bearer {{authToken}}
+
+
+### List all profiles for a specific client
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+GET {{baseUrl}}/api/v1/user/clients/{{clientId}}/profiles
+Authorization: Bearer {{authToken}}
+
+
+### Register a license-based client with secure Docker deployment (superadmin)
+POST {{baseUrl}}/api/v1/user/clients/register
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Logistics Pvt Ltd",
+  "email": "admin@acmelogistics.in",
+  "contactPerson": "Anita Rao",
+  "password": "SecureP@ss123!",
+  "licenseType": "STANDARD",
+  "plan": "MONTHLY",
+  "services": [
+    "auth-service",
+    "user-service",
+    "api-gateway",
+    "shipment-service"
+  ],
+  "maxActivations": 1,
+  "validityDays": 30,
+  "features": {
+    "multiTenant": false,
+    "whiteLabel": true,
+    "apiAccess": true
+  },
+  "limits": {
+    "maxUsers": 50,
+    "maxShipments": 10000
+  },
+  "enableMonitoring": false
+}
+
+
+### Create a new client record (superadmin)
+POST {{baseUrl}}/api/v1/user/clients
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Bharat Movers",
+  "contactEmail": "ops@bharatmovers.in",
+  "contactPerson": "Suresh Kumar",
+  "contactPhone": "+919900112233",
+  "gstin": "27AABCU9603R1ZM",
+  "address": {
+    "line1": "12 MG Road",
+    "city": "Pune",
+    "state": "Maharashtra",
+    "pincode": "411001"
+  }
+}
+
+
+### List all clients with pagination
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?sortBy=
+#      ?sortOrder=
+#      ?isActive=
+GET {{baseUrl}}/api/v1/user/clients
+Authorization: Bearer {{authToken}}
+
+
+### Get aggregate client statistics
+GET {{baseUrl}}/api/v1/user/clients/stats
+Authorization: Bearer {{authToken}}
+
+
+### Get a client by ID
+GET {{baseUrl}}/api/v1/user/clients/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a client record
+PUT {{baseUrl}}/api/v1/user/clients/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Bharat Movers Ltd",
+  "contactPerson": "Suresh K",
+  "contactPhone": "+919900112244",
+  "address": {
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001"
+  }
+}
+
+
+### Soft delete a client (superadmin)
+DELETE {{baseUrl}}/api/v1/user/clients/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Activate or deactivate a client (superadmin)
+PUT {{baseUrl}}/api/v1/user/clients/{{id}}/activate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": true
+}
+
+
+### List users belonging to a specific client
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+GET {{baseUrl}}/api/v1/user/clients/{{clientId}}/users
+Authorization: Bearer {{authToken}}
+
+
+### List invitations for a specific client
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+GET {{baseUrl}}/api/v1/user/clients/{{clientId}}/invitations
+Authorization: Bearer {{authToken}}
+
+
+### Get statistics for a specific client
+GET {{baseUrl}}/api/v1/user/clients/{{clientId}}/stats
+Authorization: Bearer {{authToken}}
+
+
+### Create client settings/branding configuration
+POST {{baseUrl}}/api/v1/user/client-settings
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "clientId": "CLIENT_001",
+  "branding": {
+    "primaryColor": "#0B5FFF",
+    "logoUrl": "https://cdn.example.in/logo.png",
+    "companyName": "Acme Logistics"
+  },
+  "currency": "INR",
+  "timezone": "Asia/Kolkata"
+}
+
+
+### Get client settings by client ID
+GET {{baseUrl}}/api/v1/user/client-settings/{{clientId}}
+Authorization: Bearer {{authToken}}
+
+
+### Update client settings/branding
+PUT {{baseUrl}}/api/v1/user/client-settings/{{clientId}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "branding": {
+    "primaryColor": "#FF6A00",
+    "companyName": "Acme Logistics India"
+  },
+  "currency": "INR"
+}
+
+
+### Delete client settings (superadmin)
+DELETE {{baseUrl}}/api/v1/user/client-settings/{{clientId}}
+Authorization: Bearer {{authToken}}
+
+
+### Validate client settings configuration
+GET {{baseUrl}}/api/v1/user/client-settings/{{clientId}}/validate
+Authorization: Bearer {{authToken}}
+
+
+### Public: get client branding by slug (no auth)
+#  (public — no auth required)
+GET {{baseUrl}}/api/v1/user/public/branding/{{id}}
+
+
+### Create a user invitation for a client team member
+POST {{baseUrl}}/api/v1/user/invitations
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "newuser@acmelogistics.in",
+  "role": "support",
+  "clientId": "CLIENT_001",
+  "firstName": "Neha",
+  "lastName": "Gupta"
+}
+
+
+### List user invitations with pagination
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+GET {{baseUrl}}/api/v1/user/invitations
+Authorization: Bearer {{authToken}}
+
+
+### Get invitation statistics (admin)
+GET {{baseUrl}}/api/v1/user/invitations/stats
+Authorization: Bearer {{authToken}}
+
+
+### Get a single invitation by ID
+GET {{baseUrl}}/api/v1/user/invitations/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update an invitation
+PUT {{baseUrl}}/api/v1/user/invitations/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "role": "accounts",
+  "firstName": "Neha",
+  "lastName": "Gupta"
+}
+
+
+### Cancel a pending invitation
+POST {{baseUrl}}/api/v1/user/invitations/{{id}}/cancel
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Resend an invitation email
+POST {{baseUrl}}/api/v1/user/invitations/{{id}}/resend
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Public: validate an invitation token (no auth)
+#  (public — no auth required)
+GET {{baseUrl}}/api/v1/user/public/invitations/validate/{{id}}
+
+
+### Client role dashboard with user/license metrics (dashboard routes mounted at /api)
+GET {{baseUrl}}/api/v1/user/v1/dashboard/client
+Authorization: Bearer {{authToken}}
+
+
+### Team member dashboard
+GET {{baseUrl}}/api/v1/user/v1/dashboard/team
+Authorization: Bearer {{authToken}}
+
+
+### Create an outlet/customer portal user with optional addresses
+POST {{baseUrl}}/api/v1/outlets
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Sunrise Store",
+  "email": "contact@sunrisestore.in",
+  "phone": "+919845012345",
+  "companyName": "Sunrise Retail",
+  "category": "RETAIL",
+  "tanPan": "ABCDE1234F",
+  "gst": "29ABCDE1234F1Z5",
+  "companyAddress": {
+    "line1": "45 Brigade Road",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "pincode": "560001"
+  },
+  "addresses": [
+    {
+      "line1": "45 Brigade Road",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "pincode": "560001",
+      "phone": "+919845012345"
+    }
+  ]
+}
+
+
+### List outlets for a client
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?search=
+#      ?isActive=
+GET {{baseUrl}}/api/v1/outlets
+Authorization: Bearer {{authToken}}
+
+
+### Get own outlet info for authenticated outlet user
+GET {{baseUrl}}/api/v1/outlets/me
+Authorization: Bearer {{authToken}}
+
+
+### Get addresses for authenticated outlet user
+GET {{baseUrl}}/api/v1/outlets/me/addresses
+Authorization: Bearer {{authToken}}
+
+
+### Create an address for authenticated outlet user
+POST {{baseUrl}}/api/v1/outlets/me/addresses
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "line1": "22 Anna Salai",
+  "city": "Chennai",
+  "state": "Tamil Nadu",
+  "pincode": "600002",
+  "phone": "+919812311223",
+  "isDefault": true
+}
+
+
+### Update own address (outlet user)
+PUT {{baseUrl}}/api/v1/outlets/me/addresses/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "line1": "24 Anna Salai",
+  "city": "Chennai",
+  "state": "Tamil Nadu",
+  "pincode": "600002",
+  "phone": "+919812311224"
+}
+
+
+### Delete own address (outlet user)
+DELETE {{baseUrl}}/api/v1/outlets/me/addresses/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get outlet details by ID
+GET {{baseUrl}}/api/v1/outlets/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update outlet information
+PUT {{baseUrl}}/api/v1/outlets/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Sunrise Superstore",
+  "phone": "+919845012399",
+  "companyName": "Sunrise Retail Pvt Ltd",
+  "category": "WHOLESALE"
+}
+
+
+### Soft delete an outlet (admin only)
+DELETE {{baseUrl}}/api/v1/outlets/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Activate or deactivate an outlet
+PATCH {{baseUrl}}/api/v1/outlets/{{id}}/status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": false
+}
+
+
+### Assign or change an outlet's badge tier
+PATCH {{baseUrl}}/api/v1/outlets/{{id}}/badge
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "badge": "GOLD"
+}
+
+
+### Reset an outlet user's password (admin only)
+POST {{baseUrl}}/api/v1/outlets/{{id}}/reset-password
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Get all addresses for a specific outlet (client/admin)
+GET {{baseUrl}}/api/v1/outlets/{{id}}/addresses
+Authorization: Bearer {{authToken}}
+
+
+### Create an address for a specific outlet
+POST {{baseUrl}}/api/v1/outlets/{{id}}/addresses
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "line1": "7 Park Street",
+  "city": "Kolkata",
+  "state": "West Bengal",
+  "pincode": "700016",
+  "phone": "+919833044556"
+}
+
+
+### Update an address for a specific outlet
+PUT {{baseUrl}}/api/v1/outlets/{{id}}/addresses/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "line1": "9 Park Street",
+  "city": "Kolkata",
+  "state": "West Bengal",
+  "pincode": "700016"
+}
+
+
+### Delete an address for a specific outlet
+DELETE {{baseUrl}}/api/v1/outlets/{{id}}/addresses/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Affiliate dashboard with commission stats
+GET {{baseUrl}}/api/v1/affiliate/dashboard
+Authorization: Bearer {{authToken}}
+
+
+### List commissions for authenticated affiliate
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}/api/v1/affiliate/commissions
+Authorization: Bearer {{authToken}}
+
+
+### List referrals for affiliate (feature currently disabled)
+GET {{baseUrl}}/api/v1/affiliate/referrals
+Authorization: Bearer {{authToken}}
+
+
+### Get affiliate statistics
+GET {{baseUrl}}/api/v1/affiliate/stats
+Authorization: Bearer {{authToken}}
+
+
+### Get affiliate profile with statistics
+GET {{baseUrl}}/api/v1/affiliate/profile/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Register a new affiliate user (superadmin)
+POST {{baseUrl}}/api/v1/admin/affiliates/register
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "commissionType": "PERCENTAGE",
+  "commissionRate": 10,
+  "metadata": {
+    "region": "North India"
+  }
+}
+
+
+### List all affiliates with commission statistics
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?sortBy=
+#      ?sortOrder=
+GET {{baseUrl}}/api/v1/admin/affiliates
+Authorization: Bearer {{authToken}}
+
+
+### Update affiliate commission settings (superadmin)
+POST {{baseUrl}}/api/v1/admin/affiliates/{{id}}/commission-settings
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "commissionType": "FLAT",
+  "commissionRate": 250,
+  "metadata": {
+    "note": "revised Q3 rate"
+  }
+}
+
+
+### Get affiliate performance metrics
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}/api/v1/admin/affiliates/{{id}}/performance
+Authorization: Bearer {{authToken}}
+
+
+### Admin view of all commissions for an affiliate
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}/api/v1/admin/affiliates/{{id}}/commissions
+Authorization: Bearer {{authToken}}
+
+
+### Mark affiliate commissions as paid (called by wallet-service)
+POST {{baseUrl}}/api/v1/admin/affiliates/{{id}}/mark-commissions-paid
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 1500,
+  "payoutId": "f0e1d2c3-b4a5-4968-9788-0a1b2c3d4e5f"
+}
+
+
+### Superadmin: query audit logs; requires x-internal-request header (gateway/internal only)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?userId=
+#      ?action=
+#      ?resource=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Superadmin: query runtime logs; requires x-internal-request header
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?level=
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+GET {{baseUrl}}/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Superadmin: list available log files; requires x-internal-request header
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/admin/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Internal: bootstrap a new user profile from signup (called by auth-service)
+#  (internal — needs x-internal-request secret header)
+POST {{baseUrl}}/api/v1/internal/bootstrap-user
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "7c1e5d2a-4f3b-4a91-9c2e-1a2b3c4d5e6f",
+  "email": "ravi.sharma@example.in",
+  "name": "Ravi Sharma",
+  "phone": "+919876543210",
+  "clientId": "CLIENT_001"
+}
+
+
+### Internal: rollback bootstrap and delete profile records
+#  (internal — needs x-internal-request secret header)
+DELETE {{baseUrl}}/api/v1/internal/bootstrap-user/{{userId}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Internal: check whether a user has been bootstrapped
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/internal/bootstrap-user/{{userId}}/status
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Internal: get user clientId context for JWT enrichment (called by auth-service)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/internal/user-context/{{userId}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Internal: resolve outlet and badge tier by userId (called by partner-service)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/internal/outlets/by-user/{{userId}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Internal: resolve badge tier directly by outletId
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/internal/outlets/{{id}}/badge
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  SHIPMENT SERVICE  (shipments, tracking, NDR, bulk)  — port 3004
+#  43 endpoints
+###############################################################################
+
+### Create a new shipment with pickup/delivery addresses and package details
+POST {{baseUrl}}/api/v1/shipments
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "orderId": "ORD-2026-04521",
+  "pickupAddress": {
+    "name": "Sharma Electronics",
+    "phone": "+919876543210",
+    "email": "store@sharmaelec.in",
+    "addressLine1": "14 MG Road",
+    "addressLine2": "Shop 3",
+    "landmark": "Near Axis Bank",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "country": "India"
+  },
+  "deliveryAddress": {
+    "name": "Priya Nair",
+    "phone": "+919123456789",
+    "email": "priya.nair@gmail.com",
+    "addressLine1": "22 Connaught Place",
+    "city": "New Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "country": "India"
+  },
+  "packageDetails": {
+    "weight": 2.5,
+    "dimensions": {
+      "length": 30,
+      "width": 25,
+      "height": 15
+    },
+    "description": "Mobile Phone",
+    "value": 24999,
+    "fragile": true
+  },
+  "paymentType": "PREPAID",
+  "serviceType": "STANDARD",
+  "specialInstructions": "Handle with care"
+}
+
+
+### Assign a courier partner to an existing shipment
+POST {{baseUrl}}/api/v1/shipments/{{id}}/assign-partner
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-1111-4a2b-8c3d-000000000001",
+  "serviceType": "STANDARD"
+}
+
+
+### Retry courier booking for a shipment after fixing config
+POST {{baseUrl}}/api/v1/shipments/{{id}}/retry-booking
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-1111-4a2b-8c3d-000000000001"
+}
+
+
+### Refresh shipment data from courier provider and sync local records
+POST {{baseUrl}}/api/v1/shipments/{{id}}/refresh
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Fetch courier label from provider for a shipment
+POST {{baseUrl}}/api/v1/shipments/{{id}}/courier-label
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "format": "4x6"
+}
+
+
+### Cancel shipment with provider first then internally
+POST {{baseUrl}}/api/v1/shipments/{{id}}/cancel-with-provider
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "reason": "Customer requested cancellation"
+}
+
+
+### Get shipment documents (labels, POD, invoices)
+GET {{baseUrl}}/api/v1/shipments/{{id}}/documents
+Authorization: Bearer {{authToken}}
+
+
+### Get shipments with filtering and pagination
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+#      ?paymentType=
+#      ?dateFrom=
+#      ?dateTo=
+GET {{baseUrl}}/api/v1/shipments
+Authorization: Bearer {{authToken}}
+
+
+### Public webhook for courier providers to push status updates (webhook secret verified, no JWT)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/shipments/webhook/{{id}}
+Content-Type: {{contentType}}
+
+{
+  "awb": "BLUEDART99887766",
+  "status": "IN_TRANSIT",
+  "location": "Nagpur Hub",
+  "timestamp": "2026-07-16T09:30:00.000Z"
+}
+
+
+### Get shipment by ID including tracking events
+GET {{baseUrl}}/api/v1/shipments/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update shipment status or special instructions
+PUT {{baseUrl}}/api/v1/shipments/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "status": "PICKED_UP",
+  "specialInstructions": "Updated delivery instructions"
+}
+
+
+### Cancel a shipment and process refund if applicable
+POST {{baseUrl}}/api/v1/shipments/{{id}}/cancel
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "reason": "Customer requested cancellation"
+}
+
+
+### Get tracking information and events for a shipment
+GET {{baseUrl}}/api/v1/shipments/{{id}}/tracking
+Authorization: Bearer {{authToken}}
+
+
+### Add a tracking event to a shipment (admin/ops)
+POST {{baseUrl}}/api/v1/shipments/{{id}}/tracking/events
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "status": "IN_TRANSIT",
+  "message": "Package arrived at Mumbai sorting facility",
+  "location": "Mumbai Hub",
+  "timestamp": "2026-07-16T10:00:00.000Z"
+}
+
+
+### Calculate shipping rates from all partners via Partner Service
+POST {{baseUrl}}/api/v1/shipments/calculate-rates
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "fromPincode": "110001",
+  "toPincode": "400001",
+  "weight": 2.5,
+  "serviceType": "STANDARD",
+  "dimensions": {
+    "length": 20,
+    "width": 15,
+    "height": 10
+  },
+  "codAmount": 1500
+}
+
+
+### Select optimal courier partner based on strategy
+POST {{baseUrl}}/api/v1/shipments/select-partner
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "fromPincode": "110001",
+  "toPincode": "400001",
+  "weight": 2.5,
+  "serviceType": "STANDARD",
+  "dimensions": {
+    "length": 20,
+    "width": 15,
+    "height": 10
+  },
+  "codAmount": 1500,
+  "strategy": "cheapest"
+}
+
+
+### Check if partners can service a route
+POST {{baseUrl}}/api/v1/shipments/serviceability
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "fromPincode": "110001",
+  "toPincode": "400001",
+  "serviceType": "STANDARD"
+}
+
+
+### Get per-partner charge breakdown quotes for staged shipment creation
+POST {{baseUrl}}/api/v1/shipments/quotes
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "fromPincode": "110001",
+  "toPincode": "400001",
+  "weight": 2.5,
+  "serviceType": "STANDARD",
+  "paymentType": "PREPAID",
+  "codAmount": 0,
+  "dimensions": {
+    "length": 20,
+    "width": 15,
+    "height": 10
+  }
+}
+
+
+### Bulk re-rate shipments by AWB with new weight/dimensions/courier charge
+POST {{baseUrl}}/api/v1/shipments/bulk/rerate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "items": [
+    {
+      "awbNumber": "BLUEDART99887766",
+      "weight": 3.2,
+      "dimensions": {
+        "length": 32,
+        "width": 26,
+        "height": 18
+      },
+      "courierCharge": 145.5
+    }
+  ]
+}
+
+
+### Preview a re-rate (dry-run, no wallet mutation or DB write)
+POST {{baseUrl}}/api/v1/shipments/{{id}}/rerate/preview
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "weight": 3.2,
+  "dimensions": {
+    "length": 32,
+    "width": 26,
+    "height": 18
+  },
+  "courierCharge": 145.5
+}
+
+
+### Dispute re-rate a shipment with courier-validated dimensions
+POST {{baseUrl}}/api/v1/shipments/{{id}}/rerate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "weight": 3.2,
+  "dimensions": {
+    "length": 32,
+    "width": 26,
+    "height": 18
+  },
+  "courierCharge": 145.5,
+  "reason": "Courier reported higher weight"
+}
+
+
+### Public tracking of a shipment by AWB number (no auth)
+#  (public — no auth required)
+GET {{baseUrl}}/api/v1/shipments/track/{{id}}
+
+
+### Record delivery confirmation with POD (admin/ops)
+POST {{baseUrl}}/api/v1/shipments/{{id}}/delivery-confirmation
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "recipientName": "Priya Nair",
+  "recipientSignature": "https://storage.example.com/signatures/abc123.png",
+  "deliveryImage": "https://storage.example.com/deliveries/def456.jpg",
+  "otp": "123456",
+  "notes": "Delivered to recipient",
+  "deliveryPersonName": "Ravi Kumar",
+  "deliveryTime": "2026-07-16T14:30:00.000Z"
+}
+
+
+### Get tracking analytics and performance metrics
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?timeRange=
+GET {{baseUrl}}/api/v1/shipments/analytics/tracking
+Authorization: Bearer {{authToken}}
+
+
+### Process bulk shipments from uploaded CSV/Excel file (multipart)
+POST {{baseUrl}}/api/v1/shipments/bulk
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "file": "<binary CSV/Excel upload>",
+  "clientId": "c1d2e3f4-2222-4a2b-8c3d-000000000002"
+}
+
+
+### Get status of a bulk shipment processing job
+GET {{baseUrl}}/api/v1/shipments/bulk/{{id}}/status
+Authorization: Bearer {{authToken}}
+
+
+### Create an NDR case for a failed delivery
+POST {{baseUrl}}/api/v1/shipments/{{shipmentId}}/ndr
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "reason": "CONSIGNEE_UNAVAILABLE",
+  "description": "Recipient not available at address",
+  "priority": "HIGH"
+}
+
+
+### Get NDR cases with filtering
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?status=
+#      ?priority=
+GET {{baseUrl}}/api/v1/shipments/ndr
+Authorization: Bearer {{authToken}}
+
+
+### Take action on an NDR case
+POST {{baseUrl}}/api/v1/shipments/ndr/{{id}}/action
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "action": "REATTEMPT_DELIVERY",
+  "notes": "Retry tomorrow morning",
+  "preferredDate": "2026-07-17"
+}
+
+
+### Generate a shipping label for a shipment
+POST {{baseUrl}}/api/v1/shipments/{{shipmentId}}/label
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "format": "4x6",
+  "copies": 2
+}
+
+
+### Generate bulk shipping labels for multiple shipments
+POST {{baseUrl}}/api/v1/shipments/labels/bulk
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "shipmentIds": [
+    "11111111-2222-4a2b-8c3d-000000000010",
+    "11111111-2222-4a2b-8c3d-000000000011"
+  ],
+  "format": "A4"
+}
+
+
+### Create a manifest for multiple shipments
+POST {{baseUrl}}/api/v1/shipments/manifest
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-1111-4a2b-8c3d-000000000001",
+  "shipmentIds": [
+    "11111111-2222-4a2b-8c3d-000000000010",
+    "11111111-2222-4a2b-8c3d-000000000011"
+  ]
+}
+
+
+### Schedule a pickup for shipments
+POST {{baseUrl}}/api/v1/shipments/pickup/schedule
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-1111-4a2b-8c3d-000000000001",
+  "shipmentIds": [
+    "11111111-2222-4a2b-8c3d-000000000010"
+  ],
+  "scheduledDate": "2026-07-17",
+  "timeSlot": "10:00-13:00",
+  "pickupAddress": {
+    "name": "Sharma Electronics",
+    "phone": "+919876543210",
+    "addressLine1": "14 MG Road",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001"
+  }
+}
+
+
+### Get pickup schedules with filtering
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?status=
+#      ?partnerId=
+GET {{baseUrl}}/api/v1/shipments/pickup/schedules
+Authorization: Bearer {{authToken}}
+
+
+### Update pickup schedule status
+PUT {{baseUrl}}/api/v1/shipments/pickup/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "status": "CONFIRMED",
+  "notes": "Pickup confirmed by partner"
+}
+
+
+### Cancel a scheduled pickup
+DELETE {{baseUrl}}/api/v1/shipments/pickup/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get available pickup time slots for a date and partner
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?date=
+#      ?partnerId=
+GET {{baseUrl}}/api/v1/shipments/pickup/slots
+Authorization: Bearer {{authToken}}
+
+
+### Get shipment-service audit logs (superadmin, internal service-to-service via x-internal-request; direct service port 3004)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?action=
+#      ?resource=
+#      ?userId=
+#      ?clientId=
+#      ?search=
+GET {{baseUrl}}/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get shipment-service runtime log entries (superadmin, internal via x-internal-request; direct service port 3004)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?level=
+#      ?file=
+GET {{baseUrl}}/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### List available shipment-service log files (superadmin, internal via x-internal-request; direct service port 3004)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/admin/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Health check for shipment-service with dependency status (direct service port 3004, not proxied)
+#  (public — no auth required)
+GET {{baseUrl}}/health
+
+
+### OpenAPI JSON spec, requires x-internal-request header (direct service port 3004)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Service info root endpoint (direct service port 3004, blocked without internal header)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  PARTNER SERVICE  (couriers, zones, charges, geography, pincodes)  — port 3005
+#  135 endpoints
+###############################################################################
+
+### List all courier partners with filters and pagination
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?isActive=
+#      ?supportsCOD=
+#      ?supportsReverse=
+#      ?search=
+#      ?page=
+#      ?limit=
+#      ?sortBy=
+#      ?sortOrder=
+GET {{baseUrl}}/api/v1/partners
+Authorization: Bearer {{authToken}}
+
+
+### Get a single partner by ID
+GET {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a new courier partner
+POST {{baseUrl}}/api/v1/partners
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Delhivery",
+  "code": "DELHIVERY",
+  "displayName": "Delhivery Express",
+  "isActive": true,
+  "supportsCOD": true,
+  "supportsReverse": true,
+  "minWeight": 0.5,
+  "maxWeight": 25,
+  "baseRate": 45,
+  "perKgRate": 18,
+  "codChargePercent": 2,
+  "fuelSurcharge": 12,
+  "servicePincodes": [
+    "110001",
+    "400001"
+  ]
+}
+
+
+### Update an existing courier partner
+PUT {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "displayName": "Delhivery Surface",
+  "isActive": true,
+  "supportsCOD": true,
+  "baseRate": 50,
+  "perKgRate": 20
+}
+
+
+### Delete a courier partner
+DELETE {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Calculate shipping rates across all available partners
+POST {{baseUrl}}/api/v1/partners/calculate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "110001",
+  "destinationPincode": "400001",
+  "weight": 2.5,
+  "length": 30,
+  "width": 20,
+  "height": 10,
+  "paymentMode": "COD",
+  "codAmount": 1499,
+  "declaredValue": 1499
+}
+
+
+### Calculate shipping rates including badge/tier based discounts
+POST {{baseUrl}}/api/v1/partners/calculate-with-discounts
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "560001",
+  "destinationPincode": "700001",
+  "weight": 1.2,
+  "paymentMode": "PREPAID",
+  "declaredValue": 899,
+  "outletId": "a1b2c3d4-0000-4000-8000-000000000001"
+}
+
+
+### Check partner serviceability between origin and destination pincodes
+POST {{baseUrl}}/api/v1/partners/serviceability
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "110001",
+  "destinationPincode": "411001",
+  "weight": 3,
+  "paymentMode": "COD"
+}
+
+
+### List all states
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/states
+Authorization: Bearer {{authToken}}
+
+
+### Search states by name
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?q=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/states/search
+Authorization: Bearer {{authToken}}
+
+
+### List cities (optionally filtered by state)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?stateId=
+#      ?search=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/cities
+Authorization: Bearer {{authToken}}
+
+
+### List areas (optionally filtered by city)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?cityId=
+#      ?search=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/areas
+Authorization: Bearer {{authToken}}
+
+
+### List pincodes with filters
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?areaId=
+#      ?cityId=
+#      ?stateId=
+#      ?search=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/pincodes
+Authorization: Bearer {{authToken}}
+
+
+### Search pincodes by code or locality
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?q=
+#      ?limit=
+GET {{baseUrl}}/api/v1/geography/pincodes/search
+Authorization: Bearer {{authToken}}
+
+
+### Get details for a specific pincode
+GET {{baseUrl}}/api/v1/geography/pincodes/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get cities for a list of state IDs
+POST {{baseUrl}}/api/v1/geography/cities/by-states
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "stateIds": [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222"
+  ]
+}
+
+
+### Get areas for a list of city IDs
+POST {{baseUrl}}/api/v1/geography/areas/by-cities
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "cityIds": [
+    "33333333-3333-4333-8333-333333333333"
+  ]
+}
+
+
+### Get pincodes for a list of area IDs
+POST {{baseUrl}}/api/v1/geography/pincodes/by-areas
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "areaIds": [
+    "44444444-4444-4444-8444-444444444444"
+  ]
+}
+
+
+### Toggle active status of a state
+PATCH {{baseUrl}}/api/v1/geography/states/{{id}}/toggle-status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": false
+}
+
+
+### Toggle active status of a city
+PATCH {{baseUrl}}/api/v1/geography/cities/{{id}}/toggle-status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": true
+}
+
+
+### Toggle active status of an area
+PATCH {{baseUrl}}/api/v1/geography/areas/{{id}}/toggle-status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": false
+}
+
+
+### Toggle active status of a pincode
+PATCH {{baseUrl}}/api/v1/geography/pincodes/{{id}}/toggle-status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": true
+}
+
+
+### Calculate distance between two pincodes
+POST {{baseUrl}}/api/v1/geography/distance/pincode-to-pincode
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "110001",
+  "destinationPincode": "400001"
+}
+
+
+### Calculate distance between two cities
+POST {{baseUrl}}/api/v1/geography/distance/city-to-city
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originCityId": "33333333-3333-4333-8333-333333333333",
+  "destinationCityId": "55555555-5555-4555-8555-555555555555"
+}
+
+
+### Calculate distance between two states
+POST {{baseUrl}}/api/v1/geography/distance/state-to-state
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originStateId": "11111111-1111-4111-8111-111111111111",
+  "destinationStateId": "22222222-2222-4222-8222-222222222222"
+}
+
+
+### Calculate distance between two areas
+POST {{baseUrl}}/api/v1/geography/distance/area-to-area
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originAreaId": "44444444-4444-4444-8444-444444444444",
+  "destinationAreaId": "66666666-6666-4666-8666-666666666666"
+}
+
+
+### Calculate distance between two lat/long coordinate pairs
+POST {{baseUrl}}/api/v1/geography/distance/coordinates
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originLat": 28.6139,
+  "originLng": 77.209,
+  "destinationLat": 19.076,
+  "destinationLng": 72.8777
+}
+
+
+### Batch distance calculation for multiple origin-destination pairs
+POST {{baseUrl}}/api/v1/geography/distance/batch
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pairs": [
+    {
+      "originPincode": "110001",
+      "destinationPincode": "400001"
+    },
+    {
+      "originPincode": "560001",
+      "destinationPincode": "700001"
+    }
+  ]
+}
+
+
+### Clear cached distance calculations
+POST {{baseUrl}}/api/v1/geography/distance/clear-cache
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "confirm": true
+}
+
+
+### Health check for the distance calculation service
+GET {{baseUrl}}/api/v1/geography/distance/health
+Authorization: Bearer {{authToken}}
+
+
+### Check zone coverage for a pincode or area
+POST {{baseUrl}}/api/v1/zones/coverage/check
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pincode": "110001",
+  "zoneId": "77777777-7777-4777-8777-777777777777"
+}
+
+
+### Get zone coverage details for a pincode
+GET {{baseUrl}}/api/v1/zones/coverage/pincode/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Detect overlapping zone coverage
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?zoneId=
+GET {{baseUrl}}/api/v1/zones/coverage/overlaps
+Authorization: Bearer {{authToken}}
+
+
+### Detect gaps in zone coverage
+GET {{baseUrl}}/api/v1/zones/coverage/gaps
+Authorization: Bearer {{authToken}}
+
+
+### Validate coverage for a specific zone
+GET {{baseUrl}}/api/v1/zones/coverage/{{id}}/validate
+Authorization: Bearer {{authToken}}
+
+
+### Calculate distance for zone matching
+POST {{baseUrl}}/api/v1/zones/calculate-distance
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "110001",
+  "destinationPincode": "400001"
+}
+
+
+### Match origin/destination to a configured zone
+POST {{baseUrl}}/api/v1/zones/match
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "originPincode": "110001",
+  "destinationPincode": "400001",
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001"
+}
+
+
+### Create a new geographical/distance zone
+POST {{baseUrl}}/api/v1/zones
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "North Zone",
+  "code": "NORTH",
+  "zoneType": "GEOGRAPHICAL",
+  "description": "Northern India coverage",
+  "stateIds": [
+    "11111111-1111-4111-8111-111111111111"
+  ]
+}
+
+
+### List all zones
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?zoneType=
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/zones
+Authorization: Bearer {{authToken}}
+
+
+### Get a zone by ID
+GET {{baseUrl}}/api/v1/zones/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get a zone with full geography and milestone details
+GET {{baseUrl}}/api/v1/zones/{{id}}/complete
+Authorization: Bearer {{authToken}}
+
+
+### Update a zone
+PUT {{baseUrl}}/api/v1/zones/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "North Zone Updated",
+  "description": "Revised northern coverage",
+  "isActive": true
+}
+
+
+### Delete a zone
+DELETE {{baseUrl}}/api/v1/zones/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get distance milestones for a zone
+GET {{baseUrl}}/api/v1/zones/{{id}}/milestones
+Authorization: Bearer {{authToken}}
+
+
+### Update distance milestones for a zone
+PUT {{baseUrl}}/api/v1/zones/{{id}}/milestones
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "milestones": [
+    {
+      "fromKm": 0,
+      "toKm": 50,
+      "rate": 40
+    },
+    {
+      "fromKm": 50,
+      "toKm": 200,
+      "rate": 75
+    }
+  ]
+}
+
+
+### Get geography mapping for a zone
+GET {{baseUrl}}/api/v1/zones/{{id}}/geography
+Authorization: Bearer {{authToken}}
+
+
+### Update geography mapping for a zone
+PUT {{baseUrl}}/api/v1/zones/{{id}}/geography
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "stateIds": [
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "cityIds": [
+    "33333333-3333-4333-8333-333333333333"
+  ]
+}
+
+
+### Create a pincode type
+POST {{baseUrl}}/api/v1/pincode-types
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Metro",
+  "code": "METRO",
+  "description": "Metro city pincodes"
+}
+
+
+### List pincode types
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/pincode-types
+Authorization: Bearer {{authToken}}
+
+
+### Get a pincode type by ID
+GET {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a pincode type
+PUT {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Metro Plus",
+  "description": "Tier-1 metro pincodes"
+}
+
+
+### Delete a pincode type
+DELETE {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a partner-specific charge type
+POST {{baseUrl}}/api/v1/charges-types
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Fuel Surcharge",
+  "code": "FUEL",
+  "description": "Fuel surcharge percentage",
+  "chargeCategory": "SURCHARGE"
+}
+
+
+### List charge types
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/charges-types
+Authorization: Bearer {{authToken}}
+
+
+### Get a charge type by ID
+GET {{baseUrl}}/api/v1/charges-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a charge type
+PUT {{baseUrl}}/api/v1/charges-types/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Fuel Surcharge Updated",
+  "description": "Revised fuel surcharge"
+}
+
+
+### Delete a charge type
+DELETE {{baseUrl}}/api/v1/charges-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a charge rule (invoice/weight/zone-to-zone/distance based)
+POST {{baseUrl}}/api/v1/charges
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001",
+  "name": "Standard Surface",
+  "chargeType": "WEIGHT_BASED",
+  "baseRate": 45,
+  "perKgRate": 18,
+  "codChargePercent": 2,
+  "minWeight": 0.5,
+  "maxWeight": 25
+}
+
+
+### List charge rules
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?partnerId=
+#      ?chargeType=
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/charges
+Authorization: Bearer {{authToken}}
+
+
+### Get a charge rule by ID
+GET {{baseUrl}}/api/v1/charges/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a charge rule
+PUT {{baseUrl}}/api/v1/charges/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Standard Surface v2",
+  "baseRate": 50,
+  "perKgRate": 20,
+  "isActive": true
+}
+
+
+### Delete a charge rule
+DELETE {{baseUrl}}/api/v1/charges/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a badge/tier based charge discount package
+POST {{baseUrl}}/api/v1/charge-discount-packages
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Gold Tier Discount",
+  "badge": "GOLD",
+  "discountPercent": 12,
+  "description": "Discount for gold tier outlets"
+}
+
+
+### List charge discount packages
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?badge=
+#      ?search=
+#      ?isActive=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/charge-discount-packages
+Authorization: Bearer {{authToken}}
+
+
+### Get a charge discount package by ID
+GET {{baseUrl}}/api/v1/charge-discount-packages/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a charge discount package
+PUT {{baseUrl}}/api/v1/charge-discount-packages/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "discountPercent": 15,
+  "isActive": true
+}
+
+
+### Delete a charge discount package
+DELETE {{baseUrl}}/api/v1/charge-discount-packages/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get active channels for a partner
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/channels/active
+Authorization: Bearer {{authToken}}
+
+
+### List all channels configured for a partner
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/channels
+Authorization: Bearer {{authToken}}
+
+
+### Create one or more API channels for a partner
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/channels
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "channels": [
+    {
+      "channelName": "Delhivery Primary",
+      "apiUrl": "https://track.delhivery.com/api",
+      "apiKey": "dlv_live_abc123",
+      "isPrimary": true,
+      "priority": 1,
+      "aggregatorType": "DELHIVERY"
+    }
+  ]
+}
+
+
+### Update a partner channel
+PUT {{baseUrl}}/api/v1/channels/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "channelName": "Delhivery Backup",
+  "apiUrl": "https://track.delhivery.com/api",
+  "isActive": true,
+  "priority": 2
+}
+
+
+### Delete a partner channel
+DELETE {{baseUrl}}/api/v1/channels/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get selectable carrier accounts for a partner
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/carrier-accounts/select
+Authorization: Bearer {{authToken}}
+
+
+### List carrier accounts for a partner
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/carrier-accounts
+Authorization: Bearer {{authToken}}
+
+
+### Create one or more carrier accounts for a partner
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/carrier-accounts
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "accounts": [
+    {
+      "channelName": "Delhivery Surface",
+      "accountRef": "DLV-SUR-01",
+      "serviceType": "SURFACE",
+      "minWeight": 0.5,
+      "maxWeight": 25,
+      "priority": 1
+    }
+  ]
+}
+
+
+### Update a carrier account
+PUT {{baseUrl}}/api/v1/carrier-accounts/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "channelName": "Delhivery Air",
+  "serviceType": "AIR",
+  "maxWeight": 10,
+  "isActive": true,
+  "priority": 2
+}
+
+
+### Delete a carrier account
+DELETE {{baseUrl}}/api/v1/carrier-accounts/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Assign a pincode to a partner with type values
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pincode": "110001",
+  "pincodeTypeId": "88888888-8888-4888-8888-888888888888",
+  "isServiceable": true,
+  "codAvailable": true
+}
+
+
+### List pincode assignments for a partner
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?search=
+#      ?isServiceable=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes
+Authorization: Bearer {{authToken}}
+
+
+### Get a specific pincode assignment for a partner
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Update a partner pincode assignment
+PUT {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isServiceable": false,
+  "codAvailable": false
+}
+
+
+### Delete a partner pincode assignment
+DELETE {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Bulk import partner pincode assignments (CSV/JSON)
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/import
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pincodes": [
+    {
+      "pincode": "110001",
+      "isServiceable": true,
+      "codAvailable": true
+    },
+    {
+      "pincode": "400001",
+      "isServiceable": true,
+      "codAvailable": false
+    }
+  ]
+}
+
+
+### Export partner pincode assignments
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?format=
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/export
+Authorization: Bearer {{authToken}}
+
+
+### Download the pincode import template
+GET {{baseUrl}}/api/v1/pincodes/template
+Authorization: Bearer {{authToken}}
+
+
+### Search pincodes across partner assignments
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?q=
+#      ?partnerId=
+#      ?limit=
+GET {{baseUrl}}/api/v1/pincodes/search
+Authorization: Bearer {{authToken}}
+
+
+### Book a shipment with a courier partner (direct service port 3005)
+POST {{baseUrl}}/api/v1/courier-operations/book
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001",
+  "pickupPincode": "110001",
+  "deliveryPincode": "400001",
+  "weight": 2.5,
+  "paymentMode": "COD",
+  "codAmount": 1499,
+  "consignee": {
+    "name": "Ravi Kumar",
+    "phone": "+919876543210",
+    "address": "12 MG Road, Mumbai",
+    "pincode": "400001"
+  }
+}
+
+
+### Get courier capabilities for a partner (direct service port 3005)
+POST {{baseUrl}}/api/v1/courier-operations/capabilities
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001"
+}
+
+
+### Cancel a booked shipment (direct service port 3005)
+POST {{baseUrl}}/api/v1/courier-operations/cancel
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001",
+  "awbNumber": "DLV1234567890"
+}
+
+
+### Track a shipment by AWB (direct service port 3005)
+GET {{baseUrl}}/api/v1/courier-operations/track/{{partnerId}}/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Schedule a pickup with a courier partner (direct service port 3005)
+POST {{baseUrl}}/api/v1/courier-operations/pickup
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001",
+  "pickupPincode": "110001",
+  "pickupDate": "2026-07-20",
+  "packageCount": 3
+}
+
+
+### Get shipping label for an AWB (direct service port 3005)
+GET {{baseUrl}}/api/v1/courier-operations/label/{{partnerId}}/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Generate a manifest for booked shipments (direct service port 3005)
+POST {{baseUrl}}/api/v1/courier-operations/manifest
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerId": "a1b2c3d4-0000-4000-8000-000000000001",
+  "awbNumbers": [
+    "DLV1234567890",
+    "DLV0987654321"
+  ]
+}
+
+
+### Check courier serviceability for a pincode (direct service port 3005)
+GET {{baseUrl}}/api/v1/courier-operations/serviceability/{{partnerId}}/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### List supported courier aggregators (direct service port 3005)
+GET {{baseUrl}}/api/v1/courier-operations/supported-aggregators
+Authorization: Bearer {{authToken}}
+
+
+### Get partner packages from external API (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partner-packages/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner charges from external API (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partner-charges/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner discounts from external API (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partner-discounts/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner services from external API (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partner-services/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get comprehensive aggregated partner data (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partners/comprehensive-data/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner metrics (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?from=
+#      ?to=
+GET {{baseUrl}}http://localhost:3005/api/partners/{{partnerId}}/metrics
+Authorization: Bearer {{authToken}}
+
+
+### Export partner data (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?format=
+GET {{baseUrl}}http://localhost:3005/api/partners/{{partnerId}}/export
+Authorization: Bearer {{authToken}}
+
+
+### Clear cached partner data (direct service port 3005, not proxied)
+DELETE {{baseUrl}}http://localhost:3005/api/partners/{{partnerId}}/cache
+Authorization: Bearer {{authToken}}
+
+
+### Get partner external API health status (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/partners/{{partnerId}}/health
+Authorization: Bearer {{authToken}}
+
+
+### Get partner performance summary (direct service port 3005, not proxied; documented as partner-performance)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?from=
+#      ?to=
+GET {{baseUrl}}http://localhost:3005/api/v1/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get main system performance dashboard (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/main-system-dashboard
+Authorization: Bearer {{authToken}}
+
+
+### Get partner analytics (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?from=
+#      ?to=
+GET {{baseUrl}}http://localhost:3005/api/v1/partner-analytics/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner benchmark comparison (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/partner-benchmarks/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get partner KPIs (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/partner-kpis/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get performance alerts (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?severity=
+#      ?partnerId=
+GET {{baseUrl}}http://localhost:3005/api/v1/performance-alerts
+Authorization: Bearer {{authToken}}
+
+
+### Clear performance cache for a partner (partnerId optional; direct service port 3005, not proxied)
+DELETE {{baseUrl}}http://localhost:3005/api/v1/cache/{{partnerId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get performance statistics (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/statistics
+Authorization: Bearer {{authToken}}
+
+
+### Generate a performance report (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/report
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "partnerIds": [
+    "a1b2c3d4-0000-4000-8000-000000000001"
+  ],
+  "from": "2026-06-01",
+  "to": "2026-06-30",
+  "format": "pdf"
+}
+
+
+### Register/configure the main external partner system (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/main-system
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "apiUrl": "https://calc.websiteduniya.com",
+  "apiKey": "hmac_key_xyz",
+  "secret": "hmac_secret_abc"
+}
+
+
+### Set main system rate limit (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/main-system-rate-limit
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "requestsPerMinute": 120,
+  "burst": 30
+}
+
+
+### Get main system rate limit config (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/main-system-rate-limit
+Authorization: Bearer {{authToken}}
+
+
+### Configure main system cache settings (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/main-system-cache
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "ttlSeconds": 300,
+  "enabled": true
+}
+
+
+### Get main system cache config (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/main-system-cache
+Authorization: Bearer {{authToken}}
+
+
+### Get partner-service audit logs (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?resource=
+#      ?action=
+#      ?userId=
+#      ?from=
+#      ?to=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}http://localhost:3005/api/v1/audit
+Authorization: Bearer {{authToken}}
+
+
+### Register a webhook (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/webhooks
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "url": "https://client.example.com/webhook",
+  "events": [
+    "shipment.booked",
+    "shipment.delivered"
+  ],
+  "secret": "whsec_123"
+}
+
+
+### List registered webhooks (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/webhooks
+Authorization: Bearer {{authToken}}
+
+
+### Get system health status (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/system-health
+Authorization: Bearer {{authToken}}
+
+
+### Get status of dependent services (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/services-status
+Authorization: Bearer {{authToken}}
+
+
+### Get system configuration (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/system-configuration
+Authorization: Bearer {{authToken}}
+
+
+### Update system configuration (direct service port 3005, not proxied)
+PUT {{baseUrl}}http://localhost:3005/api/v1/system-configuration
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "maintenanceMode": false,
+  "maxConcurrentBookings": 100
+}
+
+
+### Clear system cache by type (type optional; direct service port 3005, not proxied)
+DELETE {{baseUrl}}http://localhost:3005/api/v1/system-cache/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get system statistics (direct service port 3005, not proxied)
+GET {{baseUrl}}http://localhost:3005/api/v1/system-statistics
+Authorization: Bearer {{authToken}}
+
+
+### Trigger system maintenance operations (direct service port 3005, not proxied)
+POST {{baseUrl}}http://localhost:3005/api/v1/system-maintenance
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "operation": "reindex",
+  "confirm": true
+}
+
+
+### Get system alerts (direct service port 3005, not proxied)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?severity=
+GET {{baseUrl}}http://localhost:3005/api/v1/system-alerts
+Authorization: Bearer {{authToken}}
+
+
+### Get admin audit logs (direct service port 3005, admin-only internal auth via x-internal-request)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?resource=
+#      ?action=
+#      ?userId=
+#      ?from=
+#      ?to=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}http://localhost:3005/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get runtime application logs (direct service port 3005, admin-only)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?level=
+#      ?limit=
+#      ?file=
+GET {{baseUrl}}http://localhost:3005/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### List available log files (direct service port 3005, admin-only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3005/api/v1/admin/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Service health check (direct, bypasses internal-request guard)
+#  (public — no auth required)
+GET {{baseUrl}}http://localhost:3005/health
+
+
+### OpenAPI JSON spec (direct service port 3005, requires x-internal-request header)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3005/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Service info/root endpoint (direct service port 3005)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3005/
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  WALLET SERVICE  (wallet, COD, settlement, payout)  — port 3006
+#  55 endpoints
+###############################################################################
+
+### List all wallets for a client from external wallet API (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?clientCode=
+#      ?page=
+#      ?size=
+#      ?sortBy=
+#      ?sortDir=
+#      ?status=
+GET {{baseUrl}}/api/v1/wallet/admin/client-wallets
+Authorization: Bearer {{authToken}}
+
+
+### List all transactions for a client from external wallet API (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?clientCode=
+#      ?page=
+#      ?size=
+#      ?sortBy=
+#      ?sortDir=
+#      ?type=
+#      ?status=
+#      ?userId=
+GET {{baseUrl}}/api/v1/wallet/admin/client-transactions
+Authorization: Bearer {{authToken}}
+
+
+### Get or create wallet for a specific user via external wallet API (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?userId=
+#      ?clientCode=
+GET {{baseUrl}}/api/v1/wallet/admin/wallet
+Authorization: Bearer {{authToken}}
+
+
+### Update a user's status under a client (admin only)
+PATCH {{baseUrl}}/api/v1/wallet/admin/user-status
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "status": "ACTIVE",
+  "clientCode": "DEFAULT"
+}
+
+
+### Top up a user's wallet via external wallet API (admin only)
+POST {{baseUrl}}/api/v1/wallet/admin/topup
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "amount": 5000,
+  "reference": "MANUAL_TOPUP_2026_001",
+  "description": "Wallet topup for Mumbai seller"
+}
+
+
+### Debit a user's wallet via external wallet API (admin only)
+POST {{baseUrl}}/api/v1/wallet/admin/debit
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "amount": 150.75,
+  "reference": "ADJ_DEBIT_2026_014",
+  "description": "Manual debit adjustment"
+}
+
+
+### Refund to a user's wallet via external wallet API (admin only)
+POST {{baseUrl}}/api/v1/wallet/admin/refund
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "amount": 250,
+  "reference": "REFUND_AWB_784512369",
+  "description": "Refund for RTO shipment"
+}
+
+
+### Batch create wallets for multiple users (admin only, rate-limited)
+POST {{baseUrl}}/api/v1/wallet/admin/sync-wallets
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userIds": [
+    "550e8400-e29b-41d4-a716-446655440001",
+    "550e8400-e29b-41d4-a716-446655440002"
+  ],
+  "clientCode": "DEFAULT"
+}
+
+
+### Get all wallets from local DB (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?status=
+GET {{baseUrl}}/api/v1/wallet/admin/all-wallets
+Authorization: Bearer {{authToken}}
+
+
+### Get all transactions from local DB (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?type=
+#      ?status=
+GET {{baseUrl}}/api/v1/wallet/admin/transactions
+Authorization: Bearer {{authToken}}
+
+
+### Get wallet info for the authenticated outlet user
+GET {{baseUrl}}/api/v1/wallet/my/wallet-info
+Authorization: Bearer {{authToken}}
+
+
+### Get transaction history for the authenticated outlet user
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/wallet/my/transactions
+Authorization: Bearer {{authToken}}
+
+
+### Get transaction statistics for the authenticated outlet user
+GET {{baseUrl}}/api/v1/wallet/my/statistics
+Authorization: Bearer {{authToken}}
+
+
+### Detailed wallet service health (authenticated)
+GET {{baseUrl}}/api/v1/wallet/health
+Authorization: Bearer {{authToken}}
+
+
+### Initiate a payment via a payment gateway provider
+POST {{baseUrl}}/api/v1/wallet/payment-gateway/initiate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 2500,
+  "currency": "INR",
+  "provider": "razorpay",
+  "metadata": {
+    "orderId": "ORD_998877"
+  }
+}
+
+
+### Handle payment gateway webhook callback (public, no auth)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/wallet/payment-gateway/webhook
+Content-Type: {{contentType}}
+
+{
+  "paymentId": "pay_Nx8sTq3kLm09Ab",
+  "status": "COMPLETED"
+}
+
+
+### Get status of a payment gateway transaction
+GET {{baseUrl}}/api/v1/wallet/payment-gateway/status/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Get or create wallet for a user (auto wallet creation)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?clientCode=
+GET {{baseUrl}}/api/v1/wallet/{{userId}}
+Authorization: Bearer {{authToken}}
+
+
+### Get wallet balance with optional external sync
+GET {{baseUrl}}/api/v1/wallet/{{userId}}/balance
+Authorization: Bearer {{authToken}}
+
+
+### Debit wallet for shipment charges
+POST {{baseUrl}}/api/v1/wallet/{{userId}}/debit
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 150.75,
+  "reference": "SHIPMENT_784512369",
+  "description": "Shipment charges for order #12345"
+}
+
+
+### Credit wallet for refunds or adjustments
+POST {{baseUrl}}/api/v1/wallet/{{userId}}/credit
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 75.25,
+  "reference": "REFUND_784512369",
+  "description": "Refund for cancelled shipment #12345"
+}
+
+
+### Manually load balance into a user's wallet (admin only)
+POST {{baseUrl}}/api/v1/wallet/{{userId}}/load-balance
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 1000,
+  "reference": "MANUAL_LOAD_2026_001",
+  "description": "Manual balance load for premium customer"
+}
+
+
+### Get paginated transaction history for a user's wallet
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?type=
+#      ?status=
+#      ?reference=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}/api/v1/wallet/{{userId}}/transactions
+Authorization: Bearer {{authToken}}
+
+
+### Ingest a COD shipment (called by shipment-service on COD delivery, or admin)
+POST {{baseUrl}}/api/v1/wallet/cod/shipments/ingest
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "shipmentId": "550e8400-e29b-41d4-a716-446655440010",
+  "awbNumber": "784512369",
+  "orderId": "ORD_998877",
+  "invoiceNo": "INV-2026-0451",
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "partnerId": "delhivery",
+  "partnerName": "Delhivery",
+  "codAmount": 1499,
+  "deliveredAt": "2026-07-14T10:30:00.000Z"
+}
+
+
+### List COD shipments with filters (finance/admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?search=
+#      ?userId=
+#      ?clientCode=
+#      ?partnerId=
+#      ?collectionStatus=
+#      ?reconStatus=
+#      ?dateFrom=
+#      ?dateTo=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/wallet/cod/shipments
+Authorization: Bearer {{authToken}}
+
+
+### Add a manual COD collection entry (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/cod/collections/manual
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "awbNumber": "784512369",
+  "reportedAmount": 1499,
+  "collectionDate": "2026-07-15T00:00:00.000Z",
+  "courierReportId": "DLV-RPT-88123",
+  "metadata": {
+    "mode": "cash"
+  }
+}
+
+
+### Bulk import COD collections from rows (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/cod/collections/import
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "source": "IMPORT",
+  "rows": [
+    {
+      "awbNumber": "784512369",
+      "reportedAmount": 1499,
+      "collectionDate": "2026-07-15T00:00:00.000Z",
+      "courierReportId": "DLV-RPT-88123"
+    },
+    {
+      "awbNumber": "784512370",
+      "reportedAmount": 899
+    }
+  ]
+}
+
+
+### Bulk import COD collections from CSV content (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/cod/collections/import-csv
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "source": "IMPORT",
+  "csv": "awbNumber,reportedAmount,collectionDate\n784512369,1499.00,2026-07-15\n784512370,899.00,2026-07-15"
+}
+
+
+### Verify a COD collection entry (finance/admin only)
+PATCH {{baseUrl}}/api/v1/wallet/cod/collections/{{id}}/verify
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{}
+
+
+### Auto-reconcile COD collections against shipments (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/cod/reconcile/auto
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "dateFrom": "2026-07-01T00:00:00.000Z",
+  "dateTo": "2026-07-15T23:59:59.000Z"
+}
+
+
+### List COD reconciliations (finance/admin only)
+GET {{baseUrl}}/api/v1/wallet/cod/reconcile
+Authorization: Bearer {{authToken}}
+
+
+### Manually reconcile a COD shipment (finance/admin only)
+PATCH {{baseUrl}}/api/v1/wallet/cod/reconcile/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "status": "MANUAL",
+  "reportedAmount": 1499,
+  "remarks": "Reconciled against courier report DLV-RPT-88123"
+}
+
+
+### Generate a COD report of the given type (finance/admin only)
+GET {{baseUrl}}/api/v1/wallet/cod/reports/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### List the authenticated user's own settlements (customer portal)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?clientCode=
+#      ?status=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/wallet/settlement/my
+Authorization: Bearer {{authToken}}
+
+
+### Generate a COD settlement for a user (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/settlement/generate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "clientCode": "DEFAULT",
+  "codShipmentIds": [
+    "550e8400-e29b-41d4-a716-446655440010"
+  ],
+  "cycle": "T_PLUS_2",
+  "paymentMode": "WALLET_CREDIT",
+  "remarks": "Weekly COD settlement"
+}
+
+
+### List settlements with filters (finance/admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?userId=
+#      ?clientCode=
+#      ?status=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/wallet/settlement
+Authorization: Bearer {{authToken}}
+
+
+### List settlement rules (finance/admin only)
+GET {{baseUrl}}/api/v1/wallet/settlement/rules
+Authorization: Bearer {{authToken}}
+
+
+### Create a settlement rule (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/settlement/rules
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "scope": "CUSTOMER",
+  "clientCode": "DEFAULT",
+  "userId": "550e8400-e29b-41d4-a716-446655440001",
+  "partnerId": "delhivery",
+  "cycle": "T_PLUS_2",
+  "paymentMode": "WALLET_CREDIT",
+  "autoRelease": false,
+  "isActive": true
+}
+
+
+### Update a settlement rule (finance/admin only)
+PUT {{baseUrl}}/api/v1/wallet/settlement/rules/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "cycle": "T_PLUS_7",
+  "autoRelease": true,
+  "isActive": true
+}
+
+
+### Delete a settlement rule (finance/admin only)
+DELETE {{baseUrl}}/api/v1/wallet/settlement/rules/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Manually trigger the auto-settlement run (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/settlement/run-auto
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "dryRun": false
+}
+
+
+### Get a single settlement by id (finance/admin only)
+GET {{baseUrl}}/api/v1/wallet/settlement/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Add an adjustment to a settlement (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/settlement/{{id}}/adjustments
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "type": "DEDUCTION",
+  "amount": -50,
+  "reason": "Weight discrepancy charge",
+  "referenceAwb": "784512369"
+}
+
+
+### Act on a settlement workflow (verify/approve/release/reject/hold/cancel/reprocess) (finance/admin only)
+POST {{baseUrl}}/api/v1/wallet/settlement/{{id}}/actions
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "action": "approve",
+  "paymentMode": "WALLET_CREDIT",
+  "payoutReference": "PAYOUT_2026_0451",
+  "reason": "Verified and approved"
+}
+
+
+### Request a payout for affiliate commissions
+POST {{baseUrl}}/api/v1/payout/request
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 3200,
+  "metadata": {
+    "note": "Monthly affiliate commission payout"
+  }
+}
+
+
+### List all payout requests (admin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?sortBy=
+#      ?sortOrder=
+#      ?status=
+GET {{baseUrl}}/api/v1/payout/requests
+Authorization: Bearer {{authToken}}
+
+
+### Approve payout and credit affiliate wallet (admin only)
+POST {{baseUrl}}/api/v1/payout/{{id}}/approve
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "notes": "Approved after commission verification"
+}
+
+
+### Reject a payout request (admin only)
+POST {{baseUrl}}/api/v1/payout/{{id}}/reject
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "reason": "Insufficient commission balance for this cycle"
+}
+
+
+### Get payout history for an affiliate
+GET {{baseUrl}}/api/v1/payout/history/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Service health check with Redis and external wallet API status (direct service port 3006, not gateway-proxied, no auth)
+#  (public — no auth required)
+GET {{baseUrl}}http://localhost:3006/health
+
+
+### Root service info and endpoint listing (direct service port 3006, requires x-internal-request header)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3006/
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### OpenAPI JSON spec (direct service port 3006, requires x-internal-request header, not exposed via gateway)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3006/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get wallet-service audit logs, superadmin only via internal header (direct service port 3006, not gateway-proxied)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?page=
+#      ?limit=
+#      ?action=
+#      ?resource=
+#      ?userId=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}http://localhost:3006/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get wallet-service runtime logs, superadmin only via internal header (direct service port 3006, not gateway-proxied)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?level=
+#      ?limit=
+#      ?startDate=
+#      ?endDate=
+GET {{baseUrl}}http://localhost:3006/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### List wallet-service log files, superadmin only via internal header (direct service port 3006, not gateway-proxied)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}http://localhost:3006/api/v1/admin/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  LICENSE SERVICE  (licenses, subscriptions, activation, metrics)  — port 3009
+#  20 endpoints
+###############################################################################
+
+### Health check (postgres + redis). (direct service port 3009) - not proxied through gateway
+#  (public — no auth required)
+GET {{baseUrl}}/health
+
+
+### Generate a new license for a client (admin only, permission license:generate:all)
+POST {{baseUrl}}/api/v1/licenses/generate
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "clientId": "3f2c9a7e-8b1d-4c6a-9e2f-1a2b3c4d5e6f",
+  "type": "PROFESSIONAL",
+  "plan": "YEARLY",
+  "allowedServices": [
+    "auth-service",
+    "user-service",
+    "api-gateway",
+    "shipment-service"
+  ],
+  "maxActivations": 3,
+  "validityDays": 365,
+  "allowedIPs": [
+    "103.21.58.10"
+  ],
+  "allowedMachineIds": [
+    "machine-mumbai-01"
+  ],
+  "features": {
+    "bulkShipments": true,
+    "ndrManagement": true
+  },
+  "limits": {
+    "monthlyShipments": 50000
+  },
+  "commissionRate": 0.05
+}
+
+
+### Validate a license key against machine/server IP (public, rate limited)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/licenses/validate
+Content-Type: {{contentType}}
+
+{
+  "licenseKey": "LIC-DELHIVERY-XK9P-2M4Q-7R8T-9V0W",
+  "machineId": "machine-mumbai-01",
+  "serverIP": "103.21.58.10"
+}
+
+
+### Get details of a single license by id (permission license:read:own)
+GET {{baseUrl}}/api/v1/licenses/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Revoke a license (admin only, permission license:delete:all)
+PUT {{baseUrl}}/api/v1/licenses/{{id}}/revoke
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "reason": "Non-payment of subscription invoice INV-2026-04521"
+}
+
+
+### Extend license validity by a number of days (permission license:update:all)
+PUT {{baseUrl}}/api/v1/licenses/{{id}}/extend
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "days": 90
+}
+
+
+### List licenses with filtering, pagination and sorting (permission license:read:assigned)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?clientId=
+#      ?status=
+#      ?type=
+#      ?plan=
+#      ?page=
+#      ?limit=
+#      ?sortBy=
+#      ?sortOrder=
+GET {{baseUrl}}/api/v1/licenses
+Authorization: Bearer {{authToken}}
+
+
+### Activate a license on a machine, returns config + heartbeat interval (public, rate limited)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/activate
+Content-Type: {{contentType}}
+
+{
+  "licenseKey": "LIC-DELHIVERY-XK9P-2M4Q-7R8T-9V0W",
+  "machineId": "machine-mumbai-01",
+  "serverIP": "103.21.58.10",
+  "hostname": "logistics-prod-mumbai",
+  "services": [
+    "auth-service",
+    "shipment-service",
+    "partner-service"
+  ],
+  "nodeVersion": "18.19.0",
+  "dockerVersion": "24.0.7",
+  "osInfo": {
+    "platform": "linux",
+    "release": "Ubuntu 22.04"
+  }
+}
+
+
+### Deactivate a license on a specific machine
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/activate/deactivate
+Content-Type: {{contentType}}
+
+{
+  "licenseKey": "LIC-DELHIVERY-XK9P-2M4Q-7R8T-9V0W",
+  "machineId": "machine-mumbai-01",
+  "reason": "Server decommissioned"
+}
+
+
+### Send a heartbeat with usage metrics for an active license, returns nextHeartbeat
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/activate/heartbeat
+Content-Type: {{contentType}}
+
+{
+  "licenseKey": "LIC-DELHIVERY-XK9P-2M4Q-7R8T-9V0W",
+  "machineId": "machine-mumbai-01",
+  "metrics": {
+    "apiCalls": 12450,
+    "activeShipments": 320,
+    "cpuUsage": 42.5
+  }
+}
+
+
+### Get activation status for a license key + machine id
+#  (public — no auth required)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?licenseKey=
+#      ?machineId=
+GET {{baseUrl}}/api/v1/activate/status
+
+
+### List all activations for a given license (permission license:read:assigned)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?status=
+#      ?page=
+#      ?limit=
+GET {{baseUrl}}/api/v1/activate/list/{{licenseId}}
+Authorization: Bearer {{authToken}}
+
+
+### List all subscriptions (admin only) - stub, pending implementation
+GET {{baseUrl}}/api/v1/subscriptions
+Authorization: Bearer {{authToken}}
+
+
+### Get admin dashboard aggregation (permission license:manage:all) - stub, pending implementation
+GET {{baseUrl}}/api/v1/admin/dashboard
+Authorization: Bearer {{authToken}}
+
+
+### Get usage metrics (admin only) - stub, pending implementation
+GET {{baseUrl}}/api/v1/metrics/usage
+Authorization: Bearer {{authToken}}
+
+
+### Get audit logs for the service; requires x-internal-request secret and superadmin context headers (internal service-to-service, via gateway logs aggregation)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?action=
+#      ?resource=
+#      ?userId=
+#      ?clientId=
+#      ?search=
+GET {{baseUrl}}/api/v1/admin/logs/audit-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Get runtime (winston) logs; requires x-internal-request secret and superadmin context (internal service-to-service)
+#  (internal — needs x-internal-request secret header)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?startDate=
+#      ?endDate=
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?level=
+#      ?file=
+GET {{baseUrl}}/api/v1/admin/logs/runtime-logs
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### List available log files; requires x-internal-request secret and superadmin context (internal service-to-service)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/admin/logs/log-files
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### OpenAPI JSON spec; requires x-internal-request header, otherwise 403. (direct service port 3009)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/openapi.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Service info endpoint listing available routes. (direct service port 3009) - requires internal secret header for non-health paths
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+
+###############################################################################
+#  API GATEWAY (native routes: health, audit-logs, swagger)
+#  89 endpoints
+###############################################################################
+
+### Health check for the API Gateway including Redis dependency status, memory and system info
+#  (public — no auth required)
+GET {{baseUrl}}/health
+
+
+### Returns the OpenAPI 3.0 specification for the API Gateway with dynamic server URLs
+#  (public — no auth required)
+GET {{baseUrl}}/openapi.json
+
+
+### Swagger UI documentation page for the API Gateway
+#  (public — no auth required)
+GET {{baseUrl}}/api-docs
+
+
+### Get system-wide audit logs aggregated from all backend services (superadmin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?action=
+#      ?resource=
+#      ?startDate=
+#      ?endDate=
+#      ?search=
+GET {{baseUrl}}/api/v1/admin/audit-logs
+Authorization: Bearer {{authToken}}
+
+
+### Get system-wide Winston runtime logs aggregated from all services with sensitive data redacted (superadmin only)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?limit=
+#      ?service=
+#      ?file=
+#      ?level=
+GET {{baseUrl}}/api/v1/admin/runtime-logs
+Authorization: Bearer {{authToken}}
+
+
+### Get client/tenant-scoped audit logs (admin, client, accounts, sales, support roles)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?limit=
+#      ?cursor=
+#      ?service=
+#      ?action=
+#      ?resource=
+#      ?startDate=
+#      ?endDate=
+#      ?search=
+GET {{baseUrl}}/api/v1/audit-logs
+Authorization: Bearer {{authToken}}
+
+
+### Get available audit log action types organized by functional category for filtering
+GET {{baseUrl}}/api/v1/audit-log-actions
+Authorization: Bearer {{authToken}}
+
+
+### Merged Swagger UI combining OpenAPI specs from all backend microservices (dev only)
+#  (public — no auth required)
+GET {{baseUrl}}/swagger
+
+
+### Merged OpenAPI JSON spec combining all backend microservice specs (dev only)
+#  (public — no auth required)
+GET {{baseUrl}}/swagger/all.json
+
+
+### Auth service OpenAPI spec fetched and rewritten with gateway server URL (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/auth.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### User service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/users.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Shipment service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/shipments.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Partner service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/partners.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Wallet service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/wallet.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Support service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/support.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Platform service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/platforms.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### License service OpenAPI spec (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/license.json
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Auth service Swagger UI proxied through the gateway (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/auth
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### User service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/users
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Shipment service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/shipments
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Partner service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/partners
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Wallet service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/wallet
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Support service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/support
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Platform service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/platforms
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### License service Swagger UI (dev only)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/swagger/license
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Proxy GET requests to Auth Service (login/register/etc). Public sub-paths: login, register, forgot-password, reset-password, verify-email, refresh-token
+#  (public — no auth required)
+GET {{baseUrl}}/api/v1/auth/{{id}}
+
+
+### Proxy POST requests to Auth Service (e.g. login, register)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/auth/{{id}}
+Content-Type: {{contentType}}
+
+{
+  "email": "rahul.sharma@example.in",
+  "password": "Passw0rd!123"
+}
+
+
+### Proxy GET requests to Auth Service user management (/auth/users/*)
+GET {{baseUrl}}/api/v1/users/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy POST requests to Auth Service user management
+POST {{baseUrl}}/api/v1/users/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "priya.nair@example.in",
+  "phone": "+919876543210",
+  "role": "customer",
+  "clientId": "7f9c1e42-3b1a-4d6e-9a2f-1c8b5d0e3a77"
+}
+
+
+### Proxy GET requests to User Service (profiles, clients, dashboard, affiliate)
+GET {{baseUrl}}/api/v1/user/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy POST requests to User Service (profiles, clients, etc.)
+POST {{baseUrl}}/api/v1/user/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "companyName": "Bharat Logistics Pvt Ltd",
+  "gstin": "27ABCDE1234F1Z5",
+  "phone": "+919812345678"
+}
+
+
+### Proxy GET requests to User Service outlet management (/api/outlets/*)
+GET {{baseUrl}}/api/v1/outlets/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy POST requests to User Service outlet management
+POST {{baseUrl}}/api/v1/outlets/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Andheri Warehouse",
+  "pincode": "400053",
+  "city": "Mumbai",
+  "state": "Maharashtra",
+  "phone": "+919820011223"
+}
+
+
+### Proxy GET requests to Shipment Service (list, track, get by id)
+GET {{baseUrl}}/api/v1/shipments/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy POST requests to Shipment Service (create shipment, bulk operations)
+POST {{baseUrl}}/api/v1/shipments/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pickupPincode": "110001",
+  "deliveryPincode": "400001",
+  "weight": 1.5,
+  "declaredValue": 2499,
+  "consigneeName": "Amit Verma",
+  "consigneePhone": "+919911223344",
+  "paymentMode": "COD",
+  "codAmount": 2499
+}
+
+
+### Public courier provider webhook callback proxied to Shipment Service (no auth)
+#  (public — no auth required)
+POST {{baseUrl}}/api/v1/shipments/webhook
+Content-Type: {{contentType}}
+
+{
+  "awb": "DELH123456789",
+  "status": "IN_TRANSIT",
+  "courier": "Delhivery",
+  "timestamp": "2026-07-16T10:30:00.000Z"
+}
+
+
+### Proxy GET requests to Partner Service (75+ courier integrations)
+GET {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy POST requests to Partner Service
+POST {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Blue Dart",
+  "code": "BLUEDART",
+  "authType": "HMAC_SHA256",
+  "isActive": true
+}
+
+
+### Proxy PUT requests to Partner Service
+PUT {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Blue Dart Express",
+  "isActive": false
+}
+
+
+### Proxy DELETE requests to Partner Service
+DELETE {{baseUrl}}/api/v1/partners/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy GET partner pincode assignment endpoints to Partner Service
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Assign pincodes with type values to a partner (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/pincodes
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pincodes": [
+    {
+      "pincode": "560001",
+      "typeValue": "ODA"
+    },
+    {
+      "pincode": "600001",
+      "typeValue": "NON_ODA"
+    }
+  ]
+}
+
+
+### Download partner pincode bulk-upload template (proxied to Partner Service)
+GET {{baseUrl}}/api/v1/partners/pincodes/template
+Authorization: Bearer {{authToken}}
+
+
+### Deprecated pincode search proxied to Partner Service (successor: /api/v1/geography/pincodes/search)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?pincode=
+#      ?q=
+GET {{baseUrl}}/api/v1/pincodes/search
+Authorization: Bearer {{authToken}}
+
+
+### Proxy partner channel management GET requests to Partner Service
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/channels/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create/manage a partner channel (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/channels
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "channelName": "Surface",
+  "mode": "FORWARD",
+  "isActive": true
+}
+
+
+### Update a partner channel mode (proxied to Partner Service)
+PUT {{baseUrl}}/api/v1/partners/{{partnerId}}/channel-mode
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "mode": "REVERSE"
+}
+
+
+### Proxy channel listing/detail GET requests to Partner Service
+GET {{baseUrl}}/api/v1/channels/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy partner carrier account GET requests to Partner Service
+GET {{baseUrl}}/api/v1/partners/{{partnerId}}/carrier-accounts/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a partner carrier account (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/partners/{{partnerId}}/carrier-accounts
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "accountId": "BD-ACC-9021",
+  "apiKey": "a1b2c3d4e5",
+  "apiSecret": "s3cr3t"
+}
+
+
+### Proxy carrier account listing GET requests to Partner Service
+GET {{baseUrl}}/api/v1/carrier-accounts/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy courier operations GET requests to Partner Service
+GET {{baseUrl}}/api/v1/courier-operations/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy courier operations POST requests (rate calc, booking) to Partner Service
+POST {{baseUrl}}/api/v1/courier-operations/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "pickupPincode": "110001",
+  "deliveryPincode": "700001",
+  "weight": 2,
+  "codAmount": 1500
+}
+
+
+### Proxy public geographical data endpoints (states, cities, pincode search) to Partner Service
+#  (public — no auth required)
+#  optional query params — uncomment & fill the ones you need, join with & :
+#      ?pincode=
+#      ?q=
+#      ?state=
+#      ?city=
+GET {{baseUrl}}/api/v1/geography/{{id}}
+
+
+### Proxy zone management GET requests to Partner Service
+GET {{baseUrl}}/api/v1/zones/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a geographical zone (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/zones/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "West Zone",
+  "states": [
+    "Maharashtra",
+    "Gujarat",
+    "Goa"
+  ]
+}
+
+
+### Proxy pincode type management GET requests to Partner Service (admin/operations)
+GET {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy pincode type create/assign POST requests to Partner Service
+POST {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "ODA",
+  "description": "Out of Delivery Area"
+}
+
+
+### Proxy pincode type update PUT requests to Partner Service
+PUT {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "description": "Out of Delivery Area (remote)"
+}
+
+
+### Proxy pincode type delete/unassign DELETE requests to Partner Service
+DELETE {{baseUrl}}/api/v1/pincode-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy charges rule GET requests to Partner Service
+GET {{baseUrl}}/api/v1/charges/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a charges rule (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/charges/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Fuel Surcharge",
+  "type": "PERCENTAGE",
+  "value": 8.5
+}
+
+
+### Proxy partner-specific charge type GET requests to Partner Service
+GET {{baseUrl}}/api/v1/charges-types/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a partner-specific charge type (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/charges-types/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "COD Fee",
+  "code": "COD_FEE"
+}
+
+
+### Proxy badge-based charge discount package GET requests to Partner Service
+GET {{baseUrl}}/api/v1/charge-discount-packages/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Create a badge-based charge discount package for outlet tiers (proxied to Partner Service)
+POST {{baseUrl}}/api/v1/charge-discount-packages/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "badge": "GOLD",
+  "discountPercent": 12.5
+}
+
+
+### Proxy system services-status GET requests to Partner Service
+GET {{baseUrl}}/api/v1/services-status/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-health GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-health/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-configuration GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-configuration/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-configuration POST/update requests to Partner Service
+POST {{baseUrl}}/api/v1/system-configuration/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "key": "MAX_WEIGHT_KG",
+  "value": "50"
+}
+
+
+### Proxy system-cache GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-cache/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-statistics GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-statistics/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-alerts GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-alerts/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy system-maintenance GET requests to Partner Service
+GET {{baseUrl}}/api/v1/system-maintenance/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy webhook management/callback requests to Partner Service
+POST {{baseUrl}}/api/v1/webhooks/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "url": "https://client.example.in/hooks/tracking",
+  "event": "SHIPMENT_UPDATE"
+}
+
+
+### Proxy partner-service audit GET requests to Partner Service
+GET {{baseUrl}}/api/v1/audit/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy wallet GET requests (balance, transactions) to Wallet Service
+GET {{baseUrl}}/api/v1/wallet/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy wallet POST requests (recharge, debit, transactions) to Wallet Service
+POST {{baseUrl}}/api/v1/wallet/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "amount": 5000,
+  "currency": "INR",
+  "paymentMethod": "UPI",
+  "reference": "TXN-20260716-0001"
+}
+
+
+### Proxy payout GET requests to Wallet Service (note: no explicit payout proxy prefix in server.js; served via wallet-service if configured)
+GET {{baseUrl}}/api/v1/payout/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy support GET requests (tickets, disputes) to Support Service
+GET {{baseUrl}}/api/v1/support/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy support POST requests (create ticket) to Support Service
+POST {{baseUrl}}/api/v1/support/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "subject": "Shipment delayed",
+  "priority": "HIGH",
+  "shipmentId": "3a2b1c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+}
+
+
+### Proxy support PUT requests (update ticket) to Support Service
+PUT {{baseUrl}}/api/v1/support/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "status": "RESOLVED",
+  "resolution": "Package delivered"
+}
+
+
+### Proxy support DELETE requests to Support Service
+DELETE {{baseUrl}}/api/v1/support/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy platform integration GET requests (Shopify, etc.) to Platform Service
+GET {{baseUrl}}/api/v1/platforms/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy platform integration POST requests to Platform Service
+POST {{baseUrl}}/api/v1/platforms/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "platform": "SHOPIFY",
+  "storeUrl": "mystore.myshopify.com",
+  "accessToken": "shpat_xxx"
+}
+
+
+### Proxy platform integration PUT requests to Platform Service
+PUT {{baseUrl}}/api/v1/platforms/{{id}}
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "isActive": false
+}
+
+
+### Proxy platform integration DELETE requests to Platform Service
+DELETE {{baseUrl}}/api/v1/platforms/{{id}}
+Authorization: Bearer {{authToken}}
+
+
+### Proxy internal inter-service communication GET requests to User Service (bootstrap, etc.)
+#  (internal — needs x-internal-request secret header)
+GET {{baseUrl}}/api/v1/internal/{{id}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+
+
+### Proxy internal inter-service communication POST requests to User Service
+#  (internal — needs x-internal-request secret header)
+POST {{baseUrl}}/api/v1/internal/{{id}}
+Authorization: Bearer {{authToken}}
+x-internal-request: {{internalSecret}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "7f9c1e42-3b1a-4d6e-9a2f-1c8b5d0e3a77",
+  "clientId": "2b3c4d5e-6f70-4812-93a4-b5c6d7e8f901"
+}
+
+
+###############################################################################
+#  TOTAL: 454 endpoints across 7 services
+###############################################################################

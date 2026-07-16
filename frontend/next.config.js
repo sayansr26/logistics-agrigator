@@ -5,7 +5,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   output: "standalone",
-  // This app lives in a pnpm workspace. Point Next's file tracing at the
+  // This app lives in a yarn workspace. Point Next's file tracing at the
   // monorepo root so the standalone build bundles ALL hoisted/symlinked deps
   // (e.g. styled-jsx) into standalone/node_modules and emits the monorepo
   // layout: .next/standalone/frontend/server.js

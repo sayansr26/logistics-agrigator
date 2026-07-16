@@ -217,11 +217,11 @@ run_seeds() {
         schema_path=$(find_schema_path "$service") || true
         local seed_dir="${schema_path%/schema.prisma}"
 
-        # Try service-level pnpm db:seed, then direct seed.js execution
+        # Try service-level yarn db:seed, then direct seed.js execution
         if dc exec -T "$service" sh -c "cd \$(dirname $schema_path) 2>/dev/null && test -f seed.js && node seed.js" > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service (direct execution)"
             return 0
-        elif dc exec -T "$service" pnpm run db:seed > /dev/null 2>&1; then
+        elif dc exec -T "$service" yarn db:seed > /dev/null 2>&1; then
             print_success "✅ Seeds executed for $service"
             return 0
         else
@@ -308,5 +308,5 @@ echo ""
 print_status "Next steps:"
 echo "   - Access frontend at http://localhost:3000"
 echo "   - Access API Gateway at http://localhost:3001"
-echo "   - View logs with: pnpm run logs"
+echo "   - View logs with: yarn logs"
 echo ""

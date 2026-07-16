@@ -96,7 +96,6 @@ safe_remove() {
 
 # Remove root level dependencies
 safe_remove "node_modules" "root node_modules"
-safe_remove "pnpm-lock.yaml" "root pnpm lock"
 safe_remove "package-lock.json" "root npm lock"
 safe_remove "yarn.lock" "root yarn lock"
 safe_remove ".next" "root Next.js build"
@@ -109,7 +108,7 @@ safe_remove "frontend/node_modules" "frontend node_modules"
 safe_remove "frontend/.next" "frontend Next.js build"
 safe_remove "frontend/dist" "frontend dist"
 safe_remove "frontend/build" "frontend build"
-safe_remove "frontend/pnpm-lock.yaml" "frontend pnpm lock"
+safe_remove "frontend/yarn.lock" "frontend yarn lock"
 safe_remove "frontend/.turbo" "frontend Turbo cache"
 
 # Remove backend services
@@ -124,7 +123,7 @@ for service in "${backend_services[@]}"; do
         safe_remove "$service_path/node_modules" "$service node_modules"
         safe_remove "$service_path/dist" "$service dist"
         safe_remove "$service_path/build" "$service build"
-        safe_remove "$service_path/pnpm-lock.yaml" "$service pnpm lock"
+        safe_remove "$service_path/yarn.lock" "$service yarn lock"
         safe_remove "$service_path/.turbo" "$service Turbo cache"
     fi
 done
@@ -173,7 +172,7 @@ find_and_remove ".next" "Next.js builds"
 find_and_remove "dist" "dist directories"
 find_and_remove "build" "build directories"
 find_and_remove ".turbo" "Turbo caches"
-find_and_remove "pnpm-lock.yaml" "pnpm locks"
+find_and_remove "yarn.lock" "yarn locks"
 find_and_remove "*.log" "log files"
 find_and_remove ".DS_Store" "macOS files"
 
@@ -218,11 +217,11 @@ fi
 
 print_status "🧽 Step 5: Final cleanup..."
 
-# Clean pnpm cache
-if command -v pnpm &> /dev/null; then
-    print_status "Cleaning pnpm cache..."
-    pnpm store prune 2>/dev/null || true
-    print_success "✅ pnpm cache cleaned"
+# Clean yarn cache
+if command -v yarn &> /dev/null; then
+    print_status "Cleaning yarn cache..."
+    yarn cache clean 2>/dev/null || true
+    print_success "✅ yarn cache cleaned"
 fi
 
 # Summary
@@ -239,7 +238,7 @@ if [ "$1" = "--docker-deep-clean" ]; then
 fi
 echo ""
 print_status "📋 Next steps:"
-echo "   pnpm run dev           # Start all services (auto-installs dependencies)"
-echo "   pnpm run setup:dev     # Full setup with environment files"
+echo "   yarn dev               # Start all services (auto-installs dependencies)"
+echo "   yarn setup:dev         # Full setup with environment files"
 echo ""
 print_warning "⚠️  Dependencies will auto-install when containers start (via entrypoint.sh)"
