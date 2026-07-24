@@ -211,13 +211,14 @@ class GeographicalService {
    */
   async getPincodesByArea(params) {
     try {
-      const { areaId, cityId, stateId, limit = 100, page = 1 } = params;
+      const { areaId, cityId, stateId, limit = 100, page = 1, search } = params;
       logger.info("Getting pincodes by area/city/state", {
         areaId,
         cityId,
         stateId,
         limit,
         page,
+        search,
       });
 
       // Calculate skip for pagination
@@ -229,6 +230,8 @@ class GeographicalService {
       if (cityId) cacheKey += `:city:${cityId}`;
       if (stateId) cacheKey += `:state:${stateId}`;
       if (!areaId && !cityId && !stateId) cacheKey += `:all`;
+      if (search && search.trim())
+        cacheKey += `:search:${search.trim().toLowerCase()}`;
       cacheKey += `:page:${page}:limit:${limit}`;
 
       // Try cache first
@@ -266,6 +269,16 @@ class GeographicalService {
       } else if (stateId) {
         // Get pincodes by state
         where.stateId = stateId;
+      }
+
+      // Case-insensitive search across pincode code, area name and district
+      if (search && search.trim()) {
+        const term = search.trim();
+        where.OR = [
+          { code: { contains: term, mode: "insensitive" } },
+          { areaName: { contains: term, mode: "insensitive" } },
+          { district: { contains: term, mode: "insensitive" } },
+        ];
       }
 
       // Get total count
@@ -696,7 +709,7 @@ class GeographicalService {
    */
   async getCities(params) {
     try {
-      const { stateIds, page = 1, limit = 50 } = params;
+      const { stateIds, page = 1, limit = 50, search } = params;
       logger.info("Getting cities", { params });
 
       // Build where clause - show both active and inactive for management
@@ -704,6 +717,14 @@ class GeographicalService {
       if (stateIds) {
         const stateIdArray = stateIds.split(",").map((id) => id.trim());
         where.stateId = { in: stateIdArray };
+      }
+      // Case-insensitive search across city name (and code when present)
+      if (search && search.trim()) {
+        const term = search.trim();
+        where.OR = [
+          { name: { contains: term, mode: "insensitive" } },
+          { code: { contains: term, mode: "insensitive" } },
+        ];
       }
 
       // Get total count
@@ -767,7 +788,7 @@ class GeographicalService {
    */
   async getAreas(params) {
     try {
-      const { cityIds, stateIds, page = 1, limit = 50 } = params;
+      const { cityIds, stateIds, page = 1, limit = 50, search } = params;
       logger.info("Getting areas", { params });
 
       // Build where clause - show both active and inactive for management
@@ -781,6 +802,10 @@ class GeographicalService {
         where.city = {
           stateId: { in: stateIdArray },
         };
+      }
+      // Case-insensitive search across area name
+      if (search && search.trim()) {
+        where.name = { contains: search.trim(), mode: "insensitive" };
       }
 
       // Get total count

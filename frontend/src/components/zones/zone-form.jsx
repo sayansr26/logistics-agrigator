@@ -36,8 +36,17 @@ import {
   Route,
   Map,
   Search,
+  ChevronDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { geographicalApiService, partnersApiService } from "@/services";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -79,6 +88,76 @@ const defaultFormData = {
   liquidAllowed: false,
   perishableAllowed: true,
 };
+
+/**
+ * ScopedSelectMenu — a "Select ▾" trigger opening a grouped menu of scoped
+ * bulk-select actions. Sections carry a small label; every row shows the count
+ * it will add so the number itself is the affordance. Radix supplies keyboard
+ * navigation, focus management and Escape-to-close.
+ *
+ * Props:
+ *   label     — text on the trigger (e.g. "Select")
+ *   sections  — [{ label?, options: [{ key, label, count, onSelect, disabled? }] }]
+ *   disabled  — disables the whole trigger
+ */
+function ScopedSelectMenu({ label = "Select", sections, disabled }) {
+  const hasAny = sections.some((s) =>
+    s.options.some((o) => (o.count ?? 0) > 0 || o.always),
+  );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          disabled={disabled || !hasAny}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          {label}
+          <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-64 max-h-80 overflow-y-auto"
+      >
+        {sections.map((section, si) => {
+          const rows = section.options.filter(
+            (o) => (o.count ?? 0) > 0 || o.always,
+          );
+          if (rows.length === 0) return null;
+          return (
+            <div key={section.label || si}>
+              {si > 0 && <DropdownMenuSeparator />}
+              {section.label && (
+                <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {section.label}
+                </DropdownMenuLabel>
+              )}
+              {rows.map((o) => (
+                <DropdownMenuItem
+                  key={o.key}
+                  disabled={o.disabled || (!o.always && (o.count ?? 0) === 0)}
+                  onSelect={o.onSelect}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span className="truncate">{o.label}</span>
+                  {o.count != null && (
+                    <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                      {o.count}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </div>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function ZoneForm({
   initialData = {},
@@ -195,7 +274,7 @@ export function ZoneForm({
     }
   };
 
-  // Fetch cities for multiple states with better error handling
+  // Fetch cities for multiple states
   const fetchCitiesForStates = async (selectedStates) => {
     setLoadingCities(true);
     try {
@@ -204,57 +283,11 @@ export function ZoneForm({
         geographicalApiService.setAccessToken(accessToken);
       }
 
-      // Limit concurrent requests to prevent overwhelming the system
-      const maxConcurrentRequests = 3;
-      const allCities = [];
-
-      // Process states in batches to prevent memory issues
-      for (let i = 0; i < selectedStates.length; i += maxConcurrentRequests) {
-        const batch = selectedStates.slice(i, i + maxConcurrentRequests);
-
-        try {
-          // Add timeout protection
-          const cityPromises = batch.map((state) =>
-            Promise.race([
-              geographicalApiService.getCitiesByState(state.id),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Request timeout")), 10000),
-              ),
-            ]),
-          );
-
-          const responses = await Promise.allSettled(cityPromises);
-
-          responses.forEach((result, index) => {
-            if (
-              result.status === "fulfilled" &&
-              result.value.status === "success" &&
-              result.value.data
-            ) {
-              allCities.push(...result.value.data);
-            } else {
-              const error =
-                result.status === "rejected"
-                  ? result.reason
-                  : result.value.error;
-              console.error(
-                `Failed to fetch cities for state ${batch[index].name}:`,
-                error,
-              );
-            }
-          });
-
-          // Small delay between batches to prevent overwhelming the system
-          if (i + maxConcurrentRequests < selectedStates.length) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        } catch (batchError) {
-          console.error(
-            `Error in batch ${i}-${i + maxConcurrentRequests}:`,
-            batchError,
-          );
-        }
-      }
+      // Bulk fetch: one chunked call set instead of one request per state
+      // (avoids 429s and is far faster when many states are selected).
+      const allCities = await geographicalApiService.getCitiesByStates(
+        selectedStates.map((state) => state.id),
+      );
 
       setCities(allCities);
     } catch (error) {
@@ -298,24 +331,11 @@ export function ZoneForm({
         geographicalApiService.setAccessToken(accessToken);
       }
 
-      // Fetch areas for all selected cities
-      const areaPromises = selectedCities.map((city) =>
-        geographicalApiService.getAreasByCity(city.id),
+      // Bulk fetch: one chunked call set instead of one request per city
+      // (avoids 429s and is far faster when many/all cities are selected).
+      const allAreas = await geographicalApiService.getAreasByCities(
+        selectedCities.map((city) => city.id),
       );
-
-      const responses = await Promise.all(areaPromises);
-      const allAreas = [];
-
-      responses.forEach((response, index) => {
-        if (response.status === "success" && response.data) {
-          allAreas.push(...response.data);
-        } else {
-          console.error(
-            `Failed to fetch areas for city ${selectedCities[index].name}:`,
-            response.error,
-          );
-        }
-      });
 
       setAreas(allAreas);
     } catch (error) {
@@ -359,24 +379,11 @@ export function ZoneForm({
         geographicalApiService.setAccessToken(accessToken);
       }
 
-      // Fetch pincodes for all selected areas
-      const pincodePromises = selectedAreas.map((area) =>
-        geographicalApiService.getPincodesByArea(area.id),
+      // Bulk fetch: one chunked call set instead of one request per area
+      // (avoids 429s and is far faster when many/all areas are selected).
+      const allPincodes = await geographicalApiService.getPincodesByAreas(
+        selectedAreas.map((area) => area.id),
       );
-
-      const responses = await Promise.all(pincodePromises);
-      const allPincodes = [];
-
-      responses.forEach((response, index) => {
-        if (response.status === "success" && response.data) {
-          allPincodes.push(...response.data);
-        } else {
-          console.error(
-            `Failed to fetch pincodes for area ${selectedAreas[index].name}:`,
-            response.error,
-          );
-        }
-      });
 
       setPincodes(allPincodes);
     } catch (error) {
@@ -770,6 +777,97 @@ export function ZoneForm({
 
       updateFormData({ selectedPincodes: newSelectedPincodes });
     }
+  };
+
+  // ── Scoped "Select All" helpers ───────────────────────────────
+  // Each `add*` takes an explicit list of items to add (already scoped by the
+  // caller), de-duplicates against the current selection, resets downstream
+  // selections, and triggers the next cascade fetch. This one path backs every
+  // scope (all / metro / per-state / per-city / per-area).
+
+  const notYetSelected = (candidates, selected) => {
+    const chosen = new Set(selected.map((s) => String(s.id)));
+    return candidates.filter((c) => !chosen.has(String(c.id)));
+  };
+
+  const addCities = (cityList) => {
+    const toAdd = notYetSelected(cityList, formData.selectedCities);
+    if (toAdd.length === 0) return;
+    const newSelectedCities = [...formData.selectedCities, ...toAdd];
+    updateFormData({
+      selectedCities: newSelectedCities,
+      selectedAreas: [],
+      selectedPincodes: [],
+    });
+    setAreas([]);
+    setPincodes([]);
+    setCitySearch("");
+    setShowCityDropdown(false);
+    fetchAreasForCities(newSelectedCities);
+  };
+
+  const addAreas = (areaList) => {
+    const toAdd = notYetSelected(areaList, formData.selectedAreas);
+    if (toAdd.length === 0) return;
+    const newSelectedAreas = [...formData.selectedAreas, ...toAdd];
+    updateFormData({
+      selectedAreas: newSelectedAreas,
+      selectedPincodes: [],
+    });
+    setPincodes([]);
+    setAreaSearch("");
+    setShowAreaDropdown(false);
+    fetchPincodesForAreas(newSelectedAreas);
+  };
+
+  const addPincodes = (pincodeList) => {
+    const toAdd = notYetSelected(pincodeList, formData.selectedPincodes);
+    if (toAdd.length === 0) return;
+    updateFormData({
+      selectedPincodes: [...formData.selectedPincodes, ...toAdd],
+    });
+    setPincodeSearch("");
+    setShowPincodeDropdown(false);
+  };
+
+  // Scope groups (used to build the "Select" menus). Each returns
+  // [{ key, label, items }] respecting the active search/metro filter.
+  // NOTE: use a plain object, NOT `new Map()` — `Map` is imported from
+  // lucide-react in this file and shadows the built-in Map constructor.
+  const groupByName = (items, getName) => {
+    const groups = {};
+    for (const item of items) {
+      const name = getName(item) || "Other";
+      (groups[name] || (groups[name] = [])).push(item);
+    }
+    return Object.keys(groups)
+      .sort((a, b) => a.localeCompare(b))
+      .map((label) => ({ key: label, label, items: groups[label] }));
+  };
+
+  const cityScopeGroups = () => {
+    const visible = getFilteredCities();
+    return {
+      all: visible,
+      metro: visible.filter((c) => c.isMetro === true),
+      byState: groupByName(visible, (c) => c.state?.name),
+    };
+  };
+
+  const areaScopeGroups = () => {
+    const visible = getFilteredAreas();
+    return {
+      all: visible,
+      byCity: groupByName(visible, (a) => a.city?.name),
+    };
+  };
+
+  const pincodeScopeGroups = () => {
+    const visible = getFilteredPincodes();
+    return {
+      all: visible,
+      byArea: groupByName(visible, (p) => p.area?.name || p.areaName),
+    };
   };
 
   // Distance slab management functions
@@ -1549,26 +1647,66 @@ export function ZoneForm({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="city">Cities *</Label>
-                    {cities.length > 0 && (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-muted-foreground">
-                          Filter:
-                        </span>
-                        <Select
-                          value={cityFilter}
-                          onValueChange={setCityFilter}
-                        >
-                          <SelectTrigger className="w-32 h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Cities</SelectItem>
-                            <SelectItem value="metro">Metro Only</SelectItem>
-                            <SelectItem value="non-metro">Non-Metro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                    {cities.length > 0 &&
+                      (() => {
+                        const g = cityScopeGroups();
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <ScopedSelectMenu
+                              label="Select"
+                              sections={[
+                                {
+                                  label: "All",
+                                  options: [
+                                    {
+                                      key: "all",
+                                      label: "All cities",
+                                      count: g.all.length,
+                                      onSelect: () => addCities(g.all),
+                                    },
+                                    {
+                                      key: "metro",
+                                      label: "All metro cities",
+                                      count: g.metro.length,
+                                      onSelect: () => addCities(g.metro),
+                                    },
+                                  ],
+                                },
+                                {
+                                  label:
+                                    g.byState.length > 1 ? "By state" : null,
+                                  options: g.byState.map((grp) => ({
+                                    key: grp.key,
+                                    label: grp.label,
+                                    count: grp.items.length,
+                                    onSelect: () => addCities(grp.items),
+                                  })),
+                                },
+                              ]}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              Filter:
+                            </span>
+                            <Select
+                              value={cityFilter}
+                              onValueChange={setCityFilter}
+                            >
+                              <SelectTrigger className="w-32 h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Cities</SelectItem>
+                                <SelectItem value="metro">
+                                  Metro Only
+                                </SelectItem>
+                                <SelectItem value="non-metro">
+                                  Non-Metro
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      })()}
                   </div>
 
                   <div className="relative">
@@ -1683,31 +1821,39 @@ export function ZoneForm({
 
                   {/* City Statistics */}
                   {cities.length > 0 && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center space-x-4">
+                    <div className="mt-3 p-3 bg-muted rounded-lg border">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                           <div className="flex items-center space-x-1">
-                            <Building className="h-4 w-4 text-gray-500" />
-                            <span className="text-gray-600">Total Cities:</span>
-                            <span className="font-medium">{cities.length}</span>
+                            <Building className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              Total Cities:
+                            </span>
+                            <span className="font-semibold text-foreground">
+                              {cities.length}
+                            </span>
                           </div>
                           <div className="flex items-center space-x-1">
                             <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                            <span className="text-gray-600">Metro:</span>
-                            <span className="font-medium">
+                            <span className="text-muted-foreground">
+                              Metro:
+                            </span>
+                            <span className="font-semibold text-foreground">
                               {cities.filter((c) => c.isMetro).length}
                             </span>
                           </div>
                           <div className="flex items-center space-x-1">
                             <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                            <span className="text-gray-600">Non-Metro:</span>
-                            <span className="font-medium">
+                            <span className="text-muted-foreground">
+                              Non-Metro:
+                            </span>
+                            <span className="font-semibold text-foreground">
                               {cities.filter((c) => !c.isMetro).length}
                             </span>
                           </div>
                         </div>
                         {formData.selectedCities.length > 0 && (
-                          <div className="text-green-600 font-medium">
+                          <div className="text-green-600 dark:text-green-400 font-semibold">
                             {formData.selectedCities.length} selected
                           </div>
                         )}
@@ -1718,7 +1864,40 @@ export function ZoneForm({
 
                 {/* Area Selection - searchable multi-select */}
                 <div className="space-y-2">
-                  <Label htmlFor="area">Areas (Optional)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="area">Areas (Optional)</Label>
+                    {areas.length > 0 &&
+                      (() => {
+                        const g = areaScopeGroups();
+                        return (
+                          <ScopedSelectMenu
+                            label="Select"
+                            sections={[
+                              {
+                                label: "All",
+                                options: [
+                                  {
+                                    key: "all",
+                                    label: "All areas",
+                                    count: g.all.length,
+                                    onSelect: () => addAreas(g.all),
+                                  },
+                                ],
+                              },
+                              {
+                                label: g.byCity.length > 1 ? "By city" : null,
+                                options: g.byCity.map((grp) => ({
+                                  key: grp.key,
+                                  label: grp.label,
+                                  count: grp.items.length,
+                                  onSelect: () => addAreas(grp.items),
+                                })),
+                              },
+                            ]}
+                          />
+                        );
+                      })()}
+                  </div>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -1810,7 +1989,40 @@ export function ZoneForm({
 
                 {/* Pincode Selection - searchable multi-select */}
                 <div className="space-y-2">
-                  <Label htmlFor="pincode">Pincodes *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pincode">Pincodes *</Label>
+                    {pincodes.length > 0 &&
+                      (() => {
+                        const g = pincodeScopeGroups();
+                        return (
+                          <ScopedSelectMenu
+                            label="Select"
+                            sections={[
+                              {
+                                label: "All",
+                                options: [
+                                  {
+                                    key: "all",
+                                    label: "All pincodes",
+                                    count: g.all.length,
+                                    onSelect: () => addPincodes(g.all),
+                                  },
+                                ],
+                              },
+                              {
+                                label: g.byArea.length > 1 ? "By area" : null,
+                                options: g.byArea.map((grp) => ({
+                                  key: grp.key,
+                                  label: grp.label,
+                                  count: grp.items.length,
+                                  onSelect: () => addPincodes(grp.items),
+                                })),
+                              },
+                            ]}
+                          />
+                        );
+                      })()}
+                  </div>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input

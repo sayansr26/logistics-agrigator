@@ -130,6 +130,9 @@ const getPincodesByArea = {
       "number.min": "Limit must be at least 1",
       "number.max": "Limit cannot exceed 1000",
     }),
+    search: Joi.string().trim().max(100).allow("").optional().messages({
+      "string.max": "Search cannot exceed 100 characters",
+    }),
   }),
   // Removed .or() requirement - allow fetching all pincodes with optional filters
 };

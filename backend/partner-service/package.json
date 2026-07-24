@@ -13,7 +13,11 @@
     "db:studio": "npx prisma studio",
     "seed:geo": "node prisma/seed-geographical-data.js",
     "load:pincodes": "node scripts/load-pincode-data.js",
+    "fetch:india-post": "node scripts/fetch-india-post.js",
+    "build:pincodes": "node scripts/build-merged-pincodes.js",
     "import:pincodes": "node scripts/import-pincode-data.js",
+    "classify:cities": "node scripts/classify-cities.js",
+    "import:pincodes:live": "node scripts/import-pincode-data.js --live",
     "test": "jest --passWithNoTests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

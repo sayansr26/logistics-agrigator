@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const readline = require("readline");
+const { spawnSync } = require("child_process");
 const csv = require("csv-parser");
 const { PrismaClient } = require("@prisma/client");
 const logger = require("../shared/lib/logger");
@@ -8,6 +10,69 @@ const { connectRedis, getRedisClient } = require("../config/redis");
 const prisma = new PrismaClient();
 const BATCH_SIZE = 1000; // Process in batches of 1000 records
 const CSV_FILE_PATH = path.join(__dirname, "../data/merged_pincode_data.csv");
+const SCRIPTS_DIR = __dirname;
+
+/**
+ * Ask the user which data source to import from.
+ * Returns "live" (refresh snapshot + rebuild merged CSV) or "local".
+ *
+ * Non-interactive runs (no TTY, or IMPORT_SOURCE / --live / --local set)
+ * skip the prompt so CI / Docker exec can drive it deterministically.
+ */
+async function chooseImportSource() {
+  const flag = (process.env.IMPORT_SOURCE || "").toLowerCase();
+  if (process.argv.includes("--live") || flag === "live") return "live";
+  if (process.argv.includes("--local") || flag === "local") return "local";
+
+  if (!process.stdin.isTTY) {
+    console.log("ℹ️  Non-interactive shell — defaulting to LOCAL merged CSV.");
+    console.log("   (use --live or IMPORT_SOURCE=live to fetch fresh data)");
+    return "local";
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const ask = (q) => new Promise((res) => rl.question(q, res));
+
+  console.log("\n📥 Pincode import — choose data source:");
+  console.log(
+    "   [1] Fetch LIVE from data.gov.in  (refresh snapshot → merge → import)",
+  );
+  console.log(
+    "   [2] Use LOCAL merged CSV         (data/merged_pincode_data.csv)  [default]",
+  );
+  const answer = (await ask("Select 1 or 2 [2]: ")).trim();
+  rl.close();
+  return answer === "1" ? "live" : "local";
+}
+
+/**
+ * Refresh the local snapshot from the API, then rebuild the merged CSV.
+ * Runs the sibling scripts synchronously so their console output streams.
+ */
+function refreshFromApi() {
+  console.log("\n🌐 Fetching fresh India Post data from data.gov.in...");
+  const fetchRes = spawnSync(
+    process.execPath,
+    [path.join(SCRIPTS_DIR, "fetch-india-post.js")],
+    { stdio: "inherit" },
+  );
+  if (fetchRes.status !== 0) {
+    throw new Error("Live fetch failed — aborting import.");
+  }
+
+  console.log("\n🔗 Building merged CSV (India Post ⨝ GeoNames)...");
+  const mergeRes = spawnSync(
+    process.execPath,
+    [path.join(SCRIPTS_DIR, "build-merged-pincodes.js")],
+    { stdio: "inherit" },
+  );
+  if (mergeRes.status !== 0) {
+    throw new Error("Merge step failed — aborting import.");
+  }
+}
 
 // Cache for states and cities to avoid duplicate database queries
 const stateCache = new Map();
@@ -454,6 +519,21 @@ async function main() {
   try {
     console.log("🏁 Starting Partner Services Pincode Import");
     console.log("=".repeat(50));
+
+    // Ask (or infer) where to import from: live API refresh vs local snapshot.
+    const source = await chooseImportSource();
+    if (source === "live") {
+      refreshFromApi();
+    } else {
+      console.log("\n📂 Using local merged CSV (no API call).");
+    }
+
+    if (!fs.existsSync(CSV_FILE_PATH)) {
+      throw new Error(
+        `Merged CSV not found: ${CSV_FILE_PATH}\n` +
+          "   Run with --live (or 'yarn fetch:india-post && yarn build:pincodes') first.",
+      );
+    }
 
     // Connect to Redis for cache clearing at the end
     console.log("\n🔌 Connecting to Redis...");

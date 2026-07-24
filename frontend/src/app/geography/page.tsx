@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,19 @@ import {
 } from "lucide-react";
 import { DistanceCalculator } from "@/components/geography/distance-calculator";
 
+/**
+ * Debounce a rapidly-changing value (e.g. a search box) so dependents only
+ * update after the value has been stable for `delay` ms.
+ */
+function useDebouncedValue<T>(value: T, delay = 350): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function GeographyPage() {
   const [activeTab, setActiveTab] = useState("states");
   const [showDistanceCalculator, setShowDistanceCalculator] = useState(false);
@@ -80,6 +93,23 @@ export default function GeographyPage() {
 
   const itemsPerPage = 10;
 
+  // Debounce the search terms so we hit the API at most ~once per pause in
+  // typing (Cities/Areas/Pincodes search the FULL dataset server-side).
+  const debouncedCitiesSearch = useDebouncedValue(citiesSearchTerm, 350);
+  const debouncedAreasSearch = useDebouncedValue(areasSearchTerm, 350);
+  const debouncedPincodesSearch = useDebouncedValue(pincodesSearchTerm, 350);
+
+  // Reset to page 1 whenever a search term changes, so results start at the top.
+  useEffect(() => {
+    setCitiesPage(1);
+  }, [debouncedCitiesSearch]);
+  useEffect(() => {
+    setAreasPage(1);
+  }, [debouncedAreasSearch]);
+  useEffect(() => {
+    setPincodesPage(1);
+  }, [debouncedPincodesSearch]);
+
   // RTK Query hooks
   const {
     data: statesData,
@@ -92,19 +122,31 @@ export default function GeographyPage() {
     isLoading: citiesLoading,
     error: citiesError,
     refetch: refetchCities,
-  } = useGetCitiesQuery({ page: citiesPage, limit: itemsPerPage });
+  } = useGetCitiesQuery({
+    page: citiesPage,
+    limit: itemsPerPage,
+    search: debouncedCitiesSearch || undefined,
+  });
   const {
     data: areasData,
     isLoading: areasLoading,
     error: areasError,
     refetch: refetchAreas,
-  } = useGetAreasQuery({ page: areasPage, limit: itemsPerPage });
+  } = useGetAreasQuery({
+    page: areasPage,
+    limit: itemsPerPage,
+    search: debouncedAreasSearch || undefined,
+  });
   const {
     data: pincodesData,
     isLoading: pincodesLoading,
     error: pincodesError,
     refetch: refetchPincodes,
-  } = useGetPincodesQuery({ page: pincodesPage, limit: itemsPerPage });
+  } = useGetPincodesQuery({
+    page: pincodesPage,
+    limit: itemsPerPage,
+    search: debouncedPincodesSearch || undefined,
+  });
 
   const [toggleStateStatus] = useToggleStateStatusMutation();
   const [toggleCityStatus] = useToggleCityStatusMutation();
@@ -125,21 +167,17 @@ export default function GeographyPage() {
   const totalPincodes =
     pincodesData?.meta?.pagination?.total || pincodes.length;
 
-  // Filtered data
+  // States are fetched in full, so they are filtered client-side.
   const filteredStates = states.filter(
     (s: any) =>
       s.name.toLowerCase().includes(statesSearchTerm.toLowerCase()) ||
       s.code.toLowerCase().includes(statesSearchTerm.toLowerCase()),
   );
-  const filteredCities = cities.filter((c: any) =>
-    c.name.toLowerCase().includes(citiesSearchTerm.toLowerCase()),
-  );
-  const filteredAreas = areas.filter((a: any) =>
-    a.name.toLowerCase().includes(areasSearchTerm.toLowerCase()),
-  );
-  const filteredPincodes = pincodes.filter((p: any) =>
-    p.code.toLowerCase().includes(pincodesSearchTerm.toLowerCase()),
-  );
+  // Cities/Areas/Pincodes are searched + paginated SERVER-SIDE, so the arrays
+  // are already the correct filtered page — pass them straight through.
+  const filteredCities = cities;
+  const filteredAreas = areas;
+  const filteredPincodes = pincodes;
 
   // Pagination for states (client-side)
   const statesStartIndex = (statesPage - 1) * itemsPerPage;

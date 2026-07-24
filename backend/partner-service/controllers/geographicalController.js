@@ -150,7 +150,7 @@ async function getAreasByCity(req, res) {
  */
 async function getPincodesByArea(req, res) {
   try {
-    const { areaId, cityId, stateId, limit, page } = req.query;
+    const { areaId, cityId, stateId, limit, page, search } = req.query;
 
     logger.info("Getting pincodes by area/city/state", {
       areaId,
@@ -158,6 +158,7 @@ async function getPincodesByArea(req, res) {
       stateId,
       limit,
       page,
+      search,
       userId: req.user?.id,
     });
 
@@ -168,6 +169,7 @@ async function getPincodesByArea(req, res) {
       stateId,
       limit: limit ? parseInt(limit) : 100,
       page: page ? parseInt(page) : 1,
+      search,
     };
 
     const result = await geographicalService.getPincodesByArea(params);
@@ -642,13 +644,14 @@ async function searchStates(req, res) {
  */
 async function getCities(req, res) {
   try {
-    const { stateId, stateIds, page = 1, limit = 50 } = req.query;
+    const { stateId, stateIds, page = 1, limit = 50, search } = req.query;
 
     logger.info("Getting cities with filters", {
       stateId,
       stateIds,
       page,
       limit,
+      search,
     });
 
     const geographicalService = getGeographicalService();
@@ -668,6 +671,7 @@ async function getCities(req, res) {
       stateIds: combinedStateIds,
       page: parseInt(page),
       limit: parseInt(limit),
+      search,
     };
 
     const result = await geographicalService.getCities(params);
@@ -720,7 +724,14 @@ async function getCities(req, res) {
  */
 async function getAreas(req, res) {
   try {
-    const { cityId, cityIds, stateIds, page = 1, limit = 50 } = req.query;
+    const {
+      cityId,
+      cityIds,
+      stateIds,
+      page = 1,
+      limit = 50,
+      search,
+    } = req.query;
 
     logger.info("Getting areas with filters", {
       cityId,
@@ -728,6 +739,7 @@ async function getAreas(req, res) {
       stateIds,
       page,
       limit,
+      search,
     });
 
     const geographicalService = getGeographicalService();
@@ -748,6 +760,7 @@ async function getAreas(req, res) {
       stateIds,
       page: parseInt(page),
       limit: parseInt(limit),
+      search,
     };
 
     const result = await geographicalService.getAreas(params);

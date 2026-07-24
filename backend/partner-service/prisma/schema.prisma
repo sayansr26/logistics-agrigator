@@ -98,14 +98,14 @@ model PartnerChannelConfig {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Carrier service channels (weight-slab shipping products) that reuse this credential channel
+  serviceChannels PartnerServiceChannel[]
+
   @@unique([partnerId, channelName])
   @@index([partnerId, isActive])
   @@index([partnerId, isPrimary])
   @@index([partnerId, aggregatorType])
   @@map("partner_channel_configs")
-
-  // Carrier service channels (weight-slab shipping products) that reuse this credential channel
-  serviceChannels PartnerServiceChannel[]
 }
 
 // ========================================
@@ -303,6 +303,11 @@ model City {
   stateId   String   @db.Uuid
   name      String   @db.VarChar(255)
   code      String?  @db.VarChar(10)
+  // Government (MoF 7th Pay Commission) HRA city classification: X / Y / Z.
+  // X = metro urban agglomeration, Y = tier-2, Z = other. Populated by
+  // scripts/classify-cities.js from data/city-classification.json.
+  cityClass String   @default("Z") @db.VarChar(1)
+  isMetro   Boolean  @default(false)
   status    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -314,6 +319,7 @@ model City {
 
   @@index([stateId, status])
   @@index([code])
+  @@index([isMetro])
   @@map("cities")
 }
 

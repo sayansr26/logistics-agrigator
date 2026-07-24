@@ -168,3 +168,9 @@ api-docs/generated/
 graphify-out/cache/
 graphify-out/manifest.json
 graphify-out/cost.json
+# Pincode data pipeline: ignore regenerable/backup artifacts
+# (india_post_raw.csv is re-fetchable via `yarn fetch:india-post`;
+#  *.old-* are timestamped backups). Keep IN.txt, merged_pincode_data.csv,
+#  city-classification.json — those are tracked reference data.
+backend/partner-service/data/india_post_raw.csv
+backend/partner-service/data/*.old-*
