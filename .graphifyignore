@@ -164,3 +164,6 @@ AGENTS.node_modules
 .cursor/
 codex/
 
+
+backend/partner-service/data/india_post_raw.csv
+backend/partner-service/data/*.old-*
