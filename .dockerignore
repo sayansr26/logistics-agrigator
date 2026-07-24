@@ -236,3 +236,7 @@ bower_components/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test/
+# Pincode pipeline: keep IN.txt / merged_pincode_data.csv / city-classification.json
+# in the image (the importer reads them), but not the raw API snapshot or backups.
+backend/partner-service/data/india_post_raw.csv
+backend/partner-service/data/*.old-*

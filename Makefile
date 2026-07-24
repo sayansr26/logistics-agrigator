@@ -51,7 +51,8 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         logs-api-gateway logs-auth logs-user logs-shipment logs-partner \
         logs-wallet logs-support logs-platform logs-license logs-frontend \
         logs-db logs-redis psql backup db-init migrate migrate-all db-sync \
-        seed import-pincodes load-pincodes seed-geo dev dev-down dev-logs
+        seed import-pincodes classify-cities load-pincodes seed-geo \
+        dev dev-down dev-logs
 
 help:
 	@echo "logistics-agrigator Docker targets:"
@@ -86,7 +87,8 @@ help:
 	@echo "  make db-sync                Force schema to match schema.prisma (prisma db push)"
 	@echo "  make migrate SERVICE=<svc>  Apply Prisma migrations for one service"
 	@echo "  make seed                   Seed permissions/roles/superadmin (auth-service)"
-	@echo "  make import-pincodes        Import pincode data (partner-service)"
+	@echo "  make import-pincodes        Import pincode data from the CSV baked into the image"
+	@echo "  make classify-cities        Set metro/X-Y-Z class on cities (run after import)"
 	@echo "  make load-pincodes          Load pincode data (partner-service)"
 	@echo "  make seed-geo               Seed geographical data (partner-service)"
 	@echo ""
@@ -319,8 +321,20 @@ migrate:
 	  --schema=backend/$(SERVICE)/prisma/schema.prisma
 
 # Partner-service data loaders (mirror the package.json *:prod scripts).
+# import-pincodes reads the merged CSV baked into the image at release time
+# (data/merged_pincode_data.csv). Non-TTY exec means the importer's live-vs-
+# local prompt auto-selects LOCAL — it never calls data.gov.in from the server.
+# To ship NEWER pincode data: refresh locally (yarn fetch:india-post &&
+# yarn build:pincodes), commit, make release-prod, then on the server run
+# make deploy && make import-pincodes && make classify-cities.
 import-pincodes:
-	$(COMPOSE_PROD) exec partner-service node backend/partner-service/scripts/import-pincode-data.js
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/scripts/import-pincode-data.js
+
+# Set cityClass (X/Y/Z) + isMetro on every city from the official MoF list
+# (data/city-classification.json, also baked into the image). Idempotent.
+# Run after import-pincodes so newly created cities get classified.
+classify-cities:
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/scripts/classify-cities.js
 
 load-pincodes:
 	$(COMPOSE_PROD) exec partner-service node backend/partner-service/scripts/load-pincode-data.js
