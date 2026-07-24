@@ -342,6 +342,18 @@ class BaseCourierAdapter {
   }
 
   /**
+   * Verify the configured credentials against the live courier API with a
+   * cheap real call (no caching — a stale cache must never fake-pass a bad
+   * credential). Used by the "Test Connection" action before saving.
+   * @returns {Object} { success, message }
+   */
+  async testConnection() {
+    throw new Error(
+      "Not implemented: testConnection must be implemented by subclass",
+    );
+  }
+
+  /**
    * Normalize courier-specific status to internal status
    * @param {string} courierStatus - Courier-specific status string
    * @returns {string} Internal status (CREATED, BOOKED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, RTO, CANCELLED)

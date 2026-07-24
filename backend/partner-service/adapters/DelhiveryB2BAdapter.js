@@ -11,8 +11,9 @@
  * - No cancellation API (Delhivery One portal / account manager only)
  * - No rate API (contract rate card; freight priced by our charge rules)
  *
- * aggregatorConfig: { username, password, clientId, pickupLocationName,
- *                     ltlApiUrl?, labelSize? }
+ * aggregatorConfig: { username, password, clientId, ltlApiUrl?, labelSize? }
+ * Pickup location is NOT config — it comes from the shipment's chosen pickup
+ * address (must match a Delhivery One-registered warehouse).
  */
 
 const BaseCourierAdapter = require("./BaseCourierAdapter");
@@ -41,7 +42,6 @@ class DelhiveryB2BAdapter extends BaseCourierAdapter {
     this.username = this.config.username || "";
     this.password = this.config.password || "";
     this.clientId = this.config.clientId || this.config.warehouseId || "";
-    this.pickupLocationName = this.config.pickupLocationName || "";
 
     logger.info("DelhiveryB2BAdapter initialized", {
       channelName: this.channelName,
@@ -142,14 +142,16 @@ class DelhiveryB2BAdapter extends BaseCourierAdapter {
   async createOrder(shipmentData) {
     this._requireCredentials();
 
-    const pickupLocation =
-      shipmentData.pickupLocation || this.pickupLocationName;
+    // Pickup location is shipper-level: it comes from the shipment's chosen
+    // pickup address and must match a warehouse registered in Delhivery One
+    // (the B2B API has no warehouse-creation endpoint, unlike B2C).
+    const pickupLocation = shipmentData.pickupLocation;
     if (!pickupLocation) {
       throw Object.assign(
         new Error(
-          "Delhivery B2B requires a registered pickup location name (pickupLocationName) matching the warehouse configured in Delhivery One",
+          "Delhivery B2B requires the shipment's pickup location name — it must match a warehouse registered in Delhivery One",
         ),
-        { code: "DELHIVERY_B2B_CONFIG_MISSING", statusCode: 400 },
+        { code: "DELHIVERY_B2B_PICKUP_MISSING", statusCode: 400 },
       );
     }
 
@@ -477,6 +479,27 @@ class DelhiveryB2BAdapter extends BaseCourierAdapter {
 
     await this.setCachedResponse(cacheKey, result, 86400);
     return result;
+  }
+
+  /**
+   * Verify B2B credentials with a live JWT login (forceRefresh bypasses the
+   * cached token so an invalid password can never fake-pass).
+   * @returns {Object} { success, message }
+   */
+  async testConnection() {
+    if (!this.username || !this.password) {
+      return {
+        success: false,
+        message: "Delhivery B2B username/password is missing",
+      };
+    }
+
+    await this.getJwt(true);
+    return {
+      success: true,
+      message:
+        "Delhivery B2B login succeeded — JWT issued. Note: warehouse names are validated per shipment at booking time.",
+    };
   }
 
   /**

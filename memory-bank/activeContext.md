@@ -12,11 +12,19 @@ A partner (e.g. Delhivery) can now have multiple routing channels, each with rul
 
 **Follow-ups:** Delhivery B2B UAT with staging creds (serviceability response schema is portal-gated; cancellation is portal-manual); invoice/e-waybill edit endpoint not wired; booking auto-fallback to next-priority channel; channel-scoped pricing.
 
-**Planned next (scoped, decided July 24, 2026): B2B Registered Pickup Warehouses (~3–4 dev days).** Delhivery B2B has no warehouse-creation API — `pickup_location` must exactly match a warehouse pre-registered in Delhivery One (B2C auto-creates warehouses; B2B cannot). Approved approach = Option 1:
+**Planned next (scoped July 24, 2026, CORRECTED same day): B2B Registered Pickup Warehouse Mapping.** Delhivery B2B has no warehouse-creation API — `pickup_location` must exactly match a warehouse pre-registered in Delhivery One (B2C auto-creates warehouses at booking; B2B cannot).
 
-- Backend (~1 day, no migration): `aggregatorConfig.pickupLocations` becomes a Json array of `{name, address, city, state, pincode, phone}` (Joi updated); new `GET /partners/:partnerId/pickup-locations?businessType=B2B` aggregating active B2B channels' warehouses; B2B adapter accepts ONLY registered names and rejects unknown with a clear 400 (flip current precedence where shipment-passed `pickupLocation` overrides the channel's configured name — free-typed names currently fail at Delhivery's manifest job).
-- Frontend (~1.5–2 days): DELHIVERY_B2B credential form gets a repeatable warehouse-list editor; shipment-create pickup step becomes a warehouse dropdown when shipmentType=B2B (options tagged by partner; selection auto-fills + locks address and implicitly narrows quotes to that partner; B2C keeps free-form). New RTK endpoint in `serviceChannelApi`. Keep separate from saved-address book in v1.
-- Non-code prerequisite: client warehouses must be registered in Delhivery One and multi-pickup enabled by the account manager, else bookings fail at Delhivery's end — add to onboarding checklist.
+⚠️ **Design correction (user):** pickup location is SHIPPER-level, not partner-level. Outlets choose their own pickup/warehouse address during shipment creation (existing journey — unchanged), and the B2B channel config is shared platform-wide, so a warehouse list on the channel was wrong. ✅ **DONE (July 24, 2026):** `pickupLocationName` fully REMOVED from the DELHIVERY_B2B credential Joi schema, the frontend credential form (replaced with a hint that pickup is per-shipment), the `DelhiveryB2BConfig` type, and the adapter (which now takes pickup ONLY from the shipment and throws `DELHIVERY_B2B_PICKUP_MISSING` when absent). Verified: backend modules load + frontend build clean.
+
+Corrected approach — mapping lives on the pickup address, not the channel:
+
+- Pickup/outlet address records get an optional per-B2B-courier "registered warehouse name" mapping (exact Delhivery One string), set during outlet onboarding after ops registers the warehouse with Delhivery.
+- Booking: shipment routed to a B2B channel sends the chosen address's registered name; address without a mapping → clear error / channel excluded ("pickup location not registered with Delhivery B2B").
+- Shipment-creation UX unchanged (no new dropdown); optionally a "B2B-ready" indicator on addresses that have a mapping.
+- Non-code prerequisite: outlet warehouses registered in Delhivery One + multi-pickup enabled by the account manager — onboarding checklist item.
+- Re-estimate when picked up (address-model touch spans the address storage used by outlets; scope depends on where saved pickup addresses live).
+
+**MCP-docs finding (July 24, 2026):** Delhivery's warehouse-management APIs (`POST /api/backend/clientwarehouse/create/` + `/edit/`) are B2C-Express-only (delhivery-mcp doc set has ZERO B2B/LTL content) — and our B2C `DelhiveryAdapter` already auto-creates warehouses with them, so B2C needs no warehouse config anywhere. **Decisive UAT test before building the B2B mapping:** register a warehouse via the B2C API, then attempt a B2B manifest with the same `pickup_location` name. If Delhivery One shares the warehouse registry across B2C/B2B accounts → this whole feature is unnecessary (reuse auto-creation); if not → the per-address mapping plan applies.
 
 ### 🏪 Outlet Module Implementation (P0 - Completed)
 

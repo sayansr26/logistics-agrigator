@@ -220,6 +220,36 @@ class PartnerChannelController {
       });
     }
   }
+
+  /**
+   * Test unsaved channel credentials against the live courier API.
+   * Always responds 200 with { success, message } — a failed credential test
+   * is a valid result, not an HTTP error.
+   */
+  async testChannel(req, res) {
+    try {
+      const result = await partnerChannelService.testChannelCredentials(
+        req.body,
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error in testChannel controller", {
+        error: error.message,
+      });
+
+      res.status(500).json({
+        status: "error",
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error.message,
+        },
+      });
+    }
+  }
 }
 
 module.exports = new PartnerChannelController();

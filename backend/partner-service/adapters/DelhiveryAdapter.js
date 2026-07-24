@@ -621,6 +621,31 @@ class DelhiveryAdapter extends BaseCourierAdapter {
   }
 
   /**
+   * Verify the API token with a live serviceability lookup (bypasses the
+   * pincode cache so a bad token can never fake-pass on cached data).
+   * clientName cannot be verified without creating an order — reported as such.
+   * @returns {Object} { success, message }
+   */
+  async testConnection() {
+    if (!this.apiKey) {
+      return { success: false, message: "API Token is missing" };
+    }
+
+    const response = await this.makeRequest({
+      method: "GET",
+      url: "/c/api/pin-codes/json/?filter_codes=110001",
+    });
+
+    const tokenValid = !!response && typeof response === "object";
+    return {
+      success: tokenValid,
+      message: tokenValid
+        ? "API token is valid (serviceability lookup succeeded). Note: Client Name can only be fully verified on the first real booking."
+        : "Unexpected response from Delhivery — token may be invalid",
+    };
+  }
+
+  /**
    * Normalize Delhivery status to internal status
    * @param {string} courierStatus - Delhivery status string
    * @returns {string} Internal status

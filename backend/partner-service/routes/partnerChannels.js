@@ -17,10 +17,14 @@ const router = express.Router();
 const partnerChannelController = require("../controllers/partnerChannelController");
 const { validate } = require("../middleware/validate");
 const { authMiddleware } = require("../shared/lib/auth");
-const { partnerManagementLimiter } = require("../middleware/rateLimiter");
+const {
+  partnerManagementLimiter,
+  serviceabilityLimiter,
+} = require("../middleware/rateLimiter");
 const {
   createChannelSchema,
   updateChannelSchema,
+  testChannelSchema,
 } = require("../validation/partnerChannelSchemas");
 
 // Apply authentication to all channel routes
@@ -56,6 +60,21 @@ router.get(
 router.get(
   "/partners/:partnerId/channels",
   partnerChannelController.listChannels,
+);
+
+/**
+ * @route   POST /api/v1/channels/test
+ * @desc    Test unsaved channel credentials against the live courier API
+ *          (no DB writes). Uses the lighter serviceability limiter so users
+ *          can retry tests without exhausting the mutation quota.
+ * @access  Private (Admin, Operations)
+ * @body    { aggregatorType, apiUrl?, apiKey?, aggregatorConfig? }
+ */
+router.post(
+  "/channels/test",
+  serviceabilityLimiter,
+  validate(testChannelSchema, "body"),
+  partnerChannelController.testChannel,
 );
 
 // ==========================================

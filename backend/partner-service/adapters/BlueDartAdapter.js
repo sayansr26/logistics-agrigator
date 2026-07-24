@@ -344,6 +344,41 @@ class BlueDartAdapter extends BaseCourierAdapter {
    * @param {string} pincode - 6-digit Indian pincode
    * @returns {Object} Serviceability response
    */
+  /**
+   * Verify license key + login ID with a live pincode lookup (no cache — a
+   * cached result must never fake-pass bad credentials).
+   * @returns {Object} { success, message }
+   */
+  async testConnection() {
+    if (!this.licenseKey || !this.loginId) {
+      return {
+        success: false,
+        message: "BlueDart license key / login ID is missing",
+      };
+    }
+
+    const response = await this.makeRequest({
+      method: "GET",
+      url: "/in/Transportation/PincodeService/v1",
+      params: {
+        pincode: "110001",
+        LicenceKey: this.licenseKey,
+        LoginID: this.loginId,
+      },
+    });
+
+    const errorMessage =
+      response?.ErrorMessage ||
+      (response?.IsError === true ? "BlueDart rejected the credentials" : null);
+
+    return {
+      success: !errorMessage,
+      message: errorMessage
+        ? `BlueDart error: ${errorMessage}`
+        : "BlueDart credentials are valid (pincode service responded)",
+    };
+  }
+
   async checkPincodeServiceability(pincode) {
     const cacheKey = `courier:bluedart:pincode:${pincode}`;
 

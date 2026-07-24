@@ -62,6 +62,7 @@ import {
   useListPartnerChannelsQuery,
   useCreateChannelsMutation,
   useUpdateChannelMutation,
+  useTestChannelMutation,
   useDeleteChannelMutation,
   type ChannelConfig,
   type AggregatorType,
@@ -106,7 +107,6 @@ interface ChannelFormData {
   b2bUsername: string;
   b2bPassword: string;
   b2bClientId: string;
-  b2bPickupLocation: string;
   webhookSecret: string;
 }
 
@@ -125,7 +125,6 @@ const emptyForm: ChannelFormData = {
   b2bUsername: "",
   b2bPassword: "",
   b2bClientId: "",
-  b2bPickupLocation: "",
   webhookSecret: "",
 };
 
@@ -157,7 +156,6 @@ function buildChannelPayload(form: ChannelFormData): ChannelConfig {
         username: form.b2bUsername.trim(),
         password: form.b2bPassword,
         clientId: form.b2bClientId.trim() || undefined,
-        pickupLocationName: form.b2bPickupLocation.trim(),
       };
       break;
     case "BLUEDART":
@@ -194,7 +192,6 @@ function channelToFormData(channel: ChannelConfig): ChannelFormData {
     b2bUsername: config.username ?? "",
     b2bPassword: config.password ?? "",
     b2bClientId: config.clientId ?? "",
-    b2bPickupLocation: config.pickupLocationName ?? "",
     webhookSecret: channel.webhookSecret ?? "",
   };
 }
@@ -300,22 +297,11 @@ function AggregatorConfigFields({
             autoComplete="off"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="b2bPickupLocation">
-            Pickup Location Name <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="b2bPickupLocation"
-            type="text"
-            placeholder="Exact warehouse name registered in Delhivery One"
-            value={form.b2bPickupLocation}
-            onChange={(e) => onChange("b2bPickupLocation", e.target.value)}
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            Must exactly match the pickup warehouse registered in Delhivery One
-          </p>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Pickup location is chosen per shipment during booking — it must match
+          a warehouse registered in Delhivery One (no warehouse config needed
+          here).
+        </p>
       </div>
     );
   }
@@ -535,6 +521,10 @@ export default function ManageChannelsPage() {
   );
   const [form, setForm] = useState<ChannelFormData>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   const { hasPermission } = usePermission();
   const canCreate = hasPermission("partner", "create", "all");
@@ -555,6 +545,7 @@ export default function ManageChannelsPage() {
     useCreateChannelsMutation();
   const [updateChannel, { isLoading: isUpdating }] = useUpdateChannelMutation();
   const [deleteChannel, { isLoading: isDeleting }] = useDeleteChannelMutation();
+  const [testChannel, { isLoading: isTesting }] = useTestChannelMutation();
 
   const partner = partnerData?.data?.partner;
   const channels = channelsData?.data?.channels ?? [];
@@ -564,6 +555,7 @@ export default function ManageChannelsPage() {
   function handleFieldChange(field: keyof ChannelFormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
     setFormError(null);
+    setTestResult(null);
   }
 
   function handleAggregatorChange(value: string) {
@@ -579,15 +571,16 @@ export default function ManageChannelsPage() {
       b2bUsername: "",
       b2bPassword: "",
       b2bClientId: "",
-      b2bPickupLocation: "",
     }));
     setFormError(null);
+    setTestResult(null);
   }
 
   function openAddDialog() {
     setEditingChannel(null);
     setForm(emptyForm);
     setFormError(null);
+    setTestResult(null);
     setShowDialog(true);
   }
 
@@ -595,6 +588,7 @@ export default function ManageChannelsPage() {
     setEditingChannel(channel);
     setForm(channelToFormData(channel));
     setFormError(null);
+    setTestResult(null);
     setShowDialog(true);
   }
 
@@ -603,6 +597,67 @@ export default function ManageChannelsPage() {
     setEditingChannel(null);
     setForm(emptyForm);
     setFormError(null);
+    setTestResult(null);
+  }
+
+  // Validate only the credential fields needed for a live connection test
+  function validateCredentialsForTest(): string | null {
+    if (form.aggregatorType === "DELHIVERY") {
+      if (!form.apiKey.trim()) return "Enter the API Token to test.";
+      if (!form.delhiveryClientName.trim())
+        return "Enter the Client Name to test.";
+    }
+    if (form.aggregatorType === "DELHIVERY_B2B") {
+      if (!form.b2bUsername.trim()) return "Enter the API Username to test.";
+      if (!form.b2bPassword) return "Enter the API Password to test.";
+    }
+    if (form.aggregatorType === "BLUEDART") {
+      if (!form.licenseKey.trim()) return "Enter the License Key to test.";
+      if (!form.loginId.trim()) return "Enter the Login ID to test.";
+      if (!form.customerCode.trim()) return "Enter the Customer Code to test.";
+    }
+    return null;
+  }
+
+  async function handleTest() {
+    const credentialError = validateCredentialsForTest();
+    if (credentialError) {
+      setTestResult(null);
+      setFormError(credentialError);
+      return;
+    }
+
+    setFormError(null);
+    setTestResult(null);
+
+    const payload = buildChannelPayload(form);
+
+    try {
+      const response = await testChannel({
+        aggregatorType: payload.aggregatorType ?? form.aggregatorType,
+        apiUrl: payload.apiUrl || undefined,
+        apiKey: payload.apiKey,
+        aggregatorConfig: payload.aggregatorConfig,
+      }).unwrap();
+      setTestResult({
+        success: response.data.success,
+        message: response.data.message,
+      });
+    } catch (err: unknown) {
+      const errorMessage =
+        err &&
+        typeof err === "object" &&
+        "data" in err &&
+        err.data &&
+        typeof err.data === "object" &&
+        "error" in err.data &&
+        err.data.error &&
+        typeof err.data.error === "object" &&
+        "message" in err.data.error
+          ? String((err.data.error as { message: string }).message)
+          : "Connection test failed. Please try again.";
+      setTestResult({ success: false, message: errorMessage });
+    }
   }
 
   // Validation
@@ -621,8 +676,6 @@ export default function ManageChannelsPage() {
         return "API Username is required for Delhivery B2B.";
       if (!editingChannel && !form.b2bPassword)
         return "API Password is required for Delhivery B2B.";
-      if (!form.b2bPickupLocation.trim())
-        return "Pickup Location Name is required for Delhivery B2B.";
     }
 
     if (form.aggregatorType === "BLUEDART") {
@@ -992,13 +1045,51 @@ export default function ManageChannelsPage() {
                 <AlertDescription>{formError}</AlertDescription>
               </Alert>
             )}
+
+            {testResult && (
+              <Alert
+                variant={testResult.success ? "default" : "destructive"}
+                className={
+                  testResult.success
+                    ? "border-green-200 bg-green-50 text-green-800"
+                    : undefined
+                }
+              >
+                {testResult.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  {testResult.success ? "Connection OK — " : "Test failed — "}
+                  {testResult.message}
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={isSaving || isTesting}
+              className="mr-auto"
+            >
+              {isTesting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Network className="h-4 w-4 mr-2" />
+              )}
+              Test Connection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={closeDialog}
+              disabled={isSaving || isTesting}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving || isTesting}>
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingChannel ? "Save Changes" : "Add Channel"}
             </Button>

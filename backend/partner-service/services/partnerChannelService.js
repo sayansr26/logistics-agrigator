@@ -370,6 +370,60 @@ class PartnerChannelService {
   }
 
   // ==========================================
+  // CREDENTIAL TESTING
+  // ==========================================
+
+  /**
+   * Test unsaved credential data against the live courier API so users can
+   * verify credentials BEFORE saving. No DB writes; single attempt (no retry
+   * backoff) so the result comes back quickly.
+   * @param {Object} channelData - { aggregatorType, apiUrl?, apiKey?, aggregatorConfig? }
+   * @returns {Promise<{success: boolean, message: string, aggregatorType: string}>}
+   */
+  async testChannelCredentials(channelData) {
+    const { createAdapter } = require("../adapters/AdapterFactory");
+
+    const adapter = createAdapter({
+      aggregatorType: channelData.aggregatorType,
+      apiUrl: channelData.apiUrl || "",
+      apiKey: channelData.apiKey || "",
+      aggregatorConfig: channelData.aggregatorConfig || {},
+      channelName: channelData.channelName || "credential-test",
+    });
+
+    if (!adapter) {
+      return {
+        success: false,
+        message: "No adapter available for this aggregator type",
+        aggregatorType: channelData.aggregatorType,
+      };
+    }
+
+    // Fast-fail for interactive testing: one attempt, shorter timeout
+    adapter.maxRetryAttempts = 1;
+    adapter.client.defaults.timeout = 10000;
+
+    try {
+      const result = await adapter.testConnection();
+      logger.info("Channel credential test completed", {
+        aggregatorType: channelData.aggregatorType,
+        success: result.success,
+      });
+      return { ...result, aggregatorType: channelData.aggregatorType };
+    } catch (error) {
+      logger.warn("Channel credential test failed", {
+        aggregatorType: channelData.aggregatorType,
+        error: error.message,
+      });
+      return {
+        success: false,
+        message: error.message || "Credential test failed",
+        aggregatorType: channelData.aggregatorType,
+      };
+    }
+  }
+
+  // ==========================================
   // CHANNEL MODE AUTO-SYNC
   // ==========================================
 

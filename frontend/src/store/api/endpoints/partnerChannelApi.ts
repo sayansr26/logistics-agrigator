@@ -28,7 +28,6 @@ export interface DelhiveryB2BConfig {
   username?: string;
   password?: string;
   clientId?: string;
-  pickupLocationName?: string;
   ltlApiUrl?: string;
   [key: string]: any;
 }
@@ -67,6 +66,22 @@ export interface ChannelResponse {
 export interface ActiveChannelResponse {
   status: "success" | "error";
   data: ChannelConfig & { mode?: "SINGLE" | "MULTI" };
+}
+
+export interface TestChannelRequest {
+  aggregatorType: AggregatorType;
+  apiUrl?: string;
+  apiKey?: string;
+  aggregatorConfig?: AggregatorConfig;
+}
+
+export interface TestChannelResponse {
+  status: "success" | "error";
+  data: {
+    success: boolean;
+    message: string;
+    aggregatorType: string;
+  };
 }
 
 // ===========================
@@ -146,6 +161,18 @@ export const partnerChannelApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * Test unsaved channel credentials against the live courier API.
+     * No cache tags — nothing is persisted.
+     */
+    testChannel: builder.mutation<TestChannelResponse, TestChannelRequest>({
+      query: (body) => ({
+        url: `/api/v1/channels/test`,
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /**
      * Delete a channel
      */
     deleteChannel: builder.mutation<
@@ -172,5 +199,6 @@ export const {
   useListPartnerChannelsQuery,
   useCreateChannelsMutation,
   useUpdateChannelMutation,
+  useTestChannelMutation,
   useDeleteChannelMutation,
 } = partnerChannelApi;
