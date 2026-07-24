@@ -306,6 +306,7 @@ async function calculateRates(params, userContext = null) {
     outletId,
     sortBy,
     skipServiceabilityCheck,
+    shipmentType,
   } = params;
 
   // Validate required parameters
@@ -339,6 +340,7 @@ async function calculateRates(params, userContext = null) {
       sortBy: sortBy || "cheapest",
       userContext,
       skipServiceabilityCheck: skipServiceabilityCheck || false,
+      shipmentType: shipmentType || "B2C",
     });
 
     // Transform to expected response format (maintaining backward compatibility)
@@ -356,6 +358,7 @@ async function calculateRates(params, userContext = null) {
       zoneName: rate.zoneName,
       breakdown: rate.breakdown,
       ...(rate.discount && { discount: rate.discount }),
+      ...(rate.channel && { channel: rate.channel }),
       serviceType: serviceType || "standard",
       isServiceable: rate.serviceable,
     }));

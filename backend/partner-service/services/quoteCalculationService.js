@@ -20,6 +20,14 @@ let _chargesRuleCalcService = null;
 let _zoneCoverageValidationService = null;
 let _chargeDiscountPackageService = null;
 let _outletContextService = null;
+let _carrierAccountService = null;
+
+const getCarrierAccountService = () => {
+  if (!_carrierAccountService) {
+    _carrierAccountService = require("./carrierAccountService");
+  }
+  return _carrierAccountService;
+};
 
 const getDistanceZoneService = () => {
   if (!_distanceZoneService) {
@@ -81,6 +89,7 @@ function generateCacheKey(params) {
     dimensions,
     partnerId,
     sortBy = "cheapest",
+    shipmentType = "B2C",
   } = params;
 
   const dimStr = dimensions
@@ -88,7 +97,7 @@ function generateCacheKey(params) {
     : "0x0x0";
 
   const fragile = params.isFragile ? "1" : "0";
-  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:${partnerId || "all"}:${sortBy}:f${fragile}`;
+  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:${partnerId || "all"}:${sortBy}:f${fragile}:${shipmentType}`;
 }
 
 /**
@@ -551,6 +560,7 @@ async function calculateRates(params) {
     sortBy = "cheapest",
     userContext,
     skipServiceabilityCheck = false,
+    shipmentType = "B2C",
   } = params;
 
   logger.info("Calculating rates", {
@@ -622,6 +632,7 @@ async function calculateRates(params) {
     partnerId,
     sortBy,
     isFragile,
+    shipmentType,
   });
   const redis = getRedisClient();
   const skipCache = !!outletBadge;
@@ -723,6 +734,50 @@ async function calculateRates(params) {
           }
         }
 
+        // Rule-based channel eligibility: a partner with service channels can
+        // only quote when one matches the shipment profile (B2B/B2C + weight +
+        // order amount + payment mode). Partners without channels stay on the
+        // legacy path. Rerates (skipServiceabilityCheck) never hard-fail here.
+        const channelSelection = await getCarrierAccountService().selectChannel(
+          partner.id,
+          {
+            weight: effectiveWeight,
+            businessType: shipmentType,
+            orderAmount: declaredValue || null,
+            paymentType,
+          },
+        );
+
+        if (channelSelection.mode === "NO_MATCH" && !skipServiceabilityCheck) {
+          return {
+            partnerId: partner.id,
+            partnerName: partner.displayName || partner.name,
+            serviceable: false,
+            reason:
+              "No channel matches shipment profile (type/weight/amount/payment)",
+          };
+        }
+
+        const matchedChannel =
+          channelSelection.mode === "MATCHED" ? channelSelection.channel : null;
+
+        // Recompute volumetric weight with the matched channel's divisor when
+        // it differs from the default 5000
+        let partnerEffectiveWeight = effectiveWeight;
+        const channelDivisor = matchedChannel?.channelConfig?.volumetricDivisor;
+        if (
+          channelDivisor &&
+          Number(channelDivisor) !== 5000 &&
+          dimensions?.length &&
+          dimensions?.width &&
+          dimensions?.height
+        ) {
+          const channelVolumetricWeight =
+            (dimensions.length * dimensions.width * dimensions.height) /
+            Number(channelDivisor);
+          partnerEffectiveWeight = Math.max(weight, channelVolumetricWeight);
+        }
+
         // Distance zone matching for pricing context (DISTANCE_BASE_WEIGHT rules).
         // Do not hard-fail here: many partners price with WEIGHT / INVOICE_VALUE /
         // ZONE_TO_ZONE_WEIGHT only. Missing distance slabs must not block quotes.
@@ -750,7 +805,7 @@ async function calculateRates(params) {
 
         // Build shipment context for the charge rule engine
         const chargeContext = {
-          effectiveWeight,
+          effectiveWeight: partnerEffectiveWeight,
           invoiceValue: declaredValue,
           isFragile,
           paymentType,
@@ -860,6 +915,15 @@ async function calculateRates(params) {
           baseRate: totalRate,
           breakdown: breakdownToUse,
           ...(discountInfo && { discount: discountInfo }),
+          ...(matchedChannel && {
+            channel: {
+              id: matchedChannel.id,
+              channelName: matchedChannel.channelName,
+              accountRef: matchedChannel.accountRef,
+              serviceType: matchedChannel.serviceType,
+              businessType: matchedChannel.businessType,
+            },
+          }),
         };
       } catch (error) {
         logger.warn("Rate calculation failed for partner", {

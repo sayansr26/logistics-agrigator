@@ -1,5 +1,6 @@
 const ADAPTER_MAP = {
   DELHIVERY: require("./DelhiveryAdapter"),
+  DELHIVERY_B2B: require("./DelhiveryB2BAdapter"),
   BLUEDART: require("./BlueDartAdapter"),
 };
 

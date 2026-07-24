@@ -232,6 +232,7 @@ async function attemptCourierBooking({
   pickupAddress,
   deliveryAddress,
   packageDetails,
+  shipmentType,
   paymentType,
   codAmount,
   productDescription,
@@ -248,6 +249,7 @@ async function attemptCourierBooking({
       pickupAddress,
       deliveryAddress,
       packageDetails,
+      shipmentType: shipmentType || "B2C",
       paymentType,
       codAmount: paymentType === "COD" ? codAmount || 0 : 0,
       productDescription: productDescription || "Package",
@@ -632,6 +634,7 @@ async function createShipment(req, res) {
             width: packageDetails.dimensions?.width,
             height: packageDetails.dimensions?.height,
           },
+          shipmentType,
           paymentType,
           codAmount,
           productDescription: packageDetails.description || "Package",
@@ -649,6 +652,9 @@ async function createShipment(req, res) {
               awbNumber: courierBookingResult.awbNumber,
               partnerShipmentId: courierBookingResult.partnerShipmentId || null,
               trackingUrl: bookingAttempt.trackingUrl,
+              courierChannelId: courierBookingResult.channel?.id || null,
+              courierChannelName:
+                courierBookingResult.channel?.channelName || null,
               status: "BOOKED",
               bookingStatus: "BOOKED",
             },
@@ -887,6 +893,7 @@ async function assignPartner(req, res) {
         height: true,
         numberOfBoxes: true,
         serviceType: true,
+        shipmentType: true,
         awbNumber: true,
         partnerId: true,
         partnerName: true,
@@ -1101,6 +1108,7 @@ async function assignPartner(req, res) {
           width: toNumber(shipment.width),
           height: toNumber(shipment.height),
         },
+        shipmentType: shipment.shipmentType,
         paymentType: shipment.paymentType,
         codAmount: shipment.codAmount ? toNumber(shipment.codAmount) : 0,
         productDescription:
@@ -1118,6 +1126,8 @@ async function assignPartner(req, res) {
           awbNumber: courierBookingResult.awbNumber,
           partnerShipmentId: courierBookingResult.partnerShipmentId || null,
           trackingUrl: bookingAttempt.trackingUrl,
+          courierChannelId: courierBookingResult.channel?.id || null,
+          courierChannelName: courierBookingResult.channel?.channelName || null,
           status: "BOOKED",
           bookingStatus: "BOOKED",
         },
@@ -1325,6 +1335,7 @@ async function retryCourierBooking(req, res) {
         orderId: true,
         status: true,
         bookingStatus: true,
+        shipmentType: true,
         paymentType: true,
         codAmount: true,
         totalCost: true,
@@ -1399,6 +1410,7 @@ async function retryCourierBooking(req, res) {
         width: parseFloat(shipment.width.toString()),
         height: parseFloat(shipment.height.toString()),
       },
+      shipmentType: shipment.shipmentType,
       paymentType: shipment.paymentType,
       codAmount: shipment.paymentType === "COD" ? shipment.codAmount || 0 : 0,
       productDescription:
@@ -1426,6 +1438,8 @@ async function retryCourierBooking(req, res) {
         awbNumber: courierBookingResult.awbNumber,
         partnerShipmentId: courierBookingResult.partnerShipmentId || null,
         trackingUrl: retryTrackingUrl,
+        courierChannelId: courierBookingResult.channel?.id || null,
+        courierChannelName: courierBookingResult.channel?.channelName || null,
         status: "BOOKED",
         bookingStatus: "BOOKED",
       },
@@ -2314,6 +2328,7 @@ async function calculateRates(req, res) {
       serviceType = "STANDARD",
       dimensions = { length: 10, width: 10, height: 10 },
       codAmount,
+      shipmentType = "B2C",
     } = req.body;
 
     logger.info("Calculating shipping rates", {
@@ -2333,6 +2348,7 @@ async function calculateRates(req, res) {
       serviceType: serviceType.toUpperCase(),
       dimensions,
       codAmount,
+      shipmentType,
     };
 
     const authToken = req.header("Authorization");
@@ -2414,6 +2430,7 @@ async function selectPartner(req, res) {
       dimensions = { length: 10, width: 10, height: 10 },
       codAmount,
       strategy = "cheapest", // cheapest, fastest, balanced
+      shipmentType = "B2C",
     } = req.body;
 
     logger.info("Selecting courier partner", {
@@ -2433,6 +2450,7 @@ async function selectPartner(req, res) {
       dimensions,
       codAmount,
       strategy,
+      shipmentType,
     };
 
     // Select optimal courier using Partner Service
@@ -2643,6 +2661,7 @@ async function getShipmentQuotes(req, res) {
       isFragile: req.body.isFragile || false,
       outletId: req.body.outletId || null,
       sortBy: req.body.sortBy || "cheapest",
+      shipmentType,
     };
 
     const authToken = req.header("Authorization");
@@ -2706,6 +2725,7 @@ async function getShipmentQuotes(req, res) {
           serviceable:
             rate.isServiceable !== false && rate.serviceable !== false,
           ...(rate.discount && { discount: rate.discount }),
+          ...(rate.channel && { channel: rate.channel }),
         };
       })
       .sort((a, b) => a.totalAmount - b.totalAmount);

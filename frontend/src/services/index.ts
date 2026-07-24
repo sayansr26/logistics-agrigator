@@ -7,7 +7,6 @@ import { PartnersApiService } from "./api/partners-api";
 import { GeographicalApiService } from "./api/geographical-api";
 import { settlementApi } from "./api/settlement-api";
 import { shipmentRerateApi } from "./api/shipment-rerate-api";
-import { carrierAccountsApi } from "./api/carrier-accounts-api";
 
 export { AuthApiService } from "./api/auth-api";
 export { UserApiService } from "./api/user-api";
@@ -35,7 +34,6 @@ export const setTokenForAllServices = (token: string | null) => {
   geographicalApiService.setAccessToken(token);
   settlementApi.setAccessToken(token);
   shipmentRerateApi.setAccessToken(token);
-  carrierAccountsApi.setAccessToken(token);
 };
 
 // Clear tokens from all services
@@ -48,5 +46,4 @@ export const clearTokensFromAllServices = () => {
   geographicalApiService.setAccessToken(null);
   settlementApi.setAccessToken(null);
   shipmentRerateApi.setAccessToken(null);
-  carrierAccountsApi.setAccessToken(null);
 };

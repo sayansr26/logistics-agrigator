@@ -9,6 +9,7 @@
  */
 
 const partnerChannelService = require("./partnerChannelService");
+const carrierAccountService = require("./carrierAccountService");
 const {
   createAdapter,
   getSupportedAggregators,
@@ -56,6 +57,82 @@ class CourierOperationService {
   }
 
   /**
+   * Resolve the channel for a shipment profile via rule-based selection.
+   * - No service channels configured → legacy getActiveChannel (backward compatible)
+   * - Channels exist but none match → 422 CHANNEL_NOT_MATCHED (fail loudly;
+   *   booking on a mismatched account is worse than a visible config gap)
+   * - Match → adapter-ready credentials resolved from the linked credential
+   *   account + per-channel overrides
+   * @param {string} partnerId
+   * @param {Object} profile - { weight, shipmentType, orderAmount, paymentType }
+   * @returns {Promise<{channel: Object, serviceChannel: Object|null}>}
+   * @private
+   */
+  async _resolveBookingChannel(partnerId, profile) {
+    const selection = await carrierAccountService.selectChannel(partnerId, {
+      weight: profile.weight,
+      businessType: profile.shipmentType || "B2C",
+      orderAmount: profile.orderAmount ?? null,
+      paymentType: profile.paymentType || null,
+    });
+
+    if (selection.mode === "NO_MATCH") {
+      throw Object.assign(
+        new Error(
+          `No channel matches shipment profile (type=${profile.shipmentType || "B2C"}, ` +
+            `weight=${profile.weight}kg, amount=${profile.orderAmount ?? "n/a"}, ` +
+            `payment=${profile.paymentType || "n/a"}) for partner ${partnerId}`,
+        ),
+        { code: "CHANNEL_NOT_MATCHED", statusCode: 422 },
+      );
+    }
+
+    if (selection.mode === "MATCHED") {
+      const channel = await carrierAccountService.resolveChannelCredentials(
+        selection.channel,
+      );
+      return { channel, serviceChannel: selection.channel };
+    }
+
+    // LEGACY — partner has no rule channels; behave exactly as before
+    const channel = await this._getValidatedChannel(partnerId);
+    return { channel, serviceChannel: null };
+  }
+
+  /**
+   * Resolve credentials for operations on an EXISTING shipment (track/label/
+   * cancel): prefer the channel it was booked on (a B2B shipment must be
+   * cancelled with B2B credentials), falling back to the legacy active channel.
+   * @param {string} partnerId
+   * @param {string|null} awbNumber
+   * @returns {Promise<Object>} adapter-ready channel config
+   * @private
+   */
+  async _resolveShipmentChannel(partnerId, awbNumber) {
+    if (awbNumber) {
+      const shipment = await prisma.partnerShipment.findFirst({
+        where: { partnerId, partnerAwbNo: awbNumber },
+        select: { serviceChannelId: true },
+      });
+
+      if (shipment?.serviceChannelId) {
+        try {
+          return await carrierAccountService.resolveChannelCredentials(
+            shipment.serviceChannelId,
+          );
+        } catch (error) {
+          logger.warn(
+            "Failed to resolve booked service channel, falling back to active channel",
+            { partnerId, awbNumber, error: error.message },
+          );
+        }
+      }
+    }
+
+    return this._getValidatedChannel(partnerId);
+  }
+
+  /**
    * Book a shipment with the courier partner
    * @param {string} partnerId - Partner ID
    * @param {Object} shipmentData - Shipment booking details
@@ -67,9 +144,28 @@ class CourierOperationService {
       logger.info("Booking shipment", {
         partnerId,
         orderId: shipmentData.orderId,
+        shipmentType: shipmentData.shipmentType || "B2C",
       });
 
-      const channel = await this._getValidatedChannel(partnerId);
+      const { channel, serviceChannel } = await this._resolveBookingChannel(
+        partnerId,
+        {
+          weight: shipmentData.packageDetails?.weight,
+          shipmentType: shipmentData.shipmentType,
+          orderAmount: shipmentData.declaredValue ?? null,
+          paymentType: shipmentData.paymentType,
+        },
+      );
+
+      if (serviceChannel) {
+        logger.info("Rule-based channel selected for booking", {
+          partnerId,
+          serviceChannelId: serviceChannel.id,
+          channelName: serviceChannel.channelName,
+          businessType: serviceChannel.businessType,
+        });
+      }
+
       const adapter = createAdapter(channel);
       if (!adapter) {
         throw Object.assign(
@@ -138,7 +234,8 @@ class CourierOperationService {
             calculatedRate: shipmentData.declaredValue || 0,
             codAmount:
               shipmentData.paymentType === "COD" ? shipmentData.codAmount : 0,
-            serviceType: "SURFACE",
+            serviceChannelId: serviceChannel?.id ?? null,
+            serviceType: serviceChannel?.serviceType ?? "SURFACE",
           },
         });
       }
@@ -154,6 +251,9 @@ class CourierOperationService {
             partnerId,
             orderId: normalizedShipmentData.orderId,
             awbNumber: result?.awbNumber,
+            shipmentType: shipmentData.shipmentType || "B2C",
+            serviceChannelId: serviceChannel?.id ?? null,
+            serviceChannelName: serviceChannel?.channelName ?? null,
           },
           ipAddress: null,
           userAgent: null,
@@ -163,12 +263,22 @@ class CourierOperationService {
       logger.info("Shipment booked successfully", {
         partnerId,
         awbNumber: result?.awbNumber,
+        serviceChannelId: serviceChannel?.id ?? null,
       });
 
       return {
         success: true,
         awbNumber: result?.awbNumber,
         orderId: shipmentData.orderId,
+        channel: serviceChannel
+          ? {
+              id: serviceChannel.id,
+              channelName: serviceChannel.channelName,
+              accountRef: serviceChannel.accountRef,
+              serviceType: serviceChannel.serviceType,
+              businessType: serviceChannel.businessType,
+            }
+          : null,
         courierResponse: result,
       };
     } catch (error) {
@@ -193,7 +303,7 @@ class CourierOperationService {
     try {
       logger.info("Cancelling shipment", { partnerId, awbNumber, reason });
 
-      const channel = await this._getValidatedChannel(partnerId);
+      const channel = await this._resolveShipmentChannel(partnerId, awbNumber);
       const adapter = createAdapter(channel);
       const result = await adapter.cancelOrder(awbNumber, reason);
 
@@ -251,7 +361,7 @@ class CourierOperationService {
     try {
       logger.info("Tracking shipment", { partnerId, awbNumber });
 
-      const channel = await this._getValidatedChannel(partnerId);
+      const channel = await this._resolveShipmentChannel(partnerId, awbNumber);
       const adapter = createAdapter(channel);
       const result = await adapter.trackShipment(awbNumber);
 
@@ -344,7 +454,7 @@ class CourierOperationService {
         format,
       });
 
-      const channel = await this._getValidatedChannel(partnerId);
+      const channel = await this._resolveShipmentChannel(partnerId, awbNumber);
       const adapter = createAdapter(channel);
       const result = await adapter.getLabel(awbNumber, format);
 

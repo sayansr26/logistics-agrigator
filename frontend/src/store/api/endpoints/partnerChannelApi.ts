@@ -24,10 +24,17 @@ export interface BlueDartConfig {
   customerCode?: string;
 }
 
+export interface DelhiveryB2BConfig {
+  username?: string;
+  password?: string;
+  clientId?: string;
+  pickupLocationName?: string;
+  ltlApiUrl?: string;
+  [key: string]: any;
+}
+
 export type AggregatorConfig =
-  | DelhiveryConfig
-  | BlueDartConfig
-  | Record<string, any>;
+  DelhiveryConfig | BlueDartConfig | DelhiveryB2BConfig | Record<string, any>;
 
 export interface ChannelConfig {
   id?: string;

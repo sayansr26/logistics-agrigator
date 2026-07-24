@@ -21,7 +21,9 @@ class CarrierAccountController {
         data: { accounts, total: accounts.length },
       });
     } catch (error) {
-      logger.error("Error in listAccounts controller", { error: error.message });
+      logger.error("Error in listAccounts controller", {
+        error: error.message,
+      });
       res.status(500).json({
         status: "error",
         error: { code: "INTERNAL_ERROR", message: error.message },
@@ -30,34 +32,46 @@ class CarrierAccountController {
   }
 
   /**
-   * Select the best-matching carrier account for a chargeable weight.
+   * Select the best-matching channel for a shipment profile.
    * Used by shipment-service at rating/booking time.
-   * Query: ?weight=<kg>&serviceType=<SURFACE|AIR|EXPRESS>
+   * Query: ?weight=<kg>&businessType=<B2B|B2C>&orderAmount=<INR>&paymentType=<COD|PREPAID>&serviceType=<SURFACE|AIR|EXPRESS>
    */
   async selectAccount(req, res) {
     try {
       const { partnerId } = req.params;
-      const { weight, serviceType } = req.query;
+      const { weight, businessType, orderAmount, paymentType, serviceType } =
+        req.query;
 
-      const account = await carrierAccountService.selectAccount(
-        partnerId,
-        parseFloat(weight),
-        serviceType || null,
-      );
+      const selection = await carrierAccountService.selectChannel(partnerId, {
+        weight: parseFloat(weight),
+        businessType: businessType || "B2C",
+        orderAmount:
+          orderAmount !== undefined && orderAmount !== ""
+            ? parseFloat(orderAmount)
+            : null,
+        paymentType: paymentType || null,
+        serviceType: serviceType || null,
+      });
 
-      if (!account) {
+      if (selection.mode === "NO_MATCH") {
         return res.status(404).json({
           status: "error",
           error: {
-            code: "NOT_FOUND",
-            message: "No carrier account matched the given weight slab",
+            code: "CHANNEL_NOT_MATCHED",
+            message:
+              "No channel matches the shipment profile (type/weight/amount/payment)",
           },
         });
       }
 
-      res.status(200).json({ status: "success", data: account });
+      res.status(200).json({
+        status: "success",
+        data: { mode: selection.mode, channel: selection.channel || null },
+      });
     } catch (error) {
-      logger.error("Error in selectAccount controller", { error: error.message });
+      logger.error("Error in selectAccount controller", {
+        error: error.message,
+      });
       res.status(500).json({
         status: "error",
         error: { code: "INTERNAL_ERROR", message: error.message },
@@ -83,10 +97,14 @@ class CarrierAccountController {
       res.status(201).json({
         status: "success",
         data: { accounts: results, total: results.length },
-        meta: { message: `Successfully created ${results.length} carrier account(s)` },
+        meta: {
+          message: `Successfully created ${results.length} carrier account(s)`,
+        },
       });
     } catch (error) {
-      logger.error("Error in createAccounts controller", { error: error.message });
+      logger.error("Error in createAccounts controller", {
+        error: error.message,
+      });
       const statusCode = error.message.includes("not found")
         ? 404
         : error.message.includes("already exists")
@@ -119,7 +137,9 @@ class CarrierAccountController {
 
       res.status(200).json({ status: "success", data: account });
     } catch (error) {
-      logger.error("Error in updateAccount controller", { error: error.message });
+      logger.error("Error in updateAccount controller", {
+        error: error.message,
+      });
       const statusCode =
         error.message.includes("not found") ||
         error.message.includes("Record to update not found")
@@ -152,7 +172,9 @@ class CarrierAccountController {
         data: { message: "Carrier account deleted successfully" },
       });
     } catch (error) {
-      logger.error("Error in deleteAccount controller", { error: error.message });
+      logger.error("Error in deleteAccount controller", {
+        error: error.message,
+      });
       const statusCode =
         error.message.includes("not found") ||
         error.message.includes("Record to delete does not exist")

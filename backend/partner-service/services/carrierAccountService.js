@@ -1,12 +1,13 @@
 /**
  * Carrier Account (Service Channel) Service
  *
- * Manages weight-slab shipping products / accounts per carrier partner
- * (e.g. "Delhivery Surface A" 0-5kg → Account 1, "Delhivery Air" all-weight → Account 3).
+ * Manages rule-based shipping channels/accounts per carrier partner
+ * (e.g. "Delhivery B2C" 0-100kg → Account 1, "Delhivery B2B Heavy" 100kg+ → LTL account).
  *
- * Distinct from PartnerChannelConfig (credential/env channel) — this is a shipping
- * PRODUCT keyed by weight slab + account type, selected at rating/booking time by
- * chargeable weight.
+ * Each channel carries routing rules (businessType B2B/B2C, weight slab,
+ * order-amount range, payment modes, serviceType, priority) plus a link to a
+ * credential account (PartnerChannelConfig) and optional per-channel credential
+ * overrides. Selected at rating/booking time via selectChannel().
  *
  * Follows auth-service patterns: Prisma ORM, service layer, audit logging.
  */
@@ -23,12 +24,25 @@ const PUBLIC_ACCOUNT_SELECT = {
   channelName: true,
   accountRef: true,
   serviceType: true,
+  businessType: true,
   minWeight: true,
   maxWeight: true,
+  minOrderAmount: true,
+  maxOrderAmount: true,
+  paymentModes: true,
   isActive: true,
   priority: true,
   createdAt: true,
   updatedAt: true,
+  // Non-secret divisor from the linked credential account (for volumetric calc)
+  channelConfig: { select: { volumetricDivisor: true } },
+};
+
+// Selection outcomes for selectChannel()
+const SELECTION_MODES = {
+  LEGACY: "LEGACY", // partner has no channels — caller uses getActiveChannel
+  NO_MATCH: "NO_MATCH", // channels exist but none matches the shipment profile
+  MATCHED: "MATCHED",
 };
 
 class CarrierAccountService {
@@ -45,46 +59,164 @@ class CarrierAccountService {
     return prisma.partnerServiceChannel.findMany({
       where: { partnerId },
       select: PUBLIC_ACCOUNT_SELECT,
-      orderBy: [{ serviceType: "asc" }, { priority: "asc" }, { minWeight: "asc" }],
+      orderBy: [
+        { priority: "asc" },
+        { serviceType: "asc" },
+        { minWeight: "asc" },
+      ],
     });
   }
 
   /**
-   * Select the best-matching carrier account for a given chargeable weight.
-   * Match rule: isActive AND minWeight <= weight AND (maxWeight is null OR maxWeight >= weight),
-   * optionally filtered by serviceType, ordered by priority then narrowest slab.
+   * Select the best-matching channel for a shipment profile.
+   *
+   * Match rule: isActive AND businessType IN (shipment type, BOTH)
+   *   AND weight within [minWeight, maxWeight] (null maxWeight = open)
+   *   AND orderAmount within [minOrderAmount, maxOrderAmount] (null = open)
+   *   AND paymentType in paymentModes (empty list = all modes)
+   *   AND serviceType filter when given,
+   * ordered by priority then narrowest weight slab.
+   *
    * @param {string} partnerId
-   * @param {number} chargeableWeight - kg
-   * @param {string|null} [serviceType] - SURFACE | AIR | EXPRESS
-   * @returns {Promise<Object|null>} matching account or null
+   * @param {Object} criteria
+   * @param {number} criteria.weight - chargeable weight in kg
+   * @param {string} [criteria.businessType="B2C"] - B2B | B2C
+   * @param {number|null} [criteria.orderAmount] - declared/invoice value (INR)
+   * @param {string|null} [criteria.paymentType] - COD | PREPAID
+   * @param {string|null} [criteria.serviceType] - SURFACE | AIR | EXPRESS
+   * @returns {Promise<{mode: string, channel?: Object}>}
    */
-  async selectAccount(partnerId, chargeableWeight, serviceType = null) {
-    const weight = Number(chargeableWeight) || 0;
+  async selectChannel(partnerId, criteria = {}) {
+    const {
+      businessType = "B2C",
+      orderAmount = null,
+      paymentType = null,
+      serviceType = null,
+    } = criteria;
+    const weight = Number(criteria.weight) || 0;
+
+    const totalActive = await prisma.partnerServiceChannel.count({
+      where: { partnerId, isActive: true },
+    });
+
+    if (totalActive === 0) {
+      return { mode: SELECTION_MODES.LEGACY };
+    }
+
+    const andFilters = [
+      { businessType: { in: [businessType, "BOTH"] } },
+      { minWeight: { lte: weight } },
+      { OR: [{ maxWeight: null }, { maxWeight: { gte: weight } }] },
+    ];
+
+    if (orderAmount !== null && orderAmount !== undefined) {
+      andFilters.push({
+        OR: [
+          { minOrderAmount: null },
+          { minOrderAmount: { lte: orderAmount } },
+        ],
+      });
+      andFilters.push({
+        OR: [
+          { maxOrderAmount: null },
+          { maxOrderAmount: { gte: orderAmount } },
+        ],
+      });
+    }
+
+    if (paymentType) {
+      andFilters.push({
+        OR: [
+          { paymentModes: { isEmpty: true } },
+          { paymentModes: { has: paymentType } },
+        ],
+      });
+    }
+
+    if (serviceType) {
+      andFilters.push({ serviceType });
+    }
 
     const candidates = await prisma.partnerServiceChannel.findMany({
-      where: {
-        partnerId,
-        isActive: true,
-        ...(serviceType ? { serviceType } : {}),
-        minWeight: { lte: weight },
-        OR: [{ maxWeight: null }, { maxWeight: { gte: weight } }],
-      },
+      where: { partnerId, isActive: true, AND: andFilters },
       // credentials excluded — selection returns non-secret routing metadata only
       select: PUBLIC_ACCOUNT_SELECT,
       orderBy: [{ priority: "asc" }, { minWeight: "desc" }],
     });
 
     if (candidates.length === 0) {
-      logger.warn("No carrier account matched weight slab", {
+      logger.warn("No channel matched shipment profile", {
         partnerId,
-        chargeableWeight: weight,
+        weight,
+        businessType,
+        orderAmount,
+        paymentType,
         serviceType,
       });
-      return null;
+      return { mode: SELECTION_MODES.NO_MATCH };
     }
 
     // Prefer the narrowest slab (highest minWeight already via order); return first.
-    return candidates[0];
+    return { mode: SELECTION_MODES.MATCHED, channel: candidates[0] };
+  }
+
+  /**
+   * Resolve the credentials for a selected channel into the same shape
+   * partnerChannelService.getActiveChannel returns, so createAdapter() and the
+   * webhook layer work unchanged. Precedence: per-channel `credentials` Json
+   * overrides > linked PartnerChannelConfig fields.
+   *
+   * @param {Object|string} channelOrId - channel row (from selectChannel) or its id
+   * @returns {Promise<Object>} adapter-ready channel config
+   */
+  async resolveChannelCredentials(channelOrId) {
+    const channelId =
+      typeof channelOrId === "string" ? channelOrId : channelOrId?.id;
+
+    const channel = await prisma.partnerServiceChannel.findUnique({
+      where: { id: channelId },
+      include: { channelConfig: true },
+    });
+
+    if (!channel) {
+      throw Object.assign(new Error("Service channel not found"), {
+        code: "CHANNEL_NOT_FOUND",
+        statusCode: 404,
+      });
+    }
+
+    const config = channel.channelConfig;
+    const overrides = channel.credentials || {};
+
+    const resolved = {
+      serviceChannelId: channel.id,
+      channelName: channel.channelName,
+      accountRef: channel.accountRef,
+      serviceType: channel.serviceType,
+      businessType: channel.businessType,
+      apiUrl: overrides.apiUrl ?? config?.apiUrl ?? "",
+      apiKey: overrides.apiKey ?? config?.apiKey ?? "",
+      aggregatorType:
+        overrides.aggregatorType ?? config?.aggregatorType ?? "NONE",
+      aggregatorConfig: {
+        ...(config?.aggregatorConfig || {}),
+        ...(overrides.aggregatorConfig || {}),
+      },
+      webhookSecret: overrides.webhookSecret ?? config?.webhookSecret ?? null,
+      volumetricDivisor:
+        overrides.volumetricDivisor ?? config?.volumetricDivisor ?? 5000,
+    };
+
+    if (resolved.aggregatorType === "NONE") {
+      throw Object.assign(
+        new Error(
+          `Channel "${channel.channelName}" has no usable credentials — link a credential account or set overrides`,
+        ),
+        { code: "CHANNEL_CREDENTIALS_MISSING", statusCode: 400 },
+      );
+    }
+
+    return resolved;
   }
 
   /**
@@ -119,8 +251,12 @@ class CarrierAccountService {
           channelName: account.channelName,
           accountRef: account.accountRef,
           serviceType: account.serviceType ?? "SURFACE",
+          businessType: account.businessType ?? "BOTH",
           minWeight: account.minWeight ?? 0,
           maxWeight: account.maxWeight ?? null,
+          minOrderAmount: account.minOrderAmount ?? null,
+          maxOrderAmount: account.maxOrderAmount ?? null,
+          paymentModes: account.paymentModes ?? [],
           credentials: account.credentials ?? undefined,
           isActive: account.isActive ?? true,
           priority: account.priority ?? 1,
@@ -145,6 +281,8 @@ class CarrierAccountService {
       partnerId,
       count: results.length,
     });
+
+    await this._invalidateQuoteCache();
     return results;
   }
 
@@ -182,6 +320,8 @@ class CarrierAccountService {
     });
 
     logger.info("Carrier account updated", { accountId });
+
+    await this._invalidateQuoteCache();
     return account;
   }
 
@@ -204,8 +344,28 @@ class CarrierAccountService {
     });
 
     logger.info("Carrier account deleted", { accountId });
+
+    await this._invalidateQuoteCache();
     return { success: true };
+  }
+
+  /**
+   * Channel rules affect quote eligibility, so any CUD must flush the quote
+   * cache or stale rates could show partners that can no longer serve a
+   * shipment profile (and vice versa). Lazy require avoids a startup cycle.
+   * @private
+   */
+  async _invalidateQuoteCache() {
+    try {
+      const { clearCache } = require("./quoteCalculationService");
+      await clearCache();
+    } catch (error) {
+      logger.warn("Failed to invalidate quote cache after channel change", {
+        error: error.message,
+      });
+    }
   }
 }
 
 module.exports = new CarrierAccountService();
+module.exports.SELECTION_MODES = SELECTION_MODES;

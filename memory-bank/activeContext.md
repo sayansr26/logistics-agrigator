@@ -1,8 +1,22 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: April 8, 2026
+> Current work focus and priorities | Last Updated: July 24, 2026
 
 ## Current Sprint Focus
+
+### 🚚 Rule-Based Multi-Channel Routing + Delhivery B2B (P0 - Completed July 24, 2026)
+
+A partner (e.g. Delhivery) can now have multiple routing channels, each with rules — business type (B2B/B2C/BOTH), weight slab, order-amount range, payment modes, priority — linked to a reusable credential account. Booking and quotes select the matching channel per shipment; no match → partner excluded from quotes / 422 at booking; partners with zero channels keep legacy behavior. Delhivery B2B (LTL) is a new `DELHIVERY_B2B` aggregator with its own JWT credential model and async manifest adapter (LR number = AWB). Unified Channels UI at `/partners/[id]/channels` (Routing Channels + Credential Accounts tabs).
+
+**Key files:** `carrierAccountService.js` (selectChannel/resolveChannelCredentials), `courierOperationService.js` (_resolveBookingChannel), `quoteCalculationService.js` (channel gate), `adapters/DelhiveryB2BAdapter.js`, `serviceChannelApi.ts`, `service-channels-panel.tsx`.
+
+**Follow-ups:** Delhivery B2B UAT with staging creds (serviceability response schema is portal-gated; cancellation is portal-manual); invoice/e-waybill edit endpoint not wired; booking auto-fallback to next-priority channel; channel-scoped pricing.
+
+**Planned next (scoped, decided July 24, 2026): B2B Registered Pickup Warehouses (~3–4 dev days).** Delhivery B2B has no warehouse-creation API — `pickup_location` must exactly match a warehouse pre-registered in Delhivery One (B2C auto-creates warehouses; B2B cannot). Approved approach = Option 1:
+
+- Backend (~1 day, no migration): `aggregatorConfig.pickupLocations` becomes a Json array of `{name, address, city, state, pincode, phone}` (Joi updated); new `GET /partners/:partnerId/pickup-locations?businessType=B2B` aggregating active B2B channels' warehouses; B2B adapter accepts ONLY registered names and rejects unknown with a clear 400 (flip current precedence where shipment-passed `pickupLocation` overrides the channel's configured name — free-typed names currently fail at Delhivery's manifest job).
+- Frontend (~1.5–2 days): DELHIVERY_B2B credential form gets a repeatable warehouse-list editor; shipment-create pickup step becomes a warehouse dropdown when shipmentType=B2B (options tagged by partner; selection auto-fills + locks address and implicitly narrows quotes to that partner; B2C keeps free-form). New RTK endpoint in `serviceChannelApi`. Keep separate from saved-address book in v1.
+- Non-code prerequisite: client warehouses must be registered in Delhivery One and multi-pickup enabled by the account manager, else bookings fail at Delhivery's end — add to onboarding checklist.
 
 ### 🏪 Outlet Module Implementation (P0 - Completed)
 

@@ -66,6 +66,17 @@ Overall Project Progress          [███████████████
   - ✅ **AggregatorType extensibility** — Changed from Prisma enum to `String @db.VarChar(50)` (no DB reset for new aggregators)
   - ✅ **Aggregator validation** — Only DELHIVERY and BLUEDART allowed; NONE/CUSTOM removed
   - ✅ **Removed**: `switchChannelMode` endpoint, channel mode toggle UI, partner wizard pages (`/partners/add`, `/partners/[id]/edit`)
+- ✅ **Rule-Based Multi-Channel Routing + Delhivery B2B** (NEW - July 24, 2026)
+  - ✅ `PartnerServiceChannel` extended into the routing channel: `businessType` enum (B2B/B2C/BOTH), `minOrderAmount`/`maxOrderAmount`, `paymentModes[]` (COD/PREPAID, empty = all) alongside existing weight slab + serviceType + priority; migration `20260724000000_add_channel_business_rules`
+  - ✅ `carrierAccountService.selectChannel(partnerId, {weight, businessType, orderAmount, paymentType, serviceType})` — returns LEGACY (no channels → `getActiveChannel` fallback) / MATCHED / NO_MATCH; priority asc then narrowest slab
+  - ✅ `resolveChannelCredentials()` merges linked `PartnerChannelConfig` + per-channel `credentials` overrides into the adapter-ready shape (adapters/webhooks untouched)
+  - ✅ Booking wired: `courierOperationService.bookShipment` selects channel by shipment profile; NO_MATCH → 422 `CHANNEL_NOT_MATCHED`; stores `PartnerShipment.serviceChannelId` + channel serviceType; track/label/cancel resolve credentials via the booked channel first
+  - ✅ `shipmentType` (B2B/B2C) threaded end-to-end: shipment-service booking + rebook + quote call sites → partner-service; booking Joi weight cap raised 50 → 5000 kg; `Shipment.courierChannelId/Name` display columns (migration `20260724000001`)
+  - ✅ Quote engine: channel eligibility gate per partner (NO_MATCH → serviceable:false), matched channel attached to rate rows, `shipmentType` in cache key, channel-level volumetric divisor override, quote-cache flush on channel CUD
+  - ✅ **DelhiveryB2BAdapter** (`DELHIVERY_B2B` aggregatorType): JWT login via `/ums/login/` (Redis-cached ~20h, re-login on 401), async `/v2/manifest` + job polling → LR number as AWB, label URLs, LR-level tracking + status mapping, LTL-host serviceability; NO cancel/rate API (portal/contract only); credential schema: username/password/clientId/pickupLocationName
+  - ✅ Frontend: `/partners/[id]/channels` unified into tabs — "Routing Channels" (rules table + form with credential-account dropdown) + "Credential Accounts" (existing cards + DELHIVERY_B2B fields); new `serviceChannelApi` RTK slice (`ServiceChannel` tag); `/partners/[id]/carrier-accounts` now redirects; legacy `carrier-accounts-api.ts` service removed
+  - ✅ Verified: select-endpoint matrix (7 cases incl. payment-mode and amount bounds), booking 422, LEGACY fallback, cache flush on CUD, zero MODULE_NOT_FOUND, frontend build clean
+  - ⏳ UAT pending: live Delhivery B2B calls against `btob-api-dev` need real staging credentials; quote-gate E2E needs pincode assignments seeded (dev DB has none)
 - ✅ **Pincode Type Service Charges** (January 2026)
   - ✅ Many-to-many relationship between pincode types and partners
   - ✅ Service charge CRUD operations

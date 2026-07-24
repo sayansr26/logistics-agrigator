@@ -39,6 +39,7 @@ export const baseApi = createApi({
     "Shipment",
     "Partner",
     "PartnerChannel",
+    "ServiceChannel",
     "PartnerPincode",
     "Pincode",
     "Wallet",

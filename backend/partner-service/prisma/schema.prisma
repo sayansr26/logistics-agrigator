@@ -121,6 +121,14 @@ enum CarrierServiceType {
   EXPRESS
 }
 
+// Business vertical a channel serves. Delhivery B2C (Express) and B2B (LTL)
+// are separate accounts/APIs, so channels must be routable by shipment type.
+enum ChannelBusinessType {
+  B2B
+  B2C
+  BOTH
+}
+
 model PartnerServiceChannel {
   id        String  @id @default(uuid()) @db.Uuid
   partnerId String  @map("partner_id") // CUID to match Partner.id
@@ -134,9 +142,19 @@ model PartnerServiceChannel {
   accountRef  String             @map("account_ref") @db.VarChar(100) // e.g. "Account 1"
   serviceType CarrierServiceType @default(SURFACE) @map("service_type")
 
+  // Business vertical rule. BOTH matches any shipment type.
+  businessType ChannelBusinessType @default(BOTH) @map("business_type")
+
   // Weight slab (kg). maxWeight null = open-ended ("All Weight")
   minWeight Decimal  @default(0) @map("min_weight") @db.Decimal(8, 3)
   maxWeight Decimal? @map("max_weight") @db.Decimal(8, 3)
+
+  // Order/invoice value rule (INR). null bounds = open-ended
+  minOrderAmount Decimal? @map("min_order_amount") @db.Decimal(12, 2)
+  maxOrderAmount Decimal? @map("max_order_amount") @db.Decimal(12, 2)
+
+  // Payment mode rule. Empty = all modes. Values: COD, PREPAID
+  paymentModes String[] @default([]) @map("payment_modes")
 
   // Per-account credential override (apiKey, warehouseCode, etc.)
   credentials Json?
@@ -147,9 +165,12 @@ model PartnerServiceChannel {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  shipments PartnerShipment[]
+
   @@unique([partnerId, channelName])
   @@index([partnerId, isActive])
   @@index([partnerId, serviceType, isActive])
+  @@index([partnerId, businessType, isActive])
   @@map("partner_service_channels")
 }
 
@@ -194,6 +215,10 @@ model PartnerShipment {
   // Shipment Reference
   shipmentId   String  @unique // Reference to main shipment
   partnerAwbNo String? @unique // Partner's AWB number
+
+  // Service channel (rule-based account) used for booking. Null = legacy/default channel
+  serviceChannelId String?                @map("service_channel_id") @db.Uuid
+  serviceChannel   PartnerServiceChannel? @relation(fields: [serviceChannelId], references: [id], onDelete: SetNull)
 
   // Tracking
   status      String // BOOKED, PICKED, IN_TRANSIT, DELIVERED, RTO, etc.

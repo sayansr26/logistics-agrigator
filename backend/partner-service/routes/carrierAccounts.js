@@ -13,12 +13,13 @@
 const express = require("express");
 const router = express.Router();
 const carrierAccountController = require("../controllers/carrierAccountController");
-const { validate } = require("../middleware/validate");
+const { validate, validateQuery } = require("../middleware/validate");
 const { authMiddleware } = require("../shared/lib/auth");
 const { partnerManagementLimiter } = require("../middleware/rateLimiter");
 const {
   createCarrierAccountSchema,
   updateCarrierAccountSchema,
+  selectChannelQuerySchema,
 } = require("../validation/carrierAccountSchemas");
 
 // All carrier-account routes require authentication.
@@ -28,8 +29,9 @@ const {
 router.use(authMiddleware.authenticate);
 
 /**
- * @route GET /api/v1/partners/:partnerId/carrier-accounts/select?weight=&serviceType=
- * @desc  Select the best-matching carrier account for a chargeable weight.
+ * @route GET /api/v1/partners/:partnerId/carrier-accounts/select?weight=&businessType=&orderAmount=&paymentType=&serviceType=
+ * @desc  Select the best-matching channel for a shipment profile
+ *        (B2B/B2C + weight + order amount + payment mode + service type).
  *        Used by the rating/booking flow, so available to any authenticated
  *        caller — but returns non-secret routing metadata only (credentials
  *        are excluded at the service layer).
@@ -37,6 +39,7 @@ router.use(authMiddleware.authenticate);
  */
 router.get(
   "/partners/:partnerId/carrier-accounts/select",
+  validateQuery(selectChannelQuerySchema),
   carrierAccountController.selectAccount,
 );
 

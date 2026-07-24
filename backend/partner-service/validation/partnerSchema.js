@@ -103,6 +103,7 @@ const partnerSchema = {
     outletId: Joi.string().allow("", null),
     skipServiceabilityCheck: Joi.boolean().default(false),
     sortBy: Joi.string().valid("cheapest", "highest"),
+    shipmentType: Joi.string().valid("B2B", "B2C").default("B2C"),
   }),
 
   checkServiceability: Joi.object({

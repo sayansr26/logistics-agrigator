@@ -212,6 +212,7 @@ class PartnerIntegrationService {
       outletId: rateParams.outletId || null,
       partnerId: rateParams.partnerId || null,
       sortBy: rateParams.sortBy || "cheapest",
+      shipmentType: rateParams.shipmentType || "B2C",
     };
 
     const hash = crypto
@@ -308,6 +309,7 @@ class PartnerIntegrationService {
         partnerId: rateParams.partnerId || undefined,
         skipServiceabilityCheck: rateParams.skipServiceabilityCheck || false,
         sortBy: rateParams.sortBy || "cheapest",
+        shipmentType: rateParams.shipmentType || "B2C",
       };
 
       logger.info("Calling Partner Service for rate calculation", {

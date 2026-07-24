@@ -15,7 +15,9 @@ const addressSchema = Joi.object({
 });
 
 const packageDetailsSchema = Joi.object({
-  weight: Joi.number().required().min(0.01).max(50),
+  // Max raised from 50 to 5000 kg to support B2B/LTL freight channels
+  // (e.g. Delhivery PTL handles consignments up to ~5000 kg).
+  weight: Joi.number().required().min(0.01).max(5000),
   length: Joi.number().optional().min(1).max(200),
   width: Joi.number().optional().min(1).max(200),
   height: Joi.number().optional().min(1).max(200),
@@ -36,6 +38,8 @@ const bookShipmentSchema = Joi.object({
   pickupAddress: addressSchema.required(),
   deliveryAddress: addressSchema.required(),
   packageDetails: packageDetailsSchema.required(),
+  // Business vertical of the shipment — drives rule-based channel selection
+  shipmentType: Joi.string().valid("B2B", "B2C").default("B2C"),
   paymentType: Joi.string().valid("PREPAID", "COD").required(),
   codAmount: Joi.when("paymentType", {
     is: "COD",

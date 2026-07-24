@@ -1,6 +1,6 @@
 const Joi = require("joi");
 
-const ALLOWED_AGGREGATOR_TYPES = ["DELHIVERY", "BLUEDART"];
+const ALLOWED_AGGREGATOR_TYPES = ["DELHIVERY", "DELHIVERY_B2B", "BLUEDART"];
 
 const delhiveryAggregatorConfigSchema = Joi.object({
   clientName: Joi.string().trim().min(1).required().messages({
@@ -9,6 +9,26 @@ const delhiveryAggregatorConfigSchema = Joi.object({
     "string.empty":
       "Delhivery clientName cannot be empty (must match your Delhivery One registered client name)",
   }),
+}).unknown(true);
+
+// Delhivery B2B (LTL) uses a separate credential model: API username/password
+// (JWT login), plus the Delhivery One-registered warehouse/pickup location.
+const delhiveryB2BAggregatorConfigSchema = Joi.object({
+  username: Joi.string().trim().min(1).required().messages({
+    "any.required": "Delhivery B2B API username is required",
+    "string.empty": "Delhivery B2B API username cannot be empty",
+  }),
+  password: Joi.string().min(1).required().messages({
+    "any.required": "Delhivery B2B API password is required",
+    "string.empty": "Delhivery B2B API password cannot be empty",
+  }),
+  clientId: Joi.string().trim().allow("", null).optional(),
+  pickupLocationName: Joi.string().trim().min(1).required().messages({
+    "any.required":
+      "Delhivery B2B pickup location name is required (must match the warehouse registered in Delhivery One)",
+    "string.empty": "Delhivery B2B pickup location name cannot be empty",
+  }),
+  ltlApiUrl: Joi.string().uri().allow("", null).optional(),
 }).unknown(true);
 
 const bluedartAggregatorConfigSchema = Joi.object({
@@ -54,12 +74,17 @@ const channelConfigSchema = Joi.object({
     .valid(...ALLOWED_AGGREGATOR_TYPES)
     .required()
     .messages({
-      "any.only": "Aggregator type must be one of: DELHIVERY, BLUEDART",
+      "any.only":
+        "Aggregator type must be one of: DELHIVERY, DELHIVERY_B2B, BLUEDART",
       "any.required": "Aggregator type is required",
     }),
   aggregatorConfig: Joi.when("aggregatorType", {
     switch: [
       { is: "DELHIVERY", then: delhiveryAggregatorConfigSchema.required() },
+      {
+        is: "DELHIVERY_B2B",
+        then: delhiveryB2BAggregatorConfigSchema.required(),
+      },
       { is: "BLUEDART", then: bluedartAggregatorConfigSchema.required() },
     ],
     otherwise: Joi.object().optional().allow(null),
@@ -92,6 +117,10 @@ const updateChannelSchema = Joi.object({
   aggregatorConfig: Joi.when("aggregatorType", {
     switch: [
       { is: "DELHIVERY", then: delhiveryAggregatorConfigSchema.required() },
+      {
+        is: "DELHIVERY_B2B",
+        then: delhiveryB2BAggregatorConfigSchema.required(),
+      },
       { is: "BLUEDART", then: bluedartAggregatorConfigSchema.required() },
     ],
     otherwise: Joi.object().optional().allow(null),

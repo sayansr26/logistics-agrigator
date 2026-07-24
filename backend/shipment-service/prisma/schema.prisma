@@ -29,9 +29,9 @@ model Shipment {
   // `courierCost` is what we pay the carrier (purchase amount); may come from
   // the courier API, a manual entry, or a cost-side charge rule.
   // `profitMargin` = totalCost (selling) - courierCost; null until courierCost captured.
-  courierCost       Decimal?       @map("courier_cost") @db.Decimal(10, 2)
-  profitMargin      Decimal?       @map("profit_margin") @db.Decimal(10, 2)
-  courierCostSource String?        @map("courier_cost_source") @db.VarChar(20) // API | MANUAL | RULE
+  courierCost       Decimal? @map("courier_cost") @db.Decimal(10, 2)
+  profitMargin      Decimal? @map("profit_margin") @db.Decimal(10, 2)
+  courierCostSource String?  @map("courier_cost_source") @db.VarChar(20) // API | MANUAL | RULE
 
   // Pickup Address
   pickupAddressId String? @map("pickup_address_id") @db.Uuid
@@ -98,6 +98,11 @@ model Shipment {
   awbNumber         String? @map("awb_number") @db.VarChar(50)
   partnerShipmentId String? @map("partner_shipment_id") @db.VarChar(100)
   trackingUrl       String? @map("tracking_url") @db.VarChar(500)
+
+  // Rule-based channel the shipment was booked on (display/reporting; the
+  // authoritative FK lives in partner-service PartnerShipment.serviceChannelId)
+  courierChannelId   String? @map("courier_channel_id") @db.Uuid
+  courierChannelName String? @map("courier_channel_name") @db.VarChar(150)
 
   // Provider sync metadata
   providerStatus      String?   @map("provider_status") @db.VarChar(50)

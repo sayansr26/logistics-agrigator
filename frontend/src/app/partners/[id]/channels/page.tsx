@@ -41,6 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus,
   Trash2,
@@ -54,6 +55,7 @@ import {
   Network,
   MoreVertical,
   Shield,
+  GitBranch,
 } from "lucide-react";
 import { useGetPartnerByIdQuery } from "@/store/api/endpoints/partnersApi";
 import {
@@ -64,6 +66,7 @@ import {
   type ChannelConfig,
   type AggregatorType,
 } from "@/store/api/endpoints/partnerChannelApi";
+import { ServiceChannelsPanel } from "@/components/partners/service-channels-panel";
 import { usePermission } from "@/hooks/usePermission";
 
 // ===========================
@@ -75,7 +78,16 @@ const AGGREGATOR_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  { value: "DELHIVERY", label: "Delhivery", description: "Delhivery One API" },
+  {
+    value: "DELHIVERY",
+    label: "Delhivery (B2C)",
+    description: "Express Parcel API — token auth",
+  },
+  {
+    value: "DELHIVERY_B2B",
+    label: "Delhivery B2B (LTL)",
+    description: "Freight API — username/password (JWT)",
+  },
   { value: "BLUEDART", label: "BlueDart", description: "BlueDart API" },
 ];
 
@@ -91,6 +103,10 @@ interface ChannelFormData {
   licenseKey: string;
   loginId: string;
   customerCode: string;
+  b2bUsername: string;
+  b2bPassword: string;
+  b2bClientId: string;
+  b2bPickupLocation: string;
   webhookSecret: string;
 }
 
@@ -106,6 +122,10 @@ const emptyForm: ChannelFormData = {
   licenseKey: "",
   loginId: "",
   customerCode: "",
+  b2bUsername: "",
+  b2bPassword: "",
+  b2bClientId: "",
+  b2bPickupLocation: "",
   webhookSecret: "",
 };
 
@@ -129,6 +149,15 @@ function buildChannelPayload(form: ChannelFormData): ChannelConfig {
       base.apiKey = form.apiKey.trim() || undefined;
       base.aggregatorConfig = {
         clientName: form.delhiveryClientName.trim(),
+      };
+      break;
+    case "DELHIVERY_B2B":
+      base.apiKey = undefined;
+      base.aggregatorConfig = {
+        username: form.b2bUsername.trim(),
+        password: form.b2bPassword,
+        clientId: form.b2bClientId.trim() || undefined,
+        pickupLocationName: form.b2bPickupLocation.trim(),
       };
       break;
     case "BLUEDART":
@@ -162,6 +191,10 @@ function channelToFormData(channel: ChannelConfig): ChannelFormData {
     licenseKey: config.licenseKey ?? "",
     loginId: config.loginId ?? "",
     customerCode: config.customerCode ?? "",
+    b2bUsername: config.username ?? "",
+    b2bPassword: config.password ?? "",
+    b2bClientId: config.clientId ?? "",
+    b2bPickupLocation: config.pickupLocationName ?? "",
     webhookSecret: channel.webhookSecret ?? "",
   };
 }
@@ -214,6 +247,73 @@ function AggregatorConfigFields({
           <p className="text-xs text-muted-foreground">
             Must exactly match the registered client/seller name in Delhivery
             One
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (aggregatorType === "DELHIVERY_B2B") {
+    return (
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="b2bUsername">
+            API Username <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="b2bUsername"
+            type="text"
+            placeholder="Delhivery B2B API username"
+            value={form.b2bUsername}
+            onChange={(e) => onChange("b2bUsername", e.target.value)}
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            LTL API credential (separate from B2C token; JWT login)
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="b2bPassword">
+            API Password <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="b2bPassword"
+            type="password"
+            placeholder="Delhivery B2B API password"
+            value={form.b2bPassword}
+            onChange={(e) => onChange("b2bPassword", e.target.value)}
+            autoComplete="new-password"
+          />
+          <p className="text-xs text-muted-foreground">
+            Set via the LTL forgot-password flow — not the Delhivery One panel
+            password
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="b2bClientId">Client ID</Label>
+          <Input
+            id="b2bClientId"
+            type="text"
+            placeholder="Optional — B2B client/warehouse ID"
+            value={form.b2bClientId}
+            onChange={(e) => onChange("b2bClientId", e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="b2bPickupLocation">
+            Pickup Location Name <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="b2bPickupLocation"
+            type="text"
+            placeholder="Exact warehouse name registered in Delhivery One"
+            value={form.b2bPickupLocation}
+            onChange={(e) => onChange("b2bPickupLocation", e.target.value)}
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            Must exactly match the pickup warehouse registered in Delhivery One
           </p>
         </div>
       </div>
@@ -291,6 +391,11 @@ function ChannelCard({
     if (aggregatorType === "DELHIVERY") {
       return channel.apiKey ? "API Token configured" : "API Token missing";
     }
+    if (aggregatorType === "DELHIVERY_B2B") {
+      return config.username && config.password
+        ? `B2B login: ${config.username}`
+        : "B2B credentials incomplete";
+    }
     if (aggregatorType === "BLUEDART") {
       if (config.loginId && config.customerCode) {
         return `Login: ${config.loginId} | Customer: ${config.customerCode}`;
@@ -303,9 +408,11 @@ function ChannelCard({
   const isCredentialSet =
     aggregatorType === "DELHIVERY"
       ? !!channel.apiKey
-      : aggregatorType === "BLUEDART"
-        ? !!(config.loginId && config.customerCode)
-        : !!channel.apiKey;
+      : aggregatorType === "DELHIVERY_B2B"
+        ? !!(config.username && config.password)
+        : aggregatorType === "BLUEDART"
+          ? !!(config.loginId && config.customerCode)
+          : !!channel.apiKey;
 
   return (
     <Card className="group relative">
@@ -418,6 +525,7 @@ export default function ManageChannelsPage() {
   const params = useParams();
   const partnerId = params.id as string;
 
+  const [activeTab, setActiveTab] = useState("routing");
   const [showDialog, setShowDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<ChannelConfig | null>(
     null,
@@ -468,6 +576,10 @@ export default function ManageChannelsPage() {
       licenseKey: "",
       loginId: "",
       customerCode: "",
+      b2bUsername: "",
+      b2bPassword: "",
+      b2bClientId: "",
+      b2bPickupLocation: "",
     }));
     setFormError(null);
   }
@@ -502,6 +614,15 @@ export default function ManageChannelsPage() {
         return "API Token is required for Delhivery.";
       if (!form.delhiveryClientName.trim())
         return "Client Name is required for Delhivery.";
+    }
+
+    if (form.aggregatorType === "DELHIVERY_B2B") {
+      if (!form.b2bUsername.trim())
+        return "API Username is required for Delhivery B2B.";
+      if (!editingChannel && !form.b2bPassword)
+        return "API Password is required for Delhivery B2B.";
+      if (!form.b2bPickupLocation.trim())
+        return "Pickup Location Name is required for Delhivery B2B.";
     }
 
     if (form.aggregatorType === "BLUEDART") {
@@ -611,82 +732,119 @@ export default function ManageChannelsPage() {
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Channel Integrations
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage courier API channels for{" "}
-              <span className="font-medium text-foreground">
-                {partner?.displayName ?? partner?.name}
-              </span>
-            </p>
-          </div>
-          {canCreate && (
-            <Button onClick={openAddDialog} size="sm">
-              <Plus className="h-4 w-4 mr-1.5" />
-              Add Channel
-            </Button>
-          )}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Channels</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Routing rules and API credentials for{" "}
+            <span className="font-medium text-foreground">
+              {partner?.displayName ?? partner?.name}
+            </span>
+          </p>
         </div>
 
-        {/* Summary */}
-        {channels.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {channels.length} channel{channels.length !== 1 && "s"}
-            </span>
-            <span className="text-border">|</span>
-            <span>{activeCount} active</span>
-            {primaryChannel && (
-              <>
-                <span className="text-border">|</span>
-                <span>
-                  Primary:{" "}
-                  <span className="text-foreground font-medium">
-                    {primaryChannel.channelName}
-                  </span>
-                </span>
-              </>
-            )}
-          </div>
-        )}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="routing">
+              <GitBranch className="h-4 w-4 mr-1.5" />
+              Routing Channels
+            </TabsTrigger>
+            <TabsTrigger value="credentials">
+              <Key className="h-4 w-4 mr-1.5" />
+              Credential Accounts
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Channel Grid */}
-        {channels.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {channels.map((channel, index) => (
-              <ChannelCard
-                key={channel.id ?? index}
-                channel={channel}
-                canEdit={canEdit}
-                canDelete={canDelete}
-                onEdit={openEditDialog}
-                onDelete={(id) => setDeletingChannelId(id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Network className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <h3 className="font-semibold mb-1">No Channels Yet</h3>
-              <p className="text-sm text-muted-foreground max-w-xs mb-5">
-                Add a channel integration to connect this partner to a courier
-                API.
+          {/* Routing (rule-based) channels */}
+          <TabsContent value="routing" className="mt-4">
+            <ServiceChannelsPanel
+              partnerId={partnerId}
+              credentialAccounts={channels}
+              canCreate={canCreate}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onRequestCreateCredential={() => {
+                setActiveTab("credentials");
+                openAddDialog();
+              }}
+            />
+          </TabsContent>
+
+          {/* Credential accounts (API keys / logins) */}
+          <TabsContent value="credentials" className="mt-4 space-y-4">
+            <div className="flex items-start justify-between">
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                API credentials this partner books with. A credential account
+                can be shared by multiple routing channels (e.g. one Delhivery
+                B2C token used by several weight slabs).
               </p>
               {canCreate && (
                 <Button onClick={openAddDialog} size="sm">
                   <Plus className="h-4 w-4 mr-1.5" />
-                  Add Channel
+                  Add Credential Account
                 </Button>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
+
+            {/* Summary */}
+            {channels.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {channels.length} account{channels.length !== 1 && "s"}
+                </span>
+                <span className="text-border">|</span>
+                <span>{activeCount} active</span>
+                {primaryChannel && (
+                  <>
+                    <span className="text-border">|</span>
+                    <span>
+                      Primary:{" "}
+                      <span className="text-foreground font-medium">
+                        {primaryChannel.channelName}
+                      </span>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Channel Grid */}
+            {channels.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {channels.map((channel, index) => (
+                  <ChannelCard
+                    key={channel.id ?? index}
+                    channel={channel}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    onEdit={openEditDialog}
+                    onDelete={(id) => setDeletingChannelId(id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Network className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold mb-1">
+                    No Credential Accounts Yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-xs mb-5">
+                    Add a credential account to connect this partner to a
+                    courier API.
+                  </p>
+                  {canCreate && (
+                    <Button onClick={openAddDialog} size="sm">
+                      <Plus className="h-4 w-4 mr-1.5" />
+                      Add Credential Account
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Add / Edit Dialog */}
@@ -694,12 +852,14 @@ export default function ManageChannelsPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingChannel ? "Edit Channel" : "Add Channel"}
+              {editingChannel
+                ? "Edit Credential Account"
+                : "Add Credential Account"}
             </DialogTitle>
             <DialogDescription>
               {editingChannel
-                ? "Update channel configuration."
-                : "Configure a new courier API channel."}
+                ? "Update courier API credentials."
+                : "Configure a new set of courier API credentials."}
             </DialogDescription>
           </DialogHeader>
 
