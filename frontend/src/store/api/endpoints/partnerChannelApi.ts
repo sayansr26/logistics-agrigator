@@ -46,6 +46,12 @@ export interface ChannelConfig {
   aggregatorType?: AggregatorType;
   aggregatorConfig?: AggregatorConfig;
   webhookSecret?: string;
+  /**
+   * Volumetric formula override: ((boxes * L*W*H) / divisor) * factor.
+   * null on either field means "use the system default" (27000 / 6).
+   */
+  volumetricDivisor?: number | null;
+  volumetricFactor?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

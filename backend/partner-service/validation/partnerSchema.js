@@ -99,6 +99,7 @@ const partnerSchema = {
       width: Joi.number().positive().required(),
       height: Joi.number().positive().required(),
     }),
+    numberOfBoxes: Joi.number().integer().min(1).default(1),
     isFragile: Joi.boolean().default(false),
     outletId: Joi.string().allow("", null),
     skipServiceabilityCheck: Joi.boolean().default(false),

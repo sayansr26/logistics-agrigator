@@ -448,10 +448,15 @@ const bulkRerateSchema = Joi.object({
   reason: Joi.string().trim().min(5).max(500).required().messages({
     "string.min": "Reason must be at least 5 characters",
   }),
-  rows: Joi.array().items(bulkRerateRowSchema).min(1).max(500).required().messages({
-    "array.min": "At least one row is required",
-    "array.max": "Maximum 500 rows per bulk re-rate",
-  }),
+  rows: Joi.array()
+    .items(bulkRerateRowSchema)
+    .min(1)
+    .max(500)
+    .required()
+    .messages({
+      "array.min": "At least one row is required",
+      "array.max": "Maximum 500 rows per bulk re-rate",
+    }),
 });
 
 const assignPartnerSchema = Joi.object({
@@ -466,6 +471,7 @@ const assignPartnerSchema = Joi.object({
     totalAmount: Joi.number().min(0).required(),
     deliveryDays: Joi.number().integer().min(0).allow(null).optional(),
     volumetricDivisor: Joi.number().positive().optional(),
+    volumetricFactor: Joi.number().positive().optional(),
     volumetricWeight: Joi.number().positive().optional(),
     chargeableWeight: Joi.number().positive().optional(),
     actualWeight: Joi.number().positive().optional(),

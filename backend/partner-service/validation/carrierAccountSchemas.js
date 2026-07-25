@@ -55,7 +55,7 @@ const accountSchema = Joi.object({
     .unique()
     .default([]),
   channelConfigId: Joi.string().uuid().allow(null).optional(),
-  // Per-channel credential overrides: { apiUrl, apiKey, aggregatorType, aggregatorConfig, webhookSecret, volumetricDivisor }
+  // Per-channel credential overrides: { apiUrl, apiKey, aggregatorType, aggregatorConfig, webhookSecret, volumetricDivisor, volumetricFactor }
   credentials: Joi.object().allow(null).optional(),
   isActive: Joi.boolean().default(true),
   priority: Joi.number().integer().min(1).max(100).default(1),

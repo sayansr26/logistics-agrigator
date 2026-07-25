@@ -18,7 +18,6 @@ const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
 const weightCalc = require("../shared/utils/weightCalc");
-const DEFAULT_VOLUMETRIC_DIVISOR = 5000;
 
 /**
  * Shipment Controller with Real Database Operations
@@ -194,28 +193,33 @@ function buildCourierMetrics({
   numberOfBoxes,
   dimensions,
 }) {
-  const divisor = toNumber(
-    quoteSnapshot?.volumetricDivisor,
-    DEFAULT_VOLUMETRIC_DIVISOR,
-  );
+  // Formula the quote was priced with; null/absent resolves to the system default
+  const { divisor, factor } = weightCalc.resolveVolumetricConfig({
+    divisor: quoteSnapshot?.volumetricDivisor,
+    factor: quoteSnapshot?.volumetricFactor,
+  });
   const actualWeight = toNumber(quoteSnapshot?.actualWeight, weight);
   const volumetricWeight =
     quoteSnapshot?.volumetricWeight !== undefined &&
     quoteSnapshot?.volumetricWeight !== null
       ? toNumber(quoteSnapshot.volumetricWeight)
-      : (numberOfBoxes *
-          toNumber(dimensions?.length) *
-          toNumber(dimensions?.width) *
-          toNumber(dimensions?.height)) /
-        divisor;
+      : weightCalc.computeVolumetric({
+          boxes: numberOfBoxes,
+          length: dimensions?.length,
+          width: dimensions?.width,
+          height: dimensions?.height,
+          divisor,
+          factor,
+        });
   const chargeableWeight =
     quoteSnapshot?.chargeableWeight !== undefined &&
     quoteSnapshot?.chargeableWeight !== null
       ? toNumber(quoteSnapshot.chargeableWeight)
-      : Math.max(actualWeight, volumetricWeight);
+      : weightCalc.computeChargeable(actualWeight, volumetricWeight);
 
   return {
     divisor,
+    factor,
     actualWeight,
     volumetricWeight,
     chargeableWeight,
@@ -508,6 +512,7 @@ async function createShipment(req, res) {
         volumetricWeight: metrics.volumetricWeight,
         chargeableWeight: metrics.chargeableWeight,
         volumetricDivisor: metrics.divisor,
+        volumetricFactor: metrics.factor,
         description: packageDetails.description,
         value: packageDetails.value,
         fragile: packageDetails.fragile || false,
@@ -1014,6 +1019,7 @@ async function assignPartner(req, res) {
         quoteSnapshot,
         estimatedDelivery: metrics.estimatedDelivery,
         volumetricDivisor: metrics.divisor,
+        volumetricFactor: metrics.factor,
         volumetricWeight: metrics.volumetricWeight,
         chargeableWeight: metrics.chargeableWeight,
         bookingStatus: "PENDING_BOOKING",
@@ -2655,6 +2661,7 @@ async function getShipmentQuotes(req, res) {
       weight,
       serviceType: serviceType.toUpperCase(),
       dimensions,
+      numberOfBoxes,
       codAmount: paymentType === "COD" ? codAmount : null,
       declaredValue: req.body.declaredValue || req.body.shipmentValue || 0,
       paymentMode: paymentType,
@@ -2678,14 +2685,21 @@ async function getShipmentQuotes(req, res) {
 
     const quotes = (rateData.rates || [])
       .map((rate) => {
-        const divisor = rate.volumetricDivisor || 5000;
-        const volWeight =
-          (numberOfBoxes *
-            dimensions.length *
-            dimensions.width *
-            dimensions.height) /
-          divisor;
-        const chargeableWt = Math.max(weight, volWeight);
+        // Reuse the formula partner-service priced with (channel-specific or
+        // system default) rather than re-deriving one here
+        const { divisor, factor } = weightCalc.resolveVolumetricConfig({
+          divisor: rate.volumetricDivisor,
+          factor: rate.volumetricFactor,
+        });
+        const volWeight = weightCalc.computeVolumetric({
+          boxes: numberOfBoxes,
+          length: dimensions.length,
+          width: dimensions.width,
+          height: dimensions.height,
+          divisor,
+          factor,
+        });
+        const chargeableWt = weightCalc.computeChargeable(weight, volWeight);
 
         // Normalize breakdown from partner-service to frontend-friendly format
         const BASE_LABELS = {
@@ -2719,8 +2733,9 @@ async function getShipmentQuotes(req, res) {
           deliveryDays: rate.deliveryDays || rate.estimatedDays || null,
           chargeBreakdown,
           volumetricDivisor: divisor,
-          volumetricWeight: parseFloat(volWeight.toFixed(3)),
-          chargeableWeight: parseFloat(chargeableWt.toFixed(3)),
+          volumetricFactor: factor,
+          volumetricWeight: volWeight,
+          chargeableWeight: chargeableWt,
           actualWeight: weight,
           serviceable:
             rate.isServiceable !== false && rate.serviceable !== false,
@@ -2841,6 +2856,7 @@ async function rerateShipmentPreview(req, res) {
         height: true,
         numberOfBoxes: true,
         volumetricDivisor: true,
+        volumetricFactor: true,
         volumetricWeight: true,
         chargeableWeight: true,
         paymentType: true,
@@ -2861,7 +2877,11 @@ async function rerateShipmentPreview(req, res) {
     const newLength = disputedLength || parseFloat(shipment.length);
     const newWidth = disputedWidth || parseFloat(shipment.width);
     const newHeight = disputedHeight || parseFloat(shipment.height);
-    const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
+    // Reuse the formula the shipment was originally priced with
+    const { divisor, factor } = weightCalc.resolveVolumetricConfig({
+      divisor: shipment.volumetricDivisor,
+      factor: shipment.volumetricFactor,
+    });
     const numBoxes = shipment.numberOfBoxes || 1;
 
     const newVolWeight = weightCalc.computeVolumetric({
@@ -2870,6 +2890,7 @@ async function rerateShipmentPreview(req, res) {
       width: newWidth,
       height: newHeight,
       divisor,
+      factor,
     });
     const newChargeableWeight = weightCalc.computeChargeable(
       newWeight,
@@ -3057,6 +3078,7 @@ async function rerateShipment(req, res) {
         height: true,
         numberOfBoxes: true,
         volumetricDivisor: true,
+        volumetricFactor: true,
         paymentType: true,
         walletTransactionId: true,
         pickupPincode: true,
@@ -3087,7 +3109,11 @@ async function rerateShipment(req, res) {
     const newLength = disputedLength || parseFloat(shipment.length);
     const newWidth = disputedWidth || parseFloat(shipment.width);
     const newHeight = disputedHeight || parseFloat(shipment.height);
-    const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
+    // Reuse the formula the shipment was originally priced with
+    const { divisor, factor } = weightCalc.resolveVolumetricConfig({
+      divisor: shipment.volumetricDivisor,
+      factor: shipment.volumetricFactor,
+    });
     const numBoxes = shipment.numberOfBoxes || 1;
 
     const newVolWeight = weightCalc.computeVolumetric({
@@ -3096,6 +3122,7 @@ async function rerateShipment(req, res) {
       width: newWidth,
       height: newHeight,
       divisor,
+      factor,
     });
     const newChargeableWeight = weightCalc.computeChargeable(
       newWeight,

@@ -108,7 +108,15 @@ interface ChannelFormData {
   b2bPassword: string;
   b2bClientId: string;
   webhookSecret: string;
+  useDefaultVolumetric: boolean;
+  volumetricDivisor: string;
+  volumetricFactor: string;
 }
+
+// System default volumetric formula — mirrors DEFAULT_VOLUMETRIC_DIVISOR /
+// DEFAULT_VOLUMETRIC_FACTOR in shared/utils/weightCalc.js
+const DEFAULT_VOLUMETRIC_DIVISOR = 27000;
+const DEFAULT_VOLUMETRIC_FACTOR = 6;
 
 const emptyForm: ChannelFormData = {
   channelName: "",
@@ -126,6 +134,9 @@ const emptyForm: ChannelFormData = {
   b2bPassword: "",
   b2bClientId: "",
   webhookSecret: "",
+  useDefaultVolumetric: true,
+  volumetricDivisor: "",
+  volumetricFactor: "",
 };
 
 // ===========================
@@ -141,6 +152,14 @@ function buildChannelPayload(form: ChannelFormData): ChannelConfig {
     priority: form.priority,
     aggregatorType: form.aggregatorType,
     webhookSecret: form.webhookSecret.trim() || undefined,
+    // Explicit null (not undefined) so clearing an override actually reverts
+    // the channel to the system default server-side
+    volumetricDivisor: form.useDefaultVolumetric
+      ? null
+      : Number(form.volumetricDivisor),
+    volumetricFactor: form.useDefaultVolumetric
+      ? null
+      : Number(form.volumetricFactor),
   };
 
   switch (form.aggregatorType) {
@@ -193,6 +212,14 @@ function channelToFormData(channel: ChannelConfig): ChannelFormData {
     b2bPassword: config.password ?? "",
     b2bClientId: config.clientId ?? "",
     webhookSecret: channel.webhookSecret ?? "",
+    useDefaultVolumetric:
+      channel.volumetricDivisor == null && channel.volumetricFactor == null,
+    volumetricDivisor:
+      channel.volumetricDivisor != null
+        ? String(channel.volumetricDivisor)
+        : "",
+    volumetricFactor:
+      channel.volumetricFactor != null ? String(channel.volumetricFactor) : "",
   };
 }
 
@@ -211,7 +238,7 @@ function AggregatorConfigFields({
 }) {
   if (aggregatorType === "DELHIVERY") {
     return (
-      <div className="space-y-4">
+      <>
         <div className="space-y-1.5">
           <Label htmlFor="apiKey">
             API Token <span className="text-red-500">*</span>
@@ -225,7 +252,7 @@ function AggregatorConfigFields({
             autoComplete="new-password"
           />
           <p className="text-xs text-muted-foreground">
-            Delhivery One API access token (Authorization: Token &lt;token&gt;)
+            Delhivery One API access token
           </p>
         </div>
 
@@ -236,23 +263,22 @@ function AggregatorConfigFields({
           <Input
             id="delhiveryClientName"
             type="text"
-            placeholder="Exact Delhivery One registered client name"
+            placeholder="Registered client name"
             value={form.delhiveryClientName}
             onChange={(e) => onChange("delhiveryClientName", e.target.value)}
             autoComplete="off"
           />
           <p className="text-xs text-muted-foreground">
-            Must exactly match the registered client/seller name in Delhivery
-            One
+            Must match the client name in Delhivery One exactly
           </p>
         </div>
-      </div>
+      </>
     );
   }
 
   if (aggregatorType === "DELHIVERY_B2B") {
     return (
-      <div className="space-y-4">
+      <>
         <div className="space-y-1.5">
           <Label htmlFor="b2bUsername">
             API Username <span className="text-red-500">*</span>
@@ -266,7 +292,7 @@ function AggregatorConfigFields({
             autoComplete="off"
           />
           <p className="text-xs text-muted-foreground">
-            LTL API credential (separate from B2C token; JWT login)
+            LTL credential — separate from the B2C token
           </p>
         </div>
         <div className="space-y-1.5">
@@ -282,8 +308,7 @@ function AggregatorConfigFields({
             autoComplete="new-password"
           />
           <p className="text-xs text-muted-foreground">
-            Set via the LTL forgot-password flow — not the Delhivery One panel
-            password
+            Set via the LTL forgot-password flow
           </p>
         </div>
         <div className="space-y-1.5">
@@ -296,19 +321,17 @@ function AggregatorConfigFields({
             onChange={(e) => onChange("b2bClientId", e.target.value)}
             autoComplete="off"
           />
+          <p className="text-xs text-muted-foreground">
+            Pickup location is chosen per shipment, not here
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Pickup location is chosen per shipment during booking — it must match
-          a warehouse registered in Delhivery One (no warehouse config needed
-          here).
-        </p>
-      </div>
+      </>
     );
   }
 
   if (aggregatorType === "BLUEDART") {
     return (
-      <div className="space-y-4">
+      <>
         <div className="space-y-1.5">
           <Label htmlFor="licenseKey">
             License Key <span className="text-red-500">*</span>
@@ -346,12 +369,12 @@ function AggregatorConfigFields({
             onChange={(e) => onChange("customerCode", e.target.value)}
           />
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-sm text-muted-foreground sm:col-span-2">
       No additional configuration required for this aggregator type.
     </p>
   );
@@ -391,6 +414,10 @@ function ChannelCard({
     return channel.apiKey ? "API Key configured" : "No credentials";
   })();
 
+  // Either field set means the channel diverges from the system default formula
+  const hasVolumetricOverride =
+    channel.volumetricDivisor != null || channel.volumetricFactor != null;
+
   const isCredentialSet =
     aggregatorType === "DELHIVERY"
       ? !!channel.apiKey
@@ -411,6 +438,17 @@ function ChannelCard({
               {channel.isPrimary && (
                 <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">
                   Primary
+                </Badge>
+              )}
+              {hasVolumetricOverride && (
+                <Badge
+                  variant="outline"
+                  className="border-purple-200 text-purple-700 bg-purple-50 text-[10px] px-1.5 py-0"
+                  title={`Volumetric weight = (L × B × H / ${
+                    channel.volumetricDivisor ?? DEFAULT_VOLUMETRIC_DIVISOR
+                  }) × ${channel.volumetricFactor ?? DEFAULT_VOLUMETRIC_FACTOR}`}
+                >
+                  Custom volumetric
                 </Badge>
               )}
             </div>
@@ -551,6 +589,26 @@ export default function ManageChannelsPage() {
   const channels = channelsData?.data?.channels ?? [];
   const isSaving = isCreating || isUpdating;
 
+  // Formula shown in the volumetric panel — the configured values when
+  // overriding, the system default otherwise
+  const volumetricPreview = (() => {
+    if (form.useDefaultVolumetric) {
+      return {
+        divisor: DEFAULT_VOLUMETRIC_DIVISOR,
+        factor: DEFAULT_VOLUMETRIC_FACTOR,
+        equivalent: null as number | null,
+      };
+    }
+    const divisor = Number(form.volumetricDivisor);
+    const factor = Number(form.volumetricFactor);
+    const valid = divisor > 0 && factor > 0;
+    return {
+      divisor: form.volumetricDivisor || "?",
+      factor: form.volumetricFactor || "?",
+      equivalent: valid ? Number((divisor / factor).toFixed(2)) : null,
+    };
+  })();
+
   // Form helpers
   function handleFieldChange(field: keyof ChannelFormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -684,6 +742,23 @@ export default function ManageChannelsPage() {
       if (!form.loginId.trim()) return "Login ID is required for BlueDart.";
       if (!form.customerCode.trim())
         return "Customer Code is required for BlueDart.";
+    }
+
+    if (!form.useDefaultVolumetric) {
+      const divisor = Number(form.volumetricDivisor);
+      const factor = Number(form.volumetricFactor);
+      if (
+        !form.volumetricDivisor.trim() ||
+        !Number.isFinite(divisor) ||
+        divisor <= 0
+      )
+        return "Volumetric divisor must be a number greater than 0.";
+      if (
+        !form.volumetricFactor.trim() ||
+        !Number.isFinite(factor) ||
+        factor <= 0
+      )
+        return "Volumetric factor must be a number greater than 0.";
     }
 
     return null;
@@ -902,7 +977,7 @@ export default function ManageChannelsPage() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={closeDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingChannel
@@ -916,86 +991,172 @@ export default function ManageChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="channelName">
-                Channel Name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="channelName"
-                placeholder="e.g. Delhivery Primary, BlueDart Backup"
-                value={form.channelName}
-                onChange={(e) =>
-                  handleFieldChange("channelName", e.target.value)
-                }
+          <div className="space-y-4 py-2">
+            {/* One continuous 2-col grid: aggregator fields vary in count, so
+                letting them flow as grid children avoids half-empty rows */}
+            <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="channelName">
+                  Channel Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="channelName"
+                  placeholder="e.g. Delhivery Primary"
+                  value={form.channelName}
+                  onChange={(e) =>
+                    handleFieldChange("channelName", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="aggregatorType">
+                  Courier Aggregator <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.aggregatorType}
+                  onValueChange={handleAggregatorChange}
+                >
+                  <SelectTrigger id="aggregatorType">
+                    {/* Label only — the description would truncate in the
+                        half-width trigger */}
+                    <SelectValue>
+                      {
+                        AGGREGATOR_OPTIONS.find(
+                          (opt) => opt.value === form.aggregatorType,
+                        )?.label
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGGREGATOR_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        <span className="font-medium">{opt.label}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">
+                          — {opt.description}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {
+                    AGGREGATOR_OPTIONS.find(
+                      (opt) => opt.value === form.aggregatorType,
+                    )?.description
+                  }
+                </p>
+              </div>
+
+              <AggregatorConfigFields
+                aggregatorType={form.aggregatorType}
+                form={form}
+                onChange={handleFieldChange}
               />
+
+              <div className="space-y-1.5">
+                <Label htmlFor="webhookSecret">Webhook Secret</Label>
+                <Input
+                  id="webhookSecret"
+                  type="password"
+                  placeholder="Optional — verifies courier webhooks"
+                  value={form.webhookSecret}
+                  onChange={(e) =>
+                    handleFieldChange("webhookSecret", e.target.value)
+                  }
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="priority">Priority</Label>
+                <Input
+                  id="priority"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={form.priority}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      priority: Math.max(1, parseInt(e.target.value) || 1),
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lower number = higher priority
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="aggregatorType">
-                Courier Aggregator <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={form.aggregatorType}
-                onValueChange={handleAggregatorChange}
-              >
-                <SelectTrigger id="aggregatorType">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AGGREGATOR_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <span className="font-medium">{opt.label}</span>
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        — {opt.description}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-md border bg-muted/30 p-3.5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="useDefaultVolumetric"
+                    checked={form.useDefaultVolumetric}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useDefaultVolumetric: checked === true,
+                      }))
+                    }
+                  />
+                  <Label
+                    htmlFor="useDefaultVolumetric"
+                    className="cursor-pointer"
+                  >
+                    Use default volumetric formula
+                  </Label>
+                </div>
+                <code className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                  (L × B × H / {volumetricPreview.divisor}) ×{" "}
+                  {volumetricPreview.factor}
+                </code>
+              </div>
+
+              {!form.useDefaultVolumetric && (
+                <div className="mt-3.5 grid gap-4 border-t pt-3.5 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="volumetricDivisor">Divisor</Label>
+                    <Input
+                      id="volumetricDivisor"
+                      type="number"
+                      min={1}
+                      step="any"
+                      className="tabular-nums"
+                      placeholder={String(DEFAULT_VOLUMETRIC_DIVISOR)}
+                      value={form.volumetricDivisor}
+                      onChange={(e) =>
+                        handleFieldChange("volumetricDivisor", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="volumetricFactor">Factor</Label>
+                    <Input
+                      id="volumetricFactor"
+                      type="number"
+                      min={1}
+                      step="any"
+                      className="tabular-nums"
+                      placeholder={String(DEFAULT_VOLUMETRIC_FACTOR)}
+                      value={form.volumetricFactor}
+                      onChange={(e) =>
+                        handleFieldChange("volumetricFactor", e.target.value)
+                      }
+                    />
+                  </div>
+                  <p className="pb-2.5 text-xs text-muted-foreground">
+                    {volumetricPreview.equivalent
+                      ? `Same as dividing by ${volumetricPreview.equivalent}`
+                      : "Enter both values"}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <AggregatorConfigFields
-              aggregatorType={form.aggregatorType}
-              form={form}
-              onChange={handleFieldChange}
-            />
-
-            <div className="space-y-1.5">
-              <Label htmlFor="webhookSecret">Webhook Secret</Label>
-              <Input
-                id="webhookSecret"
-                type="password"
-                placeholder="Optional — for verifying courier webhooks"
-                value={form.webhookSecret}
-                onChange={(e) =>
-                  handleFieldChange("webhookSecret", e.target.value)
-                }
-                autoComplete="new-password"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="priority">Priority</Label>
-              <Input
-                id="priority"
-                type="number"
-                min={1}
-                max={100}
-                value={form.priority}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    priority: Math.max(1, parseInt(e.target.value) || 1),
-                  }))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Lower number = higher priority
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 pt-1">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-3">
                 <Checkbox
                   id="isActive"
@@ -1012,7 +1173,7 @@ export default function ManageChannelsPage() {
                     Active
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Channel will be used for routing shipments
+                    Used for routing shipments
                   </p>
                 </div>
               </div>

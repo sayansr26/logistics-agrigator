@@ -299,6 +299,7 @@ async function calculateRates(params, userContext = null) {
     codAmount,
     partnerId,
     dimensions,
+    numberOfBoxes,
     paymentMode,
     shipmentValue,
     declaredValue,
@@ -331,6 +332,7 @@ async function calculateRates(params, userContext = null) {
       toPincode,
       weight: parseFloat(weight),
       dimensions,
+      numberOfBoxes: parseInt(numberOfBoxes, 10) || 1,
       paymentType,
       codAmount: codAmount ? parseFloat(codAmount) : 0,
       declaredValue: parseFloat(effectiveDeclaredValue) || 0,
@@ -357,6 +359,11 @@ async function calculateRates(params, userContext = null) {
       zoneSuffix: rate.zoneSuffix,
       zoneName: rate.zoneName,
       breakdown: rate.breakdown,
+      // Volumetric formula used to price this quote (channel-specific or system
+      // default) — shipment-service snapshots these onto the shipment
+      volumetricDivisor: rate.volumetricDivisor,
+      volumetricFactor: rate.volumetricFactor,
+      chargeableWeight: rate.chargeableWeight,
       ...(rate.discount && { discount: rate.discount }),
       ...(rate.channel && { channel: rate.channel }),
       serviceType: serviceType || "standard",

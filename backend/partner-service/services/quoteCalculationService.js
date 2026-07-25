@@ -13,6 +13,7 @@
 const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
 const { getRedisClient } = require("../config/redis");
+const weightCalc = require("../shared/utils/weightCalc");
 
 // Import services (lazy load to avoid circular dependencies)
 let _distanceZoneService = null;
@@ -87,6 +88,7 @@ function generateCacheKey(params) {
     codAmount = 0,
     declaredValue = 0,
     dimensions,
+    numberOfBoxes = 1,
     partnerId,
     sortBy = "cheapest",
     shipmentType = "B2C",
@@ -97,7 +99,7 @@ function generateCacheKey(params) {
     : "0x0x0";
 
   const fragile = params.isFragile ? "1" : "0";
-  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:${partnerId || "all"}:${sortBy}:f${fragile}:${shipmentType}`;
+  return `${CACHE_PREFIX}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:b${numberOfBoxes}:${partnerId || "all"}:${sortBy}:f${fragile}:${shipmentType}`;
 }
 
 /**
@@ -551,6 +553,7 @@ async function calculateRates(params) {
     toPincode,
     weight,
     dimensions,
+    numberOfBoxes = 1,
     paymentType = "PREPAID",
     codAmount = 0,
     declaredValue = 0,
@@ -629,6 +632,7 @@ async function calculateRates(params) {
     codAmount,
     declaredValue,
     dimensions,
+    numberOfBoxes,
     partnerId,
     sortBy,
     isFragile,
@@ -652,7 +656,8 @@ async function calculateRates(params) {
   const distanceZoneService = getDistanceZoneService();
   const chargesRuleCalcService = getChargesRuleCalcService();
 
-  // Calculate volumetric weight if dimensions provided
+  // Calculate volumetric weight if dimensions provided. Uses the system default
+  // formula; a matched channel with its own config recomputes this below.
   let effectiveWeight = weight;
   if (
     dimensions &&
@@ -660,9 +665,13 @@ async function calculateRates(params) {
     dimensions.width &&
     dimensions.height
   ) {
-    const volumetricWeight =
-      (dimensions.length * dimensions.width * dimensions.height) / 5000;
-    effectiveWeight = Math.max(weight, volumetricWeight);
+    const volumetricWeight = weightCalc.computeVolumetric({
+      boxes: numberOfBoxes,
+      length: dimensions.length,
+      width: dimensions.width,
+      height: dimensions.height,
+    });
+    effectiveWeight = weightCalc.computeChargeable(weight, volumetricWeight);
   }
 
   // Get active partners
@@ -761,21 +770,28 @@ async function calculateRates(params) {
         const matchedChannel =
           channelSelection.mode === "MATCHED" ? channelSelection.channel : null;
 
-        // Recompute volumetric weight with the matched channel's divisor when
-        // it differs from the default 5000
+        // Recompute volumetric weight with the matched channel's own formula.
+        // A null divisor/factor resolves to the system default, so this always
+        // reflects what the channel is actually configured to charge.
+        const volumetricConfig = weightCalc.resolveVolumetricConfig({
+          divisor: matchedChannel?.channelConfig?.volumetricDivisor,
+          factor: matchedChannel?.channelConfig?.volumetricFactor,
+        });
+
         let partnerEffectiveWeight = effectiveWeight;
-        const channelDivisor = matchedChannel?.channelConfig?.volumetricDivisor;
-        if (
-          channelDivisor &&
-          Number(channelDivisor) !== 5000 &&
-          dimensions?.length &&
-          dimensions?.width &&
-          dimensions?.height
-        ) {
-          const channelVolumetricWeight =
-            (dimensions.length * dimensions.width * dimensions.height) /
-            Number(channelDivisor);
-          partnerEffectiveWeight = Math.max(weight, channelVolumetricWeight);
+        if (dimensions?.length && dimensions?.width && dimensions?.height) {
+          const channelVolumetricWeight = weightCalc.computeVolumetric({
+            boxes: numberOfBoxes,
+            length: dimensions.length,
+            width: dimensions.width,
+            height: dimensions.height,
+            divisor: volumetricConfig.divisor,
+            factor: volumetricConfig.factor,
+          });
+          partnerEffectiveWeight = weightCalc.computeChargeable(
+            weight,
+            channelVolumetricWeight,
+          );
         }
 
         // Distance zone matching for pricing context (DISTANCE_BASE_WEIGHT rules).
@@ -914,6 +930,11 @@ async function calculateRates(params) {
           totalRate,
           baseRate: totalRate,
           breakdown: breakdownToUse,
+          // Volumetric formula this quote was priced with, so shipment-service
+          // reuses it verbatim instead of re-deriving a default
+          volumetricDivisor: volumetricConfig.divisor,
+          volumetricFactor: volumetricConfig.factor,
+          chargeableWeight: partnerEffectiveWeight,
           ...(discountInfo && { discount: discountInfo }),
           ...(matchedChannel && {
             channel: {

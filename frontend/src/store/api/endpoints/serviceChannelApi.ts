@@ -42,7 +42,10 @@ export interface ServiceChannel {
   priority: number;
   createdAt?: string;
   updatedAt?: string;
-  channelConfig?: { volumetricDivisor?: number } | null;
+  channelConfig?: {
+    volumetricDivisor?: number | null;
+    volumetricFactor?: number | null;
+  } | null;
 }
 
 export interface ServiceChannelInput {

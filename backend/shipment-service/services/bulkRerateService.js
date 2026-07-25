@@ -51,6 +51,7 @@ async function processRow(row, reason, ctx) {
         height: true,
         numberOfBoxes: true,
         volumetricDivisor: true,
+        volumetricFactor: true,
         paymentType: true,
         pickupPincode: true,
         deliveryPincode: true,
@@ -74,7 +75,11 @@ async function processRow(row, reason, ctx) {
     const newLength = row.newLength || parseFloat(shipment.length);
     const newWidth = row.newWidth || parseFloat(shipment.width);
     const newHeight = row.newHeight || parseFloat(shipment.height);
-    const divisor = parseFloat(shipment.volumetricDivisor) || 5000;
+    // Reuse the formula the shipment was originally priced with
+    const { divisor, factor } = weightCalc.resolveVolumetricConfig({
+      divisor: shipment.volumetricDivisor,
+      factor: shipment.volumetricFactor,
+    });
     const numBoxes = shipment.numberOfBoxes || 1;
 
     const newVolWeight = weightCalc.computeVolumetric({
@@ -83,6 +88,7 @@ async function processRow(row, reason, ctx) {
       width: newWidth,
       height: newHeight,
       divisor,
+      factor,
     });
     const newChargeableWeight = weightCalc.computeChargeable(
       newWeight,
@@ -260,7 +266,10 @@ async function processRow(row, reason, ctx) {
       updateData.holdReason = `Insufficient balance after bulk re-rate (₹${oldCost} → ₹${newCost}). Reason: ${reason}`;
     }
 
-    await prisma.shipment.update({ where: { id: shipment.id }, data: updateData });
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: updateData,
+    });
 
     await prisma.shipmentFinancialAdjustment.create({
       data: {

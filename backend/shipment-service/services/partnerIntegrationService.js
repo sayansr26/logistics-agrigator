@@ -301,6 +301,7 @@ class PartnerIntegrationService {
         weight: rateParams.weight,
         serviceType: rateParams.serviceType || "STANDARD",
         dimensions: rateParams.dimensions || undefined,
+        numberOfBoxes: rateParams.numberOfBoxes || undefined,
         codAmount: rateParams.codAmount || undefined,
         declaredValue: rateParams.declaredValue || undefined,
         paymentMode: rateParams.paymentMode || "PREPAID",

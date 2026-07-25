@@ -14,6 +14,7 @@
 
 const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
+const { resolveVolumetricConfig } = require("../shared/utils/weightCalc");
 
 // Non-secret columns safe to return over HTTP. NEVER include `credentials`
 // (per-account API keys / warehouse secrets) in any HTTP response.
@@ -34,8 +35,10 @@ const PUBLIC_ACCOUNT_SELECT = {
   priority: true,
   createdAt: true,
   updatedAt: true,
-  // Non-secret divisor from the linked credential account (for volumetric calc)
-  channelConfig: { select: { volumetricDivisor: true } },
+  // Non-secret volumetric config from the linked credential account
+  channelConfig: {
+    select: { volumetricDivisor: true, volumetricFactor: true },
+  },
 };
 
 // Selection outcomes for selectChannel()
@@ -188,6 +191,13 @@ class CarrierAccountService {
     const config = channel.channelConfig;
     const overrides = channel.credentials || {};
 
+    // Per-account overrides win over the linked credential account; a null on
+    // either side falls through to the system default (27000 / 6).
+    const volumetric = resolveVolumetricConfig({
+      divisor: overrides.volumetricDivisor ?? config?.volumetricDivisor,
+      factor: overrides.volumetricFactor ?? config?.volumetricFactor,
+    });
+
     const resolved = {
       serviceChannelId: channel.id,
       channelName: channel.channelName,
@@ -203,8 +213,8 @@ class CarrierAccountService {
         ...(overrides.aggregatorConfig || {}),
       },
       webhookSecret: overrides.webhookSecret ?? config?.webhookSecret ?? null,
-      volumetricDivisor:
-        overrides.volumetricDivisor ?? config?.volumetricDivisor ?? 5000,
+      volumetricDivisor: volumetric.divisor,
+      volumetricFactor: volumetric.factor,
     };
 
     if (resolved.aggregatorType === "NONE") {

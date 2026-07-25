@@ -86,6 +86,24 @@ const channelConfigSchema = Joi.object({
     otherwise: Joi.object().optional().allow(null),
   }),
   webhookSecret: Joi.string().trim().max(500).optional().allow("", null),
+  // Volumetric formula override: ((boxes * L*W*H) / divisor) * factor.
+  // null on either field = use the system default (27000 / 6).
+  volumetricDivisor: Joi.number()
+    .positive()
+    .max(1000000)
+    .allow(null)
+    .optional()
+    .messages({
+      "number.positive": "Volumetric divisor must be greater than 0",
+    }),
+  volumetricFactor: Joi.number()
+    .positive()
+    .max(1000)
+    .allow(null)
+    .optional()
+    .messages({
+      "number.positive": "Volumetric factor must be greater than 0",
+    }),
 });
 
 const channelModeSchema = Joi.object({
@@ -122,6 +140,23 @@ const updateChannelSchema = Joi.object({
     otherwise: Joi.object().optional().allow(null),
   }),
   webhookSecret: Joi.string().trim().max(500).optional().allow("", null),
+  // null clears an override and reverts the channel to the system default
+  volumetricDivisor: Joi.number()
+    .positive()
+    .max(1000000)
+    .allow(null)
+    .optional()
+    .messages({
+      "number.positive": "Volumetric divisor must be greater than 0",
+    }),
+  volumetricFactor: Joi.number()
+    .positive()
+    .max(1000)
+    .allow(null)
+    .optional()
+    .messages({
+      "number.positive": "Volumetric factor must be greater than 0",
+    }),
 });
 
 const switchChannelModeSchema = Joi.object({

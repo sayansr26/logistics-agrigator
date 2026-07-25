@@ -226,6 +226,10 @@ class PartnerChannelService {
             aggregatorType: channel.aggregatorType ?? "NONE",
             aggregatorConfig: channel.aggregatorConfig ?? undefined,
             webhookSecret: channel.webhookSecret ?? undefined,
+            // null (not undefined) so "use default" is stored explicitly and
+            // resolves to the system default at read time
+            volumetricDivisor: channel.volumetricDivisor ?? null,
+            volumetricFactor: channel.volumetricFactor ?? null,
           },
         });
 

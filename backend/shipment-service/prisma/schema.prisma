@@ -83,7 +83,10 @@ model Shipment {
   height            Decimal  @db.Decimal(8, 2)
   volumetricWeight  Decimal? @map("volumetric_weight") @db.Decimal(8, 3)
   chargeableWeight  Decimal? @map("chargeable_weight") @db.Decimal(8, 3)
+  // Snapshot of the volumetric formula used at quote time, so re-rates reproduce
+  // the original charge even if the channel config changes later.
   volumetricDivisor Decimal? @map("volumetric_divisor") @db.Decimal(10, 2)
+  volumetricFactor  Decimal? @map("volumetric_factor") @db.Decimal(10, 2)
   description       String?  @db.VarChar(500)
   value             Decimal? @db.Decimal(12, 2)
   fragile           Boolean  @default(false)

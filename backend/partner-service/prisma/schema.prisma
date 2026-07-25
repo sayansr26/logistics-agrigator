@@ -92,8 +92,11 @@ model PartnerChannelConfig {
   aggregatorConfig Json?   @map("aggregator_config") // Courier-specific settings (clientName, licenseKey, warehouseCode, etc.)
   webhookSecret    String? @map("webhook_secret") @db.VarChar(500) // For courier webhook signature verification
 
-  // Volumetric divisor per partner/channel (default 5000)
-  volumetricDivisor Float @default(5000) @map("volumetric_divisor")
+  // Volumetric formula per partner/channel: ((boxes * L*W*H) / divisor) * factor
+  // NULL on either field = use the system default (27000 / 6), resolved at read
+  // time by shared/utils/weightCalc.resolveVolumetricConfig()
+  volumetricDivisor Float? @map("volumetric_divisor")
+  volumetricFactor  Float? @map("volumetric_factor")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
