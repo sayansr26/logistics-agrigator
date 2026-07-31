@@ -933,8 +933,53 @@ Pincode assignment is enforced in `quoteCalculationService.js` via `hasPincodeAs
 
 **Partner `quoteCalculationService`**: if no distance-zone milestone matches, the engine still runs non-distance charge rules (e.g. WEIGHT / INVOICE_VALUE); only rejects when unmatched distance **and** no priced breakdown (see codebase).
 
+### 29. Client Session Hydration & Transparent Token Refresh Pattern (July 2026)
+
+Applies to every client-side auth guard and every authenticated API call in the frontend.
+
+**Rule 1 — never act on pre-hydration auth state.** Redux `initialState` is always logged-out (SSR has no localStorage), so a guard that reads `isAuthenticated` on first render will redirect an authenticated user to login. `authSlice` exposes a separate **`isHydrated`** flag; guards render a loading state until it flips and only then decide. `useAuth().isLoading` includes `!isHydrated`.
+
+```tsx
+// ✅ CORRECT
+if (!isHydrated) return <Spinner />;      // don't know yet
+if (!isAuthenticated) router.replace(...); // now we know
+
+// ❌ WRONG - redirects every authenticated user on cold load
+useEffect(() => { if (!isAuthenticated) router.push("/auth/login"); }, [isAuthenticated]);
+```
+
+Guard redirects use `router.replace`, never `push` — `push` leaves the rejected page in history and Back re-triggers the bounce.
+
+**Rule 2 — `hydrate()` validates, it doesn't trust.** Presence of a token in localStorage is not a session. `hydrate` checks JWT `exp` via `lib/auth/token.ts` and treats _expired access token + live refresh token_ as authenticated (the API layer will swap it). Neither valid → purge localStorage **and** cookies so no two sources can disagree.
+
+**Rule 3 — one writer for auth persistence.** Only `authSlice` (`setCredentials` / `setTokens` / `logout`) writes localStorage and cookies. API `transformResponse` must not. Duplicate writers are how cookie and localStorage state drift out of sync.
+
+**Rule 4 — 401 belongs to `baseQueryWithReauth`, nothing else.** `store/api/baseApi.ts` wraps `fetchBaseQuery`:
+
+- **Pre-emptive** refresh when the access token is already expired but the refresh token is live — skips a guaranteed 401.
+- **Reactive** refresh + single retry on a 401.
+- **Single-flight**: one module-level `refreshPromise` shared by all concurrent callers. The backend rotates the refresh token on every refresh, so parallel refreshes invalidate each other. This is a correctness requirement, not an optimization.
+- Endpoints in `NO_REAUTH_ENDPOINTS` (login/register/refresh/password reset) are exempt — their 401 _is_ the answer.
+- Only on definitive failure: `logout()` + one toast + one `window.location.replace("/auth/login?expired=1&redirect=…")`. Guarded so an anonymous visitor's 401 never produces "session expired".
+
+Global error middleware must return early on 401 — a toast there fires on every recoverable 401 and re-introduces the bounce.
+
+**Rule 5 — edge middleware is a presence check, not an auth check.** The Edge runtime can't verify a JWT cheaply. The `token` cookie is written with the **refresh** token's lifetime and means "a session may exist"; the authoritative decision is client-side post-hydration. A cookie pinned to the access-token TTL evicts users whose session is still perfectly recoverable.
+
+**Rule 6 — when a submit is followed by a navigation, retire the form, not just the button.** The RTK Query mutation settles seconds before the destination route renders. Binding the spinner to `isLoading` alone makes the button snap back to idle and re-exposes a filled, submittable form — which reads as a silent failure. Two layers are needed:
+
+```jsx
+const isSubmitting = isMutating || isRedirecting; // button stays busy
+const isLeaving = isRedirecting || (isHydrated && isAuthenticated);
+if (!isHydrated || isLeaving) return <StatusScreen />; // form is gone entirely
+```
+
+Derive the "leaving" condition from **store state**, not just local state: on a remount local state resets while the browser re-autofills the inputs, resurrecting the form mid-navigation. Gating on `!isHydrated` as well keeps an already-authenticated visitor from ever seeing the form flash. `router.prefetch(destination)` helps in production but is a no-op in dev, where on-demand compilation dominates the wait.
+
+**Gateway pairing:** the refresh endpoint MUST be in `api-gateway/middleware/authValidator.js` `publicPaths` — it is called precisely when the access token is dead. `isPublicPath` matches by `startsWith`, so the entry must be a true prefix of the real route (`/api/v1/auth/refresh`); a near-miss like `/api/v1/auth/refresh-token` silently makes refresh unreachable.
+
 ---
 
 **Architecture Status**: Stable
-**Last Pattern Review**: April 8, 2026
-**Recent Additions**: Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern (DISTANCE fallback April 2026), Shipment Quote API & Rate Cache Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+**Last Pattern Review**: July 31, 2026
+**Recent Additions**: Client Session Hydration & Transparent Token Refresh Pattern, Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern (DISTANCE fallback April 2026), Shipment Quote API & Rate Cache Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

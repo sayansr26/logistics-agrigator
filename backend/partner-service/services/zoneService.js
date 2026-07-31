@@ -303,40 +303,54 @@ class ZoneService {
    */
   async deleteZone(zoneId, partnerId) {
     try {
-      logger.info("Soft deleting zone", { partnerId, zoneId });
+      logger.info("Deleting zone", { partnerId, zoneId });
 
       // Validate inputs
       if (!zoneId) {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
-      // Verify zone exists and belongs to partner
+      // partnerId is optional: admin/superadmin/operations delete across
+      // partners, so scope the lookup only when one is supplied.
       const existingZone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where: partnerId ? { id: zoneId, partnerId } : { id: zoneId },
       });
 
       if (!existingZone) {
         throw new Error("Zone not found or access denied");
       }
 
-      // Soft delete by setting status to false
-      const deletedZone = await prisma.zone.update({
-        where: { id: zoneId },
-        data: {
-          status: false,
-          updatedAt: new Date(),
+      // charge_rules.fromZoneId/toZoneId are plain UUID columns with no
+      // foreign key, so the database will NOT stop us from orphaning
+      // ZONE_TO_ZONE_WEIGHT pricing rules. Block the delete instead of
+      // silently breaking rate calculation.
+      const dependentRules = await prisma.chargeRule.count({
+        where: {
+          OR: [{ fromZoneId: zoneId }, { toZoneId: zoneId }],
         },
       });
 
-      // Invalidate cache
-      await this._invalidateZoneCache(partnerId, zoneId);
+      if (dependentRules > 0) {
+        throw new Error(
+          `Zone is in use by ${dependentRules} charge rule${dependentRules === 1 ? "" : "s"}. Remove or update those rules before deleting this zone.`,
+        );
+      }
 
-      logger.info("Zone soft deleted successfully", {
-        partnerId,
+      // Hard delete. Zone geography (states/cities/areas/pincodes) and
+      // milestones cascade via onDelete: Cascade in the schema.
+      const deletedZone = await prisma.zone.delete({
+        where: { id: zoneId },
+      });
+
+      // Invalidate cache using the zone's own owner, since an admin caller
+      // may not have a partnerId of their own.
+      await this._invalidateZoneCache(
+        partnerId || existingZone.partnerId,
+        zoneId,
+      );
+
+      logger.info("Zone deleted successfully", {
+        partnerId: partnerId || existingZone.partnerId,
         zoneId,
         zoneName: deletedZone.name,
       });

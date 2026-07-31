@@ -37,8 +37,12 @@ export const errorMiddleware: Middleware = (store) => (next) => (action) => {
 
     // Handle different error types
     if (isAuthError(error)) {
-      // 401 Unauthorized - Token expired or invalid
-      handleAuthError(store, parsedError);
+      // 401 Unauthorized - owned entirely by baseQueryWithReauth in
+      // store/api/baseApi.ts, which refreshes the access token and retries.
+      // Showing a toast or redirecting here would fire on every recoverable
+      // 401 (including pre-hydration requests) and bounce the user to login.
+      // Only when refresh definitively fails does that layer end the session.
+      return next(action);
     } else if (isAuthorizationError(error)) {
       // 403 Forbidden - Insufficient permissions
       handleAuthorizationError(store, parsedError);
@@ -56,37 +60,6 @@ export const errorMiddleware: Middleware = (store) => (next) => (action) => {
 
   return next(action);
 };
-
-/**
- * Handle Authentication Errors (401)
- *
- * - Clear auth state
- * - Redirect to login page
- * - Show toast notification
- */
-function handleAuthError(store: any, error: any) {
-  // Show notification
-  store.dispatch(
-    addNotification({
-      type: "error",
-      message: error.message,
-      duration: 5000,
-    }),
-  );
-
-  // Clear auth state and redirect to login
-  // Use setTimeout to avoid dispatching during middleware execution
-  setTimeout(() => {
-    // Clear tokens from localStorage
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
-
-    // Redirect to login page
-    if (typeof window !== "undefined") {
-      window.location.href = "/auth/login?expired=true";
-    }
-  }, 100);
-}
 
 /**
  * Handle Authorization Errors (403)

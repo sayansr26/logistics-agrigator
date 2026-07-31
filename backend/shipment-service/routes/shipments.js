@@ -8,7 +8,9 @@ const {
   createShipmentLimiter,
   trackingLimiter,
   generalLimiter,
+  bulkOperationsLimiter,
 } = require("../middleware/rateLimiter");
+const { uploadShipmentFile } = require("../middleware/upload");
 
 // Import controllers
 const {
@@ -41,6 +43,10 @@ const {
   // SHIP-005: Bulk Operations and Advanced Features
   processBulkShipments,
   getBulkJobStatus,
+  uploadBulkShipments,
+  getBulkJobs,
+  getBulkJobById,
+  downloadBulkTemplate,
   createNDRCase,
   getNDRCases,
   takeNDRAction,
@@ -403,6 +409,45 @@ router.post("/webhook/:provider", generalLimiter, handleProviderWebhook);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+/**
+ * @swagger
+ * /api/v1/shipments/ndr:
+ *   get:
+ *     tags: [NDR Management]
+ *     summary: Get NDR cases with filtering
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [OPEN, ASSIGNED, IN_PROGRESS, REATTEMPT_SCHEDULED, ADDRESS_UPDATED, RTO_INITIATED, RESOLVED, CLOSED]
+ *       - name: priority
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [LOW, MEDIUM, HIGH, URGENT]
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: NDR cases retrieved
+ */
+// NOTE: must precede "/:id" - Express matches in registration order, and
+// "/:id" would otherwise capture "ndr" as a shipment ID.
+router.get(
+  "/ndr",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getNDRCases,
+);
+
 router.get(
   "/:id",
   generalLimiter,
@@ -1393,11 +1438,140 @@ router.get(
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  */
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/template:
+ *   get:
+ *     tags: [Bulk Operations]
+ *     summary: Download the bulk shipment CSV template
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV template file
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ */
+// NOTE: must precede "/bulk/:jobId/status" so "template" is not read as a jobId
+router.get(
+  "/bulk/template",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  downloadBulkTemplate,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/jobs:
+ *   get:
+ *     tags: [Bulk Operations]
+ *     summary: List bulk upload jobs (upload history)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 10 }
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+ *       - name: search
+ *         in: query
+ *         description: Filter by file name
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Bulk jobs retrieved with pagination and summary counts
+ */
+// NOTE: must precede "/bulk/:jobId/status" so "jobs" is not read as a jobId
+router.get(
+  "/bulk/jobs",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getBulkJobs,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/jobs/{jobId}:
+ *   get:
+ *     tags: [Bulk Operations]
+ *     summary: Get a single bulk job with live progress
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: jobId
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Bulk job retrieved
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.get(
+  "/bulk/jobs/:jobId",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getBulkJobById,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/bulk/upload:
+ *   post:
+ *     tags: [Bulk Operations]
+ *     summary: Upload a CSV/Excel file to create shipments in bulk
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or Excel file (max 10MB, max 1000 rows)
+ *     responses:
+ *       200:
+ *         description: File processed; per-row results returned
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.post(
+  "/bulk/upload",
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "create", "assigned"),
+  bulkOperationsLimiter,
+  // Multipart body - parsed by multer, so no JSON validator here
+  ...uploadShipmentFile,
+  uploadBulkShipments,
+);
+
 router.post(
   "/bulk",
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "bulk_create", "assigned"),
+  authMiddleware.requirePermission("shipment", "create", "assigned"),
+  bulkOperationsLimiter,
   validate(processBulkShipmentsSchema),
   processBulkShipments,
 );
@@ -1472,37 +1646,6 @@ router.post(
   authMiddleware.requirePermission("shipment", "update", "assigned"),
   validate(createNDRCaseSchema),
   createNDRCase,
-);
-
-/**
- * @swagger
- * /api/v1/shipments/ndr:
- *   get:
- *     tags: [NDR Management]
- *     summary: Get NDR cases with filtering
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: status
- *         in: query
- *         schema:
- *           type: string
- *           enum: [CREATED, IN_PROGRESS, RESOLVED, CLOSED]
- *       - name: priority
- *         in: query
- *         schema:
- *           type: string
- *           enum: [LOW, MEDIUM, HIGH, URGENT]
- *     responses:
- *       200:
- *         description: NDR cases retrieved
- */
-router.get(
-  "/ndr",
-  authMiddleware.authenticate,
-  authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
-  getNDRCases,
 );
 
 /**

@@ -794,9 +794,20 @@ const analyticsQuerySchema = Joi.object({
 // SHIP-005: Bulk Operations and Advanced Features validation schemas
 
 const processBulkShipmentsSchema = Joi.object({
-  file: Joi.any()
+  bulkData: Joi.array()
+    .items(Joi.object().unknown(true))
+    .min(1)
+    .max(1000)
     .required()
-    .description("CSV or Excel file containing shipment data"),
+    .description("Array of shipment records to create (max 1000)")
+    .messages({
+      "array.min": "Bulk data must be a non-empty array",
+      "array.max": "Maximum 1000 shipments allowed per bulk operation",
+    }),
+  options: Joi.object()
+    .unknown(true)
+    .optional()
+    .description("Optional processing options"),
   clientId: Joi.string()
     .optional()
     .description("Client ID for multi-tenant support"),

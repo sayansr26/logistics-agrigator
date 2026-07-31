@@ -49,7 +49,7 @@ export function useAuth() {
   const router = useRouter();
 
   // Redux state selectors
-  const { user, token, isAuthenticated } = useAppSelector(
+  const { user, token, isAuthenticated, isHydrated } = useAppSelector(
     (state) => state.auth,
   );
 
@@ -226,23 +226,32 @@ export function useAuth() {
    * Redirect to login if not authenticated
    */
   const requireAuth = useCallback(() => {
+    // Before hydration the state always reads unauthenticated - acting on it
+    // redirects signed-in users to login. Wait for the real answer.
+    if (!isHydrated) return true;
+
     if (!isAuthenticated && !isLoggingIn) {
-      router.push("/auth/login");
+      router.replace("/auth/login");
       return false;
     }
     return true;
-  }, [isAuthenticated, isLoggingIn, router]);
+  }, [isHydrated, isAuthenticated, isLoggingIn, router]);
 
   /**
    * Redirect to dashboard if already authenticated
    */
-  const redirectIfAuthenticated = useCallback(() => {
-    if (isAuthenticated && !isLoggingIn) {
-      router.push("/dashboard");
-      return true;
-    }
-    return false;
-  }, [isAuthenticated, isLoggingIn, router]);
+  const redirectIfAuthenticated = useCallback(
+    (target: string = "/dashboard") => {
+      if (!isHydrated) return false;
+
+      if (isAuthenticated && !isLoggingIn) {
+        router.replace(target);
+        return true;
+      }
+      return false;
+    },
+    [isHydrated, isAuthenticated, isLoggingIn, router],
+  );
 
   /**
    * Check if user is admin
@@ -298,6 +307,7 @@ export function useAuth() {
     token,
     accessToken: token, // Alias for backward compatibility
     isAuthenticated,
+    isHydrated,
 
     // Authentication actions
     login,
@@ -320,7 +330,15 @@ export function useAuth() {
     redirectIfAuthenticated,
 
     // Loading states
-    isLoading: isLoggingIn || isRegistering || isLoggingOut || isLoadingUser,
+    // Hydration counts as loading: until it completes we genuinely do not
+    // know whether the user is signed in, and consumers must not act on the
+    // provisional "logged out" state.
+    isLoading:
+      !isHydrated ||
+      isLoggingIn ||
+      isRegistering ||
+      isLoggingOut ||
+      isLoadingUser,
     isLoggingIn,
     isRegistering,
     isLoggingOut,

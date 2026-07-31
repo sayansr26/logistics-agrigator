@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -15,23 +16,31 @@ export function ProtectedRoute({
   requiredRole,
   requiredPermission,
 }: ProtectedRouteProps) {
-  const {
-    isAuthenticated,
-    isLoading,
-    user,
-    isRole,
-    hasPermission,
-    requireAuth,
-  } = useAuth();
+  const { isAuthenticated, isHydrated, isRole, hasPermission } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      requireAuth();
-    }
-  }, [isLoading, isAuthenticated, requireAuth]);
+    // Never decide anything before Redux has read localStorage - the
+    // pre-hydration state always looks unauthenticated, and acting on it
+    // is what used to bounce signed-in users to the login page.
+    if (!isHydrated) return;
 
-  // Show loading while checking authentication
-  if (isLoading) {
+    if (!isAuthenticated && !hasRedirected.current) {
+      hasRedirected.current = true;
+      const redirect = encodeURIComponent(pathname || "/dashboard");
+      // `replace` so Back doesn't return to the page we just rejected.
+      router.replace(`/auth/login?redirect=${redirect}`);
+    }
+
+    if (isAuthenticated) {
+      hasRedirected.current = false;
+    }
+  }, [isHydrated, isAuthenticated, pathname, router]);
+
+  // Show loading while hydrating - never render children or redirect yet.
+  if (!isHydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

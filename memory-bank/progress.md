@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: April 8, 2026
+> Development status and changelog | Last Updated: July 31, 2026
 
 ## Overall Project Status
 
@@ -368,6 +368,30 @@ Overall Project Progress          [███████████████
 
 ### This Week's Progress
 
+- ✅ **Auth redirect ping-pong fixed + transparent refresh-token flow wired (July 31, 2026)**
+  - Cold-opening the app (or `/dashboard`) sent users login → dashboard flash → login with "session expired". Six compounding causes, all fixed
+  - **No refresh flow existed in the running code**: `baseApi.ts` was a bare `fetchBaseQuery`; the `refreshToken` mutation had zero call sites and `store/auth-store.ts`'s `refreshAccessToken` is dead code — every 401 went straight to logout
+  - **Gateway blocked refresh anyway**: `authValidator.js` `publicPaths` listed `/api/v1/auth/refresh-token`, but the real route is `/api/v1/auth/refresh`; `isPublicPath` matches by `startsWith`, so refresh required a live Bearer JWT and could never succeed once the access token expired
+  - **Hydration race**: `ProtectedRoute`'s effect ran on the stale pre-hydration `isAuthenticated: false` and pushed to login, then Redux flipped true (dashboard flash) and the login page pushed back — the ping-pong. Fixed with a new `isHydrated` flag; guards now render a spinner until hydration completes and use `router.replace`
+  - `hydrate()` now validates JWT `exp` instead of trusting localStorage; expired access token + live refresh token still counts as authenticated
+  - `errorMiddleware` no longer hard-navigates on any 401 (it fired on pre-hydration requests and left cookies/localStorage disagreeing); 401 is now owned solely by `baseQueryWithReauth`
+  - Auth cookies now track the **refresh** token's lifetime (was a hardcoded 24h vs the access-token TTL), so a merely-expired access token no longer evicts users at the edge
+  - New `frontend/src/lib/auth/token.ts` (decode/expiry/cookie helpers); no new dependencies — `exp` decoded manually, single-flight refresh via a module-level promise (required: the backend rotates the refresh token, so parallel refreshes would invalidate each other)
+  - Verified: `POST /api/v1/auth/refresh` with **no** Authorization header now returns 200 + rotated pair (was 401 `NO_TOKEN`); new access token authorizes `GET /api/v1/zones` 200; invalid token → `INVALID_REFRESH_TOKEN`; `/dashboard` without cookie → 307 with `?redirect=`; frontend build clean, 52/52 static pages; containers restart error-free
+  - Login post-submit dead-time fixed: the spinner was bound to the RTK Query mutation, which settles well before the destination route loads, so the filled form reappeared with a live "Sign In" button for seconds — reading as a silent failure. Now `isRedirecting` holds the button busy **and** `isLeaving = isRedirecting || (isHydrated && isAuthenticated)` replaces the whole page with a "Signing you in…" screen, so the form can't come back (a remount resets local state but the browser re-autofills the fields). Middleware ruled out first: `/dashboard` with a valid cookie returns 200 for both normal and `RSC: 1` requests
+  - ⚠️ The multi-second wait is mostly a dev artifact — Next compiles `/dashboard` on demand (~2.4s) and `router.prefetch` is a no-op in dev; production will be faster. The fix makes the wait legible, not shorter
+  - ⚠️ `yarn build` must run as `docker exec -e NODE_ENV=production logistics-frontend yarn build` — the container's dev `NODE_ENV` makes Next mix dev/prod React runtimes and fail prerender on `/_not-found`. `frontend/node_modules` does not exist on the host
+
+- ✅ **Bulk Shipment Upload built + NDR page wired to live APIs (July 25, 2026)**
+  - Replaced `mock-data.ts`-driven UI on `/shipments/bulk` and `/shipments/ndr` with real endpoints; both pages converted `.jsx` → `.tsx`, mock exports deleted
+  - Bulk upload was **non-functional**, not merely unwired: invalid permission `shipment:bulk_create:assigned` (`bulk_create` absent from `PERMISSION_ACTIONS` → 403 for all non-superadmins), Joi schema requiring `file` while the controller read `bulkData`, no multer/xlsx installed at all, `BulkJob` table never written to (history had no data source), and `bulkProcessingService` calling a non-existent `selectOptimalPartner` with wrong params/return-shape and no auth token
+  - Added `multer` + `xlsx`, `middleware/upload.js`, `services/bulkFileParserService.js` (flat CSV → nested shape, phone normalisation to `+91-XXXXXXXXXX`, per-row errors instead of whole-file rejection)
+  - New endpoints: `POST /bulk/upload` (multipart, now using the previously-unused `bulkOperationsLimiter`), `GET /bulk/jobs` (+ summary aggregate), `GET /bulk/jobs/:jobId`, `GET /bulk/template`
+  - `GET /api/v1/shipments/ndr` was **unreachable** — registered after `GET /:id`, so `"ndr"` was parsed as a shipment UUID (500). Reordered; that surfaced an invalid `include` of non-relations `createdBy`/`assignedTo` in `ndrService`, which was crashing the process
+  - Fixed `baseApi.ts` forcing `Content-Type: application/json` onto FormData (corrupts multipart boundary) via an `x-multipart` marker
+  - Verified: service restarts clean (0 MODULE_NOT_FOUND), NDR 200, bulk permission 400 not 403, upload parses/maps/persists `bulk_jobs` rows, invalid file types and unauth rejected, frontend build exit 0
+  - ⚠️ Shipment creation still blocked by missing courier rate cards in dev (affects the normal single-shipment path identically) — seed partner rates to see successful bulk creation
+
 - ✅ **Partner Pincode Autocomplete Production Bug Fix (April 8, 2026)**
   - Fixed frontend-only issue where `/api/v1/geography/pincodes/search` returned valid results in production but the partner assign dialog still showed "No pincodes found"
   - Root cause was RTK Query endpoint-name collision: both `geoApi.ts` and `partnerPincodesApi.ts` injected `searchPincodes` into the shared `baseApi`, making runtime behavior bundle/load-order dependent
@@ -593,8 +617,71 @@ Overall Project Progress          [███████████████
 | #29 | Partner      | DelhiveryAdapter falling back to env vars instead of channel config   | Mar 2026   |
 | #30 | Frontend     | Skeleton.tsx case mismatch breaking Linux production builds           | Mar 2026   |
 | #31 | Frontend     | Charges management multiple requests causing 429 rate limit errors    | Mar 2026   |
+| #32 | API Gateway  | Refresh public path typo `/auth/refresh-token` → `/auth/refresh`      | Jul 2026   |
+| #33 | Frontend     | Login↔dashboard redirect ping-pong (pre-hydration auth guard race)    | Jul 2026   |
+| #34 | Frontend     | No token refresh anywhere — every 401 forced logout                   | Jul 2026   |
+| #35 | Frontend     | `hydrate()` trusted localStorage without checking JWT `exp`           | Jul 2026   |
+| #36 | Frontend     | errorMiddleware hard-redirected on every 401, leaving cookies stale   | Jul 2026   |
+| #37 | Frontend     | Login form reappeared submittable during the post-login navigation    | Jul 2026   |
 
 ## Changelog
+
+### July 2026
+
+```
+[2026-07-31] Auth Session Hydration + Transparent Token Refresh - COMPLETE
+  Bug: cold open → login → dashboard flash → back to login "session expired".
+       Same on direct /dashboard. Refresh tokens were never used at all.
+
+  API Gateway:
+  - authValidator.js publicPaths: "/api/v1/auth/refresh-token" → "/api/v1/auth/refresh"
+    (isPublicPath matches by startsWith; the old entry is not a prefix of the real
+     route, so refresh required a live JWT and was unreachable once one expired)
+
+  Frontend - new lib/auth/token.ts:
+  - decodeJwt / getTokenExpiryMs / isTokenExpired (30s skew) / isTokenValid
+  - setAuthCookies (max-age from the REFRESH token's exp, not a hardcoded 24h)
+  - clearAuthCookies / clearStoredAuth (single teardown for localStorage + cookies)
+
+  Frontend - store/api/baseApi.ts (baseQueryWithReauth):
+  - Pre-emptive refresh when access token expired but refresh token still live
+  - Reactive refresh + single retry on 401; NO_REAUTH_ENDPOINTS exempt
+    (login/register/refresh/forgot/reset - their 401 IS the answer)
+  - Single-flight module-level refreshPromise (backend rotates the refresh token,
+    so concurrent refreshes would invalidate each other)
+  - prepareHeaders falls back to localStorage before hydration lands
+  - Definitive failure only: logout + one toast + one location.replace to
+    /auth/login?expired=1&redirect=…, guarded so anonymous 401s stay silent
+
+  Frontend - authSlice.ts:
+  - New isHydrated flag + selectIsHydrated (guards must not act before it flips)
+  - hydrate() validates JWT exp; expired access + live refresh = still authenticated;
+    neither valid → purge localStorage AND cookies
+  - New setTokens reducer for rotated pairs; setCredentials/logout own all
+    persistence (login transformResponse no longer writes localStorage/cookies)
+
+  Frontend - guards & pages:
+  - ProtectedRoute: spinner until isHydrated, router.replace + useRef once-guard
+  - useAuth: exposes isHydrated, isLoading includes !isHydrated,
+    requireAuth/redirectIfAuthenticated no-op until hydrated
+  - AuthHydration: no longer writes document.cookie (authSlice owns it)
+  - errorMiddleware: returns early on 401, no toast, no redirect
+  - login page: honours ?redirect=, shows notice on ?expired=1, gated on isHydrated;
+    isRedirecting state keeps the button spinning across the navigation (the
+    mutation settles long before the route loads) + router.prefetch(redirectTo)
+  - middleware.ts: removed dead duplicate !token check; documented as a
+    presence check only (Edge cannot verify a JWT cheaply)
+
+  Verified: refresh 200 with no Authorization header (was 401 NO_TOKEN); rotated
+  token authorizes /api/v1/zones 200; invalid → INVALID_REFRESH_TOKEN; missing body
+  → 400 validation; /auth/refresh-token now 404; frontend build clean 52/52 pages;
+  /dashboard without cookie → 307 /auth/login?redirect=%2Fdashboard.
+
+  Noted, not fixed: refresh tokens sign only {userId} so two issued in the same
+  second are byte-identical (rotated-out tokens can still validate) - add a jti if
+  strict reuse detection is ever needed. Token storage stays in localStorage by
+  decision; httpOnly-cookie migration deferred.
+```
 
 ### March 2026
 

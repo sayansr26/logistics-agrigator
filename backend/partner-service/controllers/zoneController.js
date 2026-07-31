@@ -586,18 +586,25 @@ async function deleteZone(req, res) {
   try {
     // Extract partnerId from authenticated user
     const partnerId = req.user?.partnerId;
+    const userRole = req.user?.role;
 
-    if (!partnerId) {
+    // Allow admin/superadmin/operations to delete any zone without partnerId,
+    // matching the read/update handlers above.
+    if (
+      !partnerId &&
+      !["superadmin", "admin", "operations"].includes(userRole)
+    ) {
       logger.warn("Partner ID missing from request", {
         userId: req.user?.id,
+        userRole,
         ip: req.ip,
       });
       return res
-        .status(401)
+        .status(403)
         .json(
           APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
+            "Forbidden: not authorized to delete this zone",
+            "FORBIDDEN",
           ),
         );
     }
@@ -648,6 +655,12 @@ async function deleteZone(req, res) {
       return res
         .status(404)
         .json(APIResponse.error("Zone not found", "NOT_FOUND"));
+    }
+
+    // Zone still referenced by charge rules - surface the real reason so the
+    // user knows what to fix, rather than a generic failure.
+    if (error.message.includes("in use by")) {
+      return res.status(409).json(APIResponse.error(error.message, "CONFLICT"));
     }
 
     res

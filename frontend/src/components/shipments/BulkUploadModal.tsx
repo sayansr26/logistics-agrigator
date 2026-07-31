@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload,
   FileText,
@@ -34,78 +35,72 @@ import {
 
 interface PickupAddress {
   id: string;
+  label?: string;
   name: string;
-  address: string;
+  addressLine1: string;
+  addressLine2?: string;
   city: string;
   state: string;
   pincode: string;
-  contactPerson: string;
   phone: string;
+  email?: string;
 }
 
 interface BulkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (_file: File, _pickupAddress: string) => void;
+  /** Uploads the file; should reject with an Error carrying a server message */
+  onUpload: (_file: File) => Promise<void>;
+  /** Downloads the canonical CSV template from the backend */
+  onDownloadTemplate: (_pickupAddress?: PickupAddress) => Promise<void> | void;
+  /** Pickup addresses used to prefill the template (optional) */
+  pickupAddresses?: PickupAddress[];
+  isLoadingAddresses?: boolean;
 }
 
-const mockPickupAddresses: PickupAddress[] = [
-  {
-    id: "startup-sample-5005",
-    name: "StartUP-Sample-5005",
-    address: "west gorakh park gali no-3 shahdara",
-    city: "Delhi",
-    state: "Delhi",
-    pincode: "110032",
-    contactPerson: "John Doe",
-    phone: "+91 98765 43210",
-  },
-  {
-    id: "warehouse-mumbai",
-    name: "Warehouse Mumbai",
-    address: "Andheri Industrial Area, MIDC",
-    city: "Mumbai",
-    state: "Maharashtra",
-    pincode: "400058",
-    contactPerson: "Jane Smith",
-    phone: "+91 98765 43211",
-  },
-  {
-    id: "warehouse-delhi",
-    name: "Warehouse Delhi",
-    address: "Okhla Industrial Area, Phase 1",
-    city: "Delhi",
-    state: "Delhi",
-    pincode: "110020",
-    contactPerson: "Mike Johnson",
-    phone: "+91 98765 43212",
-  },
-];
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = [".csv", ".xlsx", ".xls"];
 
 export function BulkUploadModal({
   isOpen,
   onClose,
   onUpload,
+  onDownloadTemplate,
+  pickupAddresses = [],
+  isLoadingAddresses = false,
 }: BulkUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [pickupAddress, setPickupAddress] = useState<string>("");
+  const [pickupAddressId, setPickupAddressId] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (file: File) => {
-    const allowedTypes = [
-      "text/csv",
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ];
+  const resetMessages = () => {
+    setUploadSuccess(false);
+    setUploadMessage("");
+  };
 
-    if (!allowedTypes.includes(file.type)) {
-      alert("Please select a valid CSV or Excel file");
+  const handleFileSelect = (file: File) => {
+    resetMessages();
+
+    const lastDot = file.name.lastIndexOf(".");
+    const extension =
+      lastDot === -1 ? "" : file.name.slice(lastDot).toLowerCase();
+
+    if (!ALLOWED_EXTENSIONS.includes(extension)) {
+      setUploadMessage(
+        `Unsupported file type. Allowed formats: ${ALLOWED_EXTENSIONS.join(", ")}`,
+      );
       return;
     }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setUploadMessage("File too large. Maximum size is 10MB.");
+      return;
+    }
+
     setSelectedFile(file);
   };
 
@@ -135,61 +130,50 @@ export function BulkUploadModal({
     }
   };
 
+  const closeAndReset = () => {
+    setSelectedFile(null);
+    setPickupAddressId("");
+    resetMessages();
+    onClose();
+  };
+
   const handleUpload = async () => {
-    if (!selectedFile || !pickupAddress) {
-      alert("Please select both a file and pickup address");
+    if (!selectedFile) {
+      setUploadMessage("Please select a file to upload.");
       return;
     }
 
     setIsUploading(true);
-    try {
-      await onUpload(selectedFile, pickupAddress);
-      // Show success message
-      setUploadSuccess(true);
-      setUploadMessage(
-        `Successfully uploaded ${selectedFile.name} with ${selectedAddress?.name || "selected"} pickup address`,
-      );
+    resetMessages();
 
-      // Reset form after showing success
+    try {
+      await onUpload(selectedFile);
+
+      setUploadSuccess(true);
+      setUploadMessage(`Successfully processed ${selectedFile.name}`);
+
       setTimeout(() => {
-        setSelectedFile(null);
-        setPickupAddress("");
-        setUploadSuccess(false);
-        setUploadMessage("");
-        onClose();
-      }, 2000);
+        closeAndReset();
+      }, 1500);
     } catch (error) {
-      // TODO: Implement proper error logging
+      // Surface the real server message rather than a generic string
       setUploadSuccess(false);
-      setUploadMessage("Upload failed. Please try again.");
+      setUploadMessage(
+        error instanceof Error
+          ? error.message
+          : "Upload failed. Please try again.",
+      );
     } finally {
       setIsUploading(false);
     }
   };
 
-  const downloadTemplate = () => {
-    // Create a sample CSV template
-    const csvContent = `Order ID,Customer Name,Phone,Email,Address,City,State,Pincode,Product Description,Weight (kg),Length (cm),Width (cm),Height (cm),Declared Value,Payment Mode
-ORD-001,John Doe,+91 98765 43210,john@example.com,123 Main St,Mumbai,Maharashtra,400001,Electronics,2.5,30,20,15,5000,Prepaid
-ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,110001,Clothing,1.0,25,15,10,2000,COD`;
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bulk_shipment_template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
-  const selectedAddress = mockPickupAddresses.find(
-    (addr) => addr.id === pickupAddress,
+  const selectedAddress = pickupAddresses.find(
+    (addr) => addr.id === pickupAddressId,
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && closeAndReset()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
@@ -197,8 +181,8 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
             <span>Bulk Shipment Upload</span>
           </DialogTitle>
           <DialogDescription>
-            Upload CSV or Excel file with shipment details and select pickup
-            address
+            Upload a CSV or Excel file containing shipment details. Each row
+            carries its own pickup and delivery address.
           </DialogDescription>
         </DialogHeader>
 
@@ -225,7 +209,7 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
               <Button
                 variant="outline"
                 size="sm"
-                onClick={downloadTemplate}
+                onClick={() => onDownloadTemplate(selectedAddress)}
                 className="flex items-center space-x-2"
               >
                 <Download className="h-4 w-4" />
@@ -260,7 +244,10 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setSelectedFile(null)}
+                    onClick={() => {
+                      setSelectedFile(null);
+                      resetMessages();
+                    }}
                     className="mt-2"
                   >
                     <X className="h-4 w-4 mr-1" />
@@ -275,7 +262,7 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
                       Drop your file here or click to browse
                     </p>
                     <p className="text-sm text-gray-500">
-                      Supports CSV and Excel files (max 10MB)
+                      Supports CSV and Excel files (max 10MB, 1000 rows)
                     </p>
                   </div>
                   <Button
@@ -304,12 +291,12 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
                   <p className="font-medium">File Requirements:</p>
                   <ul className="mt-1 space-y-1">
                     <li>• CSV or Excel format (.csv, .xlsx, .xls)</li>
-                    <li>• Maximum file size: 10MB</li>
+                    <li>• Maximum file size: 10MB, up to 1000 rows</li>
                     <li>
-                      • Required columns: Order ID, Customer Name, Phone,
-                      Address, etc.
+                      • Phone numbers must be valid 10-digit Indian mobiles
                     </li>
-                    <li>• Download template for correct format</li>
+                    <li>• COD rows must include a COD Amount</li>
+                    <li>• Download the template for the exact columns</li>
                   </ul>
                 </div>
               </div>
@@ -318,44 +305,64 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
 
           <Separator />
 
-          {/* Pickup Address Selection */}
+          {/* Pickup address - used only to prefill the downloaded template,
+              since the uploaded file carries a pickup address per row. */}
           <div className="space-y-4">
-            <Label className="text-base font-medium">
-              Select Pickup Address
-            </Label>
+            <div>
+              <Label className="text-base font-medium">
+                Prefill Template Pickup Address
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Optional. Choose a warehouse to prefill the pickup columns in
+                the downloaded template.
+              </p>
+            </div>
 
-            <Select value={pickupAddress} onValueChange={setPickupAddress}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose pickup address" />
-              </SelectTrigger>
-              <SelectContent>
-                {mockPickupAddresses.map((address) => (
-                  <SelectItem key={address.id} value={address.id}>
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="h-4 w-4" />
-                      <span>{address.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isLoadingAddresses ? (
+              <Skeleton className="h-10 w-full" />
+            ) : pickupAddresses.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No saved pickup addresses found. Fill the pickup columns in the
+                template manually.
+              </p>
+            ) : (
+              <Select
+                value={pickupAddressId}
+                onValueChange={setPickupAddressId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose pickup address" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pickupAddresses.map((address) => (
+                    <SelectItem key={address.id} value={address.id}>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-4 w-4" />
+                        <span>{address.label || address.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {selectedAddress && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
                     <MapPin className="h-4 w-4 text-gray-600" />
-                    <span className="font-medium">{selectedAddress.name}</span>
+                    <span className="font-medium">
+                      {selectedAddress.label || selectedAddress.name}
+                    </span>
                   </div>
                   <div className="text-sm text-gray-600 space-y-1">
-                    <p>{selectedAddress.address}</p>
+                    <p>{selectedAddress.addressLine1}</p>
                     <p>
                       {selectedAddress.city}, {selectedAddress.state} -{" "}
                       {selectedAddress.pincode}
                     </p>
                     <p>
-                      Contact: {selectedAddress.contactPerson} (
-                      {selectedAddress.phone})
+                      Contact: {selectedAddress.name} ({selectedAddress.phone})
                     </p>
                   </div>
                 </div>
@@ -377,12 +384,6 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Pickup Address:</span>
-                  <span className="ml-2 font-medium">
-                    {selectedAddress ? selectedAddress.name : "Not selected"}
-                  </span>
-                </div>
-                <div>
                   <span className="text-gray-600">File Size:</span>
                   <span className="ml-2 font-medium">
                     {selectedFile
@@ -393,14 +394,10 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
                 <div>
                   <span className="text-gray-600">Status:</span>
                   <Badge
-                    variant={
-                      selectedFile && pickupAddress ? "default" : "secondary"
-                    }
+                    variant={selectedFile ? "default" : "secondary"}
                     className="ml-2"
                   >
-                    {selectedFile && pickupAddress
-                      ? "Ready to Upload"
-                      : "Incomplete"}
+                    {selectedFile ? "Ready to Upload" : "Incomplete"}
                   </Badge>
                 </div>
               </div>
@@ -409,12 +406,16 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
         </div>
 
         <DialogFooter className="flex space-x-2">
-          <Button variant="outline" onClick={onClose} disabled={isUploading}>
+          <Button
+            variant="outline"
+            onClick={closeAndReset}
+            disabled={isUploading}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={!selectedFile || !pickupAddress || isUploading}
+            disabled={!selectedFile || isUploading}
             className="bg-blue-600 hover:bg-blue-700"
           >
             {isUploading ? (
@@ -434,3 +435,5 @@ ORD-002,Jane Smith,+91 98765 43211,jane@example.com,456 Oak Ave,Delhi,Delhi,1100
     </Dialog>
   );
 }
+
+export type { PickupAddress };

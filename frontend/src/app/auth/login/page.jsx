@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -40,9 +40,35 @@ const loginFormSchema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading, error, clearError, redirectIfAuthenticated } =
-    useAuth();
+  const searchParams = useSearchParams();
+  const {
+    login,
+    isLoggingIn,
+    isHydrated,
+    isAuthenticated,
+    error,
+    clearError,
+    redirectIfAuthenticated,
+  } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+
+  // Credentials are accepted well before the destination route has finished
+  // loading. Without this the button would snap back to "Sign In" and the page
+  // would just sit there, so we keep the spinner up until navigation happens.
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Where to land after a successful login (set by the route guards).
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
+  const sessionExpired = searchParams.get("expired") === "1";
+
+  const isSubmitting = isLoggingIn || isRedirecting;
+
+  // Once credentials are accepted the form must never be shown again - the
+  // navigation takes a moment, and re-exposing a filled form with a live
+  // "Sign In" button reads as if the login silently failed. Deriving this from
+  // `isAuthenticated` (not just local state) also covers a remount, where
+  // local state resets but the browser would re-autofill the fields.
+  const isLeaving = isRedirecting || (isHydrated && isAuthenticated);
 
   const form = useForm({
     resolver: zodResolver(loginFormSchema),
@@ -53,10 +79,20 @@ export default function LoginPage() {
     },
   });
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated. Gated on hydration - firing before
+  // Redux has read localStorage is what caused the login/dashboard ping-pong.
   useEffect(() => {
-    redirectIfAuthenticated();
-  }, [redirectIfAuthenticated]);
+    if (!isHydrated) return;
+    if (redirectIfAuthenticated(redirectTo)) {
+      // Already signed in and leaving - keep the page in its busy state.
+      setIsRedirecting(true);
+    }
+  }, [isHydrated, redirectIfAuthenticated, redirectTo]);
+
+  // Warm the destination route so the post-login navigation isn't a cold load.
+  useEffect(() => {
+    router.prefetch(redirectTo);
+  }, [router, redirectTo]);
 
   // Clear error when form changes
   useEffect(() => {
@@ -72,10 +108,37 @@ export default function LoginPage() {
         email: data.email,
         password: data.password,
       });
-      router.push("/dashboard");
+      // Stay busy across the navigation - it is not instant, and the
+      // login mutation has already settled by this point.
+      setIsRedirecting(true);
+      router.replace(redirectTo);
     } catch (error) {
+      setIsRedirecting(false);
       console.error("Login failed:", error);
     }
+  }
+
+  // Hydrating, or already on the way out: show a standalone status screen
+  // instead of the form. Rendering the form here would flash it at users who
+  // are already signed in and, after a submit, make a completed login look
+  // like it had reset itself.
+  if (!isHydrated || isLeaving) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+        <div className="text-center">
+          <div className="flex items-center justify-center space-x-2 mb-6">
+            <Truck className="h-8 w-8 text-logistics-600" />
+            <span className="text-2xl font-bold text-foreground">
+              Logistics Portal
+            </span>
+          </div>
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-logistics-600" />
+          <p className="text-muted-foreground">
+            {isLeaving ? "Signing you in..." : "Loading..."}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -96,6 +159,18 @@ export default function LoginPage() {
             Sign in to your account to continue
           </p>
         </div>
+
+        {/* Session Expired Notice */}
+        {sessionExpired && !error && (
+          <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Your session has expired. Please sign in again.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -199,11 +274,15 @@ export default function LoginPage() {
                   </Link>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
+                      {isLoggingIn ? "Signing in..." : "Taking you in..."}
                     </>
                   ) : (
                     "Sign In"

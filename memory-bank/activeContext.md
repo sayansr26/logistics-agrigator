@@ -1,8 +1,78 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: July 24, 2026
+> Current work focus and priorities | Last Updated: July 31, 2026
 
 ## Current Sprint Focus
+
+### 🔐 Auth Redirect Ping-Pong Fixed + Refresh-Token Flow Wired (P0 - Completed July 31, 2026)
+
+**Symptom:** cold-opening the app and clicking "Get Started" landed on `/auth/login`, flashed the dashboard, then bounced back to login with "Your session has expired." Opening `/dashboard` directly did the same. Six compounding causes, all fixed:
+
+1. **No refresh flow existed in the running code path.** `baseApi.ts` was a bare `fetchBaseQuery` — no `baseQueryWithReauth`, no retry, no single-flight. The `refreshToken` mutation in `authApi.ts` had **zero call sites**, and `store/auth-store.ts` (zustand `refreshAccessToken`) is dead code. Every 401 went straight to logout.
+2. **The gateway blocked refresh anyway.** `api-gateway/middleware/authValidator.js` listed `/api/v1/auth/refresh-token` as public, but the real route is `/api/v1/auth/refresh`. `isPublicPath` uses `startsWith`, and `/api/v1/auth/refresh` does **not** start with `/api/v1/auth/refresh-token` — so refresh required a valid Bearer JWT and could never succeed once the access token expired. **One-line fix, but nothing else worked without it.**
+3. **Hydration race.** `AuthHydration`'s effect dispatched `hydrate()` in the same commit as `ProtectedRoute`'s effect, which still read the stale `isAuthenticated: false` and pushed to login. Redux then re-rendered `true`, the dashboard rendered briefly (**the flash**), and the login page's `redirectIfAuthenticated()` pushed back — the ping-pong. There was no "still hydrating" state: `useAuth().isLoading` was only mutation-loading.
+4. **`hydrate()` trusted localStorage without checking JWT `exp`** — a dead token yielded `isAuthenticated: true`.
+5. **`errorMiddleware.handleAuthError` hard-navigated on _any_ 401** (`window.location.href`), including pre-hydration unauthenticated requests, while leaving `user` in localStorage and the `token`/`userRole` cookies set — so the edge middleware and Redux disagreed on the next load and the cycle repeated.
+6. **Cookie lifetime (hardcoded 24h) far exceeded the access-token TTL**, so `src/middleware.ts` admitted requests the API would 401.
+
+**New:** `frontend/src/lib/auth/token.ts` — `decodeJwt` / `getTokenExpiryMs` / `isTokenExpired(skew 30s)` / `setAuthCookies` / `clearAuthCookies` / `clearStoredAuth`. No new dependencies (`jwt-decode` and `async-mutex` are not installed — `exp` is decoded manually, single-flight is a module-level promise).
+
+**Key decisions:**
+
+- **Cookies now track the _refresh_ token's lifetime, not the access token's.** The edge middleware can't verify a JWT cheaply, so the cookie means "a session may exist"; the real decision happens client-side after hydration. A merely-expired access token no longer evicts the user at the edge.
+- **`isHydrated` is the guard, not `isAuthenticated`.** Route guards must never act on the pre-hydration state — that IS the bug. `ProtectedRoute` renders a spinner until `isHydrated`, and `requireAuth`/`redirectIfAuthenticated` no-op until then. All guard redirects use `router.replace` so Back doesn't re-trigger the bounce.
+- **Single writer for persistence.** `setCredentials`/`setTokens`/`logout` in `authSlice` own localStorage _and_ cookies; the `login` `transformResponse` no longer writes them. Two writers is exactly how cookie/localStorage state drifted apart.
+- **401 is owned solely by `baseQueryWithReauth`.** `errorMiddleware` now returns early on 401 without a toast — a recoverable 401 must be invisible. Only a definitive refresh failure ends the session (one toast, one `window.location.replace` to `/auth/login?expired=1&redirect=…`), and `endSession` first checks a session actually existed so anonymous visitors never see "session expired".
+- **Single-flight refresh is mandatory, not an optimization.** The backend rotates the refresh token on every refresh; concurrent dashboard queries would otherwise rotate it out from under each other and kill the session they were trying to save.
+
+**Verified:** gateway restarts clean; `POST /api/v1/auth/refresh` with **no** Authorization header returns 200 with a rotated pair (was 401 `NO_TOKEN`); the new access token authorizes `GET /api/v1/zones` 200; invalid token → 401 `INVALID_REFRESH_TOKEN`; missing body → 400 validation (proving the request reaches auth-service); `/api/v1/auth/refresh-token` now 404s. Frontend `yarn build` compiles clean, 52/52 static pages; `/dashboard` without a cookie → 307 `/auth/login?redirect=%2Fdashboard`; container restarts with no compile errors.
+
+⚠️ **Build gotcha:** running `yarn build` inside `logistics-frontend` fails at prerender with `TypeError: Cannot read properties of null (reading 'useContext')` on `/_not-found`. This is **not** a code defect — the container runs `NODE_ENV=development`, which makes Next mix the dev and prod React runtimes. Build with `docker exec -e NODE_ENV=production logistics-frontend yarn build`. Note `frontend/node_modules` does not exist on the host; all frontend builds/typechecks must run in the container.
+
+**Backend quirk noticed, not fixed (out of scope):** refresh tokens are `jwt.sign({ userId }, secret, { expiresIn: "30d" })` — payload is only `{userId, iat, exp}`, so two signed in the same second are **byte-identical**. A rotated-out refresh token can therefore still validate. Harmless here (leniency, not lockout), but it means refresh tokens are not uniquely identifiable; add a `jti`/nonce if strict rotation-reuse detection is ever wanted. Access-token TTL in this env is 8h (`expiresIn: 28800`), not the 1h default.
+
+**Login post-submit dead-time (same session, July 31, 2026):** after clicking Sign In the spinner stopped, the filled form reappeared with a live "Sign In" button for several seconds, then the redirect finally happened — reading as if the login had silently failed. Root cause: the button's busy state was bound to the RTK Query mutation, which settles _long before_ `router.replace` finishes loading the destination route.
+
+Fixed in two layers, because the button state alone was not enough:
+
+1. `isRedirecting` local state held from a successful login until navigation completes (`isSubmitting = isLoggingIn || isRedirecting`).
+2. **The form is no longer rendered at all once we're leaving.** `isLeaving = isRedirecting || (isHydrated && isAuthenticated)` short-circuits the whole page to a standalone "Signing you in…" screen. Deriving it from `isAuthenticated` — not just local state — also covers a remount, where local state resets but the browser re-autofills the fields (which is what made it look like the form had "come back"). The same screen shows while `!isHydrated`, so an already-signed-in visitor never sees the form flash.
+
+Middleware was ruled out as the cause first: `/dashboard` with a valid `token` cookie returns 200 for both a normal and an `RSC: 1` request, so there is no server-side bounce back to login.
+
+⚠️ **The multi-second wait itself is mostly a dev-server artifact** — Next compiles `/dashboard` on demand (~2.4s in logs) and `router.prefetch` is a no-op in dev. Production builds will be substantially faster; the fix makes the wait _legible_ rather than eliminating it.
+
+**General rule (now Rule 6 in systemPatterns):** never bind a submit button's busy state to the mutation alone when a navigation follows it, and don't leave the submitted form interactive while that navigation is in flight.
+
+**Not changed by decision:** token storage stays in localStorage (user chose this over an httpOnly-cookie migration, which would require auth-service to set/clear cookies, the gateway to read them, and rewriting every frontend token read). `store/auth-store.ts` and `services/api/auth-api.ts` remain dead code. Only `/dashboard` uses `ProtectedRoute`; other protected pages rely on the edge middleware plus the new reauth layer.
+
+### 📦 Bulk Shipment Upload + NDR: mock data replaced with live APIs (P0 - Completed July 25, 2026)
+
+`/shipments/bulk` and `/shipments/ndr` rendered entirely from `frontend/src/lib/mock-data.ts` (hardcoded stat cards `24/18/6/2`, `setTimeout` fake upload, dead buttons). Both now run on real endpoints. Both pages converted `.jsx` → `.tsx`; the four mock exports (`mockNDRs`, `mockBulkUploads`, `getNDRStatusColor`, `getBulkUploadStatusColor`) and their interfaces were deleted from `mock-data.ts`.
+
+**Bulk upload was non-functional and had to be built, not just wired.** Five blocking defects found and fixed:
+
+1. `routes/shipments.js` required permission `shipment:bulk_create:assigned`, but `bulk_create` is **not** in `PERMISSION_ACTIONS` (`shared/constants/permissions.js`) — it appeared exactly once in the whole repo, so `checkPermission` returned false and every non-superadmin got 403. Now `shipment:create:assigned`.
+2. Joi `processBulkShipmentsSchema` required a `file` field while the controller read `req.body.bulkData` — no request could satisfy both. Schema now validates `bulkData` (array, 1..1000).
+3. **No multer/xlsx anywhere** — the CSV/Excel half of the feature was never built. Added `multer` + `xlsx`, `middleware/upload.js` (memory storage, 10MB, extension allowlist), and `services/bulkFileParserService.js`.
+4. `BulkJob` (Prisma) was dead code — job state lived only in Redis (24h TTL, non-UUID ids), so upload history had **no data source**. `updateJobStatus`/`updateJobProgress` now mirror to Postgres via `persistJobStatus` (UUID job ids only); Redis still backs live progress.
+5. `bulkProcessingService` called `partnerIntegrationService.selectOptimalPartner` (**does not exist**; real name `selectOptimalCourier`), with wrong param names (`pickupPincode`/`deliveryPincode` vs `fromPincode`/`toPincode`), wrong return destructuring (`{selectedPartner, charges}` vs `{selectedCourier}`), a mis-ordered `processShipmentPayment` call (description landed in the `shipmentId` slot), and no auth token — so downstream calls 401'd. All corrected; `authToken` now threaded from the controller through both methods.
+
+**NDR's `GET /api/v1/shipments/ndr` was unreachable** — registered _after_ `GET /:id`, so Express matched `"ndr"` as a shipment UUID and returned a Prisma UUID-parse 500. Moved above `/:id` (comment added). Then exposed a second bug: `ndrService.getNDRCases` `include`d `createdBy`/`assignedTo`, which are **not relations** on `NDRCase` (plain UUID columns; users live in another service's DB) — this crashed the process. Removed.
+
+**New endpoints:** `POST /bulk/upload` (multipart, rate-limited via the previously-unused `bulkOperationsLimiter`), `GET /bulk/jobs` (paginated + `summary` aggregate driving the stat cards), `GET /bulk/jobs/:jobId`, `GET /bulk/template` (generated from the parser's own column list so template and parser can't drift).
+
+**Response shapes the frontend depends on:** NDR returns `data.ndrCases` + `data.pagination.pages` (not `ndrs`/`totalPages`), and summary is `statusDistribution: [{status, count}]` (**not** `statusCounts`). NDR page shows the real 8-value `NDRStatus` enum via `lib/utils/shipment-status.ts`.
+
+**Gotcha:** `baseApi.ts` unconditionally set `Content-Type: application/json`, which corrupts multipart boundaries. Upload endpoints now send an `x-multipart: true` marker that `prepareHeaders` consumes to drop the header.
+
+**Untouched by decision:** the unlinked `/app/ndr` page, `store/ndrStore.ts`, `hooks/useNDR.ts`, `components/ndr/*` — their service layer targets `/ndr/stats`, `/ndr/reasons`, `PUT /ndr/:id/status`, none of which exist on the backend.
+
+**Verified:** shipment-service restarts clean (0 MODULE_NOT_FOUND), `GET /ndr` 200, bulk permission returns 400 not 403, multipart upload parses + maps flat CSV → nested shape + normalizes phones to `+91-XXXXXXXXXX`, `bulk_jobs` rows persist with counts/timings, `.txt` and missing-file rejected 400, unauth 401, frontend `yarn build` exit 0.
+
+⚠️ **Blocked on data, not code:** shipments still cannot be created in this dev environment — no courier rate cards are configured, so `calculate-rates` returns `rates: []` and bulk rows fail with "No serviceable partners found for the given route". The _same_ failure occurs on the normal single-shipment path. Seed partner rates to see successful bulk creation.
+
+**Known pre-existing issue (not fixed, out of scope):** ~40 handlers in `shipmentController.js` `throw` from async handlers instead of calling `next(error)`; with Express 4 and no `express-async-errors`, these become unhandled rejections that crash/hang rather than reaching `errorHandler`. Only the handlers touched here were converted.
 
 ### 🚚 Rule-Based Multi-Channel Routing + Delhivery B2B (P0 - Completed July 24, 2026)
 

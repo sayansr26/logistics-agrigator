@@ -228,9 +228,13 @@ class NDRService {
       const [ndrCases, totalCount] = await Promise.all([
         prisma.nDRCase.findMany({
           where: whereClause,
+          // NOTE: createdById/assignedToId are plain UUID columns, not
+          // relations - users live in the user-service database, so they
+          // cannot be included here.
           include: {
             shipment: {
               select: {
+                id: true,
                 orderId: true,
                 awbNumber: true,
                 deliveryName: true,
@@ -241,18 +245,6 @@ class NDRService {
                 partnerName: true,
                 paymentType: true,
                 totalCost: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                email: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                email: true,
               },
             },
           },

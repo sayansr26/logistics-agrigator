@@ -122,52 +122,19 @@ export const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: credentials,
       }),
-      transformResponse: (response: BackendAuthResponse) => {
-        console.log("[authApi.login] Backend response:", {
-          hasAccessToken: !!response.data?.accessToken,
-          hasRefreshToken: !!response.data?.refreshToken,
-          hasUser: !!response.data?.user,
-        });
-
-        // Transform backend response (accessToken) to frontend format (token)
-        const normalizedResponse: AuthResponse = {
-          status: response.status,
-          message: response.message || "Login successful",
-          data: {
-            token: response.data.accessToken, // Transform accessToken -> token
-            refreshToken: response.data.refreshToken,
-            user: response.data.user,
-          },
-        };
-
-        // Store tokens in localStorage for persistence
-        if (normalizedResponse.data?.token) {
-          console.log("[authApi.login] ✅ Saving token to localStorage");
-          localStorage.setItem("token", normalizedResponse.data.token);
-
-          // Also set cookies for middleware authentication
-          document.cookie = `token=${normalizedResponse.data.token}; path=/; max-age=86400; SameSite=Lax`;
-        }
-        if (normalizedResponse.data?.refreshToken) {
-          console.log("[authApi.login] ✅ Saving refreshToken to localStorage");
-          localStorage.setItem(
-            "refreshToken",
-            normalizedResponse.data.refreshToken,
-          );
-        }
-        if (normalizedResponse.data?.user) {
-          console.log("[authApi.login] ✅ Saving user to localStorage");
-          localStorage.setItem(
-            "user",
-            JSON.stringify(normalizedResponse.data.user),
-          );
-
-          // Also set userRole cookie for middleware
-          document.cookie = `userRole=${normalizedResponse.data.user.role}; path=/; max-age=86400; SameSite=Lax`;
-        }
-
-        return normalizedResponse;
-      },
+      // Transform backend response (accessToken) to frontend format (token).
+      // Persistence is deliberately NOT done here - `setCredentials` in
+      // authSlice owns localStorage and cookies. Two writers is how the
+      // cookie and localStorage state used to drift apart.
+      transformResponse: (response: BackendAuthResponse): AuthResponse => ({
+        status: response.status,
+        message: response.message || "Login successful",
+        data: {
+          token: response.data.accessToken,
+          refreshToken: response.data.refreshToken,
+          user: response.data.user,
+        },
+      }),
       invalidatesTags: ["Auth", "User"],
     }),
 
@@ -273,31 +240,17 @@ export const authApi = baseApi.injectEndpoints({
           body: { refreshToken },
         };
       },
-      transformResponse: (response: BackendAuthResponse) => {
-        console.log("[authApi.refreshToken] Backend response:", {
-          hasAccessToken: !!response.data?.accessToken,
-        });
-
-        // Transform backend response (accessToken) to frontend format (token)
-        const normalizedResponse: AuthResponse = {
-          status: response.status,
-          message: response.message || "Token refreshed",
-          data: {
-            token: response.data.accessToken, // Transform accessToken -> token
-            refreshToken: response.data.refreshToken,
-            user: response.data.user,
-          },
-        };
-
-        // Update stored access token
-        if (normalizedResponse.data?.token) {
-          console.log(
-            "[authApi.refreshToken] ✅ Updating token in localStorage",
-          );
-          localStorage.setItem("token", normalizedResponse.data.token);
-        }
-        return normalizedResponse;
-      },
+      // The refresh response carries no `user` - only the rotated token pair.
+      // Persistence is handled by `setTokens` via baseQueryWithReauth.
+      transformResponse: (response: BackendAuthResponse): AuthResponse => ({
+        status: response.status,
+        message: response.message || "Token refreshed",
+        data: {
+          token: response.data.accessToken,
+          refreshToken: response.data.refreshToken,
+          user: response.data.user,
+        },
+      }),
     }),
 
     /**

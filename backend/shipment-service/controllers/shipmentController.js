@@ -13,6 +13,7 @@ const paymentProcessingService = require("../services/paymentProcessingService")
 const shipmentWalletService = require("../services/shipmentWalletService");
 const trackingService = require("../services/trackingService");
 const bulkProcessingService = require("../services/bulkProcessingService");
+const bulkFileParserService = require("../services/bulkFileParserService");
 const bulkRerateService = require("../services/bulkRerateService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
@@ -3726,20 +3727,13 @@ async function getTrackingAnalytics(req, res) {
 /**
  * Process bulk shipments from CSV/Excel data
  */
-async function processBulkShipments(req, res) {
+async function processBulkShipments(req, res, next) {
   try {
     const userId = req.user.userId;
     const clientId = req.user.clientId;
-    const { bulkData, options = {} } = req.body;
+    const { bulkData } = req.body;
 
-    logger.info("Processing bulk shipments", {
-      service: "shipment-service",
-      userId,
-      clientId,
-      totalRecords: bulkData.length,
-    });
-
-    // Validate bulk data
+    // Validate bulk data before reading any of its properties
     if (!Array.isArray(bulkData) || bulkData.length === 0) {
       throw new ValidationError("Bulk data must be a non-empty array");
     }
@@ -3750,11 +3744,22 @@ async function processBulkShipments(req, res) {
       );
     }
 
+    logger.info("Processing bulk shipments", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      totalRecords: bulkData.length,
+    });
+
     // Process bulk shipments
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+
     const result = await bulkProcessingService.processBulkShipments(
       bulkData,
       userId,
       clientId,
+      null,
+      authToken,
     );
 
     res
@@ -3768,14 +3773,14 @@ async function processBulkShipments(req, res) {
       );
   } catch (error) {
     logger.error("Bulk shipments processing error:", error);
-    throw error;
+    next(error);
   }
 }
 
 /**
  * Get bulk job status
  */
-async function getBulkJobStatus(req, res) {
+async function getBulkJobStatus(req, res, next) {
   try {
     const { jobId } = req.params;
 
@@ -3798,7 +3803,315 @@ async function getBulkJobStatus(req, res) {
       );
   } catch (error) {
     logger.error("Get bulk job status error:", error);
-    throw error;
+    next(error);
+  }
+}
+
+/**
+ * Upload a CSV/Excel file and process it as bulk shipments.
+ *
+ * Creates a durable BulkJob row so the upload appears in history regardless
+ * of Redis TTL, then delegates row processing to bulkProcessingService.
+ */
+async function uploadBulkShipments(req, res, next) {
+  let job = null;
+
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+
+    if (!req.file) {
+      throw new ValidationError(
+        'No file uploaded. Attach a CSV or Excel file in the "file" field.',
+      );
+    }
+
+    logger.info("Processing bulk shipment upload", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+    });
+
+    // Parse first so an unreadable file fails before a job row is created
+    const { rows, parseErrors, totalRows } =
+      bulkFileParserService.parseShipmentFile(
+        req.file.buffer,
+        req.file.originalname,
+      );
+
+    if (rows.length > 1000) {
+      throw new ValidationError(
+        "Maximum 1000 shipments allowed per bulk operation",
+      );
+    }
+
+    job = await prisma.bulkJob.create({
+      data: {
+        type: "BULK_SHIPMENT",
+        status: "PROCESSING",
+        totalRecords: totalRows,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        startedAt: new Date(),
+        createdById: userId,
+        clientId: clientId || null,
+      },
+    });
+
+    // Forward the caller's token so downstream partner/wallet calls authenticate
+    const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+    const result = await bulkProcessingService.processBulkShipments(
+      rows,
+      userId,
+      clientId,
+      job.id,
+      authToken,
+    );
+
+    // Rows rejected during parsing never reach the processor, so fold them
+    // into the totals the user sees.
+    const failureCount = result.summary.failureCount + parseErrors.length;
+
+    await prisma.bulkJob.update({
+      where: { id: job.id },
+      data: {
+        status: result.summary.successCount > 0 ? "COMPLETED" : "FAILED",
+        totalRecords: totalRows,
+        processedRecords: result.summary.successCount + failureCount,
+        successfulRecords: result.summary.successCount,
+        failedRecords: failureCount,
+        completedAt: new Date(),
+        processingTimeMs: result.summary.processingTime,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "CREATE_BULK",
+        resource: "BulkJob",
+        resourceId: job.id,
+        changes: {
+          fileName: req.file.originalname,
+          fileSize: req.file.size,
+          totalRecords: totalRows,
+          successCount: result.summary.successCount,
+          failureCount,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      },
+    });
+
+    res.status(200).json(
+      APIResponse.success(
+        {
+          jobId: job.id,
+          fileName: req.file.originalname,
+          total: totalRows,
+          successful: result.successful,
+          failed: [
+            ...parseErrors.map((parseError) => ({
+              index: parseError.row,
+              orderId: parseError.orderId,
+              error: parseError.error,
+            })),
+            ...result.failed,
+          ],
+          summary: {
+            successCount: result.summary.successCount,
+            failureCount,
+            parseErrorCount: parseErrors.length,
+            processingTime: result.summary.processingTime,
+          },
+        },
+        "Bulk shipment file processed successfully",
+        200,
+      ),
+    );
+  } catch (error) {
+    logger.error("Bulk shipment upload error:", error);
+
+    // Never leave a job stuck in PROCESSING when the request fails
+    if (job) {
+      try {
+        await prisma.bulkJob.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            errorMessage: error.message,
+            completedAt: new Date(),
+          },
+        });
+      } catch (updateError) {
+        logger.error("Failed to mark bulk job as failed", {
+          jobId: job.id,
+          error: updateError.message,
+        });
+      }
+    }
+
+    next(error);
+  }
+}
+
+/**
+ * List bulk upload jobs (upload history) with pagination and summary counts.
+ */
+async function getBulkJobs(req, res, next) {
+  try {
+    const userId = req.user.userId;
+    const clientId = req.user.clientId;
+    const { status, search, type } = req.query;
+
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 10, 1),
+      100,
+    );
+
+    const where = {};
+
+    // Multi-tenant scoping: non-admins only ever see their own client's jobs
+    if (clientId && !["superadmin", "admin"].includes(req.user.role)) {
+      where.clientId = clientId;
+    }
+
+    if (status) where.status = status;
+    if (type) where.type = type;
+    if (search) {
+      where.fileName = { contains: search, mode: "insensitive" };
+    }
+
+    logger.info("Getting bulk jobs", {
+      service: "shipment-service",
+      userId,
+      clientId,
+      page,
+      limit,
+    });
+
+    const [jobs, total, statusGroups] = await Promise.all([
+      prisma.bulkJob.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.bulkJob.count({ where }),
+      // Summary spans the whole filtered set, not just the current page
+      prisma.bulkJob.groupBy({
+        by: ["status"],
+        where,
+        _count: true,
+      }),
+    ]);
+
+    const statusCounts = statusGroups.reduce((acc, group) => {
+      acc[group.status] = group._count;
+      return acc;
+    }, {});
+
+    res.status(200).json(
+      APIResponse.success(
+        {
+          jobs,
+          pagination: {
+            page,
+            limit,
+            total,
+            pages: Math.ceil(total / limit),
+          },
+          summary: {
+            totalJobs: total,
+            successful: statusCounts.COMPLETED || 0,
+            failed: statusCounts.FAILED || 0,
+            inProgress:
+              (statusCounts.PROCESSING || 0) + (statusCounts.PENDING || 0),
+            statusCounts,
+          },
+        },
+        "Bulk jobs retrieved successfully",
+        200,
+      ),
+    );
+  } catch (error) {
+    logger.error("Get bulk jobs error:", error);
+    next(error);
+  }
+}
+
+/**
+ * Get a single bulk job by ID, including live Redis progress when available.
+ */
+async function getBulkJobById(req, res, next) {
+  try {
+    const { jobId } = req.params;
+    const clientId = req.user.clientId;
+
+    const job = await prisma.bulkJob.findUnique({ where: { id: jobId } });
+
+    if (!job) {
+      throw new NotFoundError(`Bulk job not found: ${jobId}`);
+    }
+
+    // Prevent cross-tenant reads
+    if (
+      clientId &&
+      !["superadmin", "admin"].includes(req.user.role) &&
+      job.clientId !== clientId
+    ) {
+      throw new NotFoundError(`Bulk job not found: ${jobId}`);
+    }
+
+    // Redis holds per-row errors for 24h; absence is expected for older jobs
+    let liveStatus = null;
+    try {
+      liveStatus = await bulkProcessingService.getBulkJobStatus(jobId);
+    } catch (statusError) {
+      logger.debug("No live status for bulk job", {
+        jobId,
+        error: statusError.message,
+      });
+    }
+
+    res
+      .status(200)
+      .json(
+        APIResponse.success(
+          { job, liveStatus },
+          "Bulk job retrieved successfully",
+          200,
+        ),
+      );
+  } catch (error) {
+    logger.error("Get bulk job error:", error);
+    next(error);
+  }
+}
+
+/**
+ * Download the bulk shipment CSV template.
+ *
+ * Generated from the parser's own column definitions so the template can
+ * never drift from what the parser accepts.
+ */
+async function downloadBulkTemplate(req, res, next) {
+  try {
+    const csv = bulkFileParserService.generateTemplateCsv();
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="bulk_shipment_template.csv"',
+    );
+    res.status(200).send(csv);
+  } catch (error) {
+    logger.error("Download bulk template error:", error);
+    next(error);
   }
 }
 
@@ -5009,6 +5322,10 @@ module.exports = {
   // SHIP-005: Bulk Operations and Advanced Features
   processBulkShipments,
   getBulkJobStatus,
+  uploadBulkShipments,
+  getBulkJobs,
+  getBulkJobById,
+  downloadBulkTemplate,
   createNDRCase,
   getNDRCases,
   takeNDRAction,

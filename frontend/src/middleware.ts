@@ -68,7 +68,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get auth token from cookies
+  // Get auth token from cookies.
+  //
+  // This is a presence check only - the edge runtime cannot verify a JWT
+  // cheaply, and an expired access token is still a live session (the API
+  // layer refreshes it transparently). The cookie is written with the
+  // *refresh* token's lifetime, so it means "a session may exist"; the real
+  // authentication decision happens client-side once Redux has hydrated.
   const token = request.cookies.get("token")?.value;
   const userRole = request.cookies.get("userRole")?.value;
 
@@ -90,13 +96,6 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(deniedUrl);
       }
     }
-  }
-
-  // Check if user is authenticated for protected routes
-  if (!token && !isPublicRoute) {
-    const loginUrl = new URL("/auth/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
   }
 
   // User has token and meets role requirements - allow access

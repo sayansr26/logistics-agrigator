@@ -23,6 +23,204 @@ interface AddressPayload {
   country?: string;
 }
 
+// ===========================
+// Bulk upload types
+// ===========================
+
+export type BulkJobStatus =
+  "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+export interface BulkJob {
+  id: string;
+  type: string;
+  status: BulkJobStatus;
+  totalRecords: number;
+  processedRecords: number;
+  successfulRecords: number;
+  failedRecords: number;
+  fileName: string | null;
+  fileSize: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  processingTimeMs: number | null;
+  createdById: string;
+  clientId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GetBulkJobsParams {
+  page?: number;
+  limit?: number;
+  status?: BulkJobStatus;
+  search?: string;
+}
+
+export interface BulkJobsResponse {
+  status: string;
+  data: {
+    jobs: BulkJob[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+    summary: {
+      totalJobs: number;
+      successful: number;
+      failed: number;
+      inProgress: number;
+      statusCounts: Record<string, number>;
+    };
+  };
+}
+
+export interface BulkJobDetailResponse {
+  status: string;
+  data: {
+    job: BulkJob;
+    liveStatus: {
+      status?: string;
+      total?: number;
+      processed?: number;
+      successful?: number;
+      failed?: number;
+      errors?: unknown[];
+    } | null;
+  };
+}
+
+export interface BulkUploadRowResult {
+  index: number;
+  orderId: string | null;
+  error?: string;
+  shipmentId?: string;
+  awbNumber?: string;
+}
+
+export interface BulkUploadResponse {
+  status: string;
+  data: {
+    jobId: string;
+    fileName: string;
+    total: number;
+    successful: BulkUploadRowResult[];
+    failed: BulkUploadRowResult[];
+    summary: {
+      successCount: number;
+      failureCount: number;
+      parseErrorCount: number;
+      processingTime: number;
+    };
+  };
+}
+
+// ===========================
+// NDR types
+// ===========================
+
+/** Matches the NDRStatus enum in shipment-service prisma schema */
+export type NDRStatusValue =
+  | "OPEN"
+  | "ASSIGNED"
+  | "IN_PROGRESS"
+  | "REATTEMPT_SCHEDULED"
+  | "ADDRESS_UPDATED"
+  | "RTO_INITIATED"
+  | "RESOLVED"
+  | "CLOSED";
+
+export type NDRPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+export type NDRReasonCode =
+  | "ADDRESS_INCORRECT"
+  | "CONSIGNEE_UNAVAILABLE"
+  | "REFUSED_BY_CONSIGNEE"
+  | "DAMAGE_DURING_TRANSIT"
+  | "OTHER";
+
+export type NDRActionType =
+  "REATTEMPT_DELIVERY" | "RETURN_TO_ORIGIN" | "MARK_RESOLVED";
+
+export interface NDRCase {
+  id: string;
+  shipmentId: string;
+  reason: string;
+  description: string | null;
+  status: NDRStatusValue;
+  priority: NDRPriority;
+  deliveryAttemptDate: string;
+  customerFeedback: string | null;
+  deliveryPersonNotes: string | null;
+  reattemptRequested: boolean;
+  reattemptDate: string | null;
+  preferredReattemptDate: string | null;
+  assignedToId: string | null;
+  createdById: string | null;
+  resolvedAt: string | null;
+  resolution: string | null;
+  createdAt: string;
+  updatedAt: string;
+  shipment?: {
+    id: string;
+    orderId: string;
+    awbNumber: string | null;
+    deliveryName: string;
+    deliveryPhone: string;
+    deliveryCity: string;
+    deliveryState: string;
+    deliveryPincode: string;
+    partnerName: string | null;
+    paymentType: string;
+    totalCost: number | null;
+  };
+}
+
+export interface GetNDRCasesParams {
+  page?: number;
+  limit?: number;
+  status?: NDRStatusValue;
+  priority?: NDRPriority;
+  reason?: string;
+  shipmentId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface NDRCasesResponse {
+  status: string;
+  data: {
+    ndrCases: NDRCase[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+    summary: {
+      statusDistribution: { status: NDRStatusValue; count: number }[];
+      reasonDistribution: { reason: string; count: number }[];
+      priorityDistribution: { priority: NDRPriority; count: number }[];
+    };
+  };
+}
+
+export interface NDRActionRequest {
+  action: NDRActionType;
+  notes?: string;
+  preferredDate?: string;
+}
+
+export interface CreateNDRCaseRequest {
+  reason: NDRReasonCode;
+  description?: string;
+  priority?: NDRPriority;
+}
+
 interface InvoicePayload {
   eWayBillNo?: string;
   invoiceNo: string;
@@ -727,6 +925,116 @@ export const shipmentApi = baseApi.injectEndpoints({
       query: (shipmentId) => `/api/v1/shipments/${shipmentId}/documents`,
       providesTags: (result, error, id) => [{ type: "Shipment", id }],
     }),
+
+    // ===========================
+    // Bulk Upload (jobs & history)
+    // ===========================
+
+    /**
+     * List bulk upload jobs (upload history) with summary counts
+     */
+    getBulkJobs: builder.query<BulkJobsResponse, GetBulkJobsParams | void>({
+      query: (params) => {
+        const search = new URLSearchParams();
+        if (params?.page) search.append("page", String(params.page));
+        if (params?.limit) search.append("limit", String(params.limit));
+        if (params?.status) search.append("status", params.status);
+        if (params?.search) search.append("search", params.search);
+
+        const qs = search.toString();
+        return `/api/v1/shipments/bulk/jobs${qs ? `?${qs}` : ""}`;
+      },
+      providesTags: [{ type: "BulkJob", id: "LIST" }],
+    }),
+
+    /**
+     * Get a single bulk job, including live progress when still cached
+     */
+    getBulkJob: builder.query<BulkJobDetailResponse, string>({
+      query: (jobId) => `/api/v1/shipments/bulk/jobs/${jobId}`,
+      providesTags: (result, error, id) => [{ type: "BulkJob", id }],
+    }),
+
+    /**
+     * Upload a CSV/Excel file to create shipments in bulk.
+     *
+     * Sends FormData - the x-multipart marker tells baseApi's prepareHeaders
+     * to drop the JSON Content-Type so the browser sets the boundary.
+     */
+    uploadBulkShipments: builder.mutation<BulkUploadResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        return {
+          url: "/api/v1/shipments/bulk/upload",
+          method: "POST",
+          body: formData,
+          headers: { "x-multipart": "true" },
+        };
+      },
+      invalidatesTags: [
+        { type: "BulkJob", id: "LIST" },
+        { type: "Shipment", id: "LIST" },
+      ],
+    }),
+
+    // ===========================
+    // NDR (Non-Delivery Reports)
+    // ===========================
+
+    /**
+     * List NDR cases with filtering, pagination and summary distributions
+     */
+    getNDRCases: builder.query<NDRCasesResponse, GetNDRCasesParams | void>({
+      query: (params) => {
+        const search = new URLSearchParams();
+        if (params?.page) search.append("page", String(params.page));
+        if (params?.limit) search.append("limit", String(params.limit));
+        if (params?.status) search.append("status", params.status);
+        if (params?.priority) search.append("priority", params.priority);
+        if (params?.reason) search.append("reason", params.reason);
+        if (params?.shipmentId) search.append("shipmentId", params.shipmentId);
+        if (params?.dateFrom) search.append("dateFrom", params.dateFrom);
+        if (params?.dateTo) search.append("dateTo", params.dateTo);
+        if (params?.sortBy) search.append("sortBy", params.sortBy);
+        if (params?.sortOrder) search.append("sortOrder", params.sortOrder);
+
+        const qs = search.toString();
+        return `/api/v1/shipments/ndr${qs ? `?${qs}` : ""}`;
+      },
+      providesTags: [{ type: "NDR", id: "LIST" }],
+    }),
+
+    /**
+     * Take an action on an NDR case (reattempt / RTO / resolve)
+     */
+    takeNDRAction: builder.mutation<
+      { status: string; data: NDRCase },
+      { ndrCaseId: string } & NDRActionRequest
+    >({
+      query: ({ ndrCaseId, ...body }) => ({
+        url: `/api/v1/shipments/ndr/${ndrCaseId}/action`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [{ type: "NDR", id: "LIST" }],
+    }),
+
+    /**
+     * Create an NDR case against a shipment
+     */
+    createNDRCase: builder.mutation<
+      { status: string; data: NDRCase },
+      { shipmentId: string } & CreateNDRCaseRequest
+    >({
+      query: ({ shipmentId, ...body }) => ({
+        url: `/api/v1/shipments/${shipmentId}/ndr`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [{ type: "NDR", id: "LIST" }],
+    }),
   }),
 });
 
@@ -753,6 +1061,14 @@ export const {
   useFetchCourierLabelMutation,
   useCancelWithProviderMutation,
   useGetShipmentDocumentsQuery,
+  // Bulk upload
+  useGetBulkJobsQuery,
+  useGetBulkJobQuery,
+  useUploadBulkShipmentsMutation,
+  // NDR
+  useGetNDRCasesQuery,
+  useTakeNDRActionMutation,
+  useCreateNDRCaseMutation,
 } = shipmentApi;
 
 // ===========================
