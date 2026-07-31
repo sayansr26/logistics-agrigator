@@ -84,6 +84,7 @@ const BADGE_COLORS: Record<string, string> = {
 
 const BASE_LABELS: Record<string, string> = {
   INVOICE_VALUE: "Invoice Value",
+  COD_VALUE: "COD Value",
   WEIGHT: "Weight",
   ZONE_TO_ZONE_WEIGHT: "Zone to Zone",
   DISTANCE_BASE_WEIGHT: "Distance Based",
@@ -115,6 +116,8 @@ function getRuleChargeInfo(rule: any): string {
   switch (rule.base) {
     case "INVOICE_VALUE":
       return `${rule.percentageValue}% of invoice | Min ${minVal}`;
+    case "COD_VALUE":
+      return `${rule.percentageValue}% of COD amount | Min ${minVal}`;
     case "WEIGHT":
       return `${formatCurrency(rule.perKgCharge)} per ${rule.perKg}kg | Min ${minVal}`;
     case "ZONE_TO_ZONE_WEIGHT":

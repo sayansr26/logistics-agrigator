@@ -5,6 +5,10 @@
  * - INVOICE_VALUE:
  *     computed = (percentageValue / 100) * invoiceValue
  *     final    = max(minValue, computed)
+ * - COD_VALUE:
+ *     computed = (percentageValue / 100) * codAmount
+ *     final    = max(minValue, computed)
+ *     Only applied when paymentType === "COD" (see shouldIncludeRule).
  * - WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT:
  *     computed = ceil(effectiveWeight / perKg) * perKgCharge
  *     final    = max(minValue, computed)
@@ -50,6 +54,36 @@ function calcInvoiceValue(rule, invoiceValue) {
     computed: Math.round(computed * 100) / 100,
     totalCharge: Math.round(finalCharge * 100) / 100,
     calculation: `max(${minValue}, ${pct}% of ₹${invoiceValue}) = ₹${Math.round(finalCharge * 100) / 100}`,
+  };
+}
+
+/**
+ * Compute charge for COD_VALUE base.
+ *
+ * Identical arithmetic to calcInvoiceValue, but the percentage applies to the amount
+ * being collected on delivery rather than the declared invoice value. Gating to COD
+ * shipments happens in shouldIncludeRule, so codAmount is expected to be > 0 here.
+ *
+ * @param {Object} rule
+ * @param {number} codAmount
+ * @returns {{ totalCharge: number, calculation: string } | null}
+ */
+function calcCodValue(rule, codAmount) {
+  const minValue = parseFloat(rule.minValue) || 0;
+  const pct = parseFloat(rule.percentageValue) || 0;
+
+  const computed = (pct / 100) * codAmount;
+  const finalCharge = Math.max(minValue, computed);
+
+  return {
+    ruleId: rule.id,
+    base: "COD_VALUE",
+    minValue,
+    percentageValue: pct,
+    codAmount,
+    computed: Math.round(computed * 100) / 100,
+    totalCharge: Math.round(finalCharge * 100) / 100,
+    calculation: `max(${minValue}, ${pct}% of COD ₹${codAmount}) = ₹${Math.round(finalCharge * 100) / 100}`,
   };
 }
 
@@ -191,6 +225,7 @@ function isPincodeTypeActive(
  * Determine whether a charge rule should be included based on the shipment context.
  *
  * Conditional gating:
+ * - COD_VALUE base  → only when paymentType === "COD" (base-level, name-independent)
  * - FRAGILE charges → only when isFragile === true
  * - COD charges     → only when paymentType === "COD"
  * - PREPAID charges → only when paymentType === "PREPAID"
@@ -204,6 +239,13 @@ function shouldIncludeRule(rule, context) {
 
   const ctName = rule.chargesType?.name;
   const ptName = rule.pincodeType?.name;
+
+  // COD_VALUE prices off the collected amount, which only exists on COD shipments.
+  // Checked before the name-based gates so the rule is COD-only regardless of how its
+  // charges type / pincode type happens to be named.
+  if (rule.base === "COD_VALUE") {
+    return (paymentType || "").toUpperCase() === "COD";
+  }
 
   // Fragile gating (chargesType or pincodeType named "fragile"/"FRGILE"/etc.)
   if (
@@ -244,6 +286,7 @@ function shouldIncludeRule(rule, context) {
  * @param {Object} context
  * @param {number} context.effectiveWeight - kg
  * @param {number} context.invoiceValue - declared value
+ * @param {number} [context.codAmount=0] - amount collected on delivery (COD shipments)
  * @param {boolean} [context.isFragile=false]
  * @param {string} [context.paymentType='PREPAID']
  * @param {string|null} context.distanceMilestoneId - ZoneMilestone.id matched by distance zone
@@ -257,6 +300,7 @@ async function calculateCharges(partnerId, context) {
   const {
     effectiveWeight = 0,
     invoiceValue = 0,
+    codAmount = 0,
     isFragile = false,
     paymentType = "PREPAID",
     distanceMilestoneId = null,
@@ -326,6 +370,16 @@ async function calculateCharges(partnerId, context) {
     categoryMap.get(categoryKey).push(rule);
   }
 
+  // Shared pricing context handed to every calculator via computeRuleCharge
+  const ruleCtx = {
+    effectiveWeight,
+    invoiceValue,
+    codAmount,
+    distanceMilestoneId,
+    pickupZoneIds: pickupGeoZoneIds,
+    deliveryZoneIds: deliveryGeoZoneIds,
+  };
+
   const breakdown = [];
   let totalCharge = 0;
 
@@ -360,15 +414,7 @@ async function calculateCharges(partnerId, context) {
         const base = rule.base;
 
         if (pickupActive) {
-          const res = computeRuleCharge(
-            rule,
-            base,
-            effectiveWeight,
-            invoiceValue,
-            distanceMilestoneId,
-            pickupGeoZoneIds,
-            deliveryGeoZoneIds,
-          );
+          const res = computeRuleCharge(rule, base, ruleCtx);
           if (res && res.totalCharge > pickupHighest) {
             pickupHighest = res.totalCharge;
             pickupResult = { ...res, side: "pickup" };
@@ -376,15 +422,7 @@ async function calculateCharges(partnerId, context) {
         }
 
         if (deliveryActive) {
-          const res = computeRuleCharge(
-            rule,
-            base,
-            effectiveWeight,
-            invoiceValue,
-            distanceMilestoneId,
-            pickupGeoZoneIds,
-            deliveryGeoZoneIds,
-          );
+          const res = computeRuleCharge(rule, base, ruleCtx);
           if (res && res.totalCharge > deliveryHighest) {
             deliveryHighest = res.totalCharge;
             deliveryResult = { ...res, side: "delivery" };
@@ -410,15 +448,7 @@ async function calculateCharges(partnerId, context) {
       let highestResult = null;
 
       for (const rule of categoryRules) {
-        const result = computeRuleCharge(
-          rule,
-          rule.base,
-          effectiveWeight,
-          invoiceValue,
-          distanceMilestoneId,
-          pickupGeoZoneIds,
-          deliveryGeoZoneIds,
-        );
+        const result = computeRuleCharge(rule, rule.base, ruleCtx);
 
         if (result && result.totalCharge > highestCharge) {
           highestCharge = result.totalCharge;
@@ -451,33 +481,42 @@ async function calculateCharges(partnerId, context) {
 
 /**
  * Dispatch a single rule to the correct calculator.
+ *
+ * @param {Object} rule
+ * @param {string} base
+ * @param {Object} ctx - shipment pricing context
+ * @param {number} ctx.effectiveWeight
+ * @param {number} ctx.invoiceValue
+ * @param {number} ctx.codAmount
+ * @param {string|null} ctx.distanceMilestoneId
+ * @param {string[]} ctx.pickupZoneIds
+ * @param {string[]} ctx.deliveryZoneIds
  */
-function computeRuleCharge(
-  rule,
-  base,
-  effectiveWeight,
-  invoiceValue,
-  distanceMilestoneId,
-  pickupZoneIds,
-  deliveryZoneIds,
-) {
+function computeRuleCharge(rule, base, ctx) {
   switch (base) {
     case "INVOICE_VALUE":
-      return calcInvoiceValue(rule, invoiceValue);
+      return calcInvoiceValue(rule, ctx.invoiceValue);
+
+    case "COD_VALUE":
+      return calcCodValue(rule, ctx.codAmount);
 
     case "WEIGHT":
-      return calcWeight(rule, effectiveWeight);
+      return calcWeight(rule, ctx.effectiveWeight);
 
     case "ZONE_TO_ZONE_WEIGHT":
       return calcZoneToZoneWeight(
         rule,
-        effectiveWeight,
-        pickupZoneIds,
-        deliveryZoneIds,
+        ctx.effectiveWeight,
+        ctx.pickupZoneIds,
+        ctx.deliveryZoneIds,
       );
 
     case "DISTANCE_BASE_WEIGHT":
-      return calcDistanceBaseWeight(rule, effectiveWeight, distanceMilestoneId);
+      return calcDistanceBaseWeight(
+        rule,
+        ctx.effectiveWeight,
+        ctx.distanceMilestoneId,
+      );
 
     default:
       logger.warn(`Unknown charge rule base: ${base}`);
@@ -493,6 +532,7 @@ module.exports = {
   calculateCharges,
   _helpers: {
     calcInvoiceValue,
+    calcCodValue,
     calcWeight,
     calcZoneToZoneWeight,
     calcDistanceBaseWeight,

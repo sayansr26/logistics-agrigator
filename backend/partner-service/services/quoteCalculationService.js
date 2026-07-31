@@ -823,6 +823,9 @@ async function calculateRates(params) {
         const chargeContext = {
           effectiveWeight: partnerEffectiveWeight,
           invoiceValue: declaredValue,
+          // Base for COD_VALUE rules. Zeroed on non-COD shipments so a stray codAmount
+          // can never price a prepaid quote (COD_VALUE rules are gated out anyway).
+          codAmount: paymentType === "COD" ? codAmount || 0 : 0,
           isFragile,
           paymentType,
           distanceMilestoneId: zoneResult.milestone?.id || null,

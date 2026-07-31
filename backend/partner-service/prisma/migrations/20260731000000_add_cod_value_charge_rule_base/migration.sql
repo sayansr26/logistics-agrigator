@@ -1,0 +1,14 @@
+-- Add COD_VALUE to the ChargeRuleBase enum.
+--
+-- COD_VALUE mirrors INVOICE_VALUE exactly (min_value + percentage_value, linked to a
+-- charges_type_id or pincode_type_id) but the engine applies the percentage to the
+-- shipment's COD amount instead of its invoice/declared value. Rules on this base only
+-- apply when the shipment payment mode is COD.
+--
+-- No new columns are required and no data backfill is needed: existing rules keep their
+-- current base. Placed AFTER 'INVOICE_VALUE' so the physical enum order matches the
+-- declaration order in schema.prisma.
+--
+-- PostgreSQL 15 permits ALTER TYPE ... ADD VALUE inside a transaction block; the new
+-- label is only added here and not referenced in this same migration.
+ALTER TYPE "ChargeRuleBase" ADD VALUE 'COD_VALUE' AFTER 'INVOICE_VALUE';

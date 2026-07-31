@@ -610,6 +610,7 @@ model PartnerPincodeTypeValue {
 
 enum ChargeRuleBase {
   INVOICE_VALUE
+  COD_VALUE
   WEIGHT
   ZONE_TO_ZONE_WEIGHT
   DISTANCE_BASE_WEIGHT
@@ -620,16 +621,17 @@ model ChargeRule {
   partnerId String         @map("partner_id") // CUID to match Partner.id
   base      ChargeRuleBase
 
-  // Link to partner's ChargesType (for INVOICE_VALUE/WEIGHT when "Charges Types" selected)
+  // Link to partner's ChargesType (for INVOICE_VALUE/COD_VALUE/WEIGHT when "Charges Types" selected)
   chargesTypeId String? @map("charges_type_id") @db.Uuid
 
-  // Link to PincodeType (for INVOICE_VALUE/WEIGHT when "Pincode Types" selected)
+  // Link to PincodeType (for INVOICE_VALUE/COD_VALUE/WEIGHT when "Pincode Types" selected)
   pincodeTypeId String? @map("pincode_type_id") @db.Uuid
 
   // ---- Shared min value (all bases) ----
   minValue Decimal? @map("min_value") @db.Decimal(12, 2)
 
-  // ---- For INVOICE_VALUE base ----
+  // ---- For INVOICE_VALUE base (applied to invoiceValue) ----
+  // ---- and COD_VALUE base   (same field, applied to codAmount instead) ----
   percentageValue Decimal? @map("percentage_value") @db.Decimal(10, 4)
 
   // ---- For WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT ----

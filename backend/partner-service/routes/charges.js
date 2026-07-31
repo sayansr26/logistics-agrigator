@@ -88,7 +88,7 @@ router.post(
  *         name: base
  *         schema:
  *           type: string
- *           enum: [INVOICE_VALUE, WEIGHT, ZONE_TO_ZONE_WEIGHT, DISTANCE_BASE_WEIGHT]
+ *           enum: [INVOICE_VALUE, COD_VALUE, WEIGHT, ZONE_TO_ZONE_WEIGHT, DISTANCE_BASE_WEIGHT]
  *       - in: query
  *         name: isActive
  *         schema:

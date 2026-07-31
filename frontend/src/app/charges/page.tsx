@@ -68,15 +68,24 @@ import { useGetZonesQuery } from "@/store/api/endpoints/zonesApi";
 
 const BASE_LABELS: Record<string, string> = {
   INVOICE_VALUE: "Invoice Value",
+  COD_VALUE: "COD Value",
   WEIGHT: "Weight",
   ZONE_TO_ZONE_WEIGHT: "Zone to Zone (Weight)",
   DISTANCE_BASE_WEIGHT: "Distance Based (Weight)",
 };
 
+// Bases priced as a percentage of a monetary amount. They share the same form fields
+// (minValue + percentageValue) and both require a ChargesType or PincodeType link.
+const PERCENTAGE_BASES = ["INVOICE_VALUE", "COD_VALUE"];
+
+const isPercentageBase = (base: string) => PERCENTAGE_BASES.includes(base);
+
 function getBaseColor(base: string) {
   switch (base) {
     case "INVOICE_VALUE":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+    case "COD_VALUE":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300";
     case "WEIGHT":
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
     case "ZONE_TO_ZONE_WEIGHT":
@@ -104,6 +113,8 @@ function getRuleSummary(rule: any) {
   switch (rule.base) {
     case "INVOICE_VALUE":
       return `${rule.percentageValue}% | min ${minVal}`;
+    case "COD_VALUE":
+      return `${rule.percentageValue}% of COD | min ${minVal}`;
     case "WEIGHT":
       return `ceil(wt/${rule.perKg}kg) × ${formatCurrency(rule.perKgCharge)} | min ${minVal}`;
     case "ZONE_TO_ZONE_WEIGHT":
@@ -239,7 +250,7 @@ function CreateChargeRuleModal({
     pincodeTypeId: "",
     // Shared
     minValue: "",
-    // INVOICE_VALUE
+    // INVOICE_VALUE / COD_VALUE
     percentageValue: "",
     // WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT
     perKg: "",
@@ -349,7 +360,7 @@ function CreateChargeRuleModal({
     if (!formData.minValue && formData.minValue !== 0)
       e.minValue = "Min Value is required";
 
-    if (formData.base === "INVOICE_VALUE" || formData.base === "WEIGHT") {
+    if (isPercentageBase(formData.base) || formData.base === "WEIGHT") {
       if (!formData.typeMode) e.typeMode = "Select a type category";
       if (formData.typeMode === "CHARGES_TYPE" && !formData.chargesTypeId)
         e.chargesTypeId = "Charges Type is required";
@@ -357,7 +368,7 @@ function CreateChargeRuleModal({
         e.pincodeTypeId = "Pincode Type is required";
     }
 
-    if (formData.base === "INVOICE_VALUE") {
+    if (isPercentageBase(formData.base)) {
       if (!formData.percentageValue) e.percentageValue = "Required";
     }
 
@@ -401,7 +412,7 @@ function CreateChargeRuleModal({
       basePayload.pincodeTypeId = formData.pincodeTypeId;
 
     try {
-      if (formData.base === "INVOICE_VALUE") {
+      if (isPercentageBase(formData.base)) {
         await createRule({
           ...(basePayload as CreateChargeRuleRequest),
           percentageValue: parseFloat(formData.percentageValue) || 0,
@@ -493,6 +504,7 @@ function CreateChargeRuleModal({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="INVOICE_VALUE">Invoice Value</SelectItem>
+                <SelectItem value="COD_VALUE">COD Value</SelectItem>
                 <SelectItem value="WEIGHT">Weight</SelectItem>
                 <SelectItem value="ZONE_TO_ZONE_WEIGHT">
                   Weight Zone-to-Zone
@@ -507,9 +519,8 @@ function CreateChargeRuleModal({
             )}
           </div>
 
-          {/* Type selector for INVOICE_VALUE and WEIGHT */}
-          {(formData.base === "INVOICE_VALUE" ||
-            formData.base === "WEIGHT") && (
+          {/* Type selector for INVOICE_VALUE, COD_VALUE and WEIGHT */}
+          {(isPercentageBase(formData.base) || formData.base === "WEIGHT") && (
             <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <TypeSelector
                 partnerId={formData.partnerId}
@@ -550,12 +561,20 @@ function CreateChargeRuleModal({
             </div>
           )}
 
-          {/* INVOICE_VALUE specific */}
-          {formData.base === "INVOICE_VALUE" && (
+          {/* INVOICE_VALUE / COD_VALUE specific */}
+          {isPercentageBase(formData.base) && (
             <div className="p-4 bg-muted/40 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-muted-foreground">
-                Invoice Value formula: max(minValue, percentage% × invoiceValue)
+                {formData.base === "COD_VALUE"
+                  ? "COD Value formula: max(minValue, percentage% × codAmount)"
+                  : "Invoice Value formula: max(minValue, percentage% × invoiceValue)"}
               </p>
+              {formData.base === "COD_VALUE" && (
+                <p className="text-xs text-muted-foreground">
+                  Applies only to COD shipments — prepaid shipments are not
+                  charged by this rule.
+                </p>
+              )}
               <div className="space-y-1">
                 <Label>Percentage Value (%) *</Label>
                 <Input
@@ -913,7 +932,7 @@ function ViewEditChargeRuleModal({
       isActive: formData.isActive,
     };
 
-    if (rule.base === "INVOICE_VALUE") {
+    if (isPercentageBase(rule.base)) {
       payload.percentageValue = parseFloat(formData.percentageValue) || 0;
     }
     if (
@@ -1071,13 +1090,13 @@ function ViewEditChargeRuleModal({
                   <span className="text-muted-foreground">Min Value:</span>{" "}
                   {formatCurrency(rule.minValue)}
                 </div>
-                {rule.base === "INVOICE_VALUE" && (
+                {isPercentageBase(rule.base) && (
                   <div>
                     <span className="text-muted-foreground">Percentage:</span>{" "}
                     {rule.percentageValue}%
                   </div>
                 )}
-                {rule.base !== "INVOICE_VALUE" && (
+                {!isPercentageBase(rule.base) && (
                   <>
                     <div>
                       <span className="text-muted-foreground">Per KG:</span>{" "}
@@ -1116,7 +1135,7 @@ function ViewEditChargeRuleModal({
                   onChange={(e) => handleChange("minValue", e.target.value)}
                 />
               </div>
-              {rule.base === "INVOICE_VALUE" && (
+              {isPercentageBase(rule.base) && (
                 <div className="space-y-1">
                   <Label>Percentage Value (%)</Label>
                   <Input
@@ -1334,7 +1353,7 @@ export default function ChargesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Invoice / Weight
+                Invoice / COD / Weight
               </CardTitle>
               <DollarSign className="h-4 w-4 text-green-600" />
             </CardHeader>
@@ -1342,8 +1361,7 @@ export default function ChargesPage() {
               <div className="text-2xl font-bold">
                 {
                   chargeRules.filter(
-                    (r: any) =>
-                      r.base === "INVOICE_VALUE" || r.base === "WEIGHT",
+                    (r: any) => isPercentageBase(r.base) || r.base === "WEIGHT",
                   ).length
                 }
               </div>
@@ -1426,6 +1444,7 @@ export default function ChargesPage() {
                 <SelectContent>
                   <SelectItem value="all">All Bases</SelectItem>
                   <SelectItem value="INVOICE_VALUE">Invoice Value</SelectItem>
+                  <SelectItem value="COD_VALUE">COD Value</SelectItem>
                   <SelectItem value="WEIGHT">Weight</SelectItem>
                   <SelectItem value="ZONE_TO_ZONE_WEIGHT">
                     Zone to Zone

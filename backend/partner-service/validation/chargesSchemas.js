@@ -3,9 +3,10 @@
  *
  * New field set (charges engine redesign):
  * - No kind field.
- * - base: INVOICE_VALUE | WEIGHT | ZONE_TO_ZONE_WEIGHT | DISTANCE_BASE_WEIGHT
- * - For INVOICE_VALUE/WEIGHT: exactly one of chargesTypeId or pincodeTypeId.
- * - For INVOICE_VALUE: minValue + percentageValue.
+ * - base: INVOICE_VALUE | COD_VALUE | WEIGHT | ZONE_TO_ZONE_WEIGHT | DISTANCE_BASE_WEIGHT
+ * - For INVOICE_VALUE/COD_VALUE/WEIGHT: exactly one of chargesTypeId or pincodeTypeId.
+ * - For INVOICE_VALUE: minValue + percentageValue (applied to the invoice value).
+ * - For COD_VALUE: minValue + percentageValue (applied to the COD amount instead).
  * - For WEIGHT/ZONE_TO_ZONE_WEIGHT/DISTANCE_BASE_WEIGHT: minValue + perKg + perKgCharge.
  * - For ZONE_TO_ZONE_WEIGHT: fromZoneId + toZoneId (required).
  * - For DISTANCE_BASE_WEIGHT: zoneMilestoneId (required).
@@ -22,10 +23,15 @@ const uuidPattern =
 
 const validBases = [
   "INVOICE_VALUE",
+  "COD_VALUE",
   "WEIGHT",
   "ZONE_TO_ZONE_WEIGHT",
   "DISTANCE_BASE_WEIGHT",
 ];
+
+// Bases priced as a percentage of a monetary amount (percentageValue + minValue),
+// as opposed to the per-kg weight bases. Both require exactly one type FK.
+const percentageBases = ["INVOICE_VALUE", "COD_VALUE"];
 
 // ========================================
 // CREATE CHARGE RULE
@@ -45,7 +51,8 @@ const createChargeRule = {
         "any.only": `Base must be one of: ${validBases.join(", ")}`,
       }),
 
-    // For INVOICE_VALUE and WEIGHT: exactly one of chargesTypeId or pincodeTypeId is required.
+    // For INVOICE_VALUE, COD_VALUE and WEIGHT: exactly one of chargesTypeId or
+    // pincodeTypeId is required.
     chargesTypeId: Joi.string()
       .pattern(uuidPattern)
       .optional()
@@ -67,14 +74,14 @@ const createChargeRule = {
       "any.required": "minValue is required",
     }),
 
-    // ---- INVOICE_VALUE fields ----
+    // ---- INVOICE_VALUE / COD_VALUE fields ----
     percentageValue: Joi.number()
       .min(0)
       .precision(4)
       .when("base", {
-        is: "INVOICE_VALUE",
+        is: Joi.valid(...percentageBases),
         then: Joi.required().messages({
-          "any.required": "percentageValue is required for INVOICE_VALUE base",
+          "any.required": `percentageValue is required for ${percentageBases.join("/")} base`,
         }),
         otherwise: Joi.optional().allow(null),
       }),
@@ -148,21 +155,22 @@ const createChargeRule = {
 
     isActive: Joi.boolean().default(true),
   }).custom((value, helpers) => {
-    // XOR validation: for INVOICE_VALUE and WEIGHT, exactly one of chargesTypeId or pincodeTypeId
+    // XOR validation: for INVOICE_VALUE, COD_VALUE and WEIGHT, exactly one of
+    // chargesTypeId or pincodeTypeId
     const { base, chargesTypeId, pincodeTypeId } = value;
-    if (base === "INVOICE_VALUE" || base === "WEIGHT") {
+    const typedBases = [...percentageBases, "WEIGHT"];
+    if (typedBases.includes(base)) {
+      const label = typedBases.join("/");
       const hasChargesType = !!chargesTypeId;
       const hasPincodeType = !!pincodeTypeId;
       if (!hasChargesType && !hasPincodeType) {
         return helpers.error("any.custom", {
-          message:
-            "Either chargesTypeId or pincodeTypeId is required for INVOICE_VALUE/WEIGHT base",
+          message: `Either chargesTypeId or pincodeTypeId is required for ${label} base`,
         });
       }
       if (hasChargesType && hasPincodeType) {
         return helpers.error("any.custom", {
-          message:
-            "Only one of chargesTypeId or pincodeTypeId can be set for INVOICE_VALUE/WEIGHT base",
+          message: `Only one of chargesTypeId or pincodeTypeId can be set for ${label} base`,
         });
       }
     }

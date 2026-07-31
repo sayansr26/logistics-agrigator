@@ -629,6 +629,51 @@ Overall Project Progress          [███████████████
 ### July 2026
 
 ```
+[2026-07-31] Charge Rule Base: COD_VALUE - COMPLETE
+  Need: percentage charges could only be computed against the invoice/declared value.
+        COD collection fees in Indian courier pricing are a % of the COD amount
+        collected, which differs from invoice value whenever part of an order is
+        prepaid/discounted or the invoice includes non-collected items.
+
+  Decision: COD_VALUE mirrors INVOICE_VALUE exactly (minValue + percentageValue,
+            linked to a ChargesType or PincodeType). Only the multiplied amount
+            differs. Rules apply ONLY when payment mode is COD; prepaid shipments
+            get no line item at all.
+
+  No new columns: COD_VALUE reuses min_value / percentage_value / charges_type_id /
+  pincode_type_id. Schema change is the enum member alone.
+  Migration: 20260731000000_add_cod_value_charge_rule_base
+             ALTER TYPE "ChargeRuleBase" ADD VALUE 'COD_VALUE' AFTER 'INVOICE_VALUE'
+
+  partner-service chargesRuleCalculationService.js:
+  - calcCodValue(rule, codAmount) — max(minValue, pct% × codAmount)
+  - shouldIncludeRule: base-level COD gate checked BEFORE the name-based semantic
+    gates, so a COD_VALUE rule is COD-only regardless of its charges-type name
+  - REFACTOR: computeRuleCharge(rule, base, ctx) — was 7 positional args, now a
+    single ctx object {effectiveWeight, invoiceValue, codAmount, distanceMilestoneId,
+    pickupZoneIds, deliveryZoneIds}. All 3 call sites updated. Adding an 8th
+    positional arg was the alternative; the object stops that drift.
+
+  quoteCalculationService.js: chargeContext gains
+    codAmount: paymentType === "COD" ? codAmount || 0 : 0
+  codAmount was ALREADY plumbed shipmentController → partnerIntegrationService →
+  partnerController → calculateRates (and already in the quote cache key); it just
+  stopped one line short of the engine.
+
+  Also: chargesSchemas.js (percentageBases array drives the Joi .when + XOR check),
+  chargesService.js create path, swagger enum, chargesApi.ts union,
+  charges/page.tsx (isPercentageBase helper replaces scattered === "INVOICE_VALUE"),
+  charge-discount-packages/page.tsx labels, shipmentController BASE_LABELS + re-rate
+  naming map.
+
+  Verified: 9/9 Joi cases; engine priced COD_VALUE ₹60 on codAmount=3000 (NOT ₹100
+  from invoiceValue=5000), min floor ₹35 at codAmount=100, absent on PREPAID;
+  INVOICE_VALUE ₹100 + WEIGHT ₹90 + COD_VALUE ₹60 = ₹250 together (refactor
+  regression); ctx produced-vs-consumed key sets match 6/6. Frontend build clean.
+  NOTE: no unit tests exist for the charge engine — verification was manual.
+```
+
+```
 [2026-07-31] Auth Session Hydration + Transparent Token Refresh - COMPLETE
   Bug: cold open → login → dashboard flash → back to login "session expired".
        Same on direct /dashboard. Refresh tokens were never used at all.

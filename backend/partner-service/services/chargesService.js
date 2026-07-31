@@ -203,7 +203,9 @@ async function createChargeRule(ruleData, reqContext = {}) {
   if (ruleData.pincodeTypeId) createData.pincodeTypeId = ruleData.pincodeTypeId;
 
   // Base-specific fields
-  if (base === "INVOICE_VALUE") {
+  // INVOICE_VALUE and COD_VALUE share the same percentage-of-an-amount shape; they
+  // differ only in which amount the engine multiplies at quote time.
+  if (base === "INVOICE_VALUE" || base === "COD_VALUE") {
     createData.percentageValue = ruleData.percentageValue;
   }
 

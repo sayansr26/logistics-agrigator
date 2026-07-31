@@ -2706,6 +2706,7 @@ async function getShipmentQuotes(req, res) {
         const BASE_LABELS = {
           WEIGHT: "Weight Charge",
           INVOICE_VALUE: "Invoice Value Charge",
+          COD_VALUE: "COD Value Charge",
           ZONE_TO_ZONE_WEIGHT: "Zone-to-Zone Charge",
           DISTANCE_BASE_WEIGHT: "Distance Charge",
         };
@@ -3335,10 +3336,13 @@ async function rerateShipment(req, res) {
     if (newBreakdown && newBreakdown.length > 0) {
       const chargeBreakdown = newBreakdown.map((entry) => {
         const rawName = entry.chargeTypeName || entry.base || "Charge";
+        const RERATE_BASE_LABELS = {
+          DISTANCE_BASE_WEIGHT: "Distance Charge",
+          COD_VALUE: "COD Value Charge",
+        };
         const displayName =
-          rawName === "DISTANCE_BASE_WEIGHT"
-            ? "Distance Charge"
-            : rawName.charAt(0) + rawName.slice(1).toLowerCase();
+          RERATE_BASE_LABELS[rawName] ||
+          rawName.charAt(0) + rawName.slice(1).toLowerCase();
         return { name: displayName, amount: entry.totalCharge || 0 };
       });
       const existingSnapshot =

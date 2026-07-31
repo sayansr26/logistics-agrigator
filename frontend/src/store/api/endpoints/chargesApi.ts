@@ -5,6 +5,9 @@ import { baseApi } from "../baseApi";
  *
  * No kind field. New field set per base:
  * - INVOICE_VALUE:        minValue, percentageValue, + chargesTypeId|pincodeTypeId
+ * - COD_VALUE:            minValue, percentageValue, + chargesTypeId|pincodeTypeId
+ *                         (same shape as INVOICE_VALUE; the backend applies the
+ *                          percentage to the COD amount, and only on COD shipments)
  * - WEIGHT:               minValue, perKg, perKgCharge, + chargesTypeId|pincodeTypeId
  * - ZONE_TO_ZONE_WEIGHT:  minValue, perKg, perKgCharge, fromZoneId, toZoneId
  * - DISTANCE_BASE_WEIGHT: minValue, perKg, perKgCharge, zoneMilestoneId
@@ -16,6 +19,7 @@ import { baseApi } from "../baseApi";
 
 export type ChargeRuleBase =
   | "INVOICE_VALUE"
+  | "COD_VALUE"
   | "WEIGHT"
   | "ZONE_TO_ZONE_WEIGHT"
   | "DISTANCE_BASE_WEIGHT";
@@ -53,12 +57,12 @@ export interface ChargeRule {
   id: string;
   partnerId: string;
   base: ChargeRuleBase;
-  // Type link (Invoice/Weight only – exactly one)
+  // Type link (Invoice/COD/Weight only – exactly one)
   chargesTypeId?: string | null;
   pincodeTypeId?: string | null;
   // Shared min value
   minValue?: number | null;
-  // INVOICE_VALUE
+  // INVOICE_VALUE / COD_VALUE
   percentageValue?: number | null;
   // WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT
   perKg?: number | null;
