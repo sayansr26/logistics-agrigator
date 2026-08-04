@@ -594,9 +594,16 @@ class PartnerDataService {
   }
 
   async getLocalPackageCharges(partnerId, filters) {
-    // This integrates with existing package service
-    const packageService = require("./packageService");
-    return await packageService.getPackageCharges(filters);
+    // Charge packages were removed by the charges engine v3 redesign; pricing
+    // now lives in charge_definitions / partner_charge_configs.
+    return {
+      source: "removed",
+      packages: [],
+      metadata: {
+        note: "Charge packages replaced by charges engine v3 (charge-configs)",
+        filters,
+      },
+    };
   }
 
   async getLocalCustomerCharges(partnerId, filters) {

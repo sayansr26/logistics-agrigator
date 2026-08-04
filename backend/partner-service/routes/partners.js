@@ -3,8 +3,10 @@ const router = express.Router();
 const { authMiddleware } = require("../shared/lib/auth");
 const APIResponse = require("../shared/lib/response");
 const partnerController = require("../controllers/partnerController");
+const quoteController = require("../controllers/quoteController");
 const { validateBody } = require("../middleware/validate");
 const { partnerSchema } = require("../validation/partnerSchema");
+const { quoteSchemas } = require("../validation/quoteSchemas");
 const {
   partnerManagementLimiter,
   rateCalculationLimiter,
@@ -317,324 +319,50 @@ router.post(
   rateCalculationLimiter,
   authMiddleware.authenticate,
   authMiddleware.requirePermission("partner", "read", "own"),
-  validateBody(partnerSchema.calculateRate),
-  async (req, res, next) => {
-    try {
-      // Pass user context for badge-based discount resolution
-      const userContext = req.user
-        ? { userId: req.user.userId || req.user.id, role: req.user.role }
-        : null;
-
-      const result = await partnerController.calculateRates(
-        req.body,
-        userContext,
-      );
-
-      // result from the new quote engine has { rates, cheapestRate, fastestRate, summary }
-      const rates = result.rates || result;
-
-      let cheapestRate = result.cheapestRate;
-      let fastestRate = result.fastestRate;
-
-      // Fallback for legacy format (array of rates)
-      if (!cheapestRate && Array.isArray(rates) && rates.length > 0) {
-        cheapestRate = rates.reduce((prev, current) =>
-          (prev.totalAmount || prev.totalRate || 0) <
-          (current.totalAmount || current.totalRate || 0)
-            ? prev
-            : current,
-        );
-        fastestRate = rates.reduce((prev, current) =>
-          (prev.deliveryDays || prev.estimatedDays || 999) <
-          (current.deliveryDays || current.estimatedDays || 999)
-            ? prev
-            : current,
-        );
-      }
-
-      res.json(
-        APIResponse.success({
-          rates,
-          cheapestRate,
-          fastestRate,
-          summary: result.summary,
-        }),
-      );
-    } catch (error) {
-      next(error);
-    }
-  },
+  validateBody(quoteSchemas.calculateRatesV3),
+  quoteController.calculateRates,
 );
 
 /**
  * @swagger
- * /api/partners/calculate-with-discounts:
+ * /api/partners/calculate-v3:
  *   post:
  *     tags: [Rates]
- *     summary: Calculate shipping rates with discount application
- *     description: Calculate shipping rates from all available partners with applicable discounts
+ *     summary: Calculate rates with the v3 charges engine (migration window endpoint)
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - fromPincode
- *               - toPincode
- *               - weight
- *             properties:
- *               fromPincode:
- *                 type: string
- *                 description: Origin pincode
- *                 example: "110001"
- *               toPincode:
- *                 type: string
- *                 description: Destination pincode
- *                 example: "400001"
- *               weight:
- *                 type: number
- *                 format: float
- *                 description: Package weight in kg
- *                 example: 2.5
- *               serviceType:
- *                 type: string
- *                 description: Service type
- *                 example: "express"
- *               codAmount:
- *                 type: number
- *                 format: float
- *                 description: COD amount if applicable
- *                 example: 1500.0
- *               partnerId:
- *                 type: string
- *                 description: Specific partner ID (optional)
- *                 example: "PARTNER_123"
- *               dimensions:
- *                 type: object
- *                 properties:
- *                   length:
- *                     type: number
- *                     example: 20
- *                   width:
- *                     type: number
- *                     example: 15
- *                   height:
- *                     type: number
- *                     example: 10
- *               discountParams:
- *                 type: object
- *                 description: Discount calculation parameters
- *                 properties:
- *                   customerType:
- *                     type: string
- *                     enum: [NEW, PREMIUM, REGULAR, VIP]
- *                     description: Customer type for discount eligibility
- *                     example: "PREMIUM"
- *                   applicableOn:
- *                     type: string
- *                     enum: [PACKAGE, CUSTOMER_CHARGE, TOTAL, SHIPPING, COD]
- *                     description: What the discount applies to
- *                     example: "TOTAL"
- *                   zoneId:
- *                     type: integer
- *                     description: Zone ID for location-based discounts
- *                     example: 5
- *                   conditions:
- *                     type: object
- *                     description: Additional discount conditions
- *                     properties:
- *                       minimumOrderValue:
- *                         type: number
- *                         example: 500.0
- *                       isFirstOrder:
- *                         type: boolean
- *                         example: true
  *     responses:
  *       200:
- *         description: Rate calculation results with discounts applied
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Rates calculated successfully with discounts"
- *                 data:
- *                   type: object
- *                   properties:
- *                     rates:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           partnerId:
- *                             type: string
- *                             example: "PARTNER_123"
- *                           partnerName:
- *                             type: string
- *                             example: "Express Logistics"
- *                           serviceType:
- *                             type: string
- *                             example: "express"
- *                           rate:
- *                             type: number
- *                             format: float
- *                             description: Base rate
- *                             example: 150.0
- *                           codCharge:
- *                             type: number
- *                             format: float
- *                             example: 30.0
- *                           fuelSurcharge:
- *                             type: number
- *                             format: float
- *                             example: 15.0
- *                           originalAmount:
- *                             type: number
- *                             format: float
- *                             description: Total amount before discount
- *                             example: 195.0
- *                           discountAmount:
- *                             type: number
- *                             format: float
- *                             description: Total discount applied
- *                             example: 29.25
- *                           finalAmount:
- *                             type: number
- *                             format: float
- *                             description: Final amount after discount
- *                             example: 165.75
- *                           savings:
- *                             type: number
- *                             format: float
- *                             description: Amount saved
- *                             example: 29.25
- *                           discountPercentage:
- *                             type: string
- *                             description: Discount percentage
- *                             example: "15.00"
- *                           appliedDiscounts:
- *                             type: array
- *                             items:
- *                               type: object
- *                               properties:
- *                                 discountId:
- *                                   type: string
- *                                   example: "DISC_001"
- *                                 discountName:
- *                                   type: string
- *                                   example: "Premium Customer Discount"
- *                                 discountType:
- *                                   type: string
- *                                   example: "PERCENTAGE"
- *                                 discountValue:
- *                                   type: number
- *                                   example: 15.0
- *                                 calculatedDiscount:
- *                                   type: number
- *                                   example: 29.25
- *                           deliveryDays:
- *                             type: integer
- *                             example: 2
- *                           isServiceable:
- *                             type: boolean
- *                             example: true
- *                     cheapestRate:
- *                       type: object
- *                       description: Rate with lowest final amount
- *                     fastestRate:
- *                       type: object
- *                       description: Rate with fastest delivery
- *                     bestValueRate:
- *                       type: object
- *                       description: Rate with best value (considering price and speed)
- *                     totalSavings:
- *                       type: number
- *                       format: float
- *                       description: Total savings across all rates
- *                       example: 125.50
- *       400:
- *         description: Bad request - Invalid parameters
- *       401:
- *         description: Unauthorized - Invalid or missing authentication
- *       500:
- *         description: Internal server error
+ *         description: v3 rate calculation results (GST-inclusive totalRate, pricing block, requiredQuestions)
  */
 router.post(
-  "/calculate-with-discounts",
+  "/calculate-v3",
   rateCalculationLimiter,
   authMiddleware.authenticate,
   authMiddleware.requirePermission("partner", "read", "own"),
-  async (req, res, next) => {
-    try {
-      const { discountParams, ...rateParams } = req.body;
+  validateBody(quoteSchemas.calculateRatesV3),
+  quoteController.calculateRates,
+);
 
-      // Calculate rates with discounts
-      const rates = await partnerController.calculateRatesWithDiscounts(
-        rateParams,
-        discountParams || {},
-      );
-
-      if (!rates || rates.length === 0) {
-        return res.json(
-          APIResponse.success({
-            rates: [],
-            message: "No rates available for the given parameters",
-          }),
-        );
-      }
-
-      // Find best rates (already sorted by final amount)
-      const cheapestRate = rates[0]; // First item after sorting by final amount
-
-      const fastestRate = rates.reduce((prev, current) =>
-        (prev.deliveryDays || 999) < (current.deliveryDays || 999)
-          ? prev
-          : current,
-      );
-
-      // Best value rate: balance between price and speed
-      const bestValueRate = rates.reduce((prev, current) => {
-        const prevScore =
-          (prev.finalAmount || 0) + (prev.deliveryDays || 1) * 10;
-        const currentScore =
-          (current.finalAmount || 0) + (current.deliveryDays || 1) * 10;
-        return prevScore < currentScore ? prev : current;
-      });
-
-      // Calculate total savings
-      const totalSavings = rates.reduce(
-        (sum, rate) => sum + (rate.savings || 0),
-        0,
-      );
-
-      res.json(
-        APIResponse.success(
-          {
-            rates,
-            cheapestRate,
-            fastestRate,
-            bestValueRate,
-            totalSavings: parseFloat(totalSavings.toFixed(2)),
-            discountApplied: rates.some(
-              (rate) => (rate.discountAmount || 0) > 0,
-            ),
-            rateCount: rates.length,
-          },
-          "Rates calculated successfully with discounts",
-        ),
-      );
-    } catch (error) {
-      next(error);
-    }
-  },
+/**
+ * @swagger
+ * /api/partners/event-charge-quote:
+ *   post:
+ *     tags: [Rates]
+ *     summary: Price an EVENT-stage charge (demurrage, reattempt, cancellation...) for a shipment context
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Event charge quote with GST
+ */
+router.post(
+  "/event-charge-quote",
+  rateCalculationLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("partner", "read", "own"),
+  validateBody(quoteSchemas.eventChargeQuote),
+  quoteController.eventChargeQuote,
 );
 
 /**

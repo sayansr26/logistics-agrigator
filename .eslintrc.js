@@ -48,5 +48,14 @@ module.exports = {
         commonjs: true,
       },
     },
+    {
+      // Jest test files (backend/shared unit tests)
+      files: ["**/tests/**/*.js", "**/*.test.js", "**/__tests__/**/*.js"],
+      env: {
+        node: true,
+        commonjs: true,
+        jest: true,
+      },
+    },
   ],
 };

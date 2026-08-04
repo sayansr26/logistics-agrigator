@@ -16,7 +16,6 @@ import {
   FileText,
   Bell,
   HelpCircle,
-  CreditCard,
   Globe,
   AlertTriangle,
   LucideIcon,
@@ -26,8 +25,10 @@ import {
   MapPin,
   Store,
   ScrollText,
-  Tag,
   Wallet,
+  ListTree,
+  SlidersHorizontal,
+  TrendingUp,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -110,14 +111,6 @@ const getNavigationSections = () => {
       title: "Configuration",
       items: [
         {
-          title: "Charges Types",
-          href: "/charges-types",
-          icon: IndianRupee,
-          permission: "partner:read:own",
-          roles: ["superadmin", "admin", "operations"],
-          disabled: false,
-        },
-        {
           title: "Pincode Types",
           href: "/pincode-types",
           icon: MapPin,
@@ -126,17 +119,17 @@ const getNavigationSections = () => {
           disabled: false,
         },
         {
-          title: "Charges Management",
-          href: "/charges",
-          icon: CreditCard,
+          title: "Charge Definitions",
+          href: "/charge-definitions",
+          icon: ListTree,
           permission: "partner:manage:all",
           roles: ["superadmin", "admin"],
           disabled: false,
         },
         {
-          title: "Discount Packages",
-          href: "/charge-discount-packages",
-          icon: Tag,
+          title: "Charge Configs",
+          href: "/charge-configs",
+          icon: SlidersHorizontal,
           permission: "partner:manage:all",
           roles: ["superadmin", "admin"],
           disabled: false,
@@ -181,6 +174,13 @@ const getNavigationSections = () => {
           href: "/wallet",
           icon: Wallet,
           roles: ["superadmin", "admin", "accounts", "client", "outlet"],
+          disabled: false,
+        },
+        {
+          title: "Earnings",
+          href: "/earnings",
+          icon: TrendingUp,
+          roles: ["superadmin", "admin", "client", "outlet"],
           disabled: false,
         },
       ].filter(canSeeMenuItem),

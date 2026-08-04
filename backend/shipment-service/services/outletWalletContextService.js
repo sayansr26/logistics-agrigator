@@ -81,6 +81,12 @@ async function fetchOutletWalletContext(url, cacheKey, logContext) {
       badge: data.badge,
       phone: data.phone,
       isActive: data.isActive,
+      clientId: data.clientId ?? null,
+      // Markup preference + admin caps (charges-engine v3)
+      defaultMarkupType: data.defaultMarkupType ?? null,
+      defaultMarkupValue: data.defaultMarkupValue ?? null,
+      maxMarkupFlat: data.maxMarkupFlat ?? null,
+      maxMarkupPercent: data.maxMarkupPercent ?? null,
     };
 
     await writeCache(cacheKey, result);

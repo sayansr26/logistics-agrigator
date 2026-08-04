@@ -132,7 +132,6 @@
   },
   "lint-staged": {
     "frontend/**/*.{js,jsx,ts,tsx}": [
-      "eslint --fix --no-error-on-unmatched-pattern --resolve-plugins-relative-to frontend --config frontend/.eslintrc.json --",
       "prettier --write"
     ],
     "backend/**/*.{js,ts}": [

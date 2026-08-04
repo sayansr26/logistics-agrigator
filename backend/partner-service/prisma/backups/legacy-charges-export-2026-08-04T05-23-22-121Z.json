@@ -1,0 +1,21 @@
+{
+  "exportedAt": "2026-08-04T05:23:22.120Z",
+  "schemaGeneration": "G2 (charge_rules) + G1 remnants (partner_rates)",
+  "counts": {
+    "chargeRules": 0,
+    "chargesTypes": 0,
+    "discountPackages": 0,
+    "partnerRates": 0,
+    "partnersWithLegacyPricing": 0
+  },
+  "chargeRules": [],
+  "chargesTypes": [],
+  "discountPackages": [],
+  "partnerRates": [],
+  "partnerLegacyPricing": [],
+  "reference": {
+    "pincodeTypes": [],
+    "zones": [],
+    "zoneMilestones": []
+  }
+}

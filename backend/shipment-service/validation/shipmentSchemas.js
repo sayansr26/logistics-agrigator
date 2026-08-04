@@ -223,6 +223,21 @@ const createShipmentSchema = Joi.object({
     otherwise: Joi.optional().allow(null),
   }),
 
+  billingSameAsDelivery: Joi.boolean().default(true),
+
+  billingAddress: Joi.when("billingSameAsDelivery", {
+    is: false,
+    then: addressSchema.required().messages({
+      "any.required": "Billing address is required when not same as delivery",
+    }),
+    otherwise: Joi.optional().allow(null),
+  }),
+
+  // Address-book provenance ids (display/reporting only)
+  deliveryAddressId: Joi.string().uuid().optional().allow(null),
+  rtoAddressId: Joi.string().uuid().optional().allow(null),
+  billingAddressId: Joi.string().uuid().optional().allow(null),
+
   productDescription: Joi.string()
     .trim()
     .max(1000)
@@ -301,6 +316,52 @@ const createShipmentSchema = Joi.object({
   }),
 
   quoteSnapshot: Joi.object().optional().allow(null),
+
+  // Signed quote token issued by POST /quotes — mandatory whenever a partner
+  // is selected so the debit amount comes from verified claims
+  quoteToken: Joi.string()
+    .max(2048)
+    .when("selectedPartnerId", {
+      is: Joi.string().exist(),
+      then: Joi.required().messages({
+        "any.required": "quoteToken is required when a partner is selected",
+      }),
+      otherwise: Joi.optional().allow(null),
+    }),
+
+  // Outlet markup/commission on top of the system price (validated against
+  // admin caps server-side; falls back to the outlet's stored default)
+  markup: Joi.object({
+    type: Joi.string().valid("FLAT", "PERCENTAGE").required(),
+    value: Joi.number()
+      .min(0)
+      .precision(2)
+      .when("type", { is: "PERCENTAGE", then: Joi.number().max(100) })
+      .required(),
+  })
+    .optional()
+    .allow(null),
+
+  // Booking-time VAS answers ({chargeCode, answer}); must match the answers
+  // the quote was priced with (enforced via the token's vasHash)
+  vasSelections: Joi.array()
+    .items(
+      Joi.object({
+        chargeCode: Joi.string()
+          .pattern(/^[A-Z0-9_]{2,60}$/)
+          .required(),
+        answer: Joi.alternatives()
+          .try(
+            Joi.string().max(200),
+            Joi.number(),
+            Joi.boolean(),
+            Joi.object().unknown(true).max(10),
+          )
+          .required(),
+      }),
+    )
+    .max(20)
+    .default([]),
 });
 
 // Quote request for staged shipment creation
@@ -381,6 +442,26 @@ const shipmentQuoteSchema = Joi.object({
   outletId: Joi.string().optional().allow("", null),
 
   sortBy: Joi.string().valid("cheapest", "highest").default("cheapest"),
+
+  // Booking-time VAS answers ({chargeCode, answer}) priced by the v3 engine
+  vasSelections: Joi.array()
+    .items(
+      Joi.object({
+        chargeCode: Joi.string()
+          .pattern(/^[A-Z0-9_]{2,60}$/)
+          .required(),
+        answer: Joi.alternatives()
+          .try(
+            Joi.string().max(200),
+            Joi.number(),
+            Joi.boolean(),
+            Joi.object().unknown(true).max(10),
+          )
+          .required(),
+      }),
+    )
+    .max(20)
+    .default([]),
 });
 
 // Dispute re-rate schema

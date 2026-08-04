@@ -16,6 +16,8 @@ const {
   createOutletSchema,
   updateOutletSchema,
   updateBadgeSchema,
+  updateMarkupSchema,
+  updateMarkupLimitsSchema,
   createAddressSchema,
   updateAddressSchema,
   listOutletsQuerySchema,
@@ -173,6 +175,48 @@ router.get(
  *       404:
  *         description: Outlet not found
  */
+/**
+ * @swagger
+ * /api/outlets/me/markup:
+ *   put:
+ *     tags: [Outlets]
+ *     summary: Update own default markup/commission preference (outlet)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Markup preference updated
+ *       400:
+ *         description: Validation error or cap exceeded
+ */
+router.put(
+  "/outlets/me/markup",
+  authMiddleware.authenticate,
+  authMiddleware.requireRole("outlet"),
+  validate(updateMarkupSchema),
+  OutletController.updateMyMarkup,
+);
+
+/**
+ * @swagger
+ * /api/outlets/{id}/markup-limits:
+ *   put:
+ *     tags: [Outlets]
+ *     summary: Update markup caps for an outlet (admin/client)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Markup limits updated
+ */
+router.put(
+  "/outlets/:id/markup-limits",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("user", "update", "parent"),
+  validate(updateMarkupLimitsSchema),
+  OutletController.updateMarkupLimits,
+);
+
 router.get(
   "/outlets/:id",
   authMiddleware.authenticate,

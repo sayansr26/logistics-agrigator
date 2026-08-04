@@ -367,7 +367,7 @@ class CarrierAccountService {
    */
   async _invalidateQuoteCache() {
     try {
-      const { clearCache } = require("./quoteCalculationService");
+      const { clearCache } = require("./quoteService");
       await clearCache();
     } catch (error) {
       logger.warn("Failed to invalidate quote cache after channel change", {

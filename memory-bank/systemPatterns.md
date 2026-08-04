@@ -980,6 +980,25 @@ Derive the "leaving" condition from **store state**, not just local state: on a 
 
 ---
 
+### Charges Engine v3 Pattern (NEW - August 2026)
+
+**Pricing is data, not code.** Every charge type is a `ChargeDefinition` row (computation method + JSON params contract + gating conditions + optional bookingQuestion for the dynamic VAS form + phase for pipeline ordering); per-partner values live in `PartnerChargeConfig`. The deterministic pipeline (`partner-service/services/chargeEngine/`) runs phases 100 BASE → ... → 600 FUEL (RATE_ADJUSTMENT over `flags.fuelApplicable` lines) → 800 BADGE_DISCOUNT → 900 GST (over `flags.taxable`), aggregating per phase (HIGHEST = G2 category semantics, SUM, perSide for pickup+delivery charges). `totalRate` is GST-inclusive. Rules:
+
+1. **AI never prices.** DeepSeek (via `shared/lib/aiClient.js`) only drafts configs into the `AiChargeSuggestion` PENDING inbox (re-validated in code, admin-approved through the normal CRUD paths → single audit/version trail), explains quotes, predicts COD risk, and scans for anomalies. The quote path has zero AI imports; AI downtime must never block quoting/booking (`AiUnavailableError` → graceful 503 / degraded band).
+2. **Config writes bump `charges:config:rev`** (Redis INCR) which is embedded in quote cache keys — config edits invalidate caches implicitly, no explicit deletes.
+3. **JSON refs are validated at write time** — Zone/ZoneMilestone/PincodeType UUIDs inside config JSON are checked partner-scoped on every create/update; `GET /api/v1/charge-configs/validate` sweeps for dangling refs after zone deletions.
+4. **Booking answers (`vasSelections: [{chargeCode, answer}]`) flow quotes → create → rerate verbatim** — the quote token HMAC-hashes them, so create must send the identical array.
+
+### Signed Quote Token Pattern (NEW - August 2026)
+
+**Never debit from client-supplied state.** `POST /shipments/quotes` signs each quote (`quoteSigningService`, HMAC-SHA256 with `QUOTE_SIGNING_SECRET`, 15-min TTL, claims incl. totalAmount, route/weight/payment params, vasHash). `createShipment` requires the token whenever a partner is selected, cross-checks every claim against the payload, and takes the wallet-debit amount (`systemCharge`) from verified claims — `quoteSnapshot` is stored for display only. Expired token → server re-quotes and requires an exact price match, else 409 `QUOTE_STALE` (UI bounces to the quotes step).
+
+### Outlet Markup / Earnings Ledger Pattern (NEW - August 2026)
+
+`totalCost = systemCharge + markupAmount`; **the wallet debit is systemCharge only** — markup is the outlet's own commission, cap-checked against admin-set `maxMarkupFlat/maxMarkupPercent` and added to the COD collectable (`codAmount = codBaseAmount + markupAmount`; the ₹1L Joi cap applies to the sum). An `OutletEarning` row accrues in the same `$transaction` as the shipment and flips to CANCELLED in the cancellation transaction. Rerates price COD on `codBaseAmount`, never the stored (markup-inclusive) `codAmount`.
+
+---
+
 **Architecture Status**: Stable
-**Last Pattern Review**: July 31, 2026
+**Last Pattern Review**: August 4, 2026
 **Recent Additions**: Client Session Hydration & Transparent Token Refresh Pattern, Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern (DISTANCE fallback April 2026), Shipment Quote API & Rate Cache Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern

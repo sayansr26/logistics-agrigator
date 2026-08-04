@@ -1,4 +1,5 @@
 import { baseApi } from "../baseApi";
+import type { BookingQuestionSpec } from "./chargesApi";
 
 /**
  * Shipment Management API Endpoints
@@ -239,6 +240,17 @@ interface BoxPayload {
 type ShipmentBookingStatus =
   "UNASSIGNED" | "PENDING" | "PENDING_BOOKING" | "BOOKED" | string;
 
+/** {chargeCode, answer} pair for a dynamic VAS booking question. Max 20 per request. */
+export interface VasSelection {
+  chargeCode: string;
+  answer: string | number | boolean | Record<string, unknown>;
+}
+
+export interface MarkupInput {
+  type: "FLAT" | "PERCENTAGE";
+  value: number;
+}
+
 interface CreateShipmentRequest {
   orderId: string;
   shipmentType?: "B2B" | "B2C";
@@ -249,11 +261,23 @@ interface CreateShipmentRequest {
   pickupLocation?: string;
   pickupAddress: AddressPayload;
   deliveryAddress: AddressPayload;
+  /** Provenance-only id of the selected address-book DELIVERY entry (backend never dereferences it). */
+  deliveryAddressId?: string;
   rtoSameAsPickup?: boolean;
   rtoAddress?: AddressPayload;
+  /** Provenance-only id of the selected address-book RETURN entry; omitted/ignored when rtoSameAsPickup. */
+  rtoAddressId?: string;
+  /** Default true — server copies deliveryAddress into the billing block when true. */
+  billingSameAsDelivery?: boolean;
+  /** Required when billingSameAsDelivery is false. */
+  billingAddress?: AddressPayload;
+  /** Provenance-only id of the selected address-book BILLING entry; omitted/ignored when billingSameAsDelivery. */
+  billingAddressId?: string;
   productDescription?: string;
   hsnCode?: string;
   gstPercentage?: number;
+  poNumber?: string;
+  poExpiryDate?: string;
   packageDetails: {
     weight: number;
     dimensions: { length: number; width: number; height: number };
@@ -270,6 +294,12 @@ interface CreateShipmentRequest {
   specialInstructions?: string;
   selectedPartnerId?: string;
   quoteSnapshot?: PartnerQuote;
+  /** Sign-verified token from the chosen quote; required when selectedPartnerId is set. */
+  quoteToken?: string;
+  /** Must be byte-identical to what the /quotes call used - the token hash-checks them. */
+  vasSelections?: VasSelection[];
+  /** Omit to fall back to the outlet's stored default markup. */
+  markup?: MarkupInput | null;
 }
 
 interface ShipmentQuoteRequest {
@@ -286,6 +316,26 @@ interface ShipmentQuoteRequest {
   isFragile?: boolean;
   outletId?: string;
   sortBy?: "cheapest" | "highest";
+  vasSelections?: VasSelection[];
+}
+
+export interface QuotePricing {
+  freightSubtotal: number;
+  vasSubtotal: number;
+  fuelSurcharge: number;
+  discount: number;
+  preTaxTotal: number;
+  markup: null;
+  gstRate: number;
+  gstAmount: number;
+  grandTotal: number;
+  codCollectable: number;
+}
+
+export interface RequiredQuestion {
+  chargeCode: string;
+  name: string;
+  question: BookingQuestionSpec;
 }
 
 interface PartnerQuote {
@@ -312,6 +362,11 @@ interface PartnerQuote {
   chargeableWeight: number;
   actualWeight: number;
   serviceable: boolean;
+  /** Sign-verified, 15min TTL - pass back verbatim to POST /shipments. */
+  quoteToken?: string;
+  pricing?: QuotePricing;
+  /** VAS questions actually priced for this partner (subset of the full catalog). */
+  requiredQuestions?: RequiredQuestion[];
 }
 
 interface ShipmentQuotesResponse {
@@ -657,6 +712,83 @@ interface GetShipmentsParams {
   search?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+}
+
+// ===========================
+// Outlet Earnings types
+// ===========================
+
+export type OutletEarningStatus = "ACCRUED" | "CANCELLED";
+
+export interface OutletEarning {
+  id: string;
+  shipmentId: string;
+  outletId: string;
+  clientId: string | null;
+  markupType: "FLAT" | "PERCENTAGE";
+  markupValue: number;
+  systemCharge: number;
+  markupAmount: number;
+  status: OutletEarningStatus;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  shipment?: {
+    orderId: string;
+    awbNumber: string | null;
+    status: string;
+    paymentType: string;
+    partnerName: string | null;
+    deliveryCity: string;
+    createdAt: string;
+  };
+}
+
+export interface GetOutletEarningsParams {
+  page?: number;
+  limit?: number;
+  status?: OutletEarningStatus;
+}
+
+export interface OutletEarningsResponse {
+  status: string;
+  data: {
+    earnings: OutletEarning[];
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  };
+}
+
+export interface OutletEarningsSummary {
+  totalAccrued: number;
+  accruedCount: number;
+  totalCancelled: number;
+  cancelledCount: number;
+  monthToDate: number;
+  monthToDateCount: number;
+}
+
+export interface OutletEarningsSummaryResponse {
+  status: string;
+  data: { summary: OutletEarningsSummary };
+}
+
+export interface ExplainQuoteRequest {
+  breakdown: unknown[];
+  pricing: unknown;
+  context?: Record<string, unknown>;
+}
+
+export interface ExplainQuoteResponse {
+  status: string;
+  data: {
+    explanation: string;
+    highlights: string[];
+  };
 }
 
 // ===========================
@@ -1035,6 +1167,47 @@ export const shipmentApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: "NDR", id: "LIST" }],
     }),
+
+    // ===========================
+    // Outlet Earnings (markup commission ledger)
+    // ===========================
+
+    /**
+     * Paginated earnings ledger, scoped to the caller (outlet sees own,
+     * client/admin see their scope).
+     */
+    getOutletEarnings: builder.query<
+      OutletEarningsResponse,
+      GetOutletEarningsParams | void
+    >({
+      query: (params) => ({
+        url: "/api/v1/shipments/earnings",
+        params: params || {},
+      }),
+      providesTags: [{ type: "Shipment", id: "EARNINGS" }],
+    }),
+
+    /** Summary tiles: accrued / cancelled / month-to-date totals. */
+    getOutletEarningsSummary: builder.query<
+      OutletEarningsSummaryResponse,
+      void
+    >({
+      query: () => "/api/v1/shipments/earnings/summary",
+      providesTags: [{ type: "Shipment", id: "EARNINGS_SUMMARY" }],
+    }),
+
+    /**
+     * AI "Why this price?" quote explanation. Backend returns 503
+     * AI_UNAVAILABLE when DeepSeek is down - callers should hide/disable
+     * the trigger rather than surface it as a hard error.
+     */
+    explainQuote: builder.mutation<ExplainQuoteResponse, ExplainQuoteRequest>({
+      query: (body) => ({
+        url: "/api/v1/charge-configs/ai/explain-quote",
+        method: "POST",
+        body,
+      }),
+    }),
   }),
 });
 
@@ -1069,6 +1242,10 @@ export const {
   useGetNDRCasesQuery,
   useTakeNDRActionMutation,
   useCreateNDRCaseMutation,
+  // Outlet earnings + AI explain
+  useGetOutletEarningsQuery,
+  useGetOutletEarningsSummaryQuery,
+  useExplainQuoteMutation,
 } = shipmentApi;
 
 // ===========================

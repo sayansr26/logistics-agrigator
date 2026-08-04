@@ -21,14 +21,27 @@ model Shipment {
   paymentType       PaymentType    @default(PREPAID) @map("payment_type")
   paymentStatus     PaymentStatus  @default(PENDING) @map("payment_status")
   codAmount         Decimal?       @map("cod_amount") @db.Decimal(10, 2)
+  // `totalCost` = finalTotal the end-customer pays: systemCharge + markupAmount.
   totalCost         Decimal        @map("total_cost") @db.Decimal(10, 2)
   currency          String         @default("INR") @db.VarChar(3)
 
+  // Charges-engine v3: system price vs outlet markup split.
+  // `systemCharge` = the verified platform price (wallet debit amount);
+  // `markupAmount` = the outlet's own commission on top (FLAT value or
+  // round(systemCharge x markupValue / 100)); for COD, stored codAmount =
+  // codBaseAmount + markupAmount (what the courier actually collects).
+  systemCharge  Decimal? @map("system_charge") @db.Decimal(10, 2)
+  markupType    String?  @map("markup_type") @db.VarChar(12) // FLAT | PERCENTAGE
+  markupValue   Decimal? @map("markup_value") @db.Decimal(10, 2)
+  markupAmount  Decimal? @map("markup_amount") @db.Decimal(10, 2)
+  codBaseAmount Decimal? @map("cod_base_amount") @db.Decimal(10, 2)
+  // Booking-time VAS answers ([{chargeCode, answer, label?, amount?}])
+  vasSelections Json?    @map("vas_selections")
+
   // Cost / Profit split
-  // `totalCost` above is the customer-facing SELLING charge (source of truth).
   // `courierCost` is what we pay the carrier (purchase amount); may come from
   // the courier API, a manual entry, or a cost-side charge rule.
-  // `profitMargin` = totalCost (selling) - courierCost; null until courierCost captured.
+  // `profitMargin` = systemCharge (selling) - courierCost; null until courierCost captured.
   courierCost       Decimal? @map("courier_cost") @db.Decimal(10, 2)
   profitMargin      Decimal? @map("profit_margin") @db.Decimal(10, 2)
   courierCostSource String?  @map("courier_cost_source") @db.VarChar(20) // API | MANUAL | RULE
@@ -57,6 +70,25 @@ model Shipment {
   deliveryState    String  @map("delivery_state") @db.VarChar(50)
   deliveryPincode  String  @map("delivery_pincode") @db.VarChar(6)
   deliveryCountry  String  @default("India") @map("delivery_country") @db.VarChar(50)
+
+  // Address-book provenance (which saved OutletAddress each block came from;
+  // display/reporting only — the denormalized snapshots below stay the truth)
+  deliveryAddressId String? @map("delivery_address_id") @db.Uuid
+  rtoAddressId      String? @map("rto_address_id") @db.Uuid
+  billingAddressId  String? @map("billing_address_id") @db.Uuid
+
+  // Billing Address (GST invoicing; defaults to the delivery address)
+  billingSameAsDelivery Boolean @default(true) @map("billing_same_as_delivery")
+  billingName           String? @map("billing_name") @db.VarChar(100)
+  billingPhone          String? @map("billing_phone") @db.VarChar(15)
+  billingEmail          String? @map("billing_email") @db.VarChar(255)
+  billingLine1          String? @map("billing_line1") @db.VarChar(255)
+  billingLine2          String? @map("billing_line2") @db.VarChar(255)
+  billingLandmark       String? @map("billing_landmark") @db.VarChar(100)
+  billingCity           String? @map("billing_city") @db.VarChar(50)
+  billingState          String? @map("billing_state") @db.VarChar(50)
+  billingPincode        String? @map("billing_pincode") @db.VarChar(6)
+  billingCountry        String? @default("India") @map("billing_country") @db.VarChar(50)
 
   // RTO (Return To Origin) Address
   rtoSameAsPickup Boolean @default(true) @map("rto_same_as_pickup")
@@ -160,6 +192,7 @@ model Shipment {
   invoices             ShipmentInvoice[]
   boxes                ShipmentBox[]
   documents            ShipmentDocument[]
+  outletEarning        OutletEarning?
 
   // Pickup schedule relation
   pickupScheduleId String?         @map("pickup_schedule_id") @db.Uuid
@@ -177,6 +210,30 @@ model Shipment {
   @@index([pickupScheduleId])
   @@index([disputeStatus])
   @@map("shipments")
+}
+
+// Outlet markup commission ledger (charges-engine v3). One row per shipment
+// with markup; accrues on creation, cancels with the shipment. Payout cycle
+// intentionally out of scope — this is the reporting source of truth.
+model OutletEarning {
+  id           String    @id @default(uuid()) @db.Uuid
+  shipmentId   String    @unique @map("shipment_id") @db.Uuid
+  outletId     String    @map("outlet_id") @db.Uuid
+  clientId     String?   @map("client_id") @db.Uuid
+  markupType   String    @map("markup_type") @db.VarChar(12) // FLAT | PERCENTAGE
+  markupValue  Decimal   @map("markup_value") @db.Decimal(10, 2)
+  systemCharge Decimal   @map("system_charge") @db.Decimal(10, 2)
+  markupAmount Decimal   @map("markup_amount") @db.Decimal(10, 2)
+  status       String    @default("ACCRUED") @db.VarChar(12) // ACCRUED | CANCELLED
+  cancelledAt  DateTime? @map("cancelled_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+
+  @@index([outletId, status, createdAt])
+  @@index([clientId, createdAt])
+  @@map("outlet_earnings")
 }
 
 model TrackingEvent {

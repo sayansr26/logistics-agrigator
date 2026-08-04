@@ -378,20 +378,27 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     description: "Bulk weight/charge update with wallet reconciliation",
   },
   {
-    path: "/charges",
+    path: "/charge-definitions",
     public: false,
     roles: ["superadmin", "admin"],
     permission: "partner:manage:all",
-    title: "Charges Management",
-    description: "Manage charge rules for courier partners",
+    title: "Charge Definitions",
+    description: "System catalog of chargeable line items (charges-engine v3)",
   },
   {
-    path: "/charge-discount-packages",
+    path: "/charge-configs",
     public: false,
     roles: ["superadmin", "admin"],
     permission: "partner:manage:all",
-    title: "Discount Packages",
-    description: "Manage badge-based discount packages for courier partners",
+    title: "Charge Configs",
+    description: "Per-partner charge configuration and AI assist",
+  },
+  {
+    path: "/earnings",
+    public: false,
+    roles: ["superadmin", "admin", "client", "outlet"],
+    title: "Earnings",
+    description: "Markup commission ledger",
   },
 
   // ==================== ZONES ====================

@@ -61,7 +61,7 @@ import {
   useUpdateOutletAddressMutation,
   useDeleteOutletAddressMutation,
 } from "@/store/api/endpoints/outletApi";
-import type { OutletBadge } from "@/store/api/endpoints/outletApi";
+import type { AddressType, OutletBadge } from "@/store/api/endpoints/outletApi";
 import {
   useGetStatesQuery,
   useGetCitiesQuery,
@@ -199,7 +199,7 @@ export default function OutletsPage() {
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
   const [addressFormData, setAddressFormData] = useState({
     label: "",
-    addressType: "HOME",
+    addressType: "GENERAL",
     name: "",
     phone: "",
     email: "",
@@ -210,7 +210,8 @@ export default function OutletsPage() {
     state: "",
     pincode: "",
     country: "India",
-    isDefault: false,
+    isDefaultPickup: false,
+    isDefaultReturn: false,
   });
 
   // Geo autocomplete state
@@ -317,7 +318,7 @@ export default function OutletsPage() {
     if (selectedAddress && showEditAddressDialog) {
       setAddressFormData({
         label: selectedAddress.label || "",
-        addressType: selectedAddress.addressType || "HOME",
+        addressType: selectedAddress.addressType || "GENERAL",
         name: selectedAddress.name || "",
         phone: selectedAddress.phone || "",
         email: selectedAddress.email || "",
@@ -328,8 +329,8 @@ export default function OutletsPage() {
         state: selectedAddress.state || "",
         pincode: selectedAddress.pincode || "",
         country: selectedAddress.country || "India",
-        isDefault:
-          selectedAddress.isDefaultPickup || selectedAddress.isDefault || false,
+        isDefaultPickup: selectedAddress.isDefaultPickup || false,
+        isDefaultReturn: selectedAddress.isDefaultReturn || false,
       });
       // Set pincode search for potential lookup
       setPincodeSearch(selectedAddress.pincode || "");
@@ -468,7 +469,7 @@ export default function OutletsPage() {
   const handleAddAddress = () => {
     setAddressFormData({
       label: "",
-      addressType: "HOME",
+      addressType: "GENERAL",
       name: "",
       phone: "",
       email: "",
@@ -479,7 +480,8 @@ export default function OutletsPage() {
       state: "",
       pincode: "",
       country: "India",
-      isDefault: false,
+      isDefaultPickup: false,
+      isDefaultReturn: false,
     });
     setShowAddAddressDialog(true);
   };
@@ -602,13 +604,7 @@ export default function OutletsPage() {
         outletId: selectedOutletId,
         data: {
           label: addressFormData.label,
-          addressType: addressFormData.addressType as
-            | "HOME"
-            | "WORK"
-            | "OTHER"
-            | "GENERAL"
-            | "PICKUP"
-            | "RETURN",
+          addressType: addressFormData.addressType as AddressType,
           name: addressFormData.name,
           phone: addressFormData.phone,
           email: addressFormData.email || undefined,
@@ -619,8 +615,8 @@ export default function OutletsPage() {
           state: addressFormData.state,
           pincode: addressFormData.pincode,
           country: addressFormData.country,
-          isDefaultPickup: addressFormData.isDefault,
-          isDefaultReturn: false,
+          isDefaultPickup: addressFormData.isDefaultPickup,
+          isDefaultReturn: addressFormData.isDefaultReturn,
         },
       }).unwrap();
 
@@ -640,13 +636,7 @@ export default function OutletsPage() {
         addressId: selectedAddress.id,
         data: {
           label: addressFormData.label,
-          addressType: addressFormData.addressType as
-            | "HOME"
-            | "WORK"
-            | "OTHER"
-            | "GENERAL"
-            | "PICKUP"
-            | "RETURN",
+          addressType: addressFormData.addressType as AddressType,
           name: addressFormData.name,
           phone: addressFormData.phone,
           email: addressFormData.email || undefined,
@@ -657,8 +647,8 @@ export default function OutletsPage() {
           state: addressFormData.state,
           pincode: addressFormData.pincode,
           country: addressFormData.country,
-          isDefaultPickup: addressFormData.isDefault,
-          isDefaultReturn: false,
+          isDefaultPickup: addressFormData.isDefaultPickup,
+          isDefaultReturn: addressFormData.isDefaultReturn,
         },
       }).unwrap();
 
@@ -1247,14 +1237,21 @@ export default function OutletsPage() {
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{addr.label}</span>
                             <Badge variant="secondary" className="text-xs">
-                              {addr.addressType || "Home"}
+                              {addr.addressType || "General"}
                             </Badge>
                           </div>
-                          {(addr.isDefaultPickup || addr.isDefault) && (
-                            <Badge className="text-xs bg-green-500">
-                              Default
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {addr.isDefaultPickup && (
+                              <Badge className="text-xs bg-green-500">
+                                Default Pickup
+                              </Badge>
+                            )}
+                            {addr.isDefaultReturn && (
+                              <Badge className="text-xs bg-orange-500">
+                                Default Return
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <p className="text-muted-foreground">
@@ -1573,9 +1570,11 @@ export default function OutletsPage() {
                   }
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="HOME">Home</option>
-                  <option value="WORK">Work</option>
-                  <option value="OTHER">Other</option>
+                  <option value="GENERAL">General</option>
+                  <option value="PICKUP">Pickup</option>
+                  <option value="RETURN">Return / RTO</option>
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="BILLING">Billing</option>
                 </select>
               </div>
             </div>
@@ -1796,20 +1795,37 @@ export default function OutletsPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 pt-2">
-              <Switch
-                id="new-addr-default"
-                checked={addressFormData.isDefault}
-                onCheckedChange={(checked) =>
-                  setAddressFormData((prev) => ({
-                    ...prev,
-                    isDefault: checked,
-                  }))
-                }
-              />
-              <Label htmlFor="new-addr-default" className="text-sm">
-                Set as default address
-              </Label>
+            <div className="flex items-center gap-6 pt-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="new-addr-default-pickup"
+                  checked={addressFormData.isDefaultPickup}
+                  onCheckedChange={(checked) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      isDefaultPickup: checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="new-addr-default-pickup" className="text-sm">
+                  Set as default pickup
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="new-addr-default-return"
+                  checked={addressFormData.isDefaultReturn}
+                  onCheckedChange={(checked) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      isDefaultReturn: checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="new-addr-default-return" className="text-sm">
+                  Set as default return
+                </Label>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -1882,9 +1898,11 @@ export default function OutletsPage() {
                   }
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="HOME">Home</option>
-                  <option value="WORK">Work</option>
-                  <option value="OTHER">Other</option>
+                  <option value="GENERAL">General</option>
+                  <option value="PICKUP">Pickup</option>
+                  <option value="RETURN">Return / RTO</option>
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="BILLING">Billing</option>
                 </select>
               </div>
             </div>
@@ -2105,20 +2123,37 @@ export default function OutletsPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 pt-2">
-              <Switch
-                id="addr-default"
-                checked={addressFormData.isDefault}
-                onCheckedChange={(checked) =>
-                  setAddressFormData((prev) => ({
-                    ...prev,
-                    isDefault: checked,
-                  }))
-                }
-              />
-              <Label htmlFor="addr-default" className="text-sm">
-                Set as default address
-              </Label>
+            <div className="flex items-center gap-6 pt-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="addr-default-pickup"
+                  checked={addressFormData.isDefaultPickup}
+                  onCheckedChange={(checked) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      isDefaultPickup: checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="addr-default-pickup" className="text-sm">
+                  Set as default pickup
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="addr-default-return"
+                  checked={addressFormData.isDefaultReturn}
+                  onCheckedChange={(checked) =>
+                    setAddressFormData((prev) => ({
+                      ...prev,
+                      isDefaultReturn: checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="addr-default-return" className="text-sm">
+                  Set as default return
+                </Label>
+              </div>
             </div>
           </div>
           <DialogFooter>

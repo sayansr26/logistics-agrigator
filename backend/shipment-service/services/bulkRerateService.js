@@ -107,12 +107,25 @@ async function processRow(row, reason, ctx) {
           serviceType: shipment.serviceType,
           dimensions: { length: newLength, width: newWidth, height: newHeight },
           paymentMode: shipment.paymentType,
-          codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : 0,
+          // Price COD on the base collectable — stored codAmount includes the
+          // outlet markup since charges-engine v3
+          codAmount: shipment.codBaseAmount
+            ? parseFloat(shipment.codBaseAmount)
+            : shipment.codAmount
+              ? parseFloat(shipment.codAmount)
+              : 0,
           declaredValue: shipment.value ? parseFloat(shipment.value) : 0,
           isFragile: shipment.fragile || false,
           outletId: shipment.outletId || undefined,
           partnerId: shipment.partnerId,
           skipServiceabilityCheck: true,
+          // Re-price the same VAS lines the shipment was booked with
+          vasSelections: Array.isArray(shipment.vasSelections)
+            ? shipment.vasSelections.map((s) => ({
+                chargeCode: s.chargeCode,
+                answer: s.answer,
+              }))
+            : [],
         },
         authToken,
       );

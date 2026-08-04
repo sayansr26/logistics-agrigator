@@ -365,6 +365,20 @@ const services = {
       "^/api/v1/charges": "/api/v1/charges", // Charges → /api/v1/charges/*
     },
   },
+  // Charges Engine v3 — dynamic charge catalog
+  "charge-definitions": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/charge-definitions": "/api/v1/charge-definitions",
+    },
+  },
+  // Charges Engine v3 — per-partner charge config values
+  "charge-configs": {
+    target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
+    pathRewrite: {
+      "^/api/v1/charge-configs": "/api/v1/charge-configs",
+    },
+  },
   // Partner Pincode Assignment Management (NEW - Pincode assignment with type values)
   "partner-pincodes": {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",

@@ -45,6 +45,16 @@ class ConflictError extends APIError {
   }
 }
 
+// AI provider unreachable / returned unusable output. Callers must degrade
+// gracefully — AI availability may never block quoting or booking.
+class AiUnavailableError extends APIError {
+  constructor(message = "AI provider unavailable", details = null) {
+    super(message, 503, "AI_UNAVAILABLE");
+    this.name = "AiUnavailableError";
+    this.details = details;
+  }
+}
+
 // Error handling utilities
 const errorUtils = {
   // Handle Prisma errors
@@ -100,5 +110,6 @@ module.exports = {
   AuthorizationError,
   NotFoundError,
   ConflictError,
+  AiUnavailableError,
   errorUtils,
 };

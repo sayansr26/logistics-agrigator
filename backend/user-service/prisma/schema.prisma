@@ -252,6 +252,14 @@ model Outlet {
   // Badge tier
   badge OutletBadge @default(BASIC) @map("badge")
 
+  // Outlet markup / commission preference (charges-engine v3).
+  // default* = the outlet's own default applied at booking when no explicit
+  // markup is sent; max* = admin-set caps (null = unlimited).
+  defaultMarkupType  String?  @map("default_markup_type") @db.VarChar(12) // FLAT | PERCENTAGE
+  defaultMarkupValue Decimal? @map("default_markup_value") @db.Decimal(10, 2)
+  maxMarkupFlat      Decimal? @map("max_markup_flat") @db.Decimal(10, 2)
+  maxMarkupPercent   Decimal? @map("max_markup_percent") @db.Decimal(5, 2)
+
   // Status
   isActive Boolean @default(true) @map("is_active")
 

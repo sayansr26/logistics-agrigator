@@ -18,6 +18,8 @@ const bulkRerateService = require("../services/bulkRerateService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
+const quoteSigningService = require("../services/quoteSigningService");
+const outletWalletContextService = require("../services/outletWalletContextService");
 const weightCalc = require("../shared/utils/weightCalc");
 
 /**
@@ -319,8 +321,13 @@ async function createShipment(req, res) {
       pickupAddressId,
       pickupAddress,
       deliveryAddress,
+      deliveryAddressId,
       rtoSameAsPickup = true,
       rtoAddress,
+      rtoAddressId,
+      billingSameAsDelivery = true,
+      billingAddress,
+      billingAddressId,
       productDescription,
       hsnCode,
       gstPercentage,
@@ -334,6 +341,8 @@ async function createShipment(req, res) {
       specialInstructions,
       selectedPartnerId,
       quoteSnapshot,
+      quoteToken,
+      vasSelections = [],
     } = req.body;
 
     if (
@@ -346,6 +355,81 @@ async function createShipment(req, res) {
     }
 
     const hasAssignedPartner = Boolean(selectedPartnerId && quoteSnapshot);
+
+    // ==================================================================
+    // Quote integrity: the price we debit comes from VERIFIED token
+    // claims (or a fresh server-side re-quote), never from the
+    // client-editable quoteSnapshot.
+    // ==================================================================
+    let verifiedTotalAmount = null;
+    if (hasAssignedPartner) {
+      if (!quoteToken) {
+        throw new ValidationError(
+          "quoteToken is required when booking with a selected partner",
+        );
+      }
+
+      const { claims, expired } =
+        quoteSigningService.verifyQuoteToken(quoteToken);
+
+      quoteSigningService.assertClaimsMatchPayload(claims, {
+        partnerId: selectedPartnerId,
+        fromPincode: pickupAddress?.pincode,
+        toPincode: deliveryAddress?.pincode,
+        weight: packageDetails?.weight,
+        paymentType,
+        codAmount,
+        shipmentType,
+        vasSelections,
+      });
+
+      verifiedTotalAmount = claims.totalAmount;
+
+      if (expired) {
+        // User idled past the token TTL — re-quote the selected partner
+        // server-side and require the exact same price
+        const authToken = req.header("Authorization");
+        const freshRates = await partnerIntegrationService.calculateRates(
+          {
+            fromPincode: claims.fromPincode,
+            toPincode: claims.toPincode,
+            weight: claims.weight,
+            serviceType: (serviceType || "STANDARD").toUpperCase(),
+            dimensions: packageDetails?.dimensions,
+            numberOfBoxes,
+            codAmount: claims.paymentType === "COD" ? claims.codAmount : null,
+            declaredValue: packageDetails?.value || 0,
+            paymentMode: claims.paymentType,
+            isFragile: packageDetails?.fragile || false,
+            outletId: req.body.outletId || null,
+            partnerId: claims.partnerId,
+            shipmentType: claims.shipmentType,
+            vasSelections,
+          },
+          authToken,
+        );
+
+        const freshRate = (freshRates.rates || []).find(
+          (r) => r.partnerId === claims.partnerId,
+        );
+        const freshTotal = freshRate
+          ? Number(freshRate.totalRate || freshRate.totalAmount || 0)
+          : null;
+
+        if (freshTotal === null || freshTotal !== claims.totalAmount) {
+          const staleError = new APIError(
+            "The quoted price has expired and current pricing differs. Please fetch fresh quotes.",
+            409,
+            "QUOTE_STALE",
+          );
+          staleError.details = {
+            quotedAmount: claims.totalAmount,
+            currentAmount: freshTotal,
+          };
+          throw staleError;
+        }
+      }
+    }
     const { outletId, clientId, walletUserId } = resolveOutletContext(req, {
       requireWalletUserId: paymentType === "PREPAID" && hasAssignedPartner,
     });
@@ -380,7 +464,91 @@ async function createShipment(req, res) {
       numberOfBoxes,
       dimensions: packageDetails.dimensions,
     });
-    const totalCost = hasAssignedPartner ? metrics.totalCost : 0;
+    // Verified token amount wins over the client-supplied snapshot amount.
+    // systemCharge is the platform price — the wallet debit amount.
+    const systemCharge = hasAssignedPartner
+      ? (verifiedTotalAmount ?? metrics.totalCost)
+      : 0;
+
+    // ==================================================================
+    // Outlet markup / commission (charges-engine v3):
+    // finalTotal = systemCharge + markupAmount. The markup is the outlet's
+    // own revenue (added to COD collectable for COD shipments); the wallet
+    // debit stays systemCharge.
+    // ==================================================================
+    const requestedMarkup = req.body.markup || null;
+    let markupType = null;
+    let markupValue = null;
+    let markupAmount = 0;
+    let outletContext = null;
+
+    if (hasAssignedPartner) {
+      outletContext =
+        req.user.role === "outlet"
+          ? await outletWalletContextService.resolveOutletWalletByUserId(userId)
+          : outletId
+            ? await outletWalletContextService.resolveOutletWalletByOutletId(
+                outletId,
+              )
+            : null;
+
+      const effectiveMarkup =
+        requestedMarkup ||
+        (outletContext?.defaultMarkupType &&
+        outletContext?.defaultMarkupValue !== null
+          ? {
+              type: outletContext.defaultMarkupType,
+              value: Number(outletContext.defaultMarkupValue),
+            }
+          : null);
+
+      if (effectiveMarkup) {
+        if (!outletContext) {
+          throw new ValidationError(
+            "Markup can only be applied to shipments booked for an outlet",
+          );
+        }
+
+        markupType = effectiveMarkup.type;
+        markupValue = Number(effectiveMarkup.value);
+
+        if (
+          markupType === "FLAT" &&
+          outletContext.maxMarkupFlat !== null &&
+          markupValue > Number(outletContext.maxMarkupFlat)
+        ) {
+          throw new ValidationError(
+            `Markup exceeds the allowed flat cap of ₹${outletContext.maxMarkupFlat}`,
+          );
+        }
+        if (
+          markupType === "PERCENTAGE" &&
+          outletContext.maxMarkupPercent !== null &&
+          markupValue > Number(outletContext.maxMarkupPercent)
+        ) {
+          throw new ValidationError(
+            `Markup exceeds the allowed percentage cap of ${outletContext.maxMarkupPercent}%`,
+          );
+        }
+
+        markupAmount =
+          markupType === "FLAT"
+            ? Math.round(markupValue * 100) / 100
+            : Math.round(systemCharge * markupValue) / 100;
+      }
+    }
+
+    const totalCost = hasAssignedPartner ? systemCharge + markupAmount : 0;
+
+    // COD: the courier collects base + markup; cap applies to the SUM
+    const codBaseAmount = paymentType === "COD" ? Number(codAmount) || 0 : null;
+    const finalCodAmount =
+      paymentType === "COD" ? codBaseAmount + markupAmount : null;
+    if (paymentType === "COD" && finalCodAmount > 100000) {
+      throw new ValidationError(
+        `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit after markup`,
+      );
+    }
     const estimatedDelivery = hasAssignedPartner
       ? metrics.estimatedDelivery
       : null;
@@ -395,7 +563,7 @@ async function createShipment(req, res) {
         const paymentResult =
           await paymentProcessingService.processShipmentPayment(
             walletUserId,
-            totalCost,
+            systemCharge,
             orderId,
             `Shipment charge for order ${orderId} - ${packageDetails.description || "Package"}`,
             authToken,
@@ -408,7 +576,7 @@ async function createShipment(req, res) {
           service: "shipment-service",
           userId: walletUserId,
           orderId,
-          amount: totalCost,
+          amount: systemCharge,
           error: paymentError.message,
         });
 
@@ -454,106 +622,159 @@ async function createShipment(req, res) {
           rtoCountry: rtoAddress?.country || "India",
         };
 
-    const shipment = await prisma.shipment.create({
-      data: {
-        orderId,
-        clientId,
-        userId,
-        outletId,
-        shipmentType,
-        shipmentDirection,
-        status: "CREATED",
-        bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
-        paymentType,
-        paymentStatus: hasAssignedPartner
-          ? paymentType === "COD"
-            ? "CONFIRMED"
-            : walletTransactionId
+    // Billing address: defaults to the delivery address (GST invoicing)
+    const billingSource = billingSameAsDelivery
+      ? deliveryAddress
+      : billingAddress;
+    const billingFields = {
+      billingSameAsDelivery,
+      billingName: billingSource?.name,
+      billingPhone: billingSource?.phone,
+      billingEmail: billingSource?.email,
+      billingLine1: billingSource?.addressLine1,
+      billingLine2: billingSource?.addressLine2,
+      billingLandmark: billingSource?.landmark,
+      billingCity: billingSource?.city,
+      billingState: billingSource?.state,
+      billingPincode: billingSource?.pincode,
+      billingCountry: billingSource?.country || "India",
+    };
+
+    const shipment = await prisma.$transaction(async (tx) => {
+      const created = await tx.shipment.create({
+        data: {
+          orderId,
+          clientId,
+          userId,
+          outletId,
+          shipmentType,
+          shipmentDirection,
+          status: "CREATED",
+          bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
+          paymentType,
+          paymentStatus: hasAssignedPartner
+            ? paymentType === "COD"
               ? "CONFIRMED"
-              : "PENDING"
-          : "PENDING",
-        codAmount: paymentType === "COD" ? codAmount : null,
-        totalCost,
-        currency: "INR",
+              : walletTransactionId
+                ? "CONFIRMED"
+                : "PENDING"
+            : "PENDING",
+          codAmount: paymentType === "COD" ? finalCodAmount : null,
+          totalCost,
+          currency: "INR",
 
-        pickupAddressId: pickupAddressId || null,
-        pickupName: pickupAddress.name,
-        pickupPhone: pickupAddress.phone,
-        pickupEmail: pickupAddress.email,
-        pickupLine1: pickupAddress.addressLine1,
-        pickupLine2: pickupAddress.addressLine2,
-        pickupLandmark: pickupAddress.landmark,
-        pickupCity: pickupAddress.city,
-        pickupState: pickupAddress.state,
-        pickupPincode: pickupAddress.pincode,
-        pickupCountry: pickupAddress.country || "India",
+          // Charges-engine v3 money split
+          systemCharge: hasAssignedPartner ? systemCharge : null,
+          markupType,
+          markupValue,
+          markupAmount: markupAmount > 0 ? markupAmount : null,
+          codBaseAmount,
+          vasSelections: vasSelections.length > 0 ? vasSelections : null,
 
-        deliveryName: deliveryAddress.name,
-        deliveryPhone: deliveryAddress.phone,
-        deliveryEmail: deliveryAddress.email,
-        deliveryLine1: deliveryAddress.addressLine1,
-        deliveryLine2: deliveryAddress.addressLine2,
-        deliveryLandmark: deliveryAddress.landmark,
-        deliveryCity: deliveryAddress.city,
-        deliveryState: deliveryAddress.state,
-        deliveryPincode: deliveryAddress.pincode,
-        deliveryCountry: deliveryAddress.country || "India",
+          pickupAddressId: pickupAddressId || null,
+          pickupName: pickupAddress.name,
+          pickupPhone: pickupAddress.phone,
+          pickupEmail: pickupAddress.email,
+          pickupLine1: pickupAddress.addressLine1,
+          pickupLine2: pickupAddress.addressLine2,
+          pickupLandmark: pickupAddress.landmark,
+          pickupCity: pickupAddress.city,
+          pickupState: pickupAddress.state,
+          pickupPincode: pickupAddress.pincode,
+          pickupCountry: pickupAddress.country || "India",
 
-        ...rtoFields,
+          deliveryName: deliveryAddress.name,
+          deliveryPhone: deliveryAddress.phone,
+          deliveryEmail: deliveryAddress.email,
+          deliveryLine1: deliveryAddress.addressLine1,
+          deliveryLine2: deliveryAddress.addressLine2,
+          deliveryLandmark: deliveryAddress.landmark,
+          deliveryCity: deliveryAddress.city,
+          deliveryState: deliveryAddress.state,
+          deliveryPincode: deliveryAddress.pincode,
+          deliveryCountry: deliveryAddress.country || "India",
 
-        productDescription: productDescription || null,
-        hsnCode: hsnCode || null,
-        gstPercentage: gstPercentage || null,
+          ...rtoFields,
+          ...billingFields,
 
-        numberOfBoxes,
-        weight: packageDetails.weight,
-        length: packageDetails.dimensions.length,
-        width: packageDetails.dimensions.width,
-        height: packageDetails.dimensions.height,
-        volumetricWeight: metrics.volumetricWeight,
-        chargeableWeight: metrics.chargeableWeight,
-        volumetricDivisor: metrics.divisor,
-        volumetricFactor: metrics.factor,
-        description: packageDetails.description,
-        value: packageDetails.value,
-        fragile: packageDetails.fragile || false,
+          // Address-book provenance
+          deliveryAddressId: deliveryAddressId || null,
+          rtoAddressId: rtoSameAsPickup ? null : rtoAddressId || null,
+          billingAddressId: billingSameAsDelivery
+            ? null
+            : billingAddressId || null,
 
-        serviceType,
-        specialInstructions,
+          productDescription: productDescription || null,
+          hsnCode: hsnCode || null,
+          gstPercentage: gstPercentage || null,
 
-        partnerId: hasAssignedPartner ? selectedCourier.partnerId : null,
-        partnerName: hasAssignedPartner ? selectedCourier.partnerName : null,
-        quoteSnapshot: hasAssignedPartner
-          ? quoteSnapshot || selectedCourier
-          : null,
+          numberOfBoxes,
+          weight: packageDetails.weight,
+          length: packageDetails.dimensions.length,
+          width: packageDetails.dimensions.width,
+          height: packageDetails.dimensions.height,
+          volumetricWeight: metrics.volumetricWeight,
+          chargeableWeight: metrics.chargeableWeight,
+          volumetricDivisor: metrics.divisor,
+          volumetricFactor: metrics.factor,
+          description: packageDetails.description,
+          value: packageDetails.value,
+          fragile: packageDetails.fragile || false,
 
-        estimatedDelivery,
+          serviceType,
+          specialInstructions,
 
-        walletTransactionId,
-        walletUserId,
-        paymentReference,
-      },
-      select: {
-        id: true,
-        orderId: true,
-        outletId: true,
-        shipmentType: true,
-        shipmentDirection: true,
-        status: true,
-        bookingStatus: true,
-        paymentType: true,
-        paymentStatus: true,
-        codAmount: true,
-        totalCost: true,
-        currency: true,
-        serviceType: true,
-        partnerId: true,
-        partnerName: true,
-        chargeableWeight: true,
-        volumetricWeight: true,
-        estimatedDelivery: true,
-        createdAt: true,
-      },
+          partnerId: hasAssignedPartner ? selectedCourier.partnerId : null,
+          partnerName: hasAssignedPartner ? selectedCourier.partnerName : null,
+          quoteSnapshot: hasAssignedPartner
+            ? quoteSnapshot || selectedCourier
+            : null,
+
+          estimatedDelivery,
+
+          walletTransactionId,
+          walletUserId,
+          paymentReference,
+        },
+        select: {
+          id: true,
+          orderId: true,
+          outletId: true,
+          shipmentType: true,
+          shipmentDirection: true,
+          status: true,
+          bookingStatus: true,
+          paymentType: true,
+          paymentStatus: true,
+          codAmount: true,
+          totalCost: true,
+          currency: true,
+          serviceType: true,
+          partnerId: true,
+          partnerName: true,
+          chargeableWeight: true,
+          volumetricWeight: true,
+          estimatedDelivery: true,
+          createdAt: true,
+        },
+      });
+
+      // Accrue the outlet's markup commission atomically with the shipment
+      if (markupAmount > 0 && outletContext) {
+        await tx.outletEarning.create({
+          data: {
+            shipmentId: created.id,
+            outletId: outletContext.outletId,
+            clientId: outletContext.clientId || clientId || null,
+            markupType,
+            markupValue,
+            systemCharge,
+            markupAmount,
+          },
+        });
+      }
+
+      return created;
     });
 
     // Create invoice records for B2B shipments
@@ -756,6 +977,13 @@ async function createShipment(req, res) {
           outletId,
           paymentType,
           totalCost: totalCost.toString(),
+          systemCharge: systemCharge.toString(),
+          markupType,
+          markupValue,
+          markupAmount,
+          codBaseAmount,
+          codAmount: paymentType === "COD" ? finalCodAmount : null,
+          vasSelections: vasSelections.length > 0 ? vasSelections : null,
           serviceType,
           partnerId: shipment.partnerId || null,
           partnerName: shipment.partnerName || null,
@@ -2043,14 +2271,38 @@ async function cancelShipment(req, res) {
     // Calculate refund amount
     const refundAmount = calculateRefundAmount(shipment, reason);
 
-    await prisma.shipment.update({
-      where: { id },
-      data: {
-        status: "CANCELLED",
-        cancelledAt: new Date(),
-        cancellationReason: reason,
-        refundAmount: refundAmount > 0 ? refundAmount : null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.shipment.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: new Date(),
+          cancellationReason: reason,
+          refundAmount: refundAmount > 0 ? refundAmount : null,
+        },
+      });
+
+      // Cancel the outlet's accrued markup commission with the shipment
+      const cancelledEarnings = await tx.outletEarning.updateMany({
+        where: { shipmentId: id, status: "ACCRUED" },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+
+      if (cancelledEarnings.count > 0) {
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: "OUTLET_EARNING_CANCELLED",
+            resource: "OutletEarning",
+            resourceId: id,
+            changes: { shipmentId: id, status: "CANCELLED", reason },
+            metadata: { source: "shipment-service" },
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+            clientId,
+          },
+        });
+      }
     });
 
     const authToken = req.headers.authorization?.replace("Bearer ", "");
@@ -2645,6 +2897,7 @@ async function getShipmentQuotes(req, res) {
       paymentType = "PREPAID",
       codAmount,
       shipmentType = "B2C",
+      vasSelections = [],
     } = req.body;
 
     logger.info("Getting shipment quotes", {
@@ -2654,6 +2907,7 @@ async function getShipmentQuotes(req, res) {
       toPincode,
       weight,
       numberOfBoxes,
+      vasCount: vasSelections.length,
     });
 
     const rateParams = {
@@ -2670,6 +2924,7 @@ async function getShipmentQuotes(req, res) {
       outletId: req.body.outletId || null,
       sortBy: req.body.sortBy || "cheapest",
       shipmentType,
+      vasSelections,
     };
 
     const authToken = req.header("Authorization");
@@ -2728,7 +2983,7 @@ async function getShipmentQuotes(req, res) {
             })
           : [];
 
-        return {
+        const quote = {
           partnerId: rate.partnerId,
           partnerName: rate.partnerName,
           totalAmount: rate.totalRate || rate.totalAmount || 0,
@@ -2741,9 +2996,35 @@ async function getShipmentQuotes(req, res) {
           actualWeight: weight,
           serviceable:
             rate.isServiceable !== false && rate.serviceable !== false,
+          // Charges Engine v3 additions (money split + dynamic VAS questions)
+          ...(rate.pricing && { pricing: rate.pricing }),
+          ...(rate.requiredQuestions && {
+            requiredQuestions: rate.requiredQuestions,
+          }),
+          ...(rate.engine && { engine: rate.engine }),
           ...(rate.discount && { discount: rate.discount }),
           ...(rate.channel && { channel: rate.channel }),
         };
+
+        // Signed token: shipment creation verifies price/params against this,
+        // never against the client-editable snapshot
+        if (quote.serviceable) {
+          quote.quoteToken = quoteSigningService.signQuote(
+            quote,
+            {
+              fromPincode,
+              toPincode,
+              weight,
+              paymentType,
+              codAmount,
+              shipmentType,
+              serviceType,
+            },
+            vasSelections,
+          );
+        }
+
+        return quote;
       })
       .sort((a, b) => a.totalAmount - b.totalAmount);
 
@@ -2911,12 +3192,25 @@ async function rerateShipmentPreview(req, res) {
           serviceType: shipment.serviceType,
           dimensions: { length: newLength, width: newWidth, height: newHeight },
           paymentMode: shipment.paymentType,
-          codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : 0,
+          // Price COD on the base collectable — stored codAmount includes the
+          // outlet markup since charges-engine v3
+          codAmount: shipment.codBaseAmount
+            ? parseFloat(shipment.codBaseAmount)
+            : shipment.codAmount
+              ? parseFloat(shipment.codAmount)
+              : 0,
           declaredValue: shipment.value ? parseFloat(shipment.value) : 0,
           isFragile: shipment.fragile || false,
           outletId: shipment.outletId || undefined,
           partnerId: shipment.partnerId,
           skipServiceabilityCheck: true,
+          // Re-price the same VAS lines the shipment was booked with
+          vasSelections: Array.isArray(shipment.vasSelections)
+            ? shipment.vasSelections.map((s) => ({
+                chargeCode: s.chargeCode,
+                answer: s.answer,
+              }))
+            : [],
         },
         authToken,
       );
@@ -3145,12 +3439,25 @@ async function rerateShipment(req, res) {
           serviceType: shipment.serviceType,
           dimensions: { length: newLength, width: newWidth, height: newHeight },
           paymentMode: shipment.paymentType,
-          codAmount: shipment.codAmount ? parseFloat(shipment.codAmount) : 0,
+          // Price COD on the base collectable — stored codAmount includes the
+          // outlet markup since charges-engine v3
+          codAmount: shipment.codBaseAmount
+            ? parseFloat(shipment.codBaseAmount)
+            : shipment.codAmount
+              ? parseFloat(shipment.codAmount)
+              : 0,
           declaredValue: shipment.value ? parseFloat(shipment.value) : 0,
           isFragile: shipment.fragile || false,
           outletId: shipment.outletId || undefined,
           partnerId: shipment.partnerId,
           skipServiceabilityCheck: true,
+          // Re-price the same VAS lines the shipment was booked with
+          vasSelections: Array.isArray(shipment.vasSelections)
+            ? shipment.vasSelections.map((s) => ({
+                chargeCode: s.chargeCode,
+                answer: s.answer,
+              }))
+            : [],
         },
         authToken,
       );

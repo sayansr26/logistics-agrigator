@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { useGetPartnersQuery } from "@/store/api/endpoints/partnersApi";
 import { useGetZonesQuery } from "@/store/api/endpoints/zonesApi";
-import { useGetChargesTypesQuery } from "@/store/api/endpoints/chargesTypeApi";
+import { useGetChargeDefinitionsQuery } from "@/store/api/endpoints/chargesApi";
 import { useAuth } from "@/hooks/useAuth";
 
 function AdminDashboard() {
@@ -45,11 +45,11 @@ function AdminDashboard() {
     useGetPartnersQuery({});
   const { data: zonesData, isLoading: zonesLoading } = useGetZonesQuery({});
   const { data: chargesData, isLoading: chargesLoading } =
-    useGetChargesTypesQuery({});
+    useGetChargeDefinitionsQuery({ limit: 100 });
 
   const partners = partnersData?.data?.partners || [];
   const zones = zonesData?.data?.zones || [];
-  const chargesTypes = chargesData?.data || [];
+  const chargesTypes = chargesData?.data?.definitions || [];
 
   const activePartners = partners.filter((p) => p.isActive);
   const isLoading = partnersLoading || zonesLoading || chargesLoading;
@@ -129,9 +129,9 @@ function AdminDashboard() {
       color: "text-green-600",
     },
     {
-      title: "Charges Types",
+      title: "Charge Definitions",
       description: "Set up charge configurations",
-      href: "/charges-types",
+      href: "/charge-definitions",
       icon: IndianRupee,
       color: "text-purple-600",
     },
@@ -180,7 +180,7 @@ function AdminDashboard() {
           isLoading={zonesLoading}
         />
         <StatsCard
-          title="Charges Types"
+          title="Charge Definitions"
           value={chargesTypes.length}
           description="Charge configurations"
           icon={IndianRupee}

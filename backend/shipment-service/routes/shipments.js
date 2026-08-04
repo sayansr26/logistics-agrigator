@@ -438,6 +438,50 @@ router.post("/webhook/:provider", generalLimiter, handleProviderWebhook);
  *       200:
  *         description: NDR cases retrieved
  */
+// Outlet markup commission ledger (charges-engine v3).
+// NOTE: must precede "/:id" — Express would otherwise capture "earnings" as
+// a shipment ID.
+const {
+  getOutletEarnings,
+  getOutletEarningsSummary,
+} = require("../controllers/outletEarningsController");
+
+/**
+ * @swagger
+ * /api/v1/shipments/earnings:
+ *   get:
+ *     tags: [Earnings]
+ *     summary: List outlet markup earnings (scoped by role)
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/earnings",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getOutletEarnings,
+);
+
+/**
+ * @swagger
+ * /api/v1/shipments/earnings/summary:
+ *   get:
+ *     tags: [Earnings]
+ *     summary: Outlet earnings totals (accrued/cancelled/month-to-date)
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/earnings/summary",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getOutletEarningsSummary,
+);
+
 // NOTE: must precede "/:id" - Express matches in registration order, and
 // "/:id" would otherwise capture "ndr" as a shipment ID.
 router.get(

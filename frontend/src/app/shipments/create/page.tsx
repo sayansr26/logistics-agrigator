@@ -7,7 +7,7 @@ export default function CreateShipmentEntryPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/shipments/create/docket");
+    router.replace("/shipments/create/details");
   }, [router]);
 
   return null;

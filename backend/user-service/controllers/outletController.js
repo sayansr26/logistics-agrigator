@@ -1046,6 +1046,193 @@ class OutletController {
   }
 
   /**
+   * Update own default markup preference (outlet role).
+   * PUT /api/outlets/me/markup
+   * Body: { markupType: FLAT|PERCENTAGE|null, markupValue: number|null }
+   */
+  static async updateMyMarkup(req, res) {
+    try {
+      const userId = req.user.userId || req.user.id;
+      const { markupType, markupValue } = req.body;
+
+      const outlet = await prisma.outlet.findUnique({ where: { userId } });
+      if (!outlet) {
+        throw new UserServiceError("Outlet not found", "OUTLET_NOT_FOUND", 404);
+      }
+
+      // Enforce admin caps on the stored default
+      if (markupType === "FLAT" && outlet.maxMarkupFlat !== null) {
+        if (Number(markupValue) > Number(outlet.maxMarkupFlat)) {
+          throw new UserServiceError(
+            `Markup exceeds the allowed flat cap of ₹${outlet.maxMarkupFlat}`,
+            "MARKUP_CAP_EXCEEDED",
+            400,
+          );
+        }
+      }
+      if (markupType === "PERCENTAGE" && outlet.maxMarkupPercent !== null) {
+        if (Number(markupValue) > Number(outlet.maxMarkupPercent)) {
+          throw new UserServiceError(
+            `Markup exceeds the allowed percentage cap of ${outlet.maxMarkupPercent}%`,
+            "MARKUP_CAP_EXCEEDED",
+            400,
+          );
+        }
+      }
+
+      const updatedOutlet = await prisma.$transaction(async (tx) => {
+        const updated = await tx.outlet.update({
+          where: { id: outlet.id },
+          data: {
+            defaultMarkupType: markupType ?? null,
+            defaultMarkupValue: markupType === null ? null : markupValue,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            outletId: outlet.id,
+            action: "UPDATE_OUTLET_MARKUP",
+            resource: "Outlet",
+            resourceId: outlet.id,
+            changes: {
+              defaultMarkupType: {
+                from: outlet.defaultMarkupType,
+                to: markupType ?? null,
+              },
+              defaultMarkupValue: {
+                from: outlet.defaultMarkupValue,
+                to: markupType === null ? null : markupValue,
+              },
+            },
+            metadata: { source: "user-service", changedBy: req.user.role },
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+          },
+        });
+
+        return updated;
+      });
+
+      await OutletController.invalidateOutletContextCache(outlet, userId);
+
+      res.json(
+        APIResponse.success({
+          outlet: updatedOutlet,
+          message: "Markup preference updated successfully",
+        }),
+      );
+    } catch (error) {
+      logger.error("Update outlet markup error", {
+        error: error.message,
+        userId: req.user?.userId,
+      });
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
+    }
+  }
+
+  /**
+   * Update markup caps for an outlet (admin/client).
+   * PUT /api/outlets/:id/markup-limits
+   * Body: { maxMarkupFlat: number|null, maxMarkupPercent: number|null }
+   */
+  static async updateMarkupLimits(req, res) {
+    try {
+      const { id } = req.params;
+      const { maxMarkupFlat, maxMarkupPercent } = req.body;
+      const userId = req.user.userId || req.user.id;
+
+      const outlet = await prisma.outlet.findUnique({ where: { id } });
+      if (!outlet) {
+        throw new UserServiceError("Outlet not found", "OUTLET_NOT_FOUND", 404);
+      }
+
+      const updatedOutlet = await prisma.$transaction(async (tx) => {
+        const updated = await tx.outlet.update({
+          where: { id },
+          data: {
+            maxMarkupFlat: maxMarkupFlat ?? null,
+            maxMarkupPercent: maxMarkupPercent ?? null,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            outletId: id,
+            action: "UPDATE_OUTLET_MARKUP_LIMITS",
+            resource: "Outlet",
+            resourceId: id,
+            changes: {
+              maxMarkupFlat: {
+                from: outlet.maxMarkupFlat,
+                to: maxMarkupFlat ?? null,
+              },
+              maxMarkupPercent: {
+                from: outlet.maxMarkupPercent,
+                to: maxMarkupPercent ?? null,
+              },
+            },
+            metadata: { source: "user-service", changedBy: req.user.role },
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+          },
+        });
+
+        return updated;
+      });
+
+      await OutletController.invalidateOutletContextCache(
+        outlet,
+        outlet.userId,
+      );
+
+      res.json(
+        APIResponse.success({
+          outlet: updatedOutlet,
+          message: "Markup limits updated successfully",
+        }),
+      );
+    } catch (error) {
+      logger.error("Update outlet markup limits error", {
+        error: error.message,
+        outletId: req.params.id,
+        userId: req.user?.userId,
+      });
+      const statusCode = error.statusCode || 500;
+      const code = error.code || "INTERNAL_ERROR";
+      res
+        .status(statusCode)
+        .json(APIResponse.error(error.message, statusCode, code));
+    }
+  }
+
+  /**
+   * Best-effort invalidation of shipment-service's cached outlet context
+   * (shared Redis) so markup changes take effect without waiting for TTL.
+   */
+  static async invalidateOutletContextCache(outlet, userId) {
+    try {
+      const { getRedisClient } = require("../config/redis");
+      const redis = getRedisClient();
+      await redis.del(
+        `shipment-outlet-wallet:user:${userId}`,
+        `shipment-outlet-wallet:outlet:${outlet.id}`,
+      );
+    } catch (error) {
+      logger.warn("Failed to invalidate outlet context cache", {
+        error: error.message,
+        outletId: outlet.id,
+      });
+    }
+  }
+
+  /**
    * Reset outlet password
    * POST /api/outlets/:id/reset-password
    */

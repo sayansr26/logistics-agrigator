@@ -213,6 +213,12 @@ class PartnerIntegrationService {
       partnerId: rateParams.partnerId || null,
       sortBy: rateParams.sortBy || "cheapest",
       shipmentType: rateParams.shipmentType || "B2C",
+      // Canonical (sorted) VAS answers — different answers price differently
+      vasSelections: Array.isArray(rateParams.vasSelections)
+        ? [...rateParams.vasSelections]
+            .map((s) => ({ chargeCode: s.chargeCode, answer: s.answer }))
+            .sort((a, b) => a.chargeCode.localeCompare(b.chargeCode))
+        : [],
     };
 
     const hash = crypto
@@ -311,6 +317,7 @@ class PartnerIntegrationService {
         skipServiceabilityCheck: rateParams.skipServiceabilityCheck || false,
         sortBy: rateParams.sortBy || "cheapest",
         shipmentType: rateParams.shipmentType || "B2C",
+        vasSelections: rateParams.vasSelections || [],
       };
 
       logger.info("Calling Partner Service for rate calculation", {

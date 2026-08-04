@@ -144,15 +144,21 @@ Overall Project Progress          [███████████████
 - ✅ Real-time tracking
 - ✅ Status updates
 - ✅ NDR management
-- ✅ **Shipment Creation Flow** (March 2026)
-  - ✅ End-to-end creation wizard: Docket → Dimensions → Delivery → Invoice → Review
+- ✅ **Shipment Creation Flow** (March 2026, rebuilt August 4, 2026)
+  - ✅ 3-step wizard: Shipment Details → Partner Selection → Confirm & Book (`app/shipments/create/{details,partners,confirm}`), replacing the old 2-step Docket → Review flow; `components/shipments/create/wizard-layout.tsx` shell
   - ✅ B2B/B2C multi-box support with invoice generation
-  - ✅ Partner quote calculation with charge breakdown + badge discounts
+  - ✅ Partner quote calculation with charge breakdown, now against charges-engine v3: HMAC quote tokens (15min TTL), GST-inclusive `pricing.grandTotal`, dynamic VAS (`vasSelections`) re-priced per partner via `requiredQuestions`
+  - ✅ Dynamic VAS section (`step1/vas-section.tsx`) driven by `GET /charge-definitions/booking-questions`; `lib/utils/vas.ts` builds the `[{chargeCode, answer}]` payload identically for both the quote and booking calls (token hash-checks it)
+  - ✅ Outlet markup (FLAT/PERCENTAGE) captured at booking (`step1/markup-section.tsx`), split shown at Confirm (systemCharge / markup / finalTotal / COD collectable); wallet sufficiency checked against systemCharge only
   - ✅ Wallet payment integration (auto-debit on PREPAID shipments)
   - ✅ `resolveOutletContext`: admin uses outlet phone, outlet uses JWT phone
   - ✅ `paymentProcessingService`: calls wallet admin endpoints with `X-Internal-Request` header
   - ✅ `quoteSnapshot` stores full charge breakdown + discount for shipment detail page
   - ✅ Fragile item handling (conditional charge, frontend checkbox)
+  - ✅ Draft persistence: Zustand `persist` middleware (`shipment-form-draft` in localStorage), debounced "Draft saved" badge
+  - ✅ 409 `QUOTE_STALE` handling: Confirm step clears the selected quote and bounces to Partner Selection to re-fetch
+  - ✅ AI "Why this price?" quote explain button (`useExplainQuoteMutation` → `POST /charge-configs/ai/explain-quote`)
+  - ⏳ Earnings RTK endpoints wired (`useGetOutletEarningsQuery`/`Summary`) but the `/earnings` page itself is not built yet
 - ✅ **Shipment Lifecycle Expansion** (NEW - March 24, 2026)
   - ✅ `POST /:id/refresh` — Fetch latest status from provider, update local DB
   - ✅ `POST /:id/courier-label` — Fetch label from provider, store as ShipmentDocument
@@ -625,6 +631,165 @@ Overall Project Progress          [███████████████
 | #37 | Frontend     | Login form reappeared submittable during the post-login navigation    | Jul 2026   |
 
 ## Changelog
+
+### August 2026
+
+```
+[2026-08-04] Booking Wizard — Mockup Parity (address book, billing, boxes/invoices sync) - COMPLETE
+  Need: the 3-step wizard diverged from book_shipment_form_v2.html: plain
+        native selects instead of searchable dropdowns, delivery as a manual
+        inline form, no billing address slot, add-address modal was create-
+        only (no edit/type-picker/defaults/pincode-autofill), no box-count
+        input driving dimension+invoice rows, plain outlet select. Locked
+        decisions: box count drives invoices too (B2B; B2C stays 1/1),
+        billing gets full backend support (default same-as-delivery),
+        delivery becomes select-only from the address book.
+
+  Backend (Part A, done+curl-verified before this session): user-service
+        addressType Joi enum extended to GENERAL|PICKUP|RETURN|DELIVERY|
+        BILLING (no migration — VarChar(50) column). shipment-service gained
+        billingSameAsDelivery/billing*/deliveryAddressId/rtoAddressId/
+        billingAddressId columns (one migration) + Joi + controller write-
+        through (same-as copies deliveryAddress; explicit billing stored).
+
+  Shipped (Parts B-F, frontend): components/ui/searchable-select.tsx (generic
+        autocomplete, modeled on the addresses/page.tsx hand-rolled idiom);
+        hooks/useShipmentAddresses.ts (shared my-vs-outlet dual-fetch,
+        replacing triplicated logic in address-section/confirm/partners);
+        components/shipments/create/step1/address-picker.tsx (reusable 4-slot
+        picker: searchable select + summary card with type/default badges +
+        edit pencil + Add New Address); address-modal.tsx rewritten for
+        create+edit with 5-type select and pincode autofill via
+        usePincodeAutoFill; address-section.tsx rewritten to 4 slots (pickup/
+        RTO same-as-pickup with the re-check-mirroring bug fixed/delivery
+        select-only syncing legacy store fields/billing same-as-delivery).
+        Store gained deliveryAddressId, billingSameAsDelivery, billingAddressId,
+        numberOfBoxes + setNumberOfBoxes(count) (clamps 1-100, grows/trims
+        boxes[] and — B2B only — invoices[] together), dimensionUnit.
+        docket-section.tsx: outlet select is now searchable (client filter +
+        debounced server search fallback via useLazyListOutletsQuery); "Number
+        of boxes" input added (B2B editable, B2C locked); outlet-change
+        cascade extended to clear all 4 address ids + both same-as flags.
+        dimensions-section.tsx: rows auto-render from boxes[] (Add-Box button
+        removed), column order fixed to L/W/H, Cm/Inch unit selector added
+        (unitToCmFactor() shared by partners+confirm payload builders so
+        quote and create dimensions stay consistent). invoice-payment-
+        section.tsx: B2B rows now count-driven (Add/Delete removed, reconciled
+        against numberOfBoxes); B2C unchanged. confirm/page.tsx + partners/
+        page.tsx: migrated to useShipmentAddresses; confirm sends
+        billingSameAsDelivery/billingAddress/three provenance ids; vasSelections
+        +quoteToken flow left byte-identical (HMAC-checked). Fixed app/
+        outlets/page.tsx (5 real enum values, real isDefaultPickup/
+        isDefaultReturn checkboxes, dropped dead HOME/WORK/OTHER + isDefault)
+        and app/addresses/page.tsx (DELIVERY+BILLING in type select + badge).
+        outletApi.ts CreateAddressRequest/UpdateAddressRequest now use a
+        proper AddressType union; shipmentApi.ts CreateShipmentRequest gained
+        the billing + provenance fields.
+
+  Verified: tsc --noEmit clean except the pre-existing documented
+        shipmentApi.ts Params|void errors (untouched, unrelated). curl-
+        confirmed outlet c9b85b1a-3144-4d22-aa88-74633b6cbc60 has live
+        DELIVERY ("Kharghar Consignee") and BILLING ("HO Billing") addresses
+        matching the new UI's expected shapes. Production build
+        (NODE_ENV=production yarn build) compiled successfully; container
+        restarted clean.
+```
+
+```
+[2026-08-04] Charges Engine v3 — remaining admin/outlet frontend - COMPLETE
+  Need: charges-engine v3 (below) shipped backend-first + a booking-wizard
+        pass; still missing was the admin UI for the new ChargeDefinition/
+        PartnerChargeConfig/AiChargeSuggestion models, plus the outlet-facing
+        earnings ledger and markup preference, plus removal of the three
+        frontend routes whose backends now 410.
+
+  Shipped: app/earnings/page.tsx (summary tiles + paginated/status-filtered
+        ledger, outlet/client/admin); components/outlets/markup-settings-card
+        .tsx (FLAT/PERCENTAGE + value, admin caps shown, 400 MARKUP_CAP_
+        EXCEEDED surfaced, rendered atop /earnings for outlet role);
+        app/charge-definitions/page.tsx (catalog table, Sheet drawer with
+        pretty-printed JSON blocks, isActive Switch → PUT); app/charge-configs
+        /page.tsx (partner-scoped config CRUD via JSON textareas + client
+        JSON.parse validation; AI Assist panel — draft-from-text → review →
+        approve/reject; suggestion inbox; anomaly-scan button with severity-
+        colored findings; 503 AI_UNAVAILABLE degrades gracefully everywhere).
+        chargesApi.ts extended with the full v3 admin RTK surface; baseApi.ts
+        tagTypes gained ChargeDefinition/ChargeConfig/AiSuggestion.
+        Deleted app/charges/, app/charges-types/, app/charge-discount-
+        packages/ (410 backends); patched the dashboard stat tile and sidebar
+        /routePermissions.ts references that would otherwise have dangled.
+
+  Backend fix en route: partner-service's getAllPartners/getPartnerById/
+        createPartner/updatePartner still selected _count on relations
+        (rates/chargeRules/chargesTypes) dropped by the v3 migration, 500ing
+        GET /api/v1/partners outright and blocking the new partner picker —
+        fixed to select chargeConfigs instead.
+
+  Verified: yarn type-check clean (only the pre-existing shipmentApi.ts
+        Params|void narrowing bug remains, untouched); yarn build clean with
+        the three new routes present and the three deleted ones absent from
+        the route manifest; both logistics-frontend and logistics-partner-
+        service restarted.
+
+[2026-08-04] Charges Engine v3 — complete redesign, AI-powered - COMPLETE
+  Need: two overlapping pricing generations (external-API G1 with silent
+        fallbacks + hardcoded 2% COD, and the ChargeRule G2 engine) with a
+        rigid rule schema; no VAS charges, no outlet markup, and a booking
+        flow that trusted the client-supplied quoteSnapshot for the wallet
+        debit.
+
+  Decision (user): hybrid AI architecture. A deterministic engine prices every
+        quote from a dynamic JSON config catalog; DeepSeek is the config brain
+        (NL → draft configs, legacy import, quote explanation, COD-risk,
+        anomaly scan) and is never in the quote path. Hard drop of both old
+        engines (export-first); outlet markup added to totals + earnings
+        ledger; booking secured with HMAC quote tokens.
+
+  partner-service: ChargeDefinition/PartnerChargeConfig/ChargeConfigVersion/
+        AiChargeSuggestion models; 36-definition seeded catalog (incl. EVENT
+        charges priced via POST /api/partners/event-charge-quote);
+        services/chargeEngine/* (conditionEvaluator, calculators, aggregator,
+        phase pipeline 100..900 with fuel-over-fuelApplicable and GST-last);
+        quoteService replaces quoteCalculationService (envelope preserved +
+        pricing/requiredQuestions/engine; totalRate now GST-INCLUSIVE);
+        /api/v1/charge-definitions + /charge-configs CRUD with versioning,
+        referential JSON validation, Redis config-revision cache busting;
+        /api/v1/charge-configs/ai/* (draft-from-text, import-legacy,
+        suggestions inbox approve/reject, explain-quote, cod-risk,
+        anomaly-scan) via shared/lib/aiClient.js (AiUnavailableError,
+        graceful degradation verified).
+        DROPPED: charge_rules, charges_types, charge_discount_packages(_items),
+        partner_rates, Partner.baseRate/perKgRate/codChargePercent/
+        fuelSurcharge; G1+G2 service/controller/route files deleted; old
+        admin endpoints 410.
+
+  shipment-service: quoteSigningService (HMAC tokens, 15min TTL, vasHash) —
+        wallet debit now comes from verified claims (tamper hole closed,
+        tested); vasSelections flow quotes→create→rerate; Shipment split
+        columns systemCharge/markup*/codBaseAmount/vasSelections;
+        OutletEarning ledger (ACCRUED on create tx, CANCELLED on cancel tx);
+        GET /shipments/earnings(+/summary). COD cap now applies to
+        base+markup sum.
+
+  user-service: Outlet default markup + admin caps; PUT /outlets/me/markup,
+        PUT /outlets/:id/markup-limits; internal outlet payload carries
+        markup fields.
+
+  frontend: booking wizard rebuilt as 3-step flow (details/partners/confirm)
+        per book_shipment_form_v2.html with dynamic VAS section rendered from
+        the booking-questions catalog, markup input, quote tokens, AI
+        "Why this price?" — see activeContext entry.
+
+  Tests: 25 engine unit tests + 7 signing tests, all green; full curl matrix
+        (tamper, caps, COD sums, earnings, cancel) verified in Docker.
+
+  Migrations (applied via migrate diff → db execute → migrate resolve, since
+        the shadow DB is broken by a historical db push):
+        partner-service 20260804000000_charges_engine_v3_additive,
+        20260804010000_charges_engine_v3_drop_legacy;
+        shipment-service 20260804020000_markup_split_and_outlet_earnings;
+        user-service 20260804020000_outlet_markup_preferences.
+```
 
 ### July 2026
 

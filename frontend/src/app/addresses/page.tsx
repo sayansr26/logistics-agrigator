@@ -40,6 +40,7 @@ import type {
   OutletAddress,
   CreateAddressRequest,
   UpdateAddressRequest,
+  AddressType,
 } from "@/store/api/endpoints/outletApi";
 import {
   useGetStatesQuery,
@@ -263,7 +264,7 @@ function AddressesPageContent() {
     setSelectedAddress(address);
     setFormData({
       label: address.label,
-      addressType: address.addressType as "GENERAL" | "PICKUP" | "RETURN",
+      addressType: address.addressType as AddressType,
       name: address.name,
       phone: address.phone,
       email: address.email || "",
@@ -338,6 +339,10 @@ function AddressesPageContent() {
         return <Badge className="bg-blue-500">Pickup</Badge>;
       case "RETURN":
         return <Badge className="bg-orange-500">Return</Badge>;
+      case "DELIVERY":
+        return <Badge className="bg-emerald-500">Delivery</Badge>;
+      case "BILLING":
+        return <Badge className="bg-purple-500">Billing</Badge>;
       default:
         return <Badge variant="secondary">General</Badge>;
     }
@@ -558,7 +563,7 @@ function AddressesPageContent() {
                   onValueChange={(value) =>
                     setFormData((prev) => ({
                       ...prev,
-                      addressType: value as "GENERAL" | "PICKUP" | "RETURN",
+                      addressType: value as AddressType,
                     }))
                   }
                 >
@@ -568,7 +573,9 @@ function AddressesPageContent() {
                   <SelectContent>
                     <SelectItem value="GENERAL">General</SelectItem>
                     <SelectItem value="PICKUP">Pickup</SelectItem>
-                    <SelectItem value="RETURN">Return</SelectItem>
+                    <SelectItem value="RETURN">Return / RTO</SelectItem>
+                    <SelectItem value="DELIVERY">Delivery</SelectItem>
+                    <SelectItem value="BILLING">Billing</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

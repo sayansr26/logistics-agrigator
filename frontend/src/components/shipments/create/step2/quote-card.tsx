@@ -1,0 +1,202 @@
+"use client";
+
+import { useState, type MouseEvent } from "react";
+import { Building, ChevronDown, Sparkles, Loader2 } from "lucide-react";
+import type { PartnerQuote } from "@/store/api/endpoints/shipmentApi";
+import { useExplainQuoteMutation } from "@/store/api/endpoints/shipmentApi";
+import { useShipmentFormStore } from "@/store/shipment-form-store";
+
+function fmt(n: number) {
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+interface QuoteCardProps {
+  quote: PartnerQuote;
+  isRecommended: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+export function QuoteCard({
+  quote,
+  isRecommended,
+  isSelected,
+  onSelect,
+}: QuoteCardProps) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [explanation, setExplanation] = useState<{
+    explanation: string;
+    highlights: string[];
+  } | null>(null);
+  const [explainQuote, { isLoading: explaining }] = useExplainQuoteMutation();
+  const store = useShipmentFormStore();
+
+  const markupValue = parseFloat(store.markupValue) || 0;
+  const markupAmount =
+    store.markupType === "PERCENTAGE"
+      ? (quote.totalAmount * markupValue) / 100
+      : store.markupType === "FLAT"
+        ? markupValue
+        : 0;
+  const finalTotal = quote.totalAmount + markupAmount;
+
+  async function handleExplain(e: MouseEvent) {
+    e.stopPropagation();
+    if (explanation) {
+      setExplanation(null);
+      return;
+    }
+    try {
+      const res = await explainQuote({
+        breakdown: quote.chargeBreakdown || [],
+        pricing: quote.pricing || { grandTotal: quote.totalAmount },
+        context: { partnerName: quote.partnerName },
+      }).unwrap();
+      setExplanation(res.data);
+    } catch {
+      // AI unavailable - fail silently, button stays available to retry
+    }
+  }
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`bg-card rounded-2xl p-5 border-2 shadow-sm cursor-pointer relative transition-all ${
+        isSelected
+          ? "border-blue-600 shadow-md"
+          : "border-border hover:border-primary/40"
+      }`}
+    >
+      {isRecommended && (
+        <span className="absolute top-3 right-3 bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+          Best Value
+        </span>
+      )}
+
+      <div className="flex items-center gap-3 mb-3">
+        <input
+          type="radio"
+          checked={isSelected}
+          onChange={onSelect}
+          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+        />
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <Building className="h-3.5 w-3.5 text-muted-foreground" />{" "}
+            {quote.partnerName}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {quote.deliveryDays
+              ? `Est. ${quote.deliveryDays} day${quote.deliveryDays !== 1 ? "s" : ""}`
+              : "Est. delivery TBD"}{" "}
+            · Chargeable: {quote.chargeableWeight} kg
+          </p>
+        </div>
+      </div>
+
+      <div className="pt-3 border-t border-border space-y-1">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[10px] text-muted-foreground">
+            System price
+          </span>
+          <span className="text-sm font-bold text-foreground">
+            ₹{fmt(quote.totalAmount)}
+          </span>
+        </div>
+        {markupAmount > 0 && (
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              + your markup
+            </span>
+            <span className="text-xs font-semibold text-blue-600">
+              +₹{fmt(markupAmount)}
+            </span>
+          </div>
+        )}
+        <div className="flex items-baseline justify-between pt-1">
+          <span className="text-[10px] text-muted-foreground font-semibold">
+            Total
+          </span>
+          <span className="text-xl font-black text-foreground">
+            ₹{fmt(finalTotal)}
+          </span>
+        </div>
+        {store.paymentType === "COD" && quote.pricing && (
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              COD collectable
+            </span>
+            <span className="text-xs font-semibold text-amber-600">
+              ₹{fmt(quote.pricing.codCollectable + markupAmount)}
+            </span>
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          Includes GST + Freight + Handling
+        </p>
+      </div>
+
+      <div className="pt-3 mt-3 border-t border-border flex items-center justify-between">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowBreakdown((v) => !v);
+          }}
+          className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1"
+        >
+          Charge breakdown{" "}
+          <ChevronDown
+            className={`h-3 w-3 transition-transform ${showBreakdown ? "rotate-180" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={handleExplain}
+          disabled={explaining}
+          className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 disabled:opacity-50"
+        >
+          {explaining ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Sparkles className="h-3 w-3" />
+          )}
+          Why this price?
+        </button>
+      </div>
+
+      {showBreakdown &&
+        quote.chargeBreakdown &&
+        quote.chargeBreakdown.length > 0 && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mt-2 pt-2 border-t border-dashed border-border space-y-1"
+          >
+            {quote.chargeBreakdown.map((cb, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between text-[11px]"
+              >
+                <span className="text-muted-foreground">{cb.name}</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  ₹{fmt(cb.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+      {explanation && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-2 pt-2 border-t border-dashed border-blue-200 dark:border-blue-800 text-[11px] text-muted-foreground space-y-1"
+        >
+          <p>{explanation.explanation}</p>
+        </div>
+      )}
+    </div>
+  );
+}

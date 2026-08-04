@@ -135,22 +135,40 @@ app.use("/api/v1/zones", require("./routes/zones"));
 // Pincode Type Management Routes (Simplified - No service charges)
 app.use("/api/v1/pincode-types", require("./routes/pincodeTypes"));
 
-// Charges Type Management Routes (NEW - Partner-specific charge types)
-app.use("/api/v1/charges-types", require("./routes/chargesTypes"));
-
 // Partner Channel Management Routes (NEW - Single/Multi API Configuration)
 app.use("/api/v1", require("./routes/partnerChannels"));
 app.use("/api", require("./routes/partnerChannels")); // Also mount at /api for gateway compatibility
 app.use("/api/v1", require("./routes/carrierAccounts"));
 app.use("/api", require("./routes/carrierAccounts")); // Also mount at /api for gateway compatibility
 
-// Charges Rule Management Routes (NEW - replaces legacy charge packages)
-app.use("/api/v1/charges", require("./routes/charges"));
+// Charges Engine v3 — dynamic charge catalog + per-partner configs
+// NOTE: the AI router must mount BEFORE chargeConfigs, whose /:id route would
+// otherwise capture the "ai" path segment.
+app.use("/api/v1/charge-definitions", require("./routes/chargeDefinitions"));
+app.use("/api/v1/charge-configs/ai", require("./routes/aiCharges"));
+app.use("/api/v1/charge-configs", require("./routes/chargeConfigs"));
 
-// Charge Discount Package Routes (Badge-based discounts for outlet tiers)
-app.use(
+// Deprecated G2 charges engine routes (dropped by charges engine v3)
+app.all(
+  "/api/v1/charges-types/*",
+  deprecated("/api/v1/charge-definitions", "2026-08-04"),
+);
+app.all(
+  "/api/v1/charges-types",
+  deprecated("/api/v1/charge-definitions", "2026-08-04"),
+);
+app.all(
+  "/api/v1/charges/*",
+  deprecated("/api/v1/charge-configs", "2026-08-04"),
+);
+app.all("/api/v1/charges", deprecated("/api/v1/charge-configs", "2026-08-04"));
+app.all(
+  "/api/v1/charge-discount-packages/*",
+  deprecated("/api/v1/charge-configs", "2026-08-04"),
+);
+app.all(
   "/api/v1/charge-discount-packages",
-  require("./routes/chargeDiscountPackages"),
+  deprecated("/api/v1/charge-configs", "2026-08-04"),
 );
 
 // Partner Pincode Assignment Routes (NEW - Pincode assignment with type values)
@@ -364,7 +382,6 @@ app.get("/", (req, res) => {
       zones: "/api/v1/zones",
       zoneCoverage: "/api/v1/zones/coverage",
       pincodeTypes: "/api/v1/pincode-types",
-      chargesTypes: "/api/v1/charges-types",
 
       // Pincode Type Service Charges (NEW)
       pincodeTypeServiceCharges: "/api/v1/pincode-type-service-charges",
@@ -373,8 +390,11 @@ app.get("/", (req, res) => {
       partnerChannels: "/api/v1/partners/:partnerId/channels",
       channelMode: "/api/v1/partners/:partnerId/channel-mode",
 
-      // Charges Rule Management (NEW - replaces legacy charge packages)
-      charges: "/api/v1/charges",
+      // Charges Engine v3 (AI-powered dynamic charge catalog)
+      chargeDefinitions: "/api/v1/charge-definitions",
+      chargeConfigs: "/api/v1/charge-configs",
+      bookingQuestions: "/api/v1/charge-definitions/booking-questions",
+      eventChargeQuote: "/api/partners/event-charge-quote",
 
       // Courier Operations (NEW - Delhivery, BlueDart integrations)
       courierOperations: "/api/v1/courier-operations",

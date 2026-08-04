@@ -98,11 +98,35 @@ const updateBadgeSchema = Joi.object({
     .required(),
 });
 
+// Outlet default markup preference (both null = clear preference)
+const updateMarkupSchema = Joi.object({
+  markupType: Joi.string().valid("FLAT", "PERCENTAGE").allow(null).required(),
+  markupValue: Joi.number()
+    .min(0)
+    .precision(2)
+    .when("markupType", {
+      is: "PERCENTAGE",
+      then: Joi.number().max(100),
+    })
+    .when("markupType", {
+      is: null,
+      then: Joi.valid(null),
+      otherwise: Joi.required(),
+    })
+    .allow(null),
+});
+
+// Admin caps on outlet markup (null = unlimited)
+const updateMarkupLimitsSchema = Joi.object({
+  maxMarkupFlat: Joi.number().min(0).precision(2).allow(null),
+  maxMarkupPercent: Joi.number().min(0).max(100).precision(2).allow(null),
+}).min(1);
+
 // Create address schema
 const createAddressSchema = Joi.object({
   label: Joi.string().max(100).required(),
   addressType: Joi.string()
-    .valid("GENERAL", "PICKUP", "RETURN")
+    .valid("GENERAL", "PICKUP", "RETURN", "DELIVERY", "BILLING")
     .default("GENERAL"),
   name: Joi.string().max(100).required(),
   phone: Joi.string()
@@ -125,7 +149,9 @@ const createAddressSchema = Joi.object({
 // Update address schema
 const updateAddressSchema = Joi.object({
   label: Joi.string().max(100).optional(),
-  addressType: Joi.string().valid("GENERAL", "PICKUP", "RETURN").optional(),
+  addressType: Joi.string()
+    .valid("GENERAL", "PICKUP", "RETURN", "DELIVERY", "BILLING")
+    .optional(),
   name: Joi.string().max(100).optional(),
   phone: Joi.string()
     .pattern(/^\+?[1-9]\d{1,14}$/)
@@ -164,6 +190,8 @@ module.exports = {
   createOutletSchema,
   updateOutletSchema,
   updateBadgeSchema,
+  updateMarkupSchema,
+  updateMarkupLimitsSchema,
   createAddressSchema,
   updateAddressSchema,
   listOutletsQuerySchema,

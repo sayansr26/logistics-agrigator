@@ -41,12 +41,6 @@ model Partner {
   maxWeight       Float? // in kg (maximum weight accepted)
   maxDimensions   Json? // {length, width, height} in cm
 
-  // Pricing Configuration
-  baseRate         Float?
-  perKgRate        Float?
-  codChargePercent Float?
-  fuelSurcharge    Float?
-
   // Delivery Configuration
   defaultDeliveryDays Int? @map("default_delivery_days") // Default delivery days for this partner
 
@@ -59,14 +53,11 @@ model Partner {
 
   // Relations
   shipments           PartnerShipment[]
-  rates               PartnerRate[]
   serviceabilityCache ServiceabilityCache[]
   channelConfigs      PartnerChannelConfig[]
   serviceChannels     PartnerServiceChannel[]
-  chargesTypes        ChargesType[]
   pincodeAssigns      PartnerPincodeAssign[]
-  chargeRules         ChargeRule[]
-  discountPackages    ChargeDiscountPackage[]
+  chargeConfigs       PartnerChargeConfig[]
 
   @@index([isActive])
   @@map("partners")
@@ -168,46 +159,14 @@ model PartnerServiceChannel {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  shipments PartnerShipment[]
+  shipments     PartnerShipment[]
+  chargeConfigs PartnerChargeConfig[]
 
   @@unique([partnerId, channelName])
   @@index([partnerId, isActive])
   @@index([partnerId, serviceType, isActive])
   @@index([partnerId, businessType, isActive])
   @@map("partner_service_channels")
-}
-
-model PartnerRate {
-  id        String  @id @default(cuid())
-  partnerId String
-  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  // Zone Configuration
-  fromPincode String
-  toPincode   String
-  zone        String? // A, B, C, D, E zones
-
-  // Weight Slabs
-  minWeight Float // in kg
-  maxWeight Float // in kg
-
-  // Pricing
-  rate          Float
-  codCharge     Float?
-  fuelSurcharge Float?
-
-  // Service Type
-  serviceType String // SURFACE, AIR, EXPRESS
-
-  // Delivery Time
-  deliveryDays Int?
-
-  // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([partnerId, fromPincode, toPincode, minWeight, maxWeight, serviceType])
-  @@map("partner_rates")
 }
 
 model PartnerShipment {
@@ -510,8 +469,7 @@ model ZoneMilestone {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  zone        Zone         @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  chargeRules ChargeRule[]
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
   @@unique([zoneId, sortOrder])
   @@unique([zoneId, minKm])
@@ -535,32 +493,9 @@ model PincodeType {
 
   // Relations
   partnerValues PartnerPincodeTypeValue[]
-  chargeRules   ChargeRule[]
 
   @@index([isActive, type])
   @@map("pincode_types")
-}
-
-// ========================================
-// CHARGES TYPE MANAGEMENT
-// Partner-specific charge types (e.g., COD, Freight, RTO)
-// ========================================
-
-model ChargesType {
-  id        String   @id @default(uuid()) @db.Uuid
-  partnerId String   @map("partner_id") // CUID to match Partner.id
-  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  name      String   @db.VarChar(100)
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  chargeRules ChargeRule[]
-
-  @@unique([partnerId, name]) // Each partner can't have duplicate charge type names
-  @@index([partnerId, isActive])
-  @@map("charges_types")
 }
 
 // ========================================
@@ -605,119 +540,123 @@ model PartnerPincodeTypeValue {
 }
 
 // ========================================
-// CHARGE RULE MANAGEMENT (Charges Engine)
+// CHARGES ENGINE v3 (AI-powered dynamic config)
+// ChargeDefinition = catalog entry describing HOW a charge type works
+// PartnerChargeConfig = per-partner (optionally per-channel) values
+// ChargeConfigVersion = immutable history of every config change
+// AiChargeSuggestion = AI-drafted configs pending admin review
 // ========================================
 
-enum ChargeRuleBase {
-  INVOICE_VALUE
-  COD_VALUE
-  WEIGHT
-  ZONE_TO_ZONE_WEIGHT
-  DISTANCE_BASE_WEIGHT
+enum ChargeApplyStage {
+  QUOTE // always evaluated at quote time (base, COD, fuel, GST, ODA...)
+  BOOKING_OPTION // evaluated only when a booking-form answer activates it (VAS)
+  EVENT // post-booking financial adjustment (demurrage, reattempt...)
 }
 
-model ChargeRule {
-  id        String         @id @default(uuid()) @db.Uuid
-  partnerId String         @map("partner_id") // CUID to match Partner.id
-  base      ChargeRuleBase
+model ChargeDefinition {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(60) // e.g. "COD_CHARGE", "LOADING_UNLOADING"
+  name        String  @db.VarChar(150) // human label -> breakdown chargeTypeName
+  description String?
+  category    String  @db.VarChar(40) // BASE|COD|VAS|PICKUP_DELIVERY|SURCHARGE|RISK|TAX|NOTIFICATION|EVENT|DISCOUNT
 
-  // Link to partner's ChargesType (for INVOICE_VALUE/COD_VALUE/WEIGHT when "Charges Types" selected)
-  chargesTypeId String? @map("charges_type_id") @db.Uuid
+  applyStage ChargeApplyStage @map("apply_stage")
+  phase      Int              @default(500) // pipeline ordering: 100 base .. 900 GST
 
-  // Link to PincodeType (for INVOICE_VALUE/COD_VALUE/WEIGHT when "Pincode Types" selected)
-  pincodeTypeId String? @map("pincode_type_id") @db.Uuid
+  // { method: FLAT|PERCENT_WITH_MIN|PER_UNIT|SLAB|MATRIX|PER_UNIT_TIME|RATE_ADJUSTMENT|DISCOUNT,
+  //   basis: COD_AMOUNT|INVOICE_VALUE|CHARGEABLE_WEIGHT|ANSWER_VALUE|SUBTOTAL|NONE,
+  //   paramsSchema: {...} } — the contract PartnerChargeConfig.config must satisfy
+  computation Json
 
-  // ---- Shared min value (all bases) ----
-  minValue Decimal? @map("min_value") @db.Decimal(12, 2)
+  // Dynamic booking-form spec (BOOKING_OPTION only):
+  // { key, label, type: boolean|select|datetime|number, options?, followUp? }
+  bookingQuestion Json? @map("booking_question")
 
-  // ---- For INVOICE_VALUE base (applied to invoiceValue) ----
-  // ---- and COD_VALUE base   (same field, applied to codAmount instead) ----
-  percentageValue Decimal? @map("percentage_value") @db.Decimal(10, 4)
+  // Default gating: { all|any: [ { fact, op, value } ] }
+  conditions Json?
 
-  // ---- For WEIGHT / ZONE_TO_ZONE_WEIGHT / DISTANCE_BASE_WEIGHT ----
-  perKg       Decimal? @map("per_kg") @db.Decimal(10, 3)
-  perKgCharge Decimal? @map("per_kg_charge") @db.Decimal(12, 2)
+  // { group, strategy: HIGHEST|SUM, perSide?: bool } — G2-compatible aggregation
+  aggregation Json?
 
-  // ---- Cost side (what we PAY the courier), optional / backward compatible ----
-  // When configured the engine can emit a parallel courier-cost total alongside
-  // the selling charge so profit margin = selling - cost. All nullable so existing
-  // selling-only rules are unaffected.
-  costMinValue        Decimal? @map("cost_min_value") @db.Decimal(12, 2)
-  costPercentageValue Decimal? @map("cost_percentage_value") @db.Decimal(10, 4)
-  costPerKgCharge     Decimal? @map("cost_per_kg_charge") @db.Decimal(12, 2)
+  // { fuelApplicable?, taxable?, addToCodCollectable?, aiAssisted? }
+  flags Json?
 
-  // ---- For ZONE_TO_ZONE_WEIGHT ----
-  fromZoneId String? @map("from_zone_id") @db.Uuid
-  toZoneId   String? @map("to_zone_id") @db.Uuid
+  isSystem Boolean @default(false) @map("is_system") // seeded core (GST, FUEL) — non-deletable
+  isActive Boolean @default(true) @map("is_active")
+  version  Int     @default(1)
 
-  // ---- For DISTANCE_BASE_WEIGHT ----
-  zoneMilestoneId String? @map("zone_milestone_id") @db.Uuid
-
-  // Status and timestamps
-  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relations
-  partner       Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  chargesType   ChargesType?   @relation(fields: [chargesTypeId], references: [id], onDelete: SetNull)
-  pincodeType   PincodeType?   @relation(fields: [pincodeTypeId], references: [id], onDelete: SetNull)
-  zoneMilestone ZoneMilestone? @relation(fields: [zoneMilestoneId], references: [id], onDelete: SetNull)
+  partnerConfigs PartnerChargeConfig[]
 
-  // Relations to discount items
-  discountItems ChargeDiscountPackageItem[]
-
-  @@index([partnerId, base, isActive])
-  @@index([partnerId, chargesTypeId, base, isActive])
-  @@index([partnerId, pincodeTypeId, isActive])
-  @@index([partnerId, zoneMilestoneId, isActive])
-  @@map("charge_rules")
+  @@index([applyStage, isActive])
+  @@index([category, isActive])
+  @@map("charge_definitions")
 }
 
-// ========================================
-// CHARGE DISCOUNT PACKAGE MANAGEMENT
-// Badge-based discount packages for outlet tiers
-// ========================================
+model PartnerChargeConfig {
+  id                 String  @id @default(uuid()) @db.Uuid
+  partnerId          String  @map("partner_id") // CUID to match Partner.id
+  channelId          String? @map("channel_id") @db.Uuid // optional PartnerServiceChannel override
+  chargeDefinitionId String  @map("charge_definition_id") @db.Uuid
 
-enum DiscountType {
-  FLAT
-  PERCENTAGE
-}
+  // Values satisfying the definition's computation.paramsSchema. May reference
+  // Zone/ZoneMilestone/PincodeType ids as UUID strings — referential validity is
+  // enforced by partnerChargeConfigService on every write.
+  config Json
 
-model ChargeDiscountPackage {
-  id        String   @id @default(uuid()) @db.Uuid
-  partnerId String   @map("partner_id") // CUID to match Partner.id
-  name      String   @db.VarChar(200)
-  badge     String   @db.VarChar(20) // BASIC, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND
-  isActive  Boolean  @default(true) @map("is_active")
+  // Partner-level condition overrides, merged over the definition defaults
+  conditions Json?
+
+  priority      Int       @default(100)
+  isActive      Boolean   @default(true) @map("is_active")
+  effectiveFrom DateTime? @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  version       Int       @default(1)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relations
-  partner Partner                     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  items   ChargeDiscountPackageItem[]
+  partner          Partner                @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  channel          PartnerServiceChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  chargeDefinition ChargeDefinition       @relation(fields: [chargeDefinitionId], references: [id], onDelete: Cascade)
 
-  @@unique([partnerId, badge])
+  @@unique([partnerId, chargeDefinitionId, channelId])
   @@index([partnerId, isActive])
-  @@index([badge, isActive])
-  @@map("charge_discount_packages")
+  @@index([chargeDefinitionId, isActive])
+  @@map("partner_charge_configs")
 }
 
-model ChargeDiscountPackageItem {
-  id            String       @id @default(uuid()) @db.Uuid
-  packageId     String       @map("package_id") @db.Uuid
-  chargeRuleId  String       @map("charge_rule_id") @db.Uuid
-  discountType  DiscountType @map("discount_type")
-  discountValue Decimal      @map("discount_value") @db.Decimal(12, 2)
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
+model ChargeConfigVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityType   String   @map("entity_type") @db.VarChar(30) // DEFINITION | PARTNER_CONFIG
+  entityId     String   @map("entity_id") @db.Uuid
+  version      Int
+  snapshot     Json // full row snapshot AFTER the change
+  changeSource String   @default("MANUAL") @map("change_source") @db.VarChar(20) // MANUAL | AI_SUGGESTED | LEGACY_IMPORT
+  changedById  String?  @map("changed_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  // Relations
-  package    ChargeDiscountPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  chargeRule ChargeRule            @relation(fields: [chargeRuleId], references: [id], onDelete: Cascade)
+  @@unique([entityType, entityId, version])
+  @@index([entityType, entityId])
+  @@map("charge_config_versions")
+}
 
-  @@unique([packageId, chargeRuleId])
-  @@index([packageId])
-  @@index([chargeRuleId])
-  @@map("charge_discount_package_items")
+model AiChargeSuggestion {
+  id           String    @id @default(uuid()) @db.Uuid
+  kind         String    @db.VarChar(30) // CONFIG_FROM_NL | LEGACY_IMPORT | ANOMALY | CONFIG_TUNE
+  status       String    @default("PENDING") @db.VarChar(20) // PENDING | APPROVED | REJECTED | APPLIED
+  inputContext Json      @map("input_context") // NL prompt / legacy rules chunk / anomaly window
+  suggestion   Json // proposed ChargeDefinition + PartnerChargeConfig drafts
+  // Validation errors found in the AI output, surfaced to the reviewing admin
+  validation   Json?
+  modelUsed    String?   @map("model_used") @db.VarChar(60)
+  createdById  String?   @map("created_by_id") @db.Uuid
+  reviewedById String?   @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime? @map("reviewed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([kind, status])
+  @@map("ai_charge_suggestions")
 }

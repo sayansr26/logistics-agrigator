@@ -54,9 +54,12 @@ interface UpdateOutletRequest {
   badge?: OutletBadge;
 }
 
+export type AddressType =
+  "GENERAL" | "PICKUP" | "RETURN" | "DELIVERY" | "BILLING";
+
 interface CreateAddressRequest {
   label: string;
-  addressType?: "GENERAL" | "PICKUP" | "RETURN" | "HOME" | "WORK" | "OTHER";
+  addressType?: AddressType;
   name: string;
   phone: string;
   email?: string;
@@ -69,12 +72,11 @@ interface CreateAddressRequest {
   country?: string;
   isDefaultPickup?: boolean;
   isDefaultReturn?: boolean;
-  isDefault?: boolean;
 }
 
 interface UpdateAddressRequest {
   label?: string;
-  addressType?: "GENERAL" | "PICKUP" | "RETURN" | "HOME" | "WORK" | "OTHER";
+  addressType?: AddressType;
   name?: string;
   phone?: string;
   email?: string;
@@ -87,7 +89,6 @@ interface UpdateAddressRequest {
   country?: string;
   isDefaultPickup?: boolean;
   isDefaultReturn?: boolean;
-  isDefault?: boolean;
   isActive?: boolean;
 }
 
@@ -105,12 +106,28 @@ interface Outlet {
   gst?: string;
   companyAddress?: object;
   badge?: OutletBadge;
+  /** Outlet's own default markup, applied at booking when a shipment omits `markup`. */
+  defaultMarkupType?: "FLAT" | "PERCENTAGE" | null;
+  defaultMarkupValue?: number | string | null;
+  /** Admin-set caps; null = unlimited. */
+  maxMarkupFlat?: number | string | null;
+  maxMarkupPercent?: number | string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   _count?: {
     addresses: number;
   };
+}
+
+interface UpdateMyMarkupRequest {
+  markupType: "FLAT" | "PERCENTAGE" | null;
+  markupValue: number | null;
+}
+
+interface UpdateMarkupLimitsRequest {
+  maxMarkupFlat?: number | null;
+  maxMarkupPercent?: number | null;
 }
 
 interface OutletAddress {
@@ -353,6 +370,39 @@ export const outletApi = baseApi.injectEndpoints({
       }),
     }),
 
+    /**
+     * Update own default markup preference (Outlet role only). Value is
+     * capped server-side against maxMarkupFlat/maxMarkupPercent.
+     * PUT /api/v1/outlets/me/markup
+     */
+    updateMyMarkup: builder.mutation<OutletResponse, UpdateMyMarkupRequest>({
+      query: (data) => ({
+        url: "/api/v1/outlets/me/markup",
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: [{ type: "User", id: "ME" }],
+    }),
+
+    /**
+     * Set an outlet's markup caps (Client/Admin only).
+     * PUT /api/v1/outlets/:id/markup-limits
+     */
+    updateOutletMarkupLimits: builder.mutation<
+      OutletResponse,
+      { id: string; data: UpdateMarkupLimitsRequest }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/v1/outlets/${id}/markup-limits`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "User", id },
+        { type: "User", id: "LIST" },
+      ],
+    }),
+
     // ==================== ADDRESS MANAGEMENT ====================
 
     /**
@@ -499,6 +549,8 @@ export const {
   useToggleOutletStatusMutation,
   useUpdateOutletBadgeMutation,
   useResetOutletPasswordMutation,
+  useUpdateMyMarkupMutation,
+  useUpdateOutletMarkupLimitsMutation,
 
   // Address management
   useGetMyAddressesQuery,
