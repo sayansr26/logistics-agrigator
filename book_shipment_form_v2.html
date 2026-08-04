@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Shipment | Shipping & Logistics Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Hide native arrows on number inputs */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        /* Custom select arrow styling */
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col pb-24">
+
+    <!-- TOP HEADER SECTION -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+            <!-- Top Title Bar -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <button onclick="goToStep(1)" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="Back to Dashboard">
+                        <i class="fa-solid fa-arrow-left text-base"></i>
+                    </button>
+                    <div>
+                        <div class="flex items-center gap-2.5">
+                            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Create New Shipment</h1>
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Draft saved
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">Fill in the details below to create a new shipment and optionally assign a partner</p>
+                    </div>
+                </div>
+                <button type="button" onclick="resetForm()" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <i class="fa-solid fa-rotate-right text-xs"></i> Reset
+                </button>
+            </div>
+
+            <!-- Full-Width Progress Stepper -->
+            <div class="pt-2">
+                <div class="flex items-center justify-between w-full">
+                    <!-- Step 1 -->
+                    <button onclick="goToStep(1)" id="stepBadge1" class="flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-blue-600 text-white shadow-sm shadow-blue-200">
+                        <span class="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[11px] font-bold">1</span>
+                        <span>Shipment Details</span>
+                    </button>
+
+                    <!-- Connector Line 1 -->
+                    <div class="flex-1 mx-3 h-0.5 bg-slate-200" id="stepLine1"></div>
+
+                    <!-- Step 2 -->
+                    <button onclick="goToStep(2)" id="stepBadge2" class="flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-slate-100 text-slate-500 hover:bg-slate-200">
+                        <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[11px] font-bold" id="stepNum2">2</span>
+                        <span>Partner Selection</span>
+                    </button>
+
+                    <!-- Connector Line 2 -->
+                    <div class="flex-1 mx-3 h-0.5 bg-slate-200" id="stepLine2"></div>
+
+                    <!-- Step 3 -->
+                    <button onclick="goToStep(3)" id="stepBadge3" class="flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-slate-100 text-slate-500 hover:bg-slate-200">
+                        <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[11px] font-bold" id="stepNum3">3</span>
+                        <span>Confirm & Book</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex-1 w-full">
+
+        <!-- ==================== STEP 1: SHIPMENT DETAILS ==================== -->
+        <div id="stepView1" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- LEFT COLUMN: Docket, Order & Invoice Details -->
+                <div class="lg:col-span-7 space-y-6">
+
+                    <!-- SECTION 1: DOCKET INFORMATION -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-file-invoice text-blue-600 text-sm"></i>
+                                <h2 class="text-sm font-bold text-slate-900">Docket Information</h2>
+                            </div>
+                        </div>
+
+                        <!-- 1. Reference Number Field -->
+                        <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-semibold text-slate-700">Reference Number</label>
+                                <div class="flex items-center gap-3 text-xs">
+                                    <label class="inline-flex items-center cursor-pointer text-slate-600">
+                                        <input type="radio" name="refMode" value="manual" onchange="toggleRefMode('manual')" class="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500">
+                                        <span class="ml-1.5 text-xs font-medium">Manual</span>
+                                    </label>
+                                    <label class="inline-flex items-center cursor-pointer text-slate-600">
+                                        <input type="radio" name="refMode" value="auto" checked onchange="toggleRefMode('auto')" class="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500">
+                                        <span class="ml-1.5 text-xs font-medium">Automatic</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <input type="text" id="refNumberInput" value="DOC-2026-89412" readonly class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-slate-100/80 text-slate-700 font-mono font-medium focus:outline-none transition-all">
+                            <p id="refModeHint" class="text-[11px] text-slate-500"><i class="fa-solid fa-circle-info mr-1"></i>Auto-generated reference ID assigned to this docket</p>
+                        </div>
+
+                        <!-- 2. Actual Weight & Shipment Type Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Actual Weight -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">Actual Weight</label>
+                                <div class="relative">
+                                    <input type="number" id="actualWeightInput" step="0.1" value="44.00" oninput="recalculateWeight()" placeholder="0.00" class="w-full text-xs pl-3 pr-10 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Kg</span>
+                                </div>
+                            </div>
+
+                            <!-- Shipment Type Dropdown -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">Shipment Type</label>
+                                <div class="relative">
+                                    <select id="shipmentTypeSelect" class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white font-medium text-slate-800 cursor-pointer">
+                                        <option value="B2B">B2B (Business to Business)</option>
+                                        <option value="B2C">B2C (Business to Consumer)</option>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Shipment Direction & Service Type Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Shipment Direction -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">Shipment Direction</label>
+                                <div class="relative">
+                                    <select id="shipmentDirectionSelect" class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white font-medium text-slate-800 cursor-pointer">
+                                        <option value="Forward">Forward</option>
+                                        <option value="Reverse">Reverse</option>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                </div>
+                            </div>
+
+                            <!-- Service Type Dropdown -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">Service Type</label>
+                                <div class="relative">
+                                    <select id="serviceTypeSelect" class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white font-medium text-slate-800 cursor-pointer">
+                                        <option value="Standard">Standard Delivery (2-4 Days)</option>
+                                        <option value="Express">Express Delivery (1-2 Days)</option>
+                                        <option value="Economy">Economy Cargo (4-7 Days)</option>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Select Outlet Search Autocomplete Dropdown -->
+                        <div class="space-y-1">
+                            <label class="block text-xs font-semibold text-slate-700">Select Outlet</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-store absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" id="outletSearchInput" onfocus="showOutletDropdown()" oninput="filterOutlets(this.value)" value="Main Hub - Navi Mumbai MIDC" placeholder="Search or select outlet..." class="w-full text-xs pl-9 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800">
+                                <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                
+                                <div id="outletDropdownList" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                    <!-- Populated via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 2: ORDER DETAILS -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <i class="fa-solid fa-box text-blue-600 text-sm"></i>
+                            <h2 class="text-sm font-bold text-slate-900">Order Details</h2>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-xs font-semibold text-slate-700">Description</label>
+                            <input type="text" id="orderDescriptionInput" placeholder="Enter order description (e.g. Books, Electronics, Industrial Spares)" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800">
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">PO Number</label>
+                                <input type="text" id="poNumberInput" value="PO-90218" placeholder="Enter Your PO number" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">PO Expiry Date</label>
+                                <div class="relative">
+                                    <input type="date" id="poExpiryDateInput" value="2026-08-31" class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800 bg-white">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 3: INVOICE DETAILS & PAYMENT MODE -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-file-invoice-dollar text-blue-600 text-sm"></i>
+                                <h2 class="text-sm font-bold text-slate-900">Invoice Details</h2>
+                            </div>
+                            <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Auto-filled from shipment</span>
+                        </div>
+
+                        <!-- Payment Mode Selection -->
+                        <div class="space-y-2 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
+                            <label class="block text-xs font-semibold text-slate-700">Payment Mode</label>
+                            <div class="flex items-center gap-6 text-xs">
+                                <label class="inline-flex items-center cursor-pointer text-slate-800 font-medium">
+                                    <input type="radio" name="paymentMode" value="Prepaid" checked onchange="toggleCodAmount('Prepaid')" class="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500">
+                                    <span class="ml-2">Prepaid</span>
+                                </label>
+                                <label class="inline-flex items-center cursor-pointer text-slate-800 font-medium">
+                                    <input type="radio" name="paymentMode" value="COD" onchange="toggleCodAmount('COD')" class="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500">
+                                    <span class="ml-2">COD (Cash on Delivery)</span>
+                                </label>
+                            </div>
+
+                            <!-- COD Collectable Amount Container -->
+                            <div id="codAmountContainer" class="hidden pt-2 mt-2 border-t border-slate-200 space-y-1">
+                                <label class="block text-xs font-semibold text-amber-800">COD Collectable Amount (₹)</label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                                    <input type="number" id="codAmountInput" placeholder="Enter collectable cash amount..." class="w-full text-xs pl-7 pr-3 py-2 rounded-lg border border-amber-300 bg-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-semibold text-slate-800">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Invoice Table Rows -->
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-12 gap-2 text-[11px] font-bold text-slate-500 px-1">
+                                <div class="col-span-5">E-Way Bill Number</div>
+                                <div class="col-span-4">Invoice Number</div>
+                                <div class="col-span-2">Amount (₹)</div>
+                                <div class="col-span-1 text-center">Action</div>
+                            </div>
+
+                            <div id="invoiceRowsList" class="space-y-2">
+                                <!-- Row 1 -->
+                                <div class="grid grid-cols-12 gap-2 items-center invoice-row">
+                                    <div class="col-span-5">
+                                        <input type="text" placeholder="Enter E-Way Bill number" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                                    </div>
+                                    <div class="col-span-4">
+                                        <input type="text" placeholder="Enter invoice number" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                                    </div>
+                                    <div class="col-span-2 relative">
+                                        <input type="number" oninput="calculateTotalInvoiceAmount()" placeholder="0.00" class="invoice-amount-input w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                                    </div>
+                                    <div class="col-span-1 text-center">
+                                        <button type="button" onclick="removeInvoiceRow(this)" class="p-1 text-slate-400 hover:text-red-500 transition-colors" title="Delete Row">
+                                            <i class="fa-regular fa-trash-can text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="button" onclick="addInvoiceRow()" class="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 pt-1 transition-colors">
+                                <i class="fa-solid fa-plus text-[10px]"></i> Add another invoice
+                            </button>
+                        </div>
+
+                        <!-- Checkbox: E-Way bill not required -->
+                        <div class="pt-2 border-t border-slate-100">
+                            <label class="inline-flex items-center cursor-pointer text-xs text-slate-600">
+                                <input type="checkbox" id="ewayNotRequiredCheckbox" onchange="toggleEwayNotRequired(this.checked)" class="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500">
+                                <span class="ml-2">I will add E-Way Bill later / E-Way Bill not required for this shipment</span>
+                            </label>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
+                            <span class="font-bold text-slate-700">Total Invoice Amount</span>
+                            <span id="totalInvoiceAmountDisplay" class="font-bold text-slate-900 text-sm">₹0.00</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-slate-500">
+                            <span>Delhivery Transporter ID</span>
+                            <span class="font-mono font-semibold text-slate-700">06AAPCS9575E1ZR</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- RIGHT COLUMN: Addresses, Dimensions & Documents -->
+                <div class="lg:col-span-5 space-y-6">
+
+                    <!-- SECTION 1: ADDRESS DETAILS (PICKUP, RTO, DELIVERY, BILLING) -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-location-dot text-blue-600 text-sm"></i>
+                                <h2 class="text-sm font-bold text-slate-900">Address Details</h2>
+                            </div>
+                            <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Auto-filled</span>
+                        </div>
+
+                        <!-- FIELD 1: PICKUP ADDRESS -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-800">1. Pickup Address</label>
+                                <button type="button" onclick="openAddAddressModal('pickup')" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+                                    <i class="fa-solid fa-plus text-[10px]"></i> Add New Address
+                                </button>
+                            </div>
+                            <div class="relative">
+                                <i class="fa-solid fa-warehouse absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" id="pickupAddressSearchInput" onfocus="showAddressDropdown('pickup')" oninput="filterAddresses('pickup', this.value)" value="Navi Mumbai Facility" placeholder="Search or select pickup address..." class="w-full text-xs pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 transition-all font-medium">
+                                <i class="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                
+                                <div id="pickupAddressDropdownList" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100"></div>
+                            </div>
+                            <!-- Pickup address summary card -->
+                            <div class="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 text-xs space-y-1 relative">
+                                <div class="flex items-start justify-between">
+                                    <span id="pickupDisplayTag" class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Primary Hub</span>
+                                    <button type="button" onclick="openEditAddressModal('pickup')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="Edit Address">
+                                        <i class="fa-solid fa-pen text-xs"></i>
+                                    </button>
+                                </div>
+                                <p id="pickupDisplayText" class="text-slate-700 leading-relaxed font-normal pt-1">Plot No 42, MIDC Industrial Area, Pawne, Navi Mumbai, Maharashtra 400705</p>
+                                <div class="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                                    <span><i class="fa-regular fa-user text-slate-400 mr-1"></i><span id="pickupDisplayContact">Suresh Kumar</span></span>
+                                    <span><i class="fa-solid fa-phone text-slate-400 mr-1"></i><span id="pickupDisplayPhone">987XXXXX5432</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FIELD 1.5: RTO / RETURN ADDRESS -->
+                        <div class="space-y-3 pt-2 border-t border-slate-100">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-800">2. RTO / Return Address</label>
+                                <label class="inline-flex items-center cursor-pointer text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                    <input type="checkbox" id="sameAsPickupCheckbox" checked onchange="toggleSameAsPickup(this.checked)" class="w-3.5 h-3.5 rounded text-blue-600 border-slate-300 focus:ring-blue-500">
+                                    <span class="ml-1.5">Same as Pickup Address</span>
+                                </label>
+                            </div>
+
+                            <!-- Displayed when 'Same as Pickup Address' is CHECKED -->
+                            <div id="rtoSameBadge" class="bg-blue-50/60 border border-blue-200/80 p-3 rounded-xl flex items-center justify-between text-xs text-blue-800">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-circle-check text-blue-600 text-sm"></i>
+                                    <span class="font-medium">RTO address matches Pickup Address</span>
+                                </div>
+                            </div>
+
+                            <!-- Displayed when 'Same as Pickup Address' UNCHECKED -->
+                            <div id="rtoPickerContainer" class="hidden space-y-2">
+                                <div class="flex items-center justify-end">
+                                    <button type="button" onclick="openAddAddressModal('rto')" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+                                        <i class="fa-solid fa-plus text-[10px]"></i> Add New Address
+                                    </button>
+                                </div>
+                                <div class="relative">
+                                    <i class="fa-solid fa-arrow-rotate-left absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                    <input type="text" id="rtoAddressSearchInput" onfocus="showAddressDropdown('rto')" oninput="filterAddresses('rto', this.value)" value="Navi Mumbai Facility" placeholder="Search or select RTO address..." class="w-full text-xs pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 transition-all font-medium">
+                                    <i class="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                    
+                                    <div id="rtoAddressDropdownList" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100"></div>
+                                </div>
+                                <!-- RTO address summary card -->
+                                <div class="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 text-xs space-y-1 relative">
+                                    <div class="flex items-start justify-between">
+                                        <span id="rtoDisplayTag" class="text-[11px] font-medium text-slate-500">---</span>
+                                        <button type="button" onclick="openEditAddressModal('rto')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="Edit Address">
+                                            <i class="fa-solid fa-pen text-xs"></i>
+                                        </button>
+                                    </div>
+                                    <p id="rtoDisplayText" class="text-slate-700 leading-relaxed font-normal pt-1">---</p>
+                                    <div class="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                                        <span><i class="fa-regular fa-user text-slate-400 mr-1"></i><span id="rtoDisplayContact">---</span></span>
+                                        <span><i class="fa-solid fa-phone text-slate-400 mr-1"></i><span id="rtoDisplayPhone">---</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FIELD 2: DELIVERY ADDRESS -->
+                        <div class="space-y-2 pt-2 border-t border-slate-100">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-800">3. Delivery Address</label>
+                                <button type="button" onclick="openAddAddressModal('delivery')" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+                                    <i class="fa-solid fa-plus text-[10px]"></i> Add New Address
+                                </button>
+                            </div>
+                            <div class="relative">
+                                <i class="fa-solid fa-truck-ramp-box absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" id="deliveryAddressSearchInput" onfocus="showAddressDropdown('delivery')" oninput="filterAddresses('delivery', this.value)" value="Mumbai Central Warehouse" placeholder="Search or select delivery address..." class="w-full text-xs pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 transition-all font-medium">
+                                <i class="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                
+                                <div id="deliveryAddressDropdownList" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100"></div>
+                            </div>
+                            <!-- Delivery address summary card -->
+                            <div class="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 text-xs space-y-1 relative">
+                                <div class="flex items-start justify-between">
+                                    <span id="deliveryDisplayTag" class="text-[11px] font-medium text-slate-500">Destination</span>
+                                    <button type="button" onclick="openEditAddressModal('delivery')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="Edit Address">
+                                        <i class="fa-solid fa-pen text-xs"></i>
+                                    </button>
+                                </div>
+                                <p id="deliveryDisplayText" class="text-slate-700 leading-relaxed font-normal pt-1">Mr Ajay Prakash Dhole, 1304, Anmol Planet CHS Ltd., Sector-10, Khar Ghar, Navi Mumbai, Navi mumbai, 410210</p>
+                                <div class="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                                    <span><i class="fa-regular fa-user text-slate-400 mr-1"></i><span id="deliveryDisplayContact">Mr Ajay Prakash Dhole</span></span>
+                                    <span><i class="fa-solid fa-phone text-slate-400 mr-1"></i><span id="deliveryDisplayPhone">982XXXXX1109</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FIELD 3: BILLING ADDRESS -->
+                        <div class="space-y-3 pt-2 border-t border-slate-100">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-800">4. Billing Address</label>
+                                <label class="inline-flex items-center cursor-pointer text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                    <input type="checkbox" id="sameAsDeliveryCheckbox" checked onchange="toggleSameAsDelivery(this.checked)" class="w-3.5 h-3.5 rounded text-blue-600 border-slate-300 focus:ring-blue-500">
+                                    <span class="ml-1.5">Same as Delivery Address</span>
+                                </label>
+                            </div>
+
+                            <!-- Displayed when 'Same as Delivery Address' is CHECKED -->
+                            <div id="billingSameBadge" class="bg-blue-50/60 border border-blue-200/80 p-3 rounded-xl flex items-center justify-between text-xs text-blue-800">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-circle-check text-blue-600 text-sm"></i>
+                                    <span class="font-medium">Billing address matches Delivery Address</span>
+                                </div>
+                            </div>
+
+                            <!-- Displayed when 'Same as Delivery Address' UNCHECKED -->
+                            <div id="billingPickerContainer" class="hidden space-y-2">
+                                <div class="flex items-center justify-end">
+                                    <button type="button" onclick="openAddAddressModal('billing')" class="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+                                        <i class="fa-solid fa-plus text-[10px]"></i> Add New Address
+                                    </button>
+                                </div>
+                                <div class="relative">
+                                    <i class="fa-solid fa-file-invoice text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                                    <input type="text" id="billingAddressSearchInput" onfocus="showAddressDropdown('billing')" oninput="filterAddresses('billing', this.value)" value="Mumbai Central Warehouse" placeholder="Search or select billing address..." class="w-full text-xs pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 transition-all font-medium">
+                                    <i class="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                    
+                                    <div id="billingAddressDropdownList" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100"></div>
+                                </div>
+                                <!-- Billing address summary card -->
+                                <div class="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 text-xs space-y-1 relative">
+                                    <div class="flex items-start justify-between">
+                                        <span id="billingDisplayTag" class="text-[11px] font-medium text-slate-500">---</span>
+                                        <button type="button" onclick="openEditAddressModal('billing')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="Edit Address">
+                                            <i class="fa-solid fa-pen text-xs"></i>
+                                        </button>
+                                    </div>
+                                    <p id="billingDisplayText" class="text-slate-700 leading-relaxed font-normal pt-1">---</p>
+                                    <div class="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                                        <span><i class="fa-regular fa-user text-slate-400 mr-1"></i><span id="billingDisplayContact">---</span></span>
+                                        <span><i class="fa-solid fa-phone text-slate-400 mr-1"></i><span id="billingDisplayPhone">---</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- SECTION 2: WEIGHTS & DIMENSIONS -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <i class="fa-solid fa-boxes-stacked text-blue-600 text-sm"></i>
+                            <h2 class="text-sm font-bold text-slate-900">Weights & Dimensions</h2>
+                        </div>
+
+                        <!-- Inner Box Specs Container -->
+                        <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-700">Number of boxes</label>
+                                <input type="number" id="boxCountInput" value="2" min="1" oninput="recalculateWeight()" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-blue-500 font-medium text-slate-800">
+                            </div>
+
+                            <div class="grid grid-cols-4 gap-2 items-end">
+                                <div>
+                                    <label class="block text-[11px] font-medium text-slate-500 mb-1">Length</label>
+                                    <input type="number" placeholder="L" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-blue-500 text-center font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-medium text-slate-500 mb-1">Width</label>
+                                    <input type="number" placeholder="B" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-blue-500 text-center font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-medium text-slate-500 mb-1">Height</label>
+                                    <input type="number" placeholder="H" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-blue-500 text-center font-medium">
+                                </div>
+                                <div>
+                                    <div class="relative">
+                                        <select class="w-full text-xs p-2 pr-6 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-blue-500 text-center font-semibold text-slate-700 cursor-pointer">
+                                            <option value="Cm">Cm</option>
+                                            <option value="Inch">Inch</option>
+                                        </select>
+                                        <i class="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs">
+                            <button type="button" class="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1">
+                                <i class="fa-solid fa-plus text-[10px]"></i> Add Another Box Size
+                            </button>
+                            <span class="text-slate-400 text-[11px]">0 boxes left</span>
+                        </div>
+
+                        <div class="pt-3 border-t border-slate-100 space-y-2 text-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-slate-600">Total shipment weight</span>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="totalShipmentWeightDisplay" value="44" class="w-16 text-xs p-1.5 border border-slate-200 rounded-lg text-center font-bold text-slate-800">
+                                    <span class="font-semibold text-slate-500">Kgs</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-slate-600">Total no. of boxes</span>
+                                <span id="totalBoxesDisplay" class="font-bold text-slate-800">2</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 3: UPLOAD DOCUMENTS -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-file-arrow-up text-blue-600 text-sm"></i>
+                                <h2 class="text-sm font-bold text-slate-900">Upload Documents</h2>
+                            </div>
+                            <span class="text-[11px] font-medium text-slate-400">Max size 20MB</span>
+                        </div>
+
+                        <!-- Invoice Document (Mandatory) -->
+                        <div class="space-y-2">
+                            <label class="block text-xs font-semibold text-slate-700">
+                                Invoice Document (Mandatory) <i class="fa-regular fa-circle-question text-slate-400 ml-0.5" title="Required for GST verification"></i>
+                            </label>
+
+                            <!-- Attached File Card -->
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-file-pdf text-sm"></i>
+                                    </div>
+                                    <div class="truncate">
+                                        <p class="text-xs font-bold text-slate-800 truncate">Tax Invoice - 26080106392238.pdf</p>
+                                        <p class="text-[10px] text-slate-400">0.07 MB</p>
+                                    </div>
+                                </div>
+                                <button type="button" class="w-6 h-6 rounded-full bg-slate-200/60 hover:bg-red-100 hover:text-red-600 text-slate-500 flex items-center justify-center transition-colors" title="Remove File">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Secondary Document (Optional) -->
+                        <div class="space-y-2">
+                            <label class="block text-xs font-semibold text-slate-700">Secondary Document (Optional)</label>
+                            <div class="relative">
+                                <select class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 bg-white font-medium text-slate-800 cursor-pointer">
+                                    <option value="">Select Document Type</option>
+                                    <option value="packing_list">Packing List</option>
+                                    <option value="eway_bill">E-Way Bill copy</option>
+                                    <option value="declarations">Declaration Letter</option>
+                                </select>
+                                <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                            </div>
+
+                            <!-- Drag and Drop Box -->
+                            <div class="border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-2xl p-4 text-center cursor-pointer transition-colors bg-slate-50/50">
+                                <i class="fa-regular fa-image text-slate-400 text-2xl mb-1.5"></i>
+                                <p class="text-xs font-bold text-blue-600">Upload Document (PNG, JPG, JPEG, PDF, BMP)</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">or drag and drop here</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 4: VALUE ADDED SERVICES (INSURANCE & PACKAGING - COLLAPSIBLE) -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <!-- Collapsible Header -->
+                        <button type="button" onclick="toggleVasSection()" class="w-full p-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-50/80 transition-colors">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-sliders text-xs"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-xs font-bold text-slate-900">Value Added Services</h2>
+                                    <p class="text-[10px] text-slate-500 font-normal">Insurance & Packaging options</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">Optional</span>
+                                <i id="vasChevron" class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-200"></i>
+                            </div>
+                        </button>
+
+                        <!-- Collapsed Content (Hidden by default) -->
+                        <div id="vasContent" class="hidden border-t border-slate-100 p-4 space-y-4 bg-slate-50/40">
+                            <!-- Insure Your Shipment Sub-section -->
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-2 border-b border-slate-200/60 pb-2">
+                                    <i class="fa-solid fa-shield-halved text-blue-600 text-xs"></i>
+                                    <h3 class="text-xs font-bold text-slate-800">Insure your shipment</h3>
+                                </div>
+                                <p class="text-xs text-slate-600">Are you sure you want to ship the item at your own risk?</p>
+
+                                <div class="space-y-2 text-xs pt-1">
+                                    <label class="flex items-center cursor-pointer text-slate-800 font-medium">
+                                        <input type="radio" name="insuranceRisk" value="owners" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                        <span class="ml-2">Yes, Ship with Owner's Risk</span>
+                                    </label>
+                                    <label class="flex items-center cursor-pointer text-slate-800 font-medium">
+                                        <input type="radio" name="insuranceRisk" value="carriers" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                        <span class="ml-2">Get Delhivery's Insurance <span class="text-slate-400 font-normal">(Carrier's Risk)</span></span>
+                                    </label>
+                                </div>
+                                <p class="text-[10px] text-slate-400 pt-0.5">Getting insurance may include additional costs, please read the pricing file for insurance details.</p>
+                            </div>
+
+                            <!-- Packaging Selection Sub-section -->
+                            <div class="space-y-2 pt-3 border-t border-slate-200/60">
+                                <div class="flex items-center gap-2 border-b border-slate-200/60 pb-2">
+                                    <i class="fa-solid fa-box-open text-blue-600 text-xs"></i>
+                                    <h3 class="text-xs font-bold text-slate-800">Packaging Selection</h3>
+                                </div>
+                                <p class="text-xs text-slate-600">Declare if you are packing the parcel yourself or requiring hub packaging services:</p>
+
+                                <div class="space-y-2 text-xs pt-1">
+                                    <label class="flex items-start p-2.5 rounded-xl border border-blue-200 bg-white cursor-pointer hover:border-blue-300 transition-colors">
+                                        <input type="radio" name="packagingOption" value="self" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500 mt-0.5">
+                                        <div class="ml-2">
+                                            <span class="block font-bold text-slate-800">Self Packing</span>
+                                            <span class="block text-[10px] text-slate-500 mt-0.5">Packed by sender using own materials</span>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-start p-2.5 rounded-xl border border-slate-200 bg-white cursor-pointer hover:border-slate-300 transition-colors">
+                                        <input type="radio" name="packagingOption" value="carrier" class="w-4 h-4 text-blue-600 focus:ring-blue-500 mt-0.5">
+                                        <div class="ml-2">
+                                            <span class="block font-bold text-slate-800">Carrier Packaging</span>
+                                            <span class="block text-[10px] text-slate-500 mt-0.5">Professional packing by hub team (+Charges apply)</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ==================== STEP 2: PARTNER SELECTION ==================== -->
+        <div id="stepView2" class="hidden space-y-6">
+
+            <!-- WALLET DETAILS CARD -->
+            <div class="bg-slate-900 rounded-2xl p-5 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 text-xl shrink-0">
+                        <i class="fa-solid fa-wallet"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 font-medium">Available Wallet Balance</span>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span id="walletBalanceDisplay" class="text-2xl font-black text-white tracking-tight">₹12,450.00</span>
+                            <span class="text-[11px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30 font-medium">Sufficient</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" onclick="openTopupModal()" class="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30">
+                    <i class="fa-solid fa-plus text-xs"></i> Topup Wallet
+                </button>
+            </div>
+
+            <!-- FILLED SHIPMENT DETAILS PREVIEW CARD -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-clipboard-check text-blue-600 text-base"></i>
+                        <h2 class="text-sm font-bold text-slate-900">Filled Shipment Details Preview</h2>
+                    </div>
+                    <button type="button" onclick="goToStep(1)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        <i class="fa-solid fa-pen text-[10px]"></i> Edit Details
+                    </button>
+                </div>
+
+                <!-- Preview Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <!-- Column 1: Docket & Order -->
+                    <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-1.5">
+                        <p class="font-bold text-slate-800 border-b border-slate-200 pb-1 mb-2">Docket & Order Info</p>
+                        <div class="flex justify-between"><span class="text-slate-500">Ref No:</span><span id="summaryRefNo" class="font-mono font-bold text-slate-800">DOC-2026-89412</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Actual Weight:</span><span id="summaryWeight" class="font-medium text-slate-800">44 Kg</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Shipment Type:</span><span id="summaryType" class="font-medium text-slate-800">B2B</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Direction:</span><span id="summaryDirection" class="font-medium text-slate-800">Forward</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Service Type:</span><span id="summaryService" class="font-medium text-slate-800">Standard</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">PO Number:</span><span id="summaryPo" class="font-medium text-slate-800">PO-90218</span></div>
+                    </div>
+
+                    <!-- Column 2: Address Route -->
+                    <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-1.5">
+                        <p class="font-bold text-slate-800 border-b border-slate-200 pb-1 mb-2">Address Route</p>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pickup</span>
+                            <p id="summaryPickup" class="font-medium text-slate-800 line-clamp-1">Navi Mumbai Facility, MIDC Pawne</p>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">RTO / Return</span>
+                            <p id="summaryRto" class="font-medium text-slate-800 line-clamp-1">Same as Pickup</p>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Delivery</span>
+                            <p id="summaryDelivery" class="font-medium text-slate-800 line-clamp-1">Mumbai Central Warehouse, Khar Ghar</p>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Financials & Insurance -->
+                    <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-1.5">
+                        <p class="font-bold text-slate-800 border-b border-slate-200 pb-1 mb-2">Financials & Insurance</p>
+                        <div class="flex justify-between"><span class="text-slate-500">Payment Mode:</span><span id="summaryPayment" class="font-bold text-emerald-600">Prepaid</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Total Inv. Value:</span><span id="summaryInvVal" class="font-medium text-slate-800">₹0.00</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Total Boxes:</span><span id="summaryBoxes" class="font-medium text-slate-800">2 Boxes</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Insurance:</span><span id="summaryInsurance" class="font-medium text-slate-800">Owner's Risk</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Packaging:</span><span id="summaryPackaging" class="font-medium text-slate-800">Self Packing</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- READY TO FETCH CARRIER RATES BANNER (BEFORE FETCH) -->
+            <div id="readyRatesContainer" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center space-y-3">
+                <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto text-xl">
+                    <i class="fa-solid fa-truck-fast"></i>
+                </div>
+                <h3 class="text-base font-bold text-slate-900">Ready to Fetch Carrier Rates</h3>
+                <p class="text-xs text-slate-500 max-w-md mx-auto">Click <span class="font-bold text-blue-600">"Get Partner Quotes"</span> below to query live freight rates and estimated delivery timelines across logistics partners.</p>
+            </div>
+
+            <!-- SKELETON LOADING STATE (WHILE FETCHING) -->
+            <div id="skeletonLoadingContainer" class="hidden space-y-4">
+                <div class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <i class="fa-solid fa-spinner animate-spin text-blue-600"></i> Querying partner rates across networks...
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm animate-pulse space-y-4">
+                        <div class="h-4 bg-slate-200 rounded w-1/2"></div>
+                        <div class="h-8 bg-slate-200 rounded w-3/4"></div>
+                        <div class="h-3 bg-slate-200 rounded w-1/3"></div>
+                        <div class="h-10 bg-slate-100 rounded"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm animate-pulse space-y-4">
+                        <div class="h-4 bg-slate-200 rounded w-1/2"></div>
+                        <div class="h-8 bg-slate-200 rounded w-3/4"></div>
+                        <div class="h-3 bg-slate-200 rounded w-1/3"></div>
+                        <div class="h-10 bg-slate-100 rounded"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm animate-pulse space-y-4">
+                        <div class="h-4 bg-slate-200 rounded w-1/2"></div>
+                        <div class="h-8 bg-slate-200 rounded w-3/4"></div>
+                        <div class="h-3 bg-slate-200 rounded w-1/3"></div>
+                        <div class="h-10 bg-slate-100 rounded"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REAL LOGISTICS PARTNER QUOTES (AFTER FETCH) -->
+            <div id="partnerQuotesContainer" class="hidden space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-slate-900">Available Logistics Partners (3)</h3>
+                    <span class="text-xs text-slate-500">Sorted by lowest cost</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Partner Option 1 -->
+                    <label class="bg-white rounded-2xl p-5 border-2 border-blue-600 shadow-md cursor-pointer relative block">
+                        <span class="absolute top-3 right-3 bg-blue-100 text-blue-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">Best Value</span>
+                        <div class="flex items-center gap-3 mb-3">
+                            <input type="radio" name="partnerOption" value="delhivery_surface" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                            <div>
+                                <p class="text-xs font-bold text-slate-900">Delhivery Surface</p>
+                                <p class="text-[11px] text-slate-500">Est. Delivery: 2-3 Days</p>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-100">
+                            <p class="text-xl font-black text-slate-900">₹1,240.00</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Includes GST + Freight + Handing</p>
+                        </div>
+                    </label>
+
+                    <!-- Partner Option 2 -->
+                    <label class="bg-white rounded-2xl p-5 border border-slate-200 hover:border-slate-300 shadow-sm cursor-pointer relative block">
+                        <span class="absolute top-3 right-3 bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">Fastest</span>
+                        <div class="flex items-center gap-3 mb-3">
+                            <input type="radio" name="partnerOption" value="bluedart_express" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                            <div>
+                                <p class="text-xs font-bold text-slate-900">BlueDart Express</p>
+                                <p class="text-[11px] text-slate-500">Est. Delivery: Next Day Air</p>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-100">
+                            <p class="text-xl font-black text-slate-900">₹2,150.00</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Includes Priority Air Freight</p>
+                        </div>
+                    </label>
+
+                    <!-- Partner Option 3 -->
+                    <label class="bg-white rounded-2xl p-5 border border-slate-200 hover:border-slate-300 shadow-sm cursor-pointer relative block">
+                        <div class="flex items-center gap-3 mb-3">
+                            <input type="radio" name="partnerOption" value="gati_surface" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                            <div>
+                                <p class="text-xs font-bold text-slate-900">GATI KWE Economy</p>
+                                <p class="text-[11px] text-slate-500">Est. Delivery: 4-5 Days</p>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-100">
+                            <p class="text-xl font-black text-slate-900">₹1,180.00</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Standard Ground Transportation</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ==================== STEP 3: CONFIRM & BOOK ==================== -->
+        <div id="stepView3" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-2xl mx-auto space-y-6">
+                <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-2xl">
+                    <i class="fa-solid fa-file-circle-check"></i>
+                </div>
+                <div class="space-y-1">
+                    <h2 class="text-lg font-bold text-slate-900">Final Confirmation</h2>
+                    <p class="text-xs text-slate-500">Review your final shipment details before dispatching the order to your chosen logistics partner.</p>
+                </div>
+
+                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 text-left text-xs space-y-2">
+                    <div class="flex justify-between border-b border-slate-200 pb-2">
+                        <span class="text-slate-500">Docket Reference ID:</span>
+                        <span id="finalRefId" class="font-mono font-bold text-slate-800">DOC-2026-89412</span>
+                    </div>
+                    <div class="flex justify-between border-b border-slate-200 pb-2">
+                        <span class="text-slate-500">Selected Logistics Partner:</span>
+                        <span class="font-bold text-blue-600">Delhivery Surface</span>
+                    </div>
+                    <div class="flex justify-between border-b border-slate-200 pb-2">
+                        <span class="text-slate-500">Total Weight & Boxes:</span>
+                        <span id="finalWeightBoxes" class="font-medium text-slate-800">44 Kg (2 Boxes)</span>
+                    </div>
+                    <div class="flex justify-between pt-1">
+                        <span class="font-bold text-slate-800">Total Payable Amount:</span>
+                        <span class="font-black text-emerald-600 text-sm">₹1,240.00</span>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-slate-400">By clicking "Book Shipment", you agree to manifest this shipment and deduct ₹1,240.00 from your wallet.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- STICKY BOTTOM ACTION FOOTER -->
+    <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 py-3.5 px-6 z-20 shadow-lg">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <!-- Left Action (Cancel on Step 1, Back on Step 2 & 3) -->
+            <button type="button" id="leftActionButton" onclick="handleLeftAction()" class="px-5 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+                Cancel
+            </button>
+
+            <!-- Right Dynamic Action Button -->
+            <button type="button" id="rightActionButton" onclick="handleRightAction()" class="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 transition-all flex items-center gap-2">
+                <span>Next</span>
+                <i id="rightActionIcon" class="fa-solid fa-arrow-right text-xs"></i>
+            </button>
+        </div>
+    </footer>
+
+    <!-- ADD / EDIT ADDRESS MODAL -->
+    <div id="addressModalOverlay" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 id="addressModalTitle" class="text-sm font-bold text-slate-900">Add New Address</h3>
+                <button type="button" onclick="closeAddressModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <form id="addressModalForm" onsubmit="saveAddressModal(event)" class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Label / Nickname</label>
+                        <input type="text" id="modalLabel" required placeholder="e.g. Primary Hub" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Type</label>
+                        <div class="relative">
+                            <select id="modalType" onchange="updateDefaultCheckboxLabel(this.value)" class="w-full text-xs pl-3 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 bg-white font-medium cursor-pointer">
+                                <option value="Pickup">Pickup</option>
+                                <option value="Delivery">Delivery</option>
+                                <option value="Return">Return / RTO</option>
+                                <option value="Billing">Billing</option>
+                                <option value="General">General</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Contact Name</label>
+                        <input type="text" id="modalContactName" required placeholder="Contact person name" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Phone</label>
+                        <input type="text" id="modalPhone" required placeholder="Mobile number" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Email</label>
+                    <input type="email" id="modalEmail" placeholder="email@company.com" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Address Line 1</label>
+                    <input type="text" id="modalAddressLine1" required placeholder="House/Flat/Plot No., Building Name" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Address Line 2 <span class="text-slate-400 font-normal">(Optional)</span></label>
+                    <input type="text" id="modalAddressLine2" placeholder="Street, Sector, Area" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Landmark</label>
+                        <input type="text" id="modalLandmark" placeholder="Near landmark" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Pincode</label>
+                        <input type="text" id="modalPincode" required placeholder="6-digit pincode" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">City</label>
+                        <input type="text" id="modalCity" required placeholder="City name" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">State</label>
+                        <input type="text" id="modalState" required placeholder="State name" class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-medium">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <label class="inline-flex items-center cursor-pointer text-xs text-slate-700 font-medium">
+                        <input type="checkbox" id="modalIsDefault" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                        <span class="ml-2" id="modalDefaultLabelText">Set as default Pickup address</span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeAddressModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200">Save Address</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOPUP WALLET MODAL -->
+    <div id="topupModalOverlay" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-sm font-bold text-slate-900">Topup Wallet Balance</h3>
+                <button type="button" onclick="closeTopupModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            <form onsubmit="processTopup(event)" class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Topup Amount (₹)</label>
+                    <input type="number" id="topupAmountInput" min="500" value="2000" required class="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-slate-800">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Payment Method</label>
+                    <select class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 bg-white font-medium text-slate-800">
+                        <option value="upi">UPI / QR Code</option>
+                        <option value="netbanking">Net Banking</option>
+                        <option value="card">Credit / Debit Card</option>
+                    </select>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeTopupModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200">Add Money</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- BOOKING SUCCESS CONFIRMATION MODAL -->
+    <div id="bookingSuccessModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 text-center space-y-4">
+            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div class="space-y-1">
+                <h3 class="text-base font-bold text-slate-900">Shipment Booked Successfully!</h3>
+                <p class="text-xs text-slate-500">Your shipping label and manifest have been generated.</p>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 text-xs border border-slate-200">
+                <span class="text-slate-400 block text-[10px]">WAYBILL / DOCKET NUMBER</span>
+                <span class="font-mono font-bold text-blue-600 text-sm">782910384912</span>
+            </div>
+            <div class="flex items-center justify-center gap-3 pt-2">
+                <button type="button" onclick="location.reload()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 border border-slate-300 hover:bg-slate-50">View All Orders</button>
+                <button type="button" onclick="location.reload()" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md">Download Label</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // GLOBAL STATE VARIABLES (Declared cleanly at top level)
+        let currentStep = 1;
+        let currentWalletBalance = 12450.00;
+        let quotesLoaded = false;
+        let isFetchingQuotes = false;
+
+        let targetModalType = 'delivery';
+        let isEditingAddress = false;
+
+        const addressStore = {
+            addr_1: {
+                id: 'addr_1',
+                label: 'Navi Mumbai Facility',
+                type: 'Pickup',
+                contactName: 'Suresh Kumar',
+                phone: '987XXXXX5432',
+                email: 'suresh@company.com',
+                addressLine1: 'Plot No 42, MIDC Industrial Area',
+                addressLine2: 'Pawne',
+                landmark: 'Near Bus Depot',
+                pincode: '400705',
+                city: 'Navi Mumbai',
+                state: 'Maharashtra',
+                isDefault: true,
+                address: 'Plot No 42, MIDC Industrial Area, Pawne, Navi Mumbai, Maharashtra 400705'
+            },
+            addr_2: {
+                id: 'addr_2',
+                label: 'Mumbai Central Warehouse',
+                type: 'Delivery',
+                contactName: 'Mr Ajay Prakash Dhole',
+                phone: '982XXXXX1109',
+                email: 'ajay@company.com',
+                addressLine1: '1304, Anmol Planet CHS Ltd.',
+                addressLine2: 'Sector-10, Khar Ghar',
+                landmark: 'Opposite Central Park',
+                pincode: '410210',
+                city: 'Navi Mumbai',
+                state: 'Maharashtra',
+                isDefault: true,
+                address: 'Mr Ajay Prakash Dhole, 1304, Anmol Planet CHS Ltd., Sector-10, Khar Ghar, Navi Mumbai, Navi mumbai, 410210'
+            }
+        };
+
+        const activeAddresses = {
+            pickup: 'addr_1',
+            rto: 'addr_1',
+            delivery: 'addr_2',
+            billing: 'addr_2'
+        };
+
+        const outletsList = [
+            'Main Hub - Navi Mumbai MIDC',
+            'Central Warehouse - Kurla East',
+            'South Mumbai Express Hub - Fort',
+            'Bhiwandi Logistics Park - Sector 4'
+        ];
+
+        // STEP NAVIGATION LOGIC
+        function goToStep(stepNum) {
+            currentStep = stepNum;
+            updateStepUI();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function updateStepUI() {
+            // Toggle Views
+            ['stepView1', 'stepView2', 'stepView3'].forEach((id, idx) => {
+                const elem = document.getElementById(id);
+                if (elem) {
+                    if (idx + 1 === currentStep) {
+                        elem.classList.remove('hidden');
+                    } else {
+                        elem.classList.add('hidden');
+                    }
+                }
+            });
+
+            // Update Stepper Badges
+            for (let i = 1; i <= 3; i++) {
+                const badge = document.getElementById(`stepBadge${i}`);
+                if (badge) {
+                    if (i === currentStep) {
+                        badge.className = "flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-blue-600 text-white shadow-sm shadow-blue-200";
+                    } else if (i < currentStep) {
+                        badge.className = "flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-emerald-50 text-emerald-700 border border-emerald-200";
+                    } else {
+                        badge.className = "flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-slate-100 text-slate-500 hover:bg-slate-200";
+                    }
+                }
+            }
+
+            // Update Left Action Button
+            const leftBtn = document.getElementById('leftActionButton');
+            if (leftBtn) {
+                if (currentStep === 1) {
+                    leftBtn.textContent = 'Cancel';
+                } else {
+                    leftBtn.textContent = 'Back';
+                }
+            }
+
+            // Update Right Action Button
+            const rightBtn = document.getElementById('rightActionButton');
+            const rightIcon = document.getElementById('rightActionIcon');
+            if (rightBtn && rightIcon) {
+                if (currentStep === 1) {
+                    rightBtn.querySelector('span').textContent = 'Next';
+                    rightIcon.className = 'fa-solid fa-arrow-right text-xs';
+                } else if (currentStep === 2) {
+                    if (quotesLoaded) {
+                        rightBtn.querySelector('span').textContent = 'Proceed to Confirm';
+                        rightIcon.className = 'fa-solid fa-arrow-right text-xs';
+                    } else {
+                        rightBtn.querySelector('span').textContent = 'Get Partner Quotes';
+                        rightIcon.className = 'fa-solid fa-magnifying-glass text-xs';
+                    }
+                } else if (currentStep === 3) {
+                    rightBtn.querySelector('span').textContent = 'Book Shipment';
+                    rightIcon.className = 'fa-solid fa-check text-xs';
+                }
+            }
+
+            // Populate Summary if Step 2
+            if (currentStep === 2) {
+                populateStep2Summary();
+            }
+        }
+
+        function handleLeftAction() {
+            if (currentStep === 1) {
+                if (confirm('Are you sure you want to cancel shipment booking?')) {
+                    resetForm();
+                }
+            } else {
+                goToStep(currentStep - 1);
+            }
+        }
+
+        function handleRightAction() {
+            if (currentStep === 1) {
+                goToStep(2);
+            } else if (currentStep === 2) {
+                if (!quotesLoaded) {
+                    fetchPartnerQuotes();
+                } else {
+                    goToStep(3);
+                }
+            } else if (currentStep === 3) {
+                document.getElementById('bookingSuccessModal')?.classList.remove('hidden');
+            }
+        }
+
+        function fetchPartnerQuotes() {
+            if (isFetchingQuotes) return;
+            isFetchingQuotes = true;
+
+            const readyContainer = document.getElementById('readyRatesContainer');
+            const skeletonContainer = document.getElementById('skeletonLoadingContainer');
+            const quotesContainer = document.getElementById('partnerQuotesContainer');
+
+            if (readyContainer) readyContainer.classList.add('hidden');
+            if (skeletonContainer) skeletonContainer.classList.remove('hidden');
+
+            setTimeout(() => {
+                isFetchingQuotes = false;
+                quotesLoaded = true;
+                if (skeletonContainer) skeletonContainer.classList.add('hidden');
+                if (quotesContainer) quotesContainer.classList.remove('hidden');
+                updateStepUI();
+            }, 1500);
+        }
+
+        function populateStep2Summary() {
+            try {
+                const refVal = document.getElementById('refNumberInput')?.value || 'DOC-2026-89412';
+                const weightVal = document.getElementById('actualWeightInput')?.value || '44';
+                const typeVal = document.getElementById('shipmentTypeSelect')?.value || 'B2B';
+                const dirVal = document.getElementById('shipmentDirectionSelect')?.value || 'Forward';
+                const serviceVal = document.getElementById('serviceTypeSelect')?.value || 'Standard';
+                const poVal = document.getElementById('poNumberInput')?.value || 'N/A';
+
+                const pickupVal = addressStore[activeAddresses.pickup]?.address || 'Navi Mumbai Facility';
+                const rtoVal = document.getElementById('sameAsPickupCheckbox')?.checked ? 'Same as Pickup' : (addressStore[activeAddresses.rto]?.address || 'RTO Address');
+                const delVal = addressStore[activeAddresses.delivery]?.address || 'Mumbai Central Warehouse';
+
+                const payVal = document.querySelector('input[name="paymentMode"]:checked')?.value || 'Prepaid';
+                const invVal = document.getElementById('totalInvoiceAmountDisplay')?.textContent || '₹0.00';
+                const boxVal = (document.getElementById('boxCountInput')?.value || '2') + ' Boxes';
+                const insVal = document.querySelector('input[name="insuranceRisk"]:checked')?.value === 'owners' ? "Owner's Risk" : "Carrier's Risk";
+                const packVal = document.querySelector('input[name="packagingOption"]:checked')?.value === 'self' ? "Self Packing" : "Carrier Packaging";
+
+                if (document.getElementById('summaryRefNo')) document.getElementById('summaryRefNo').textContent = refVal;
+                if (document.getElementById('summaryWeight')) document.getElementById('summaryWeight').textContent = `${weightVal} Kg`;
+                if (document.getElementById('summaryType')) document.getElementById('summaryType').textContent = typeVal;
+                if (document.getElementById('summaryDirection')) document.getElementById('summaryDirection').textContent = dirVal;
+                if (document.getElementById('summaryService')) document.getElementById('summaryService').textContent = serviceVal;
+                if (document.getElementById('summaryPo')) document.getElementById('summaryPo').textContent = poVal;
+
+                if (document.getElementById('summaryPickup')) document.getElementById('summaryPickup').textContent = pickupVal;
+                if (document.getElementById('summaryRto')) document.getElementById('summaryRto').textContent = rtoVal;
+                if (document.getElementById('summaryDelivery')) document.getElementById('summaryDelivery').textContent = delVal;
+
+                if (document.getElementById('summaryPayment')) document.getElementById('summaryPayment').textContent = payVal;
+                if (document.getElementById('summaryInvVal')) document.getElementById('summaryInvVal').textContent = invVal;
+                if (document.getElementById('summaryBoxes')) document.getElementById('summaryBoxes').textContent = boxVal;
+                if (document.getElementById('summaryInsurance')) document.getElementById('summaryInsurance').textContent = insVal;
+                if (document.getElementById('summaryPackaging')) document.getElementById('summaryPackaging').textContent = packVal;
+
+                if (document.getElementById('finalRefId')) document.getElementById('finalRefId').textContent = refVal;
+                if (document.getElementById('finalWeightBoxes')) document.getElementById('finalWeightBoxes').textContent = `${weightVal} Kg (${boxVal})`;
+            } catch (err) {
+                console.warn('Summary update soft warning:', err);
+            }
+        }
+
+        // ADDRESS MANAGEMENT LOGIC
+        function updateAddressDisplay(type) {
+            const id = activeAddresses[type];
+            const data = addressStore[id];
+            if (!data) return;
+
+            const tagElem = document.getElementById(`${type}DisplayTag`);
+            const textElem = document.getElementById(`${type}DisplayText`);
+            const contactElem = document.getElementById(`${type}DisplayContact`);
+            const phoneElem = document.getElementById(`${type}DisplayPhone`);
+
+            if (tagElem) tagElem.textContent = data.type || data.tag || '---';
+            if (textElem) textElem.textContent = data.address;
+            if (contactElem) contactElem.textContent = data.contactName;
+            if (phoneElem) phoneElem.textContent = data.phone;
+            
+            const searchInput = document.getElementById(`${type}AddressSearchInput`);
+            if (searchInput) searchInput.value = data.label || data.name || data.address;
+
+            // Mirror if same checkbox active
+            if (type === 'pickup' && document.getElementById('sameAsPickupCheckbox')?.checked) {
+                activeAddresses.rto = id;
+                updateAddressDisplay('rto');
+            }
+            if (type === 'delivery' && document.getElementById('sameAsDeliveryCheckbox')?.checked) {
+                activeAddresses.billing = id;
+                updateAddressDisplay('billing');
+            }
+        }
+
+        function toggleSameAsPickup(isChecked) {
+            const badge = document.getElementById('rtoSameBadge');
+            const picker = document.getElementById('rtoPickerContainer');
+            if (isChecked) {
+                badge?.classList.remove('hidden');
+                picker?.classList.add('hidden');
+                activeAddresses.rto = activeAddresses.pickup;
+                updateAddressDisplay('rto');
+            } else {
+                badge?.classList.add('hidden');
+                picker?.classList.remove('hidden');
+            }
+        }
+
+        function toggleSameAsDelivery(isChecked) {
+            const badge = document.getElementById('billingSameBadge');
+            const picker = document.getElementById('billingPickerContainer');
+            if (isChecked) {
+                badge?.classList.remove('hidden');
+                picker?.classList.add('hidden');
+                activeAddresses.billing = activeAddresses.delivery;
+                updateAddressDisplay('billing');
+            } else {
+                badge?.classList.add('hidden');
+                picker?.classList.remove('hidden');
+            }
+        }
+
+        function showAddressDropdown(type) {
+            renderAddressDropdownList(type);
+            document.getElementById(`${type}AddressDropdownList`)?.classList.remove('hidden');
+        }
+
+        function filterAddresses(type, query) {
+            renderAddressDropdownList(type, query);
+            document.getElementById(`${type}AddressDropdownList`)?.classList.remove('hidden');
+        }
+
+        function renderAddressDropdownList(type, query = '') {
+            const container = document.getElementById(`${type}AddressDropdownList`);
+            if (!container) return;
+
+            const q = query.toLowerCase();
+            const items = Object.values(addressStore).filter(item => {
+                const combined = `${item.label} ${item.address} ${item.contactName}`.toLowerCase();
+                return combined.includes(q);
+            });
+
+            if (items.length === 0) {
+                container.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">No addresses found</div>`;
+                return;
+            }
+
+            container.innerHTML = items.map(item => `
+                <div class="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors group" onclick="selectAddress('${type}', '${item.id}')">
+                    <div class="pr-2 truncate">
+                        <p class="text-xs font-bold text-slate-800 truncate">${item.label}</p>
+                        <p class="text-[11px] text-slate-500 truncate">${item.address}</p>
+                    </div>
+                    <button type="button" onclick="event.stopPropagation(); openEditAddressModalForId('${type}', '${item.id}')" class="p-1 text-slate-400 hover:text-blue-600 transition-colors" title="Edit">
+                        <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function selectAddress(type, id) {
+            activeAddresses[type] = id;
+            updateAddressDisplay(type);
+            document.getElementById(`${type}AddressDropdownList`)?.classList.add('hidden');
+        }
+
+        function openEditAddressModal(type = 'delivery') {
+            openEditAddressModalForId(type, activeAddresses[type]);
+        }
+
+        function openEditAddressModalForId(type, id) {
+            targetModalType = type;
+            isEditingAddress = true;
+            const data = addressStore[id] || addressStore[activeAddresses[type]];
+
+            const displayTitleType = type === 'rto' ? 'RTO / Return' : (type.charAt(0).toUpperCase() + type.slice(1));
+            if (document.getElementById('addressModalTitle')) document.getElementById('addressModalTitle').textContent = `Edit Address (${displayTitleType})`;
+            if (document.getElementById('modalLabel')) document.getElementById('modalLabel').value = data.label || '';
+            const typeVal = data.type || (type === 'rto' ? 'Return' : (type.charAt(0).toUpperCase() + type.slice(1)));
+            if (document.getElementById('modalType')) document.getElementById('modalType').value = typeVal;
+            updateDefaultCheckboxLabel(typeVal);
+
+            if (document.getElementById('modalContactName')) document.getElementById('modalContactName').value = data.contactName || '';
+            if (document.getElementById('modalPhone')) document.getElementById('modalPhone').value = data.phone || '';
+            if (document.getElementById('modalEmail')) document.getElementById('modalEmail').value = data.email || '';
+            if (document.getElementById('modalAddressLine1')) document.getElementById('modalAddressLine1').value = data.addressLine1 || '';
+            if (document.getElementById('modalAddressLine2')) document.getElementById('modalAddressLine2').value = data.addressLine2 || '';
+            if (document.getElementById('modalLandmark')) document.getElementById('modalLandmark').value = data.landmark || '';
+            if (document.getElementById('modalPincode')) document.getElementById('modalPincode').value = data.pincode || '';
+            if (document.getElementById('modalCity')) document.getElementById('modalCity').value = data.city || '';
+            if (document.getElementById('modalState')) document.getElementById('modalState').value = data.state || '';
+            if (document.getElementById('modalIsDefault')) document.getElementById('modalIsDefault').checked = !!data.isDefault;
+
+            document.getElementById('addressModalOverlay')?.classList.remove('hidden');
+        }
+
+        function openAddAddressModal(type = 'delivery') {
+            targetModalType = type;
+            isEditingAddress = false;
+            const displayTitleType = type === 'rto' ? 'RTO / Return' : (type.charAt(0).toUpperCase() + type.slice(1));
+            if (document.getElementById('addressModalTitle')) document.getElementById('addressModalTitle').textContent = `Add New Address (${displayTitleType})`;
+            document.getElementById('addressModalForm')?.reset();
+
+            const defaultTypeVal = type === 'pickup' ? 'Pickup' : (type === 'rto' ? 'Return' : (type === 'delivery' ? 'Delivery' : (type === 'billing' ? 'Billing' : 'General')));
+            if (document.getElementById('modalType')) document.getElementById('modalType').value = defaultTypeVal;
+            updateDefaultCheckboxLabel(defaultTypeVal);
+
+            document.getElementById('addressModalOverlay')?.classList.remove('hidden');
+        }
+
+        function closeAddressModal() {
+            document.getElementById('addressModalOverlay')?.classList.add('hidden');
+        }
+
+        function updateDefaultCheckboxLabel(typeVal) {
+            const labelElem = document.getElementById('modalDefaultLabelText');
+            if (labelElem) {
+                labelElem.textContent = `Set as default ${typeVal} address`;
+            }
+        }
+
+        function saveAddressModal(e) {
+            e.preventDefault();
+            const id = isEditingAddress ? activeAddresses[targetModalType] : `addr_${Date.now()}`;
+            const label = document.getElementById('modalLabel').value;
+            const type = document.getElementById('modalType').value;
+            const contactName = document.getElementById('modalContactName').value;
+            const phone = document.getElementById('modalPhone').value;
+            const email = document.getElementById('modalEmail').value;
+            const line1 = document.getElementById('modalAddressLine1').value;
+            const line2 = document.getElementById('modalAddressLine2').value;
+            const landmark = document.getElementById('modalLandmark').value;
+            const pincode = document.getElementById('modalPincode').value;
+            const city = document.getElementById('modalCity').value;
+            const state = document.getElementById('modalState').value;
+            const isDefault = document.getElementById('modalIsDefault').checked;
+
+            const formattedAddress = `${contactName}, ${line1}, ${line2 ? line2 + ', ' : ''}${city}, ${state} - ${pincode}`;
+
+            addressStore[id] = {
+                id, label, type, contactName, phone, email,
+                addressLine1: line1, addressLine2: line2, landmark,
+                pincode, city, state, isDefault,
+                address: formattedAddress
+            };
+
+            activeAddresses[targetModalType] = id;
+            updateAddressDisplay(targetModalType);
+            closeAddressModal();
+        }
+
+        // OUTLET AUTOCOMPLETE LOGIC
+        function showOutletDropdown() {
+            renderOutletDropdownList();
+            document.getElementById('outletDropdownList')?.classList.remove('hidden');
+        }
+
+        function filterOutlets(query) {
+            renderOutletDropdownList(query);
+            document.getElementById('outletDropdownList')?.classList.remove('hidden');
+        }
+
+        function renderOutletDropdownList(query = '') {
+            const container = document.getElementById('outletDropdownList');
+            if (!container) return;
+
+            const q = query.toLowerCase();
+            const filtered = outletsList.filter(o => o.toLowerCase().includes(q));
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">No outlets found</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(item => `
+                <div class="p-2.5 hover:bg-slate-50 text-xs font-medium text-slate-800 cursor-pointer" onclick="selectOutlet('${item}')">
+                    <i class="fa-solid fa-store text-slate-400 mr-2"></i>${item}
+                </div>
+            `).join('');
+        }
+
+        function selectOutlet(name) {
+            const input = document.getElementById('outletSearchInput');
+            if (input) input.value = name;
+            document.getElementById('outletDropdownList')?.classList.add('hidden');
+        }
+
+        // INVOICE ROW & CALCULATION LOGIC
+        function addInvoiceRow() {
+            const container = document.getElementById('invoiceRowsList');
+            if (!container) return;
+            const newRow = document.createElement('div');
+            newRow.className = "grid grid-cols-12 gap-2 items-center invoice-row";
+            newRow.innerHTML = `
+                <div class="col-span-5">
+                    <input type="text" placeholder="Enter E-Way Bill number" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                </div>
+                <div class="col-span-4">
+                    <input type="text" placeholder="Enter invoice number" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                </div>
+                <div class="col-span-2 relative">
+                    <input type="number" oninput="calculateTotalInvoiceAmount()" placeholder="0.00" class="invoice-amount-input w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-blue-500 text-slate-800 font-medium">
+                </div>
+                <div class="col-span-1 text-center">
+                    <button type="button" onclick="removeInvoiceRow(this)" class="p-1 text-slate-400 hover:text-red-500 transition-colors" title="Delete Row">
+                        <i class="fa-regular fa-trash-can text-xs"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(newRow);
+        }
+
+        function removeInvoiceRow(btn) {
+            const rows = document.querySelectorAll('.invoice-row');
+            if (rows.length > 1) {
+                btn.closest('.invoice-row').remove();
+                calculateTotalInvoiceAmount();
+            }
+        }
+
+        function calculateTotalInvoiceAmount() {
+            const inputs = document.querySelectorAll('.invoice-amount-input');
+            let total = 0;
+            inputs.forEach(input => {
+                const val = parseFloat(input.value) || 0;
+                total += val;
+            });
+            const display = document.getElementById('totalInvoiceAmountDisplay');
+            if (display) display.textContent = `₹${total.toFixed(2)}`;
+        }
+
+        function toggleEwayNotRequired(checked) {
+            // Soft visual hint toggle if needed
+        }
+
+        function toggleRefMode(mode) {
+            const input = document.getElementById('refNumberInput');
+            const hint = document.getElementById('refModeHint');
+            if (mode === 'manual') {
+                if (input) {
+                    input.readOnly = false;
+                    input.classList.remove('bg-slate-100/80');
+                    input.value = '';
+                    input.placeholder = 'Enter reference / order ID...';
+                }
+                if (hint) hint.innerHTML = `<i class="fa-solid fa-pen text-blue-500 mr-1"></i>Enter custom reference ID manually`;
+            } else {
+                if (input) {
+                    input.readOnly = true;
+                    input.classList.add('bg-slate-100/80');
+                    input.value = 'DOC-2026-89412';
+                }
+                if (hint) hint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i>Auto-generated reference ID assigned to this docket`;
+            }
+        }
+
+        function toggleCodAmount(paymentMode) {
+            const container = document.getElementById('codAmountContainer');
+            if (paymentMode === 'COD') {
+                container?.classList.remove('hidden');
+            } else {
+                container?.classList.add('hidden');
+            }
+        }
+
+        function recalculateWeight() {
+            const boxes = document.getElementById('boxCountInput')?.value || '1';
+            const weightDisplay = document.getElementById('totalShipmentWeightDisplay');
+            const boxDisplay = document.getElementById('totalBoxesDisplay');
+            if (boxDisplay) boxDisplay.textContent = boxes;
+        }
+
+        // VALUE ADDED SERVICES ACCORDION TOGGLE
+        function toggleVasSection() {
+            const content = document.getElementById('vasContent');
+            const chevron = document.getElementById('vasChevron');
+            if (content && chevron) {
+                content.classList.toggle('hidden');
+                chevron.classList.toggle('rotate-180');
+            }
+        }
+
+        // WALLET TOPUP LOGIC
+        function openTopupModal() {
+            document.getElementById('topupModalOverlay')?.classList.remove('hidden');
+        }
+
+        function closeTopupModal() {
+            document.getElementById('topupModalOverlay')?.classList.add('hidden');
+        }
+
+        function processTopup(e) {
+            e.preventDefault();
+            const amt = parseFloat(document.getElementById('topupAmountInput')?.value) || 0;
+            currentWalletBalance += amt;
+            const display = document.getElementById('walletBalanceDisplay');
+            if (display) display.textContent = `₹${currentWalletBalance.toFixed(2)}`;
+            closeTopupModal();
+        }
+
+        function resetForm() {
+            currentStep = 1;
+            quotesLoaded = false;
+            isFetchingQuotes = false;
+            document.getElementById('readyRatesContainer')?.classList.remove('hidden');
+            document.getElementById('skeletonLoadingContainer')?.classList.add('hidden');
+            document.getElementById('partnerQuotesContainer')?.classList.add('hidden');
+            updateStepUI();
+        }
+
+        // OUTSIDE CLICK DROPDOWN CLOSER
+        document.addEventListener('click', function(e) {
+            ['pickup', 'rto', 'delivery', 'billing'].forEach(type => {
+                const container = document.getElementById(`${type}AddressSearchInput`)?.closest('.relative');
+                if (container && !container.contains(e.target)) {
+                    document.getElementById(`${type}AddressDropdownList`)?.classList.add('hidden');
+                }
+            });
+            const outletContainer = document.getElementById('outletSearchInput')?.closest('.relative');
+            if (outletContainer && !outletContainer.contains(e.target)) {
+                document.getElementById('outletDropdownList')?.classList.add('hidden');
+            }
+        });
+
+        // PAGE LOAD INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            updateAddressDisplay('pickup');
+            updateAddressDisplay('rto');
+            updateAddressDisplay('delivery');
+            updateAddressDisplay('billing');
+            updateStepUI();
+        });
+    </script>
+</body>
+</html>
