@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: July 31, 2026
+> Development status and changelog | Last Updated: August 7, 2026
 
 ## Overall Project Status
 
@@ -635,6 +635,49 @@ Overall Project Progress          [███████████████
 ### August 2026
 
 ```
+[2026-08-07] Landing Page Migrated to "Subsolution" Scroll-Deck Design - COMPLETE
+  Need: replace the old teal-brand single-file landing page (488-line
+        src/app/page.tsx + scoped BRAND_CSS) with the approved dark-glass
+        design from the claude.ai/design project "Logistics Aggregator
+        Landing Page" (file "Subsolution Landing Page.dc.html").
+
+  Shipped: src/components/landing/* — 9-panel 3D scroll deck on desktop
+        (9×100vh scroll-snap spacers + fixed perspective viewport; rAF loop
+        writes panel transforms/opacity/z/visibility straight to DOM refs,
+        design's exact math; PanelFit scales overflowing panels on short
+        screens), stacked scrollable document on <1024px and for
+        prefers-reduced-motion (also the SSR render — deck upgrades after
+        mount via useSyncExternalStore media query). Content-only section
+        components (hero w/ mock dashboard, courier marquee, calculator,
+        8-step journey, platform, setup, roles, FAQ via shadcn Accordion,
+        get-started+footer) consumed by both layouts from one SECTIONS
+        registry. Floating pill header, right dot-nav, scroll hint.
+        html.landing-snap class toggled by effect so snap never leaks to
+        other routes. Fonts: Space Grotesk / IBM Plex Sans / IBM Plex Mono
+        via next/font variable mode in layout.tsx (inert for rest of app).
+        New app-wide favicon src/app/icon.svg (design's SUB mark).
+        page.tsx now a thin server component with Subsolution metadata.
+
+  Calculator: DistanceDemo reused with ZERO code changes — landing-css.ts
+        (.sland scope) redefines the same utility classes/vars the old
+        BRAND_CSS exposed (card/mono/tink/t2/tmut/brd/btnb/tbrand/gtext,
+        --brand/--panel/--line/...) in the new orange-glass values, so the
+        wired /api/v1/geography/* calculator restyled itself.
+
+  Note: design's hero background photo couldn't be exported (DesignSync
+        256KiB cap) — background.tsx renders a complete gradient/blob/grid
+        look standalone and auto-enables the photo layer (34s drift) once
+        public/landing/hero-bg.jpg is dropped in from the design project.
+        Design copy kept verbatim except "ten beats" → "eight beats"
+        (design ships 8 journey steps). CTAs: Get Started/Start shipping →
+        /auth/register, Log In → /auth/login (old page sent both to login).
+
+  Verified: yarn type-check clean for all new/touched files (only the
+        pre-existing shipmentApi.ts Params|void errors remain), hot reload
+        via bind mount served the new page (title/hero/wordmark curl-
+        checked), geography API round-trip 110001→400001 = 1166.57km,
+        no MODULE_NOT_FOUND / no new warnings in container logs.
+
 [2026-08-04] Booking Wizard — Mockup Parity (address book, billing, boxes/invoices sync) - COMPLETE
   Need: the 3-step wizard diverged from book_shipment_form_v2.html: plain
         native selects instead of searchable dropdowns, delivery as a manual

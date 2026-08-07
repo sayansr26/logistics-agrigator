@@ -1,8 +1,12 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: August 4, 2026
+> Current work focus and priorities | Last Updated: August 7, 2026
 
 ## Current Sprint Focus
+
+### 🎨 Landing Page — "Subsolution" Scroll-Deck Redesign (Completed August 7, 2026)
+
+The public home page (`/`) was migrated to the approved claude.ai/design project ("Logistics Aggregator Landing Page" → `Subsolution Landing Page.dc.html`): a dark glassmorphism 9-panel 3D scroll deck (hero + mock dashboard, courier marquee, distance calculator, 8-step journey, platform features, setup, roles, FAQ, get-started/footer) with a floating pill navbar, right-edge dot navigation and scroll hint. Desktop (≥1024px, motion-OK) gets the deck — 9×100vh scroll-snap spacers with all visuals in a fixed perspective viewport, panel transforms driven by an rAF scroll loop writing directly to DOM refs; mobile/reduced-motion/SSR get the same content as a normal stacked page (one `SECTIONS` registry, content-only section components, zero duplication). Everything lives in `frontend/src/components/landing/`; `src/app/page.tsx` is now a thin server component exporting Subsolution metadata. `DistanceDemo` (real `/api/v1/geography/*` wiring) was reused unmodified via token parity: `landing-css.ts` redefines the old BRAND_CSS utility classes/vars under the `.sland` scope in the new orange-glass palette. Fonts (Space Grotesk / IBM Plex Sans / IBM Plex Mono) load in variable mode from `layout.tsx`; new app-wide favicon `src/app/icon.svg`. Scroll-snap is scoped via an `html.landing-snap` class toggled on mount/unmount so other routes are unaffected. The design's hero photo is installed at `frontend/public/landing/hero-bg.jpg` (converted from the 2.1MB source PNG to a 350KB 1920px JPEG); the gradient-only background remains the automatic fallback if the file is ever removed.
 
 ### 🖥️ Charges Engine v3 — Remaining Frontend (Earnings, Outlet Markup, Admin Charge Management) (P0 - Completed August 4, 2026)
 
