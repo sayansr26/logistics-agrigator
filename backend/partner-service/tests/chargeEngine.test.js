@@ -570,6 +570,51 @@ describe("pipeline.run", () => {
     );
   });
 
+  test("badge discount reduces the GST base (CGST s.15(3)(a))", () => {
+    const withDiscount = [
+      ...configs,
+      cfg(
+        "BADGE_DISCOUNT",
+        800,
+        { method: "DISCOUNT", basis: "SUBTOTAL", subtotalOf: "PRE_TAX" },
+        { tiers: { BASIC: { type: "PERCENTAGE", value: 5 } } },
+        {
+          category: "DISCOUNT",
+          conditions: { all: [{ fact: "outletBadge", op: "exists" }] },
+          // taxable: true keeps the NEGATIVE line inside the GST base
+          flags: { taxable: true },
+        },
+      ),
+    ];
+
+    const noBadge = pipeline.run(withDiscount, {
+      ...baseFacts,
+      paymentType: "PREPAID",
+      codAmount: 0,
+    });
+    expect(noBadge.breakdown.map((l) => l.chargeCode)).not.toContain(
+      "BADGE_DISCOUNT",
+    );
+
+    const withBadge = pipeline.run(withDiscount, {
+      ...baseFacts,
+      paymentType: "PREPAID",
+      codAmount: 0,
+      outletBadge: "BASIC",
+    });
+    const byCode = Object.fromEntries(
+      withBadge.breakdown.map((l) => [l.chargeCode, l.totalCharge]),
+    );
+
+    // charges before discount: 80 + 50 + 250 + 33 = 413
+    expect(byCode.BADGE_DISCOUNT).toBe(-20.65); // 5% of 413
+    expect(withBadge.pricing.preTaxTotal).toBe(392.35); // 413 - 20.65
+    // GST must be on the DISCOUNTED base, never the pre-discount 413
+    expect(byCode.GST).toBe(70.62); // 18% of 392.35, not 74.34
+    expect(withBadge.pricing.grandTotal).toBe(462.97);
+    expect(withBadge.pricing.discount).toBe(20.65);
+  });
+
   test("broken config never breaks the quote", () => {
     const withBroken = [
       ...configs,

@@ -37,16 +37,28 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Loader2,
   AlertCircle,
   RefreshCw,
   Search,
   ListTree,
   Lock,
+  Trash2,
 } from "lucide-react";
 import {
   useGetChargeDefinitionsQuery,
   useUpdateChargeDefinitionStatusMutation,
+  useDeleteChargeDefinitionMutation,
   type ChargeDefinition,
 } from "@/store/api/endpoints/chargesApi";
 
@@ -116,6 +128,22 @@ export default function ChargeDefinitionsPage() {
     }
     return true;
   });
+
+  const [deleteDefinition, { isLoading: isDeleting }] =
+    useDeleteChargeDefinitionMutation();
+  const [definitionToDelete, setDefinitionToDelete] =
+    useState<ChargeDefinition | null>(null);
+
+  const handleDelete = async () => {
+    if (!definitionToDelete) return;
+    try {
+      await deleteDefinition(definitionToDelete.id).unwrap();
+      if (selected?.id === definitionToDelete.id) setSelected(null);
+      setDefinitionToDelete(null);
+    } catch {
+      // errorMiddleware surfaces the toast
+    }
+  };
 
   const handleToggle = async (def: ChargeDefinition) => {
     setTogglingId(def.id);
@@ -224,6 +252,7 @@ export default function ChargeDefinitionsPage() {
                     <TableHead>Phase</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead>Active</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -273,6 +302,30 @@ export default function ChargeDefinitionsPage() {
                             disabled={isTogglingStatus && togglingId === def.id}
                           />
                         </div>
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={def.isSystem}
+                          title={
+                            def.isSystem
+                              ? "System definitions cannot be deleted — deactivate instead"
+                              : "Delete definition"
+                          }
+                          onClick={() => setDefinitionToDelete(def)}
+                        >
+                          <Trash2
+                            className={
+                              def.isSystem
+                                ? "h-4 w-4 text-muted-foreground"
+                                : "h-4 w-4 text-red-500"
+                            }
+                          />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -363,6 +416,41 @@ export default function ChargeDefinitionsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete confirm */}
+      <AlertDialog
+        open={!!definitionToDelete}
+        onOpenChange={(open) => !open && setDefinitionToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Charge Definition</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes{" "}
+              <span className="font-mono">{definitionToDelete?.code}</span>
+              {definitionToDelete?.name
+                ? ` (${definitionToDelete.name})`
+                : ""}{" "}
+              from the catalog, along with every partner charge config that uses
+              it. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

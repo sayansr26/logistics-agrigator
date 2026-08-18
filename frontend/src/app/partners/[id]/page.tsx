@@ -278,11 +278,11 @@ export default function PartnerDetailPage() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
-                      router.push(`/partners/${partnerId}/charges`)
+                      router.push(`/charge-configs?partnerId=${partnerId}`)
                     }
                   >
                     <DollarSign className="h-4 w-4 mr-2" />
-                    Charges Types
+                    Charge Configs
                   </DropdownMenuItem>
                   {canManage && (
                     <>
@@ -336,8 +336,8 @@ export default function PartnerDetailPage() {
             iconColor="text-blue-600"
           />
           <StatsCard
-            title="Charges Types"
-            value={partner._count?.chargesTypes || 0}
+            title="Charge Configs"
+            value={partner._count?.chargeConfigs || 0}
             icon={DollarSign}
             iconColor="text-green-600"
           />

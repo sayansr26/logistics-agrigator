@@ -98,6 +98,18 @@ export function QuoteCard({
       </div>
 
       <div className="pt-3 border-t border-border space-y-1">
+        {/* Badge-tier discount already applied inside the system price */}
+        {quote.discount && quote.discount.totalDiscount > 0 && (
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-muted-foreground line-through">
+              ₹{fmt(quote.discount.originalTotal)}
+            </span>
+            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              {quote.discount.badge} tier · you save ₹
+              {fmt(quote.discount.totalDiscount)}
+            </span>
+          </div>
+        )}
         <div className="flex items-baseline justify-between">
           <span className="text-[10px] text-muted-foreground">
             System price

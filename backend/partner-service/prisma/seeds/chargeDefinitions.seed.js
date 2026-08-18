@@ -725,7 +725,11 @@ const DEFINITIONS = [
       },
     },
     conditions: { all: [{ fact: "outletBadge", op: "exists" }] },
-    flags: { taxable: false },
+    // taxable: true so this NEGATIVE line is included in the GST base — an
+    // invoice-disclosed discount reduces the taxable value (CGST Act
+    // s.15(3)(a)). Marking it non-taxable would charge GST on the
+    // pre-discount amount.
+    flags: { taxable: true },
     isSystem: true,
   }),
 

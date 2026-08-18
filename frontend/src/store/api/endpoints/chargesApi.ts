@@ -594,6 +594,22 @@ export const chargesApi = baseApi.injectEndpoints({
       ],
     }),
 
+    deleteChargeDefinition: builder.mutation<
+      { status: string; data: { definition: ChargeDefinition } },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/v1/charge-definitions/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "ChargeDefinition", id },
+        { type: "ChargeDefinition", id: "LIST" },
+        { type: "ChargeConfig", id: "LIST" },
+        "ChargeCatalog",
+      ],
+    }),
+
     // ===========================
     // Charge Configs (per-partner)
     // ===========================
@@ -751,6 +767,7 @@ export const {
   // Charge Definitions catalog
   useGetChargeDefinitionsQuery,
   useUpdateChargeDefinitionStatusMutation,
+  useDeleteChargeDefinitionMutation,
   // Charge Configs (per-partner)
   useGetChargeConfigsQuery,
   useCreateChargeConfigMutation,

@@ -349,9 +349,9 @@ interface PartnerQuote {
     type?: string | null;
     calculation?: string | null;
   }>;
+  // Badge-tier discount applied by the BADGE_DISCOUNT charge definition
+  // (charges engine v3 — the old package id/name fields no longer exist)
   discount?: {
-    packageId: string;
-    packageName: string;
     badge: string;
     originalTotal: number;
     totalDiscount: number;

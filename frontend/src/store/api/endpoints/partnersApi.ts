@@ -52,14 +52,13 @@ interface Partner {
   createdAt: string;
   updatedAt: string;
 
-  // Relations count
+  // Relations count (charges engine v3: chargeConfigs replaced the dropped
+  // rates / chargeRules / chargesTypes relations)
   _count?: {
     shipments?: number;
-    rates?: number;
     pincodeAssigns?: number;
-    chargeRules?: number;
     channelConfigs?: number;
-    chargesTypes?: number;
+    chargeConfigs?: number;
   };
 }
 

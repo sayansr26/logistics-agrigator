@@ -599,11 +599,13 @@ export default function PartnersPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
-                                router.push(`/partners/${partner.id}/charges`)
+                                router.push(
+                                  `/charge-configs?partnerId=${partner.id}`,
+                                )
                               }
                             >
                               <IndianRupee className="mr-2 h-4 w-4" />
-                              Charges Types
+                              Charge Configs
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>

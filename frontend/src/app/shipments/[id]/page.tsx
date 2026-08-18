@@ -559,8 +559,10 @@ export default function ShipmentDetailPage() {
   const trackingEvents: TrackingEvent[] = shipment.trackingEvents || [];
   const qs = shipment.quoteSnapshot as {
     chargeBreakdown?: Array<{ name: string; amount: number }>;
+    // Charges engine v3: badge-tier discount (legacy package name/id dropped;
+    // older shipments may still carry packageName in their stored snapshot)
     discount?: {
-      packageName: string;
+      packageName?: string;
       badge: string;
       originalTotal: number;
       totalDiscount: number;
@@ -980,7 +982,7 @@ export default function ShipmentDetailPage() {
                                 {quoteDiscount.badge}
                               </Badge>
                               <span className="text-sm text-green-700 dark:text-green-400">
-                                {quoteDiscount.packageName}
+                                {quoteDiscount.packageName || "Tier discount"}
                               </span>
                             </div>
                             <span className="font-semibold text-green-600 tabular-nums">

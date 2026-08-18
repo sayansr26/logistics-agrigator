@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { PageHeader, PageContainer } from "@/components/shared";
 import {
@@ -364,19 +365,28 @@ function AnomalyFindingsList({ findings }: { findings: AnomalyFinding[] }) {
 // ============================================
 
 export default function ChargeConfigsPage() {
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const searchParams = useSearchParams();
+  // Deep link from the partners list/detail actions: /charge-configs?partnerId=…
+  const partnerIdFromUrl = searchParams.get("partnerId") || "";
+  const [selectedPartnerId, setSelectedPartnerId] =
+    useState<string>(partnerIdFromUrl);
 
   const { data: partnersData, isLoading: partnersLoading } =
     useGetPartnersQuery({ limit: 100 });
   const partners: Partner[] = partnersData?.data?.partners || [];
 
-  // Auto-select the first partner once the list loads
+  // Follow the URL when it changes (deep link), else auto-select the first
+  // partner once the list loads.
   useEffect(() => {
+    if (partnerIdFromUrl) {
+      setSelectedPartnerId(partnerIdFromUrl);
+      return;
+    }
     if (!selectedPartnerId && partners.length > 0) {
       setSelectedPartnerId(partners[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partners.length]);
+  }, [partners.length, partnerIdFromUrl]);
 
   const {
     data: configsData,
