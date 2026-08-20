@@ -80,7 +80,7 @@ export function ConfirmSummary() {
             Total Weight &amp; Boxes:
           </span>
           <span className="font-medium text-foreground">
-            {store.actualWeight || 0} Kg ({store.boxes.length} boxes)
+            {store.actualWeight || 0} Kg ({store.numberOfBoxes} boxes)
           </span>
         </div>
 

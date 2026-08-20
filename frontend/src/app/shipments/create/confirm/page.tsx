@@ -10,7 +10,7 @@ import {
   useConfirmInsufficient,
 } from "@/components/shipments/create/step3/confirm-summary";
 import { BookingSuccessModal } from "@/components/shipments/create/step3/booking-success-modal";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { expandBoxes, useShipmentFormStore } from "@/store/shipment-form-store";
 import { useRole } from "@/hooks/useRole";
 import { useShipmentAddresses } from "@/hooks/useShipmentAddresses";
 import { useCreateShipmentMutation } from "@/store/api/endpoints/shipmentApi";
@@ -182,9 +182,12 @@ export default function ConfirmBookPage() {
         fragile: store.isFragile,
       },
       numberOfBoxes: store.numberOfBoxes,
+      // The form groups boxes by dimensions (one row of 5 = five identical
+      // boxes); the API stores one row per physical box, so expand the groups
+      // back out here.
       boxes:
         store.shipmentType === "B2B"
-          ? store.boxes.map((b, i) => ({
+          ? expandBoxes(store.boxes, store.numberOfBoxes).map((b, i) => ({
               boxNumber: i + 1,
               length: (parseFloat(b.length) || 0) * cmFactor,
               width: (parseFloat(b.width) || 0) * cmFactor,

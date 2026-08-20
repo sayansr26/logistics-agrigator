@@ -8,6 +8,12 @@ export interface Box {
   length: string;
   height: string;
   width: string;
+  /**
+   * How many physical boxes share these dimensions. One row with count 5 is
+   * five identical boxes; rows of 2 and 3 are two groups. The sum across rows
+   * never exceeds numberOfBoxes.
+   */
+  count: number;
 }
 
 export interface Invoice {
@@ -119,6 +125,8 @@ export interface ShipmentFormState {
   addBox: () => void;
   removeBox: (id: string) => void;
   updateBox: (id: string, field: keyof Box, value: string) => void;
+  /** Set how many physical boxes a dimension row covers (clamped to what's free). */
+  setBoxCount: (id: string, count: number) => void;
 
   // Invoice management
   addInvoice: () => void;
@@ -145,6 +153,76 @@ export interface ShipmentFormState {
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function makeBox(count: number = 1): Box {
+  return { id: `box-${uid()}`, length: "", height: "", width: "", count };
+}
+
+function makeInvoice(): Invoice {
+  return {
+    id: `inv-${uid()}`,
+    eWayBillNo: "",
+    invoiceNo: "",
+    invoiceAmt: "",
+    invoiceDate: "",
+    attachment: null,
+    attachmentUrl: "",
+  };
+}
+
+/** Box count of a row, tolerating drafts persisted before counts existed. */
+export function boxCount(box: Box): number {
+  const n = Math.round(Number(box.count));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** Physical boxes already claimed by the dimension rows. */
+export function assignedBoxCount(boxes: Box[]): number {
+  return boxes.reduce((sum, b) => sum + boxCount(b), 0);
+}
+
+/**
+ * Expand the grouped rows into one entry per physical box, padding with the
+ * last row's dimensions if the groups cover fewer boxes than `total`.
+ */
+export function expandBoxes(boxes: Box[], total: number): Box[] {
+  const expanded: Box[] = [];
+  for (const box of boxes) {
+    for (let i = 0; i < boxCount(box); i += 1) expanded.push(box);
+  }
+  if (expanded.length === 0) return [];
+
+  const last = expanded[expanded.length - 1];
+  while (expanded.length < total) expanded.push(last);
+  return expanded.slice(0, total);
+}
+
+/**
+ * Fit the grouping to `total` boxes: rows keep their counts while budget
+ * lasts, rows past the budget are dropped, and any remainder lands on the
+ * last row. The first row therefore absorbs the whole shipment by default -
+ * "5 boxes, all the same" - and the user splits it by adding rows.
+ */
+function fitBoxesTo(boxes: Box[], total: number): Box[] {
+  const source = boxes.length > 0 ? boxes : [makeBox()];
+  const fitted: Box[] = [];
+  let remaining = total;
+
+  for (const box of source) {
+    if (remaining <= 0) break;
+    const count = Math.min(boxCount(box), remaining);
+    fitted.push({ ...box, count });
+    remaining -= count;
+  }
+
+  if (fitted.length === 0) fitted.push(makeBox(total));
+  else if (remaining > 0) {
+    const last = fitted[fitted.length - 1];
+    fitted[fitted.length - 1] = { ...last, count: last.count + remaining };
+  }
+
+  return fitted;
 }
 
 function generateReferenceNo(): string {
@@ -209,9 +287,9 @@ const DEFAULT_STATE = {
 
   numberOfBoxes: 1,
   dimensionUnit: "CM" as const,
-  boxes: [{ id: `box-${uid()}`, length: "", height: "", width: "" }],
+  boxes: [makeBox()],
   hasHydrated: false,
-  invoices: [],
+  invoices: [makeInvoice()],
 
   vasAnswers: {} as VasAnswers,
 
@@ -265,21 +343,43 @@ export const useShipmentFormStore = create<ShipmentFormState>()(
         set({
           ...DEFAULT_STATE,
           referenceNo: generateReferenceNo(),
-          boxes: [{ id: `box-${uid()}`, length: "", height: "", width: "" }],
+          boxes: [makeBox()],
         }),
 
+      // A new group can only be added while boxes are still unassigned - the
+      // rows describe how the numberOfBoxes physical boxes are grouped, so
+      // their counts can never add up to more than that.
       addBox: () => {
-        set((s) => ({
-          boxes: [
-            ...s.boxes,
-            { id: `box-${uid()}`, length: "", height: "", width: "" },
-          ],
-        }));
+        set((s) => {
+          if (assignedBoxCount(s.boxes) >= s.numberOfBoxes) return s;
+          return { boxes: [...s.boxes, makeBox()] };
+        });
         scheduleDraftSaved(set);
       },
 
       removeBox: (id) => {
-        set((s) => ({ boxes: s.boxes.filter((b) => b.id !== id) }));
+        set((s) => {
+          if (s.boxes.length <= 1) return s;
+          return { boxes: s.boxes.filter((b) => b.id !== id) };
+        });
+        scheduleDraftSaved(set);
+      },
+
+      // Clamped to what is still unassigned, so the groups can never claim
+      // more boxes than the shipment has.
+      setBoxCount: (id, value) => {
+        set((s) => {
+          const others = s.boxes
+            .filter((b) => b.id !== id)
+            .reduce((sum, b) => sum + boxCount(b), 0);
+          const available = Math.max(1, s.numberOfBoxes - others);
+          const next = Math.max(1, Math.min(available, Math.round(value) || 1));
+          return {
+            boxes: s.boxes.map((b) =>
+              b.id === id ? { ...b, count: next } : b,
+            ),
+          };
+        });
         scheduleDraftSaved(set);
       },
 
@@ -292,73 +392,39 @@ export const useShipmentFormStore = create<ShipmentFormState>()(
         scheduleDraftSaved(set);
       },
 
-      // Clamps 1-100, grows/trims boxes[] (trim from the end so filled rows
-      // keep their index), and — for B2B — grows/trims invoices[] to match
-      // so box count and invoice row count stay in lockstep.
+      // Clamps 1-100 and refits the grouping: the dimension rows describe how
+      // those boxes are grouped, so their counts are rescaled rather than one
+      // row being created per box. Invoice rows are capped at the box count
+      // (several boxes may share one invoice, never the other way round).
       setNumberOfBoxes: (count) => {
         set((s) => {
           const clamped = Math.max(1, Math.min(100, Math.round(count) || 1));
-
-          let boxes = s.boxes;
-          if (clamped > boxes.length) {
-            boxes = [
-              ...boxes,
-              ...Array.from({ length: clamped - boxes.length }, () => ({
-                id: `box-${uid()}`,
-                length: "",
-                height: "",
-                width: "",
-              })),
-            ];
-          } else if (clamped < boxes.length) {
-            boxes = boxes.slice(0, clamped);
-          }
-
-          let invoices = s.invoices;
-          if (s.shipmentType === "B2B") {
-            if (clamped > invoices.length) {
-              invoices = [
-                ...invoices,
-                ...Array.from({ length: clamped - invoices.length }, () => ({
-                  id: `inv-${uid()}`,
-                  eWayBillNo: "",
-                  invoiceNo: "",
-                  invoiceAmt: "",
-                  invoiceDate: "",
-                  attachment: null,
-                  attachmentUrl: "",
-                })),
-              ];
-            } else if (clamped < invoices.length) {
-              invoices = invoices.slice(0, clamped);
-            }
-          }
+          const boxes = fitBoxesTo(s.boxes, clamped);
+          const invoices =
+            s.invoices.length > clamped
+              ? s.invoices.slice(0, clamped)
+              : s.invoices;
 
           return { numberOfBoxes: clamped, boxes, invoices };
         });
         scheduleDraftSaved(set);
       },
 
+      // One invoice can cover several boxes, so the row count is capped at the
+      // number of boxes rather than tied to it.
       addInvoice: () => {
-        set((s) => ({
-          invoices: [
-            ...s.invoices,
-            {
-              id: `inv-${uid()}`,
-              eWayBillNo: "",
-              invoiceNo: "",
-              invoiceAmt: "",
-              invoiceDate: "",
-              attachment: null,
-              attachmentUrl: "",
-            },
-          ],
-        }));
+        set((s) => {
+          if (s.invoices.length >= s.numberOfBoxes) return s;
+          return { invoices: [...s.invoices, makeInvoice()] };
+        });
         scheduleDraftSaved(set);
       },
 
       removeInvoice: (id) => {
-        set((s) => ({ invoices: s.invoices.filter((inv) => inv.id !== id) }));
+        set((s) => {
+          if (s.invoices.length <= 1) return s;
+          return { invoices: s.invoices.filter((inv) => inv.id !== id) };
+        });
         scheduleDraftSaved(set);
       },
 
@@ -496,6 +562,9 @@ export const useShipmentFormStore = create<ShipmentFormState>()(
       }),
       onRehydrateStorage: () => (state) => {
         state?.pruneEmptyInvoices();
+        // Drafts saved before dimension rows carried a count have one row per
+        // box and no `count` field — refitting normalises them in place.
+        state?.setNumberOfBoxes(state.numberOfBoxes);
         state?.setHasHydrated(true);
       },
     },

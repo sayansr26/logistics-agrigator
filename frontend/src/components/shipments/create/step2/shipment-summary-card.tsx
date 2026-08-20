@@ -113,7 +113,7 @@ export function ShipmentSummaryCard({
             label="Total Inv. Value"
             value={`₹${totalInvoiceAmount.toFixed(2)}`}
           />
-          <Row label="Total Boxes" value={`${store.boxes.length}`} />
+          <Row label="Total Boxes" value={`${store.numberOfBoxes}`} />
         </div>
       </div>
     </div>
