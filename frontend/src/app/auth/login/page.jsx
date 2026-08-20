@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -39,7 +39,6 @@ const loginFormSchema = z.object({
 });
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const {
     login,
@@ -89,10 +88,12 @@ export default function LoginPage() {
     }
   }, [isHydrated, redirectIfAuthenticated, redirectTo]);
 
-  // Warm the destination route so the post-login navigation isn't a cold load.
-  useEffect(() => {
-    router.prefetch(redirectTo);
-  }, [router, redirectTo]);
+  // NOTE: do NOT prefetch `redirectTo` here. This page renders while the user
+  // is still signed out, so the edge middleware answers a prefetch of
+  // /dashboard with a 307 to /auth/login. Next caches that redirected payload
+  // under the /dashboard key, and the post-login navigation then resolves
+  // straight back to this page — the login hangs on its spinner until the
+  // router cache expires, while a manual refresh works fine.
 
   // Clear error when form changes
   useEffect(() => {
@@ -111,7 +112,13 @@ export default function LoginPage() {
       // Stay busy across the navigation - it is not instant, and the
       // login mutation has already settled by this point.
       setIsRedirecting(true);
-      router.replace(redirectTo);
+
+      // A full document load, not router.replace: the auth cookie was only
+      // just written by setCredentials, and the edge middleware has to
+      // re-evaluate the destination with it. A client-side navigation would
+      // reuse whatever the router already cached for this URL from a
+      // signed-out request.
+      window.location.assign(redirectTo);
     } catch (error) {
       setIsRedirecting(false);
       console.error("Login failed:", error);
