@@ -27,6 +27,8 @@ function toWireRate(rate, serviceType) {
     totalAmount: rate.totalRate,
     deliveryDays: rate.estimatedDays,
     estimatedDays: rate.estimatedDays,
+    estimatedDeliveryDate: rate.estimatedDeliveryDate || null,
+    tatSource: rate.tatSource || null,
     distanceKm: rate.distanceKm,
     zoneSuffix: rate.zoneSuffix,
     zoneName: rate.zoneName,

@@ -227,7 +227,11 @@ function buildCourierMetrics({
     volumetricWeight,
     chargeableWeight,
     totalCost: toNumber(quoteSnapshot?.totalAmount),
-    estimatedDelivery: getEstimatedDeliveryDate(quoteSnapshot?.deliveryDays),
+    // Prefer the carrier's own date (it accounts for cutoffs and holidays)
+    // over counting days forward from today.
+    estimatedDelivery: quoteSnapshot?.estimatedDeliveryDate
+      ? new Date(quoteSnapshot.estimatedDeliveryDate)
+      : getEstimatedDeliveryDate(quoteSnapshot?.deliveryDays),
   };
 }
 
@@ -2988,6 +2992,10 @@ async function getShipmentQuotes(req, res) {
           partnerName: rate.partnerName,
           totalAmount: rate.totalRate || rate.totalAmount || 0,
           deliveryDays: rate.deliveryDays || rate.estimatedDays || null,
+          // Carrier's own expected delivery date (Delhivery TAT API and
+          // friends); null when only a day count is known.
+          estimatedDeliveryDate: rate.estimatedDeliveryDate || null,
+          tatSource: rate.tatSource || null,
           chargeBreakdown,
           volumetricDivisor: divisor,
           volumetricFactor: factor,

@@ -263,6 +263,45 @@ class BaseCourierAdapter {
   // ---------------------------------------------------------------------------
 
   /**
+   * Expected transit time for a lane, used to show a delivery estimate on the
+   * quote screen.
+   *
+   * Default implementation derives it from the destination pincode's
+   * serviceability record, which most couriers return alongside coverage.
+   * Carriers with a dedicated TAT endpoint (see DelhiveryAdapter) override this.
+   *
+   * Never throws — a quote must still render when the carrier API is down.
+   *
+   * @param {Object} params - { originPin, destinationPin, mode, productType, pickupDate }
+   * @returns {Promise<{days: number|null, expectedDeliveryDate: string|null, source: string}|null>}
+   */
+  async getExpectedTat(params = {}) {
+    const { destinationPin } = params;
+    if (!destinationPin) return null;
+
+    try {
+      const serviceability = await this.checkPincodeServiceability(
+        String(destinationPin),
+      );
+      const days = Number(serviceability?.deliveryDays);
+      if (!Number.isFinite(days) || days <= 0) return null;
+
+      return {
+        days: Math.round(days),
+        expectedDeliveryDate: null,
+        source: "SERVICEABILITY",
+      };
+    } catch (error) {
+      logger.warn("Expected TAT lookup failed; falling back", {
+        aggregatorType: this.aggregatorType,
+        destinationPin,
+        error: error.message,
+      });
+      return null;
+    }
+  }
+
+  /**
    * Create a shipment order with the courier
    * @param {Object} shipmentData - Shipment details
    * @returns {Object} { success, awbNumber, bookingReference, trackingUrl, estimatedDelivery, rawResponse }

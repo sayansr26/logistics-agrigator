@@ -1731,9 +1731,16 @@ export default function ShipmentDetailPage() {
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {quote.deliveryDays
-                                ? `${quote.deliveryDays} day${quote.deliveryDays !== 1 ? "s" : ""}`
-                                : "Est. delivery TBD"}{" "}
+                              {quote.estimatedDeliveryDate
+                                ? `Est. delivery ${new Date(
+                                    quote.estimatedDeliveryDate,
+                                  ).toLocaleDateString("en-IN", {
+                                    day: "numeric",
+                                    month: "short",
+                                  })}`
+                                : quote.deliveryDays
+                                  ? `${quote.deliveryDays} day${quote.deliveryDays !== 1 ? "s" : ""}`
+                                  : "Est. delivery TBD"}{" "}
                               · Chargeable: {quote.chargeableWeight} kg
                             </p>
                           </div>

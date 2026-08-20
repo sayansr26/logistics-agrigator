@@ -23,6 +23,7 @@ const { canonicalTypeName } = require("../utils/typeNameNormalizer");
 const { getConfigRevision } = require("./chargeConfigShared");
 const contextBuilder = require("./chargeEngine/contextBuilder");
 const pipeline = require("./chargeEngine/pipeline");
+const { createAdapter } = require("../adapters/AdapterFactory");
 
 // Lazy service loading (avoids circular dependencies)
 let _distanceZoneService = null;
@@ -126,6 +127,57 @@ async function hasZoneCoverage(partnerId, pincodeCode) {
       error: error.message,
     });
     return false;
+  }
+}
+
+/**
+ * Mode-of-transport code for the carrier TAT lookup, preferring the matched
+ * channel's own service type over the shipment's requested one.
+ */
+function resolveTatMode(channelServiceType, serviceType) {
+  const value = String(channelServiceType || serviceType || "").toUpperCase();
+  if (value === "AIR" || value === "EXPRESS") return "E";
+  return "S";
+}
+
+/**
+ * Expected transit time from the carrier for this lane.
+ *
+ * Best-effort only: a partner without an aggregator, without credentials, or
+ * whose API is down still gets quoted — the caller falls back to the
+ * partner's configured default delivery days.
+ *
+ * @returns {Promise<{days: number|null, expectedDeliveryDate: string|null}|null>}
+ */
+async function getCarrierTat({
+  channel,
+  fromPincode,
+  toPincode,
+  shipmentType,
+  serviceType,
+}) {
+  if (!channel?.id) return null;
+
+  try {
+    const credentials =
+      await getCarrierAccountService().resolveChannelCredentials(channel.id);
+    const adapter = createAdapter(credentials);
+    if (!adapter) return null;
+
+    return await adapter.getExpectedTat({
+      originPin: fromPincode,
+      destinationPin: toPincode,
+      mode: resolveTatMode(channel.serviceType, serviceType),
+      productType: shipmentType === "B2B" ? "B2B" : "B2C",
+    });
+  } catch (error) {
+    // Missing credentials, unsupported aggregator, carrier outage — none of
+    // these should cost the partner its place in the quote list.
+    logger.debug("Carrier TAT lookup unavailable", {
+      channelId: channel.id,
+      error: error.message,
+    });
+    return null;
   }
 }
 
@@ -384,6 +436,7 @@ async function calculateRates(params) {
     skipServiceabilityCheck = false,
     shipmentType = "B2C",
     shipmentDirection = "FORWARD",
+    serviceType = null,
     vasSelections = [],
   } = params;
 
@@ -583,17 +636,26 @@ async function calculateRates(params) {
         const distanceZoneUnmatched =
           !zoneResult.matched && !skipServiceabilityCheck;
 
-        // Per-partner facts inputs
+        // Per-partner facts inputs (+ the carrier's own transit estimate, which
+        // is independent of pricing and must never block it)
         const [
           pickupGeoZoneIds,
           deliveryGeoZoneIds,
           pickupPincodeTypes,
           deliveryPincodeTypes,
+          carrierTat,
         ] = await Promise.all([
           getGeoZoneIds(partner.id, fromPincode),
           getGeoZoneIds(partner.id, toPincode),
           getPincodeTypeValuesByName(partner.id, fromPincode, typeNameById),
           getPincodeTypeValuesByName(partner.id, toPincode, typeNameById),
+          getCarrierTat({
+            channel: matchedChannel,
+            fromPincode,
+            toPincode,
+            shipmentType,
+            serviceType,
+          }),
         ]);
 
         // Active configs (channel-specific override partner-wide)
@@ -631,6 +693,7 @@ async function calculateRates(params) {
             isFragile,
             shipmentType,
             shipmentDirection,
+            serviceType,
           },
           chargeableWeight: partnerEffectiveWeight,
           zoneResult,
@@ -730,7 +793,13 @@ async function calculateRates(params) {
           distanceKm: zoneResult.distanceKm,
           zoneSuffix: zoneResult.zoneSuffix,
           zoneName: zoneResult.zone?.name,
-          estimatedDays: partner.defaultDeliveryDays,
+          // Live carrier TAT when the aggregator exposes one, otherwise the
+          // partner's configured default.
+          estimatedDays: carrierTat?.days ?? partner.defaultDeliveryDays,
+          estimatedDeliveryDate: carrierTat?.expectedDeliveryDate || null,
+          tatSource:
+            carrierTat?.source ||
+            (partner.defaultDeliveryDays ? "PARTNER_DEFAULT" : null),
           chargesBreakdown: engineResult.breakdown,
           rulesEvaluated: engineResult.rulesEvaluated,
           categoriesMatched: engineResult.categoriesMatched,

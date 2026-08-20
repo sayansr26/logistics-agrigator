@@ -576,6 +576,82 @@ class DelhiveryAdapter extends BaseCourierAdapter {
    * @param {string} pincode - 6-digit Indian pincode
    * @returns {Object} Serviceability response
    */
+  /**
+   * Expected TAT — GET /api/dc/expected_tat
+   *
+   * Delhivery quirks this implementation accounts for:
+   * - params are `origin_pin` / `destination_pin` (NOT `*_pincode`)
+   * - `mot` is required: S (Surface), E (Express), N (Next Day)
+   * - auth failures come back as 403 `{detail: "Invalid token"}`, not 401
+   * - `success: false` (e.g. "Origin pin not serviceable.") is a business
+   *   answer, not a transient failure — it must never be retried, and it is
+   *   cached briefly so an unserviceable lane doesn't re-hit the API on
+   *   every quote
+   *
+   * TAT is counted from handover to Delhivery, not from order placement.
+   */
+  async getExpectedTat({
+    originPin,
+    destinationPin,
+    mode = "S",
+    productType = "B2C",
+    pickupDate = null,
+  } = {}) {
+    if (!originPin || !destinationPin) return null;
+
+    const params = {
+      origin_pin: String(originPin),
+      destination_pin: String(destinationPin),
+      mot: mode,
+      pdt: productType,
+      ...(pickupDate ? { expected_pickup_date: pickupDate } : {}),
+    };
+
+    const cacheKey = this.getCacheKey("courier:delhivery:tat", params);
+    const cached = await this.getCachedResponse(cacheKey);
+    if (cached) return cached.days ? cached : null;
+
+    let response;
+    try {
+      response = await this.makeRequest({
+        method: "GET",
+        url: "/api/dc/expected_tat",
+        params,
+      });
+    } catch (error) {
+      logger.warn("Delhivery expected TAT request failed", {
+        originPin,
+        destinationPin,
+        error: error.message,
+      });
+      return null;
+    }
+
+    if (!response?.success) {
+      logger.info("Delhivery expected TAT not available for lane", {
+        originPin,
+        destinationPin,
+        reason: response?.msg || response?.detail || "unknown",
+      });
+      // Cache the negative answer for an hour so an unserviceable lane is not
+      // re-queried on every quote.
+      await this.setCachedResponse(cacheKey, { days: null }, 3600);
+      return null;
+    }
+
+    const days = Number(response.data?.tat);
+    const result = {
+      days: Number.isFinite(days) && days > 0 ? Math.round(days) : null,
+      expectedDeliveryDate: response.data?.expected_delivery_date || null,
+      source: "DELHIVERY_TAT",
+    };
+
+    // Lane TAT shifts with network performance, so keep it short-lived.
+    await this.setCachedResponse(cacheKey, result, 6 * 3600);
+
+    return result.days ? result : null;
+  }
+
   async checkPincodeServiceability(pincode) {
     const cacheKey = `courier:delhivery:pincode:${pincode}`;
 

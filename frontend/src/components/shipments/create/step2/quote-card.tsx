@@ -13,6 +13,32 @@ function fmt(n: number) {
   });
 }
 
+/**
+ * Delivery estimate line. The carrier's own date (Delhivery TAT and friends)
+ * wins when we have it — it accounts for lane cutoffs and holidays; otherwise
+ * we show the day count, and only fall back to "TBD" when the partner has
+ * neither a live TAT nor configured default delivery days.
+ */
+function formatDeliveryEstimate(quote: PartnerQuote): string {
+  const days = quote.deliveryDays;
+  const dayLabel = days ? `${days} day${days !== 1 ? "s" : ""}` : null;
+
+  if (quote.estimatedDeliveryDate) {
+    const date = new Date(quote.estimatedDeliveryDate);
+    if (!Number.isNaN(date.getTime())) {
+      const formatted = date.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+      });
+      return dayLabel
+        ? `Est. delivery ${formatted} (${dayLabel})`
+        : `Est. delivery ${formatted}`;
+    }
+  }
+
+  return dayLabel ? `Est. ${dayLabel}` : "Est. delivery TBD";
+}
+
 interface QuoteCardProps {
   quote: PartnerQuote;
   isRecommended: boolean;
@@ -89,10 +115,8 @@ export function QuoteCard({
             {quote.partnerName}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            {quote.deliveryDays
-              ? `Est. ${quote.deliveryDays} day${quote.deliveryDays !== 1 ? "s" : ""}`
-              : "Est. delivery TBD"}{" "}
-            · Chargeable: {quote.chargeableWeight} kg
+            {formatDeliveryEstimate(quote)} · Chargeable:{" "}
+            {quote.chargeableWeight} kg
           </p>
         </div>
       </div>

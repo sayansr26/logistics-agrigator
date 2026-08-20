@@ -343,6 +343,10 @@ interface PartnerQuote {
   partnerName: string;
   totalAmount: number;
   deliveryDays: number | null;
+  /** Carrier's own expected delivery date (YYYY-MM-DD), when its TAT API gives one. */
+  estimatedDeliveryDate?: string | null;
+  /** Where the estimate came from: DELHIVERY_TAT | SERVICEABILITY | PARTNER_DEFAULT. */
+  tatSource?: string | null;
   chargeBreakdown?: Array<{
     name: string;
     amount: number;
