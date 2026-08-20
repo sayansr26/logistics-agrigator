@@ -12,8 +12,11 @@
 
 const { prisma } = require("../config/database");
 const { ValidationError, NotFoundError } = require("../shared/lib/errors");
+const logger = require("../shared/lib/logger");
 const {
   findDanglingRefs,
+  findMatrixProblems,
+  findMatrixCoverageGaps,
   recordVersion,
   bumpConfigRevision,
   createAuditLog,
@@ -44,7 +47,7 @@ async function assertForeignKeys({ partnerId, chargeDefinitionId, channelId }) {
 
   const definition = await prisma.chargeDefinition.findUnique({
     where: { id: chargeDefinitionId },
-    select: { id: true, code: true },
+    select: { id: true, code: true, category: true, computation: true },
   });
   if (!definition) {
     throw new ValidationError(
@@ -67,21 +70,46 @@ async function assertForeignKeys({ partnerId, chargeDefinitionId, channelId }) {
   return definition;
 }
 
-async function assertConfigRefs(configJson, conditionsJson, partnerId) {
+async function assertConfigRefs(
+  configJson,
+  conditionsJson,
+  partnerId,
+  definition,
+) {
   const problems = [
+    ...findMatrixProblems(definition?.computation, configJson || {}),
     ...(await findDanglingRefs(configJson || {}, { partnerId })),
     ...(await findDanglingRefs(conditionsJson || {}, { partnerId })),
   ];
   if (problems.length > 0) {
-    throw new ValidationError(
-      `Config references unknown entities: ${problems.join("; ")}`,
-    );
+    throw new ValidationError(`Invalid charge config: ${problems.join("; ")}`);
+  }
+
+  // Non-blocking: a partner is simply not quotable on a lane its BASE matrix
+  // does not cover, so log the gaps at write time instead of discovering them
+  // as a missing charge in production quotes.
+  const gaps = await findMatrixCoverageGaps(
+    definition?.computation,
+    configJson || {},
+    partnerId,
+  );
+  if (gaps.length > 0) {
+    logger.warn("Charge config does not cover every lane", {
+      partnerId,
+      chargeCode: definition?.code,
+      gaps,
+    });
   }
 }
 
 async function createConfig(data, reqContext = {}) {
   const definition = await assertForeignKeys(data);
-  await assertConfigRefs(data.config, data.conditions, data.partnerId);
+  await assertConfigRefs(
+    data.config,
+    data.conditions,
+    data.partnerId,
+    definition,
+  );
 
   const existing = await prisma.partnerChargeConfig.findFirst({
     where: {
@@ -169,6 +197,11 @@ async function getConfigById(id) {
 async function updateConfig(id, updateData, reqContext = {}) {
   const existing = await prisma.partnerChargeConfig.findUnique({
     where: { id },
+    include: {
+      chargeDefinition: {
+        select: { id: true, code: true, category: true, computation: true },
+      },
+    },
   });
   if (!existing) throw new NotFoundError("PartnerChargeConfig", id);
 
@@ -189,6 +222,7 @@ async function updateConfig(id, updateData, reqContext = {}) {
     updateData.config ?? existing.config,
     updateData.conditions ?? existing.conditions,
     existing.partnerId,
+    existing.chargeDefinition,
   );
 
   const config = await prisma.partnerChargeConfig.update({
@@ -248,13 +282,16 @@ async function validateAllConfigs() {
       partnerId: true,
       config: true,
       conditions: true,
-      chargeDefinition: { select: { code: true } },
+      chargeDefinition: {
+        select: { code: true, category: true, computation: true },
+      },
     },
   });
 
   const findings = [];
   for (const cfg of configs) {
     const problems = [
+      ...findMatrixProblems(cfg.chargeDefinition.computation, cfg.config || {}),
       ...(await findDanglingRefs(cfg.config || {}, {
         partnerId: cfg.partnerId,
       })),

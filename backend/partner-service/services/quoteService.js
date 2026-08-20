@@ -650,6 +650,29 @@ async function calculateRates(params) {
 
         const engineResult = pipeline.run(configs, facts);
 
+        // A BASE charge is collected on every parcel this partner carries. If
+        // the partner has one configured but it could not be priced for this
+        // lane (distance outside every milestone, zone pair with no row, or a
+        // config pointing at zones that no longer exist), quoting anyway would
+        // hand the customer a rate with the freight missing. Drop the partner.
+        if (engineResult.missingBase.length > 0) {
+          const codes = engineResult.missingBase
+            .map((m) => m.chargeCode)
+            .join(", ");
+          logger.warn("Partner excluded from quote — BASE charge not priced", {
+            partnerId: partner.id,
+            fromPincode,
+            toPincode,
+            missingBase: engineResult.missingBase,
+          });
+          return {
+            partnerId: partner.id,
+            partnerName: label,
+            serviceable: false,
+            reason: `Base charge not configured for this lane (${codes})`,
+          };
+        }
+
         if (engineResult.totalCharge <= 0) {
           return {
             partnerId: partner.id,

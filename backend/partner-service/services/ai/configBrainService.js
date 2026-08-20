@@ -12,7 +12,10 @@ const aiClient = require("../../shared/lib/aiClient");
 const { prisma } = require("../../config/database");
 const { ValidationError } = require("../../shared/lib/errors");
 const logger = require("../../shared/lib/logger");
-const { findDanglingRefs } = require("../chargeConfigShared");
+const {
+  findDanglingRefs,
+  findMatrixProblems,
+} = require("../chargeConfigShared");
 const prompts = require("./prompts/chargeConfigPrompts");
 const {
   chargeDefinitions: definitionSchemas,
@@ -27,6 +30,35 @@ async function getExistingDefinitionCodes() {
 }
 
 /**
+ * The partner's real zones/milestones, so the model drafts MATRIX configs
+ * against ids that exist instead of inventing placeholders.
+ */
+async function getZoneContext(partnerId) {
+  if (!partnerId) return null;
+
+  const zones = await prisma.zone.findMany({
+    where: { partnerId, status: true },
+    select: {
+      id: true,
+      name: true,
+      zoneType: true,
+      milestones: {
+        select: { id: true, suffix: true, minKm: true, maxKm: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return {
+    distanceZones: zones.filter((z) => z.zoneType === "DISTANCE"),
+    geoZones: zones
+      .filter((z) => z.zoneType === "GEOLOGICAL")
+      .map(({ id, name }) => ({ id, name })),
+  };
+}
+
+/**
  * Validate an AI draft ({definitions, configs}) and collect problems instead
  * of throwing — problems are surfaced to the reviewing admin.
  */
@@ -35,7 +67,21 @@ async function validateDraft(draft) {
   const definitions = Array.isArray(draft.definitions) ? draft.definitions : [];
   const configs = Array.isArray(draft.configs) ? draft.configs : [];
 
-  const knownCodes = new Set(await getExistingDefinitionCodes());
+  const existingDefinitions = await prisma.chargeDefinition.findMany({
+    select: { code: true, computation: true },
+  });
+  // Computation shapes for both catalogued and freshly drafted definitions —
+  // a MATRIX config is validated against whichever one it references.
+  const computationByCode = new Map(
+    existingDefinitions.map((d) => [d.code, d.computation]),
+  );
+  for (const def of definitions) {
+    if (def?.code && def?.computation) {
+      computationByCode.set(def.code, def.computation);
+    }
+  }
+
+  const knownCodes = new Set(computationByCode.keys());
   for (const def of definitions) {
     const { error } = definitionSchemas.createDefinition.body.validate(def, {
       abortEarly: false,
@@ -70,6 +116,12 @@ async function validateDraft(draft) {
       );
       continue;
     }
+    problems.push(
+      ...findMatrixProblems(
+        computationByCode.get(cfg.chargeDefinitionCode),
+        cfg.config,
+      ).map((p) => `config for ${cfg.chargeDefinitionCode}: ${p}`),
+    );
     if (cfg.partnerId) {
       const partner = await prisma.partner.findUnique({
         where: { id: cfg.partnerId },
@@ -124,13 +176,17 @@ async function draftFromText({ description, partnerId, userId }) {
     throw new ValidationError("Please describe the charge in more detail");
   }
 
-  const existingDefinitions = await getExistingDefinitionCodes();
+  const [existingDefinitions, zoneContext] = await Promise.all([
+    getExistingDefinitionCodes(),
+    getZoneContext(partnerId),
+  ]);
   // Config drafting generates long JSON — allow for slow token streaming
   const { json, model } = await aiClient.completeJson(
     prompts.draftFromTextMessages({
       description,
       existingDefinitions,
       partnerId,
+      zoneContext,
     }),
     { maxTokens: 4000, timeoutMs: 90000 },
   );

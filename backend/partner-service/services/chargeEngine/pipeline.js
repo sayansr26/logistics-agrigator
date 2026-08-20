@@ -49,9 +49,14 @@ function effectiveConditions(definition, config) {
 }
 
 /**
- * Compute one definition+config against facts. Returns a line or null.
- * Handles perSide aggregation (pickup + delivery computed independently and
- * summed into one line).
+ * Compute one definition+config against facts.
+ *
+ * Returns { line, skipReason }. `skipReason` distinguishes a charge that was
+ * deliberately not applied (CONDITIONS_NOT_MET — e.g. a COD charge on a
+ * prepaid shipment) from one that SHOULD have applied but could not be priced
+ * (NO_MATCH — a MATRIX config with no row for this lane, ZERO_AMOUNT — a
+ * config that priced to nothing). Callers use that difference to decide
+ * whether a missing charge is normal or a misconfiguration.
  */
 function computeLine(definition, config, facts) {
   const conditions = effectiveConditions(definition, config);
@@ -60,9 +65,11 @@ function computeLine(definition, config, facts) {
   if (perSide) {
     const sides = {};
     let total = 0;
+    let anySideEligible = false;
     for (const sideName of ["pickup", "delivery"]) {
       const sideFacts = withSide(facts, sideName);
       if (!evaluate(conditions, sideFacts)) continue;
+      anySideEligible = true;
       const result = compute(definition.computation, config.config, sideFacts);
       if (result && result.amount !== 0) {
         sides[sideName] = {
@@ -72,9 +79,14 @@ function computeLine(definition, config, facts) {
         total += result.amount;
       }
     }
-    if (total === 0) return null;
+    if (total === 0) {
+      return {
+        line: null,
+        skipReason: anySideEligible ? "NO_MATCH" : "CONDITIONS_NOT_MET",
+      };
+    }
 
-    return {
+    const line = {
       chargeCode: definition.code,
       chargeTypeName: definition.name,
       category: definition.category,
@@ -88,13 +100,17 @@ function computeLine(definition, config, facts) {
       aggregation: definition.aggregation || null,
       ...sides,
     };
+    return { line, skipReason: null };
   }
 
-  if (!evaluate(conditions, facts)) return null;
+  if (!evaluate(conditions, facts)) {
+    return { line: null, skipReason: "CONDITIONS_NOT_MET" };
+  }
   const result = compute(definition.computation, config.config, facts);
-  if (!result || result.amount === 0) return null;
+  if (!result) return { line: null, skipReason: "NO_MATCH" };
+  if (result.amount === 0) return { line: null, skipReason: "ZERO_AMOUNT" };
 
-  return {
+  const line = {
     chargeCode: definition.code,
     chargeTypeName: definition.name,
     category: definition.category,
@@ -105,6 +121,7 @@ function computeLine(definition, config, facts) {
     flags: definition.flags || {},
     aggregation: definition.aggregation || null,
   };
+  return { line, skipReason: null };
 }
 
 /**
@@ -116,7 +133,10 @@ function computeLine(definition, config, facts) {
  * @param {Object} [options]
  * @param {Array<string>} [options.stages] - applyStages to include
  *   (default QUOTE + BOOKING_OPTION)
- * @returns {{ breakdown, totalCharge, pricing, rulesEvaluated, categoriesMatched }}
+ * @returns {{ breakdown, totalCharge, pricing, rulesEvaluated, categoriesMatched,
+ *   skipped, missingBase }} - `skipped` lists every config that produced no
+ *   line with the reason why; `missingBase` is the subset of BASE-category
+ *   charges that should have applied but could not be priced.
  */
 function run(configs, facts, options = {}) {
   const stages = options.stages || ["QUOTE", "BOOKING_OPTION"];
@@ -140,6 +160,7 @@ function run(configs, facts, options = {}) {
   }
 
   const accepted = [];
+  const skipped = [];
   let rulesEvaluated = 0;
   let gstRate = 0;
   let gstAmount = 0;
@@ -156,18 +177,28 @@ function run(configs, facts, options = {}) {
       rulesEvaluated += 1;
 
       try {
-        let line;
+        let outcome;
         if (SUBTOTAL_METHODS.has(definition.computation?.method)) {
           const subtotal = computeSubtotal(
             definition.computation.subtotalOf,
             accepted,
           );
-          line = computeLine(definition, cfg, {
+          outcome = computeLine(definition, cfg, {
             ...facts,
             __subtotal: round2(subtotal),
           });
         } else {
-          line = computeLine(definition, cfg, facts);
+          outcome = computeLine(definition, cfg, facts);
+        }
+
+        const { line, skipReason } = outcome;
+
+        if (!line) {
+          skipped.push({
+            chargeCode: definition.code,
+            category: definition.category,
+            reason: skipReason,
+          });
         }
 
         if (line) {
@@ -188,6 +219,11 @@ function run(configs, facts, options = {}) {
         logger.warn("Charge line computation failed; skipping", {
           chargeCode: definition.code,
           error: error.message,
+        });
+        skipped.push({
+          chargeCode: definition.code,
+          category: definition.category,
+          reason: "ERROR",
         });
       }
     }
@@ -210,6 +246,23 @@ function run(configs, facts, options = {}) {
       .reduce((sum, l) => sum + l.totalCharge, 0),
   );
 
+  // A BASE-category charge is what the partner collects on EVERY parcel. If one
+  // is configured but could not be priced for this lane (no MATRIX row, zero
+  // amount, broken config), the quote would silently understate the rate — so
+  // report it and let the caller drop the partner instead.
+  const missingBase = skipped.filter(
+    (s) => s.category === "BASE" && s.reason !== "CONDITIONS_NOT_MET",
+  );
+  if (missingBase.length > 0) {
+    logger.warn("BASE charge configured but not applicable to this shipment", {
+      missing: missingBase,
+      distanceMilestoneId: facts.distanceMilestoneId,
+      pickupGeoZoneIds: facts.pickupGeoZoneIds,
+      deliveryGeoZoneIds: facts.deliveryGeoZoneIds,
+      chargeableWeight: facts.chargeableWeight,
+    });
+  }
+
   // Strip engine-internal fields from the outgoing breakdown
   const breakdown = accepted.map(
     ({ flags, aggregation, phase, ...publicLine }) => publicLine,
@@ -218,6 +271,8 @@ function run(configs, facts, options = {}) {
   return {
     breakdown,
     totalCharge,
+    skipped,
+    missingBase,
     rulesEvaluated,
     categoriesMatched: new Set(accepted.map((l) => l.category)).size,
     pricing: {

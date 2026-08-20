@@ -623,4 +623,84 @@ describe("pipeline.run", () => {
     const result = pipeline.run(withBroken, baseFacts);
     expect(result.totalCharge).toBe(558.14);
   });
+
+  test("a BASE charge that cannot be priced is reported in missingBase", () => {
+    // Same configs, but the shipment falls outside every milestone row
+    const result = pipeline.run(configs, {
+      ...baseFacts,
+      distanceMilestoneId: "m-unconfigured",
+    });
+
+    expect(result.missingBase.map((m) => m.chargeCode)).toEqual([
+      "BASE_FREIGHT",
+    ]);
+    expect(result.missingBase[0].reason).toBe("NO_MATCH");
+    expect(result.breakdown.some((l) => l.chargeCode === "BASE_FREIGHT")).toBe(
+      false,
+    );
+  });
+
+  test("a ZONE_PAIR base charge misconfigured as MILESTONE never matches", () => {
+    // The AI drafting failure this guards against: geological zone ids placed
+    // in a MILESTONE-mode config (or vice versa) match nothing at quote time.
+    const wrongMode = configs.map((c) =>
+      c.chargeDefinition.code === "BASE_FREIGHT"
+        ? {
+            ...c,
+            config: {
+              mode: "ZONE_PAIR",
+              rows: [
+                { fromZoneId: "zw", toZoneId: "zn", perKg: 52, charge: 26 },
+              ],
+            },
+          }
+        : c,
+    );
+    const result = pipeline.run(wrongMode, baseFacts); // geo zone ids are empty
+
+    expect(result.missingBase.map((m) => m.chargeCode)).toEqual([
+      "BASE_FREIGHT",
+    ]);
+  });
+
+  test("a conditional charge that does not apply is not a missing BASE", () => {
+    // COD_CHARGE on a prepaid shipment is intentional, not a misconfiguration
+    const result = pipeline.run(configs, {
+      ...baseFacts,
+      paymentType: "PREPAID",
+      codAmount: 0,
+    });
+
+    expect(result.missingBase).toEqual([]);
+    expect(
+      result.skipped.find((s) => s.chargeCode === "COD_CHARGE").reason,
+    ).toBe("CONDITIONS_NOT_MET");
+  });
+
+  test("slab maths: perKg is the slab size, not a per-kg rate", () => {
+    // "Rs 26 for up to 52 kg" — a 5 kg parcel pays 26, a 60 kg parcel pays 52
+    const slabbed = configs.map((c) =>
+      c.chargeDefinition.code === "BASE_FREIGHT"
+        ? {
+            ...c,
+            config: {
+              mode: "MILESTONE",
+              rows: [
+                { zoneMilestoneId: "m1", perKg: 52, charge: 26, minCharge: 26 },
+              ],
+            },
+          }
+        : c,
+    );
+
+    const light = pipeline.run(slabbed, { ...baseFacts, chargeableWeight: 5 });
+    const heavy = pipeline.run(slabbed, { ...baseFacts, chargeableWeight: 60 });
+
+    expect(
+      light.breakdown.find((l) => l.chargeCode === "BASE_FREIGHT").totalCharge,
+    ).toBe(26);
+    expect(
+      heavy.breakdown.find((l) => l.chargeCode === "BASE_FREIGHT").totalCharge,
+    ).toBe(52);
+  });
 });

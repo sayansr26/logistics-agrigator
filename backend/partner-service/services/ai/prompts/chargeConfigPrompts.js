@@ -7,7 +7,7 @@
  * output is never trusted or applied directly.
  */
 
-const PROMPT_VERSION = "v1";
+const PROMPT_VERSION = "v2";
 
 const CONTRACT = `
 You draft configuration for a deterministic shipping charges engine. You NEVER compute prices yourself — you produce config JSON the engine executes.
@@ -37,14 +37,62 @@ You draft configuration for a deterministic shipping charges engine. You NEVER c
 - OPTION_RATE (basis ANSWER_VALUE + "answerPath"): config { "rates": { "<optionValue>": number }, "perBox"?: bool }
 - DISCOUNT (basis SUBTOTAL, subtotalOf PRE_TAX): config { "tiers": { "<badge>": { "type": "FLAT|PERCENTAGE", "value": number } } }
 
+## MATRIX (BASE freight) rules — read carefully, these are the usual mistakes
+- The two modes are NOT interchangeable and a row in the wrong mode NEVER matches, so the charge silently vanishes from every quote:
+  - the partner's zone is type DISTANCE (it has km milestones) → mode "MILESTONE", one row per milestone, keyed by "zoneMilestoneId"
+  - the partner's zone is type GEOLOGICAL (states/cities/pincodes) → mode "ZONE_PAIR", rows keyed by "fromZoneId" + "toZoneId"
+- Use ONLY the exact UUIDs listed in the ZONE CONTEXT below. NEVER invent an id, and never use a placeholder such as "zone-a", "A", or "milestone-1" — a config with a made-up id is rejected.
+- Row maths is: max(minCharge, ceil(chargeableWeight / perKg) x charge). So "perKg" is the SLAB SIZE IN KG, not a rate: "Rs 26 for up to 52 kg" is { "perKg": 52, "charge": 26, "minCharge": 26 }, and "Rs 52 per kg with Rs 26 minimum" is { "perKg": 1, "charge": 52, "minCharge": 26 }. Ask yourself which the admin meant and put it in "warnings" if it is ambiguous.
+- A BASE-category charge is collected on EVERY shipment of that partner. Cover every milestone (MILESTONE mode) or every ordered zone pair including same-zone lanes like A→A (ZONE_PAIR mode); any lane you leave out makes the partner unquotable on that lane. Do NOT attach conditions to a BASE charge unless the admin explicitly asked for one.
+- All rows of one partner's base freight belong in ONE config for the BASE_FREIGHT definition — do not create a new definition per zone.
+
 ## Facts available in conditions
 paymentType ("COD"/"PREPAID"), codAmount, invoiceValue, chargeableWeight, actualWeight, numberOfBoxes, maxDimensionCm, shipmentType ("B2B"/"B2C"), serviceType, shipmentDirection ("FORWARD"/"REVERSE"), isFragile, distanceKm, outletBadge, pickup.city/state/isMetro/cityClass, delivery.city/state/isMetro/cityClass, side.pincodeType.<NAME> (with aggregation.perSide), answers.<questionKey>[.<followUpKey>]
 `;
+
+/**
+ * Render the partner's real zones/milestones so the model references existing
+ * UUIDs instead of inventing placeholders, and can pick MILESTONE vs ZONE_PAIR
+ * from the zone types the partner actually has.
+ */
+function renderZoneContext(zoneContext) {
+  if (!zoneContext) return "";
+
+  const distanceZones = zoneContext.distanceZones || [];
+  const geoZones = zoneContext.geoZones || [];
+  if (distanceZones.length === 0 && geoZones.length === 0) {
+    return `\n\n## ZONE CONTEXT\nThis partner has NO zones configured. Do not emit any MATRIX config — say so in "warnings" instead.`;
+  }
+
+  const lines = ["\n\n## ZONE CONTEXT — the only zone ids you may use"];
+
+  if (distanceZones.length > 0) {
+    lines.push("DISTANCE zones (use mode MILESTONE + zoneMilestoneId):");
+    for (const zone of distanceZones) {
+      lines.push(`- zone "${zone.name}" (${zone.id})`);
+      for (const milestone of zone.milestones || []) {
+        lines.push(
+          `    milestone ${milestone.suffix}: ${milestone.minKm}-${milestone.maxKm} km → zoneMilestoneId ${milestone.id}`,
+        );
+      }
+    }
+  }
+
+  if (geoZones.length > 0) {
+    lines.push("GEOLOGICAL zones (use mode ZONE_PAIR + fromZoneId/toZoneId):");
+    for (const zone of geoZones) {
+      lines.push(`- "${zone.name}" → ${zone.id}`);
+    }
+  }
+
+  return lines.join("\n");
+}
 
 function draftFromTextMessages({
   description,
   existingDefinitions,
   partnerId,
+  zoneContext,
 }) {
   return [
     {
@@ -58,7 +106,7 @@ The admin will describe a charge in natural language. Respond with JSON:
   "configs": [ { "chargeDefinitionCode": "...", "partnerId": ${JSON.stringify(partnerId || null)}, "config": {...}, "conditions": null|{...} } ],
   "warnings": [ "anything ambiguous or assumed" ]
 }
-Existing definition codes (reuse instead of duplicating): ${existingDefinitions.join(", ")}`,
+Existing definition codes (reuse instead of duplicating): ${existingDefinitions.join(", ")}${renderZoneContext(zoneContext)}`,
     },
     { role: "user", content: description },
   ];

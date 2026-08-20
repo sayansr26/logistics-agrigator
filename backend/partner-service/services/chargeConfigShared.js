@@ -14,54 +14,76 @@ const logger = require("../shared/lib/logger");
 
 const CONFIG_REV_KEY = "charges:config:rev";
 
-// JSON keys whose values are treated as references to the given model
+// JSON keys whose values are treated as references to the given model.
+// `zoneType` (when set) is the zone flavour the key REQUIRES — a ZONE_PAIR row
+// can only point at GEOLOGICAL zones, a milestone only at a DISTANCE zone.
 const REF_KEYS = {
-  zoneId: "zone",
-  fromZoneId: "zone",
-  toZoneId: "zone",
-  zoneMilestoneId: "zoneMilestone",
-  pincodeTypeId: "pincodeType",
-  channelId: "partnerServiceChannel",
+  zoneId: { model: "zone" },
+  fromZoneId: { model: "zone", zoneType: "GEOLOGICAL" },
+  toZoneId: { model: "zone", zoneType: "GEOLOGICAL" },
+  zoneMilestoneId: { model: "zoneMilestone", zoneType: "DISTANCE" },
+  pincodeTypeId: { model: "pincodeType" },
+  channelId: { model: "partnerServiceChannel" },
 };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Recursively collect { key -> Set<uuid> } for all REF_KEYS found in a JSON value.
+ * Recursively collect every REF_KEYS occurrence in a JSON value.
+ *
+ * Returns { refs, malformed }:
+ *   refs      - [{ key, model, zoneType, id }] for well-formed UUID values
+ *   malformed - [{ key, value }] for anything else (placeholders such as
+ *               "zone-a", numbers, nulls). These used to be skipped silently,
+ *               which let a config that referenced nothing save as Active and
+ *               then price at zero forever.
  */
-function collectRefs(value, found = {}) {
+function collectRefs(value, acc = { refs: [], malformed: [] }) {
   if (Array.isArray(value)) {
-    value.forEach((item) => collectRefs(item, found));
+    value.forEach((item) => collectRefs(item, acc));
   } else if (value && typeof value === "object") {
     for (const [key, v] of Object.entries(value)) {
-      if (REF_KEYS[key] && typeof v === "string" && UUID_RE.test(v)) {
-        const model = REF_KEYS[key];
-        found[model] = found[model] || new Set();
-        found[model].add(v);
+      const spec = REF_KEYS[key];
+      if (spec && v !== null && v !== undefined) {
+        if (typeof v === "string" && UUID_RE.test(v)) {
+          acc.refs.push({ key, ...spec, id: v });
+        } else {
+          acc.malformed.push({ key, value: v });
+        }
       }
-      collectRefs(v, found);
+      collectRefs(v, acc);
     }
   }
-  return found;
+  return acc;
 }
 
 /**
- * Validate that every Zone/ZoneMilestone/PincodeType/channel UUID referenced in
- * `configJson` exists (zones/milestones/channels additionally scoped to the
- * partner). Returns an array of human-readable problems; empty = valid.
+ * Validate that every Zone/ZoneMilestone/PincodeType/channel reference in
+ * `configJson` is a real UUID that exists, belongs to this partner, and is of
+ * the zone flavour the key requires. Returns human-readable problems; empty = valid.
  */
 async function findDanglingRefs(configJson, { partnerId } = {}) {
-  const refs = collectRefs(configJson);
-  const problems = [];
+  const { refs, malformed } = collectRefs(configJson);
+  const problems = malformed.map(
+    ({ key, value }) =>
+      `${key} ${JSON.stringify(value)} is not a valid id — use the actual ` +
+      `UUID of a zone/milestone belonging to this partner`,
+  );
+
+  const byModel = new Map();
+  for (const ref of refs) {
+    if (!byModel.has(ref.model)) byModel.set(ref.model, []);
+    byModel.get(ref.model).push(ref);
+  }
 
   const checks = {
     zone: async (ids) => {
       const rows = await prisma.zone.findMany({
         where: { id: { in: ids }, ...(partnerId ? { partnerId } : {}) },
-        select: { id: true },
+        select: { id: true, zoneType: true },
       });
-      return rows.map((r) => r.id);
+      return new Map(rows.map((r) => [r.id, r.zoneType]));
     },
     zoneMilestone: async (ids) => {
       const rows = await prisma.zoneMilestone.findMany({
@@ -69,39 +91,183 @@ async function findDanglingRefs(configJson, { partnerId } = {}) {
           id: { in: ids },
           ...(partnerId ? { zone: { partnerId } } : {}),
         },
-        select: { id: true },
+        select: { id: true, zone: { select: { zoneType: true } } },
       });
-      return rows.map((r) => r.id);
+      return new Map(rows.map((r) => [r.id, r.zone?.zoneType]));
     },
     pincodeType: async (ids) => {
       const rows = await prisma.pincodeType.findMany({
         where: { id: { in: ids } },
         select: { id: true },
       });
-      return rows.map((r) => r.id);
+      return new Map(rows.map((r) => [r.id, null]));
     },
     partnerServiceChannel: async (ids) => {
       const rows = await prisma.partnerServiceChannel.findMany({
         where: { id: { in: ids }, ...(partnerId ? { partnerId } : {}) },
         select: { id: true },
       });
-      return rows.map((r) => r.id);
+      return new Map(rows.map((r) => [r.id, null]));
     },
   };
 
-  for (const [model, idSet] of Object.entries(refs)) {
-    const ids = [...idSet];
-    const foundIds = new Set(await checks[model](ids));
-    for (const id of ids) {
-      if (!foundIds.has(id)) {
+  for (const [model, modelRefs] of byModel.entries()) {
+    const ids = [...new Set(modelRefs.map((r) => r.id))];
+    const found = await checks[model](ids);
+    for (const ref of modelRefs) {
+      if (!found.has(ref.id)) {
         problems.push(
-          `${model} ${id} not found${partnerId ? ` for partner ${partnerId}` : ""}`,
+          `${model} ${ref.id} not found${partnerId ? ` for partner ${partnerId}` : ""}`,
+        );
+        continue;
+      }
+      const actualType = found.get(ref.id);
+      if (ref.zoneType && actualType && actualType !== ref.zoneType) {
+        problems.push(
+          `${ref.key} ${ref.id} belongs to a ${actualType} zone but ${ref.key} ` +
+            `requires a ${ref.zoneType} zone — a ${actualType} zone can never ` +
+            `match this row at quote time`,
         );
       }
     }
   }
 
   return problems;
+}
+
+/**
+ * Structural validation for MATRIX (BASE freight) configs.
+ *
+ * The two modes are not interchangeable: MILESTONE rows are matched against
+ * the shipment's distance milestone, ZONE_PAIR rows against the pickup and
+ * delivery GEOLOGICAL zones. A row carrying the wrong key set can never match,
+ * so the charge silently disappears from every quote.
+ */
+function findMatrixProblems(computation, configJson) {
+  if (computation?.method !== "MATRIX") return [];
+
+  const problems = [];
+  const mode = configJson?.mode;
+  if (mode !== "MILESTONE" && mode !== "ZONE_PAIR") {
+    problems.push(
+      `MATRIX config needs "mode": "MILESTONE" (distance zones) or "ZONE_PAIR" (geological zones)`,
+    );
+  }
+
+  const rows = configJson?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    problems.push("MATRIX config needs a non-empty rows array");
+    return problems;
+  }
+
+  const seen = new Set();
+  rows.forEach((row, index) => {
+    const at = `row ${index + 1}`;
+    if (!row || typeof row !== "object") {
+      problems.push(`${at}: must be an object`);
+      return;
+    }
+
+    if (mode === "MILESTONE") {
+      if (!row.zoneMilestoneId) {
+        problems.push(
+          `${at}: MILESTONE mode requires zoneMilestoneId (the milestone UUID of the partner's DISTANCE zone)`,
+        );
+      }
+      if (row.fromZoneId || row.toZoneId) {
+        problems.push(
+          `${at}: MILESTONE rows must not carry fromZoneId/toZoneId — those are only read in ZONE_PAIR mode`,
+        );
+      }
+    } else if (mode === "ZONE_PAIR") {
+      if (!row.fromZoneId || !row.toZoneId) {
+        problems.push(
+          `${at}: ZONE_PAIR mode requires both fromZoneId and toZoneId (GEOLOGICAL zone UUIDs)`,
+        );
+      }
+      if (row.zoneMilestoneId) {
+        problems.push(
+          `${at}: ZONE_PAIR rows must not carry zoneMilestoneId — that is only read in MILESTONE mode`,
+        );
+      }
+    }
+
+    const key =
+      mode === "MILESTONE"
+        ? `m:${row.zoneMilestoneId}`
+        : `z:${row.fromZoneId}>${row.toZoneId}`;
+    if (seen.has(key))
+      problems.push(`${at}: duplicate of an earlier row (${key})`);
+    seen.add(key);
+
+    const perKg = Number(row.perKg);
+    const charge = Number(row.charge);
+    if (!Number.isFinite(perKg) || perKg <= 0) {
+      problems.push(
+        `${at}: perKg must be a positive number (the slab size in kg)`,
+      );
+    }
+    if (!Number.isFinite(charge) || charge <= 0) {
+      problems.push(
+        `${at}: charge must be a positive number (the amount per slab)`,
+      );
+    }
+    if (row.minCharge !== undefined && row.minCharge !== null) {
+      const minCharge = Number(row.minCharge);
+      if (!Number.isFinite(minCharge) || minCharge < 0) {
+        problems.push(`${at}: minCharge must be a non-negative number`);
+      }
+    }
+  });
+
+  return problems;
+}
+
+/**
+ * Coverage report for a MATRIX config: which of the partner's milestones or
+ * geological zone pairs have no row, i.e. which lanes this partner will drop
+ * out of at quote time. Non-blocking — surfaced as warnings.
+ */
+async function findMatrixCoverageGaps(computation, configJson, partnerId) {
+  if (computation?.method !== "MATRIX" || !partnerId) return [];
+  const rows = Array.isArray(configJson?.rows) ? configJson.rows : [];
+  if (rows.length === 0) return [];
+
+  if (configJson.mode === "MILESTONE") {
+    const milestones = await prisma.zoneMilestone.findMany({
+      where: { zone: { partnerId, zoneType: "DISTANCE", status: true } },
+      select: { id: true, suffix: true, minKm: true, maxKm: true },
+    });
+    const covered = new Set(rows.map((r) => r.zoneMilestoneId));
+    return milestones
+      .filter((m) => !covered.has(m.id))
+      .map(
+        (m) =>
+          `no row for milestone ${m.suffix} (${m.minKm}-${m.maxKm} km) — shipments in that distance band get no base charge`,
+      );
+  }
+
+  if (configJson.mode === "ZONE_PAIR") {
+    const zones = await prisma.zone.findMany({
+      where: { partnerId, zoneType: "GEOLOGICAL", status: true },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(zones.map((z) => [z.id, z.name]));
+    const covered = new Set(rows.map((r) => `${r.fromZoneId}>${r.toZoneId}`));
+    const gaps = [];
+    for (const from of zones) {
+      for (const to of zones) {
+        if (!covered.has(`${from.id}>${to.id}`)) {
+          gaps.push(
+            `no row for ${nameById.get(from.id)} → ${nameById.get(to.id)} — that lane gets no base charge`,
+          );
+        }
+      }
+    }
+    return gaps;
+  }
+
+  return [];
 }
 
 /**
@@ -189,6 +355,8 @@ async function createAuditLog(
 module.exports = {
   collectRefs,
   findDanglingRefs,
+  findMatrixProblems,
+  findMatrixCoverageGaps,
   recordVersion,
   bumpConfigRevision,
   getConfigRevision,
