@@ -215,9 +215,10 @@ export function DocketSection({ isAdminLike }: { isAdminLike: boolean }) {
             onChange={(e) => store.setField("serviceType", e.target.value)}
             className={selectClass}
           >
-            <option value="STANDARD">Standard Delivery (2-4 Days)</option>
-            <option value="EXPRESS">Express Delivery (1-2 Days)</option>
-            <option value="ECONOMY">Economy Cargo (4-7 Days)</option>
+            <option value="ALL">Select All</option>
+            <option value="STANDARD">Standard Delivery</option>
+            <option value="EXPRESS">Express Delivery</option>
+            <option value="ECONOMY">Economy Cargo</option>
           </select>
         </div>
       </div>

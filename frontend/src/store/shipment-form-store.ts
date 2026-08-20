@@ -37,7 +37,8 @@ export interface ShipmentFormState {
   shipmentDirection: "FORWARD" | "REVERSE";
   paymentType: "PREPAID" | "COD";
   codAmount: string;
-  serviceType: "STANDARD" | "EXPRESS" | "ECONOMY";
+  /** "ALL" quotes every service type instead of filtering to one. */
+  serviceType: "ALL" | "STANDARD" | "EXPRESS" | "ECONOMY";
   outletId: string;
   outletUserId: string;
   pickupAddress: string;
@@ -176,7 +177,7 @@ const DEFAULT_STATE = {
   shipmentDirection: "FORWARD" as const,
   paymentType: "PREPAID" as const,
   codAmount: "",
-  serviceType: "STANDARD" as const,
+  serviceType: "ALL" as const,
   outletId: "",
   outletUserId: "",
   pickupAddress: "",

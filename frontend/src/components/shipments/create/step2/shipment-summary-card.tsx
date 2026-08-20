@@ -49,7 +49,14 @@ export function ShipmentSummaryCard({
           <Row label="Actual Weight" value={`${store.actualWeight || 0} Kg`} />
           <Row label="Shipment Type" value={store.shipmentType} />
           <Row label="Direction" value={store.shipmentDirection} />
-          <Row label="Service Type" value={store.serviceType} />
+          <Row
+            label="Service Type"
+            value={
+              store.serviceType === "ALL"
+                ? "All service types"
+                : store.serviceType
+            }
+          />
           {store.poNumber && <Row label="PO Number" value={store.poNumber} />}
         </div>
 

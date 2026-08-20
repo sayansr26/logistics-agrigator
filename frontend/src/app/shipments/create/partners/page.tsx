@@ -78,7 +78,9 @@ export default function PartnerSelectionPage() {
         weight: parseFloat(store.actualWeight) || 0.5,
         numberOfBoxes: store.numberOfBoxes,
         dimensions: dims,
-        serviceType: store.serviceType,
+        // "Select All" means quote every service type, so send no filter.
+        serviceType:
+          store.serviceType === "ALL" ? undefined : store.serviceType,
         paymentType: store.paymentType,
         codAmount:
           store.paymentType === "COD" ? parseFloat(store.codAmount) : undefined,

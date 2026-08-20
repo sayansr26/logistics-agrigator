@@ -205,7 +205,9 @@ export default function ConfirmBookPage() {
       paymentType: store.paymentType,
       codAmount:
         store.paymentType === "COD" ? parseFloat(store.codAmount) : undefined,
-      serviceType: store.serviceType,
+      // A booked shipment stores one concrete service type - "Select All" is
+      // a quoting filter only, so it books as STANDARD.
+      serviceType: store.serviceType === "ALL" ? "STANDARD" : store.serviceType,
       selectedPartnerId: quote?.partnerId,
       quoteSnapshot: quote || undefined,
       quoteToken: quote?.quoteToken || undefined,
