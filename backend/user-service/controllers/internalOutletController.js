@@ -29,6 +29,7 @@ async function getOutletByUser(req, res) {
       where: { userId },
       select: {
         id: true,
+        userId: true,
         badge: true,
         name: true,
         phone: true,
@@ -64,6 +65,9 @@ async function getOutletByUser(req, res) {
         {
           found: true,
           outletId: outlet.id,
+          // auth-service user that owns this outlet; used to freeze the acting
+          // principal on an External API credential.
+          userId: outlet.userId,
           badge: outlet.badge,
           outletName: outlet.name,
           phone: outlet.phone,
@@ -110,6 +114,7 @@ async function getOutletBadgeById(req, res) {
       where: { id: outletId },
       select: {
         id: true,
+        userId: true,
         badge: true,
         name: true,
         phone: true,
@@ -141,6 +146,9 @@ async function getOutletBadgeById(req, res) {
         {
           found: true,
           outletId: outlet.id,
+          // auth-service user that owns this outlet; used to freeze the acting
+          // principal on an External API credential.
+          userId: outlet.userId,
           badge: outlet.badge,
           outletName: outlet.name,
           phone: outlet.phone,

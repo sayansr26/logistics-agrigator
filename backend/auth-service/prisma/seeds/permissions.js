@@ -360,6 +360,12 @@ const permissions = [
   },
   {
     module: PERMISSION_MODULES.PARTNER,
+    action: PERMISSION_ACTIONS.READ,
+    scope: PERMISSION_SCOPES.OWN,
+    description: "View partner rates when pricing own shipments",
+  },
+  {
+    module: PERMISSION_MODULES.PARTNER,
     action: PERMISSION_ACTIONS.UPDATE,
     scope: PERMISSION_SCOPES.ALL,
     description: "Modify partner/courier settings",

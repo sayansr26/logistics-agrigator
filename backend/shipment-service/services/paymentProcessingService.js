@@ -42,6 +42,12 @@ class PaymentProcessingService {
         "User-Agent": "shipment-service/1.0.0",
         "X-Internal-Request":
           process.env.INTERNAL_SECRET || "internal-service-secret",
+        // Service principal: booking-time wallet movement is an action taken
+        // BY this service, not by the booking user (who holds only
+        // wallet:read:own). The gateway strips this header from inbound client
+        // requests, so it can only originate on the internal network.
+        "X-Service-Token": process.env.INTERNAL_SECRET || "",
+        "X-Service-Name": "shipment-service",
       },
     });
 

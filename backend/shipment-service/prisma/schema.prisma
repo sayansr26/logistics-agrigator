@@ -199,6 +199,10 @@ model Shipment {
   pickupSchedule   PickupSchedule? @relation(fields: [pickupScheduleId], references: [id])
 
   @@unique([orderId, clientId])
+  // Outlet users have clientId = NULL, and Postgres treats NULLs as distinct -
+  // so the constraint above enforces nothing for them. This second constraint
+  // is what actually stops an outlet from booking the same orderId twice.
+  @@unique([orderId, userId])
   @@index([clientId, status, createdAt])
   @@index([userId, createdAt])
   @@index([outletId, createdAt])
@@ -635,4 +639,38 @@ enum PickupStatus {
   FAILED
 
   @@map("pickup_status")
+}
+
+/// Idempotency record for External API mutations.
+///
+/// Reserved BEFORE any side effect runs. This is what closes the double-debit
+/// window in createShipment, where the wallet is debited before the shipment
+/// row is inserted and the catch block does not refund: a retrying client
+/// (or an MCP tool retry) hits the unique constraint here and replays the
+/// stored response instead of paying twice.
+model IdempotencyRecord {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Client-supplied Idempotency-Key header value.
+  key          String @db.VarChar(255)
+  /// Owning API credential - keys are namespaced per credential.
+  credentialId String @map("credential_id") @db.Uuid
+  /// sha256 of the canonicalized request body; a differing hash for the same
+  /// key is a client bug and is rejected rather than replayed.
+  requestHash  String @map("request_hash") @db.VarChar(64)
+
+  /// in_progress | completed
+  status String @default("in_progress") @db.VarChar(20)
+
+  /// Stored response, replayed verbatim on a repeat request.
+  responseStatus Int?    @map("response_status")
+  responseBody   Json?   @map("response_body")
+  shipmentId     String? @map("shipment_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  @@unique([credentialId, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
 }

@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: August 7, 2026
+> Development status and changelog | Last Updated: August 21, 2026
 
 ## Overall Project Status
 
@@ -15,8 +15,24 @@ Overall Project Progress          [███████████████
 
 ### Backend Services
 
+#### External Shipment API (100% Complete) — NEW
+
+- ✅ API credentials (`lgk_live_…` / bcrypt-hashed secret, shown once)
+- ✅ `POST /api/v1/external/auth/token` → 1h `aud=external-api` JWT, no refresh token
+- ✅ Credential binds one frozen acting principal → existing controllers unchanged
+- ✅ Audience↔path binding at the gateway (token leak cannot reach other services)
+- ✅ Book (one-step `cheapest`/`fastest`, or two-step with a quote token)
+- ✅ List / details / edit / cancel — by shipment id, AWB, or your own orderId
+- ✅ Rates, serviceability, tracking, track-by-AWB, documents, label
+- ✅ Per-credential scopes, IP allowlist, rate limits; instant revocation
+- ✅ Idempotency-Key with replay, reuse rejection, and failure release
+- ✅ Stable public envelope + snake_case error taxonomy, `request_id` on every response
+- ✅ Credential manager + docs at `/developers` (portal)
+- ✅ MCP server (`mcp-server/`, stdio, 9 tools)
+
 #### Auth Service (100% Complete)
 
+- ✅ External API credential issuance, rotation and revocation
 - ✅ User registration with email validation
 - ✅ Login with JWT access/refresh tokens
 - ✅ Role-based access control (12 roles including outlet)

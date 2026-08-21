@@ -80,7 +80,46 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiter for External API credential exchange.
+// This is the brute-force surface for clientSecret, so it is keyed on the
+// clientId being attacked as well as the source IP.
+const tokenIssueLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: {
+    success: false,
+    error: {
+      type: "rate_limit_error",
+      code: "rate_limit_exceeded",
+      message: "Too many token requests. Please retry shortly.",
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    generateSecureKey(req, req.body?.clientId || "unknown"),
+});
+
+// Slower, wider net against credential stuffing across many client ids.
+const tokenIssueIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 300,
+  message: {
+    success: false,
+    error: {
+      type: "rate_limit_error",
+      code: "rate_limit_exceeded",
+      message: "Too many token requests from this IP address.",
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => generateSecureKey(req, "external-token"),
+});
+
 module.exports = {
+  tokenIssueLimiter,
+  tokenIssueIpLimiter,
   registrationLimiter,
   loginLimiter,
   sensitiveOperationsLimiter,

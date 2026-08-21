@@ -123,6 +123,15 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/v1/shipments", shipmentRoutes);
+
+// External (public) Shipment API. Authenticated by API credentials rather than
+// a portal session; the gateway confines aud="external-api" tokens to this
+// prefix. Mounted with its own error handler so failures never leak the
+// internal envelope.
+const externalShipmentRoutes = require("./routes/external/shipments");
+const { externalErrorHandler } = require("./middleware/externalEnvelope");
+app.use("/api/v1/external/shipments", externalShipmentRoutes);
+app.use("/api/v1/external", externalErrorHandler);
 const adminLogsRoutes = require("./routes/adminLogs");
 app.use("/api/v1/admin", adminLogsRoutes);
 

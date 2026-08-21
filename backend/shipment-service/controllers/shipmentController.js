@@ -19,6 +19,7 @@ const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
 const quoteSigningService = require("../services/quoteSigningService");
+const quoteService = require("../services/quoteService");
 const outletWalletContextService = require("../services/outletWalletContextService");
 const weightCalc = require("../shared/utils/weightCalc");
 
@@ -3768,129 +3769,25 @@ async function getShipmentQuotes(req, res) {
       vasCount: vasSelections.length,
     });
 
-    const rateParams = {
-      fromPincode,
-      toPincode,
-      weight,
-      serviceType: serviceType.toUpperCase(),
-      dimensions,
-      numberOfBoxes,
-      codAmount: paymentType === "COD" ? codAmount : null,
-      declaredValue: req.body.declaredValue || req.body.shipmentValue || 0,
-      paymentMode: paymentType,
-      isFragile: req.body.isFragile || false,
-      outletId: req.body.outletId || null,
-      sortBy: req.body.sortBy || "cheapest",
-      shipmentType,
-      vasSelections,
-    };
-
-    const authToken = req.header("Authorization");
-
-    // Partner quote engine already applies pincode assignment, zone coverage,
-    // and pricing rules. A second serviceability pass used the stricter
-    // "distance zone matched" flag and dropped partners that still had valid
-    // WEIGHT / non-distance pricing — yielding empty quotes while pincodes
-    // were assigned. Trust calculateRates as the single source of truth here.
-    const rateData = await partnerIntegrationService.calculateRates(
-      rateParams,
-      authToken,
+    const { quotes, recommended, params } = await quoteService.buildQuotes(
+      {
+        fromPincode,
+        toPincode,
+        weight,
+        numberOfBoxes,
+        dimensions,
+        serviceType,
+        paymentType,
+        codAmount,
+        shipmentType,
+        vasSelections,
+        declaredValue: req.body.declaredValue || req.body.shipmentValue || 0,
+        isFragile: req.body.isFragile || false,
+        outletId: req.body.outletId || null,
+        sortBy: req.body.sortBy || "cheapest",
+      },
+      req.header("Authorization"),
     );
-
-    const quotes = (rateData.rates || [])
-      .map((rate) => {
-        // Reuse the formula partner-service priced with (channel-specific or
-        // system default) rather than re-deriving one here
-        const { divisor, factor } = weightCalc.resolveVolumetricConfig({
-          divisor: rate.volumetricDivisor,
-          factor: rate.volumetricFactor,
-        });
-        const volWeight = weightCalc.computeVolumetric({
-          boxes: numberOfBoxes,
-          length: dimensions.length,
-          width: dimensions.width,
-          height: dimensions.height,
-          divisor,
-          factor,
-        });
-        const chargeableWt = weightCalc.computeChargeable(weight, volWeight);
-
-        // Normalize breakdown from partner-service to frontend-friendly format
-        const BASE_LABELS = {
-          WEIGHT: "Weight Charge",
-          INVOICE_VALUE: "Invoice Value Charge",
-          COD_VALUE: "COD Value Charge",
-          ZONE_TO_ZONE_WEIGHT: "Zone-to-Zone Charge",
-          DISTANCE_BASE_WEIGHT: "Distance Charge",
-        };
-
-        const rawBreakdown =
-          rate.breakdown || rate.chargesBreakdown || rate.chargeBreakdown || [];
-        const chargeBreakdown = Array.isArray(rawBreakdown)
-          ? rawBreakdown.map((entry) => {
-              const rawName = entry.chargeTypeName || entry.base || "Charge";
-              const isRawEnum = Object.keys(BASE_LABELS).includes(rawName);
-              const label = isRawEnum ? BASE_LABELS[rawName] : rawName;
-
-              return {
-                name: label,
-                amount: entry.totalCharge || 0,
-                type: entry.base || null,
-                calculation: entry.calculation || null,
-              };
-            })
-          : [];
-
-        const quote = {
-          partnerId: rate.partnerId,
-          partnerName: rate.partnerName,
-          totalAmount: rate.totalRate || rate.totalAmount || 0,
-          deliveryDays: rate.deliveryDays || rate.estimatedDays || null,
-          // Carrier's own expected delivery date (Delhivery TAT API and
-          // friends); null when only a day count is known.
-          estimatedDeliveryDate: rate.estimatedDeliveryDate || null,
-          tatSource: rate.tatSource || null,
-          chargeBreakdown,
-          volumetricDivisor: divisor,
-          volumetricFactor: factor,
-          volumetricWeight: volWeight,
-          chargeableWeight: chargeableWt,
-          actualWeight: weight,
-          serviceable:
-            rate.isServiceable !== false && rate.serviceable !== false,
-          // Charges Engine v3 additions (money split + dynamic VAS questions)
-          ...(rate.pricing && { pricing: rate.pricing }),
-          ...(rate.requiredQuestions && {
-            requiredQuestions: rate.requiredQuestions,
-          }),
-          ...(rate.engine && { engine: rate.engine }),
-          ...(rate.discount && { discount: rate.discount }),
-          ...(rate.channel && { channel: rate.channel }),
-        };
-
-        // Signed token: shipment creation verifies price/params against this,
-        // never against the client-editable snapshot
-        if (quote.serviceable) {
-          quote.quoteToken = quoteSigningService.signQuote(
-            quote,
-            {
-              fromPincode,
-              toPincode,
-              weight,
-              paymentType,
-              codAmount,
-              shipmentType,
-              serviceType,
-            },
-            vasSelections,
-          );
-        }
-
-        return quote;
-      })
-      .sort((a, b) => a.totalAmount - b.totalAmount);
-
-    const recommended = quotes[0] || null;
 
     await prisma.auditLog.create({
       data: {
@@ -3915,16 +3812,7 @@ async function getShipmentQuotes(req, res) {
       APIResponse.success({
         quotes,
         recommended,
-        params: {
-          fromPincode,
-          toPincode,
-          weight,
-          numberOfBoxes,
-          dimensions,
-          serviceType,
-          paymentType,
-          shipmentType,
-        },
+        params,
       }),
     );
   } catch (error) {

@@ -73,8 +73,12 @@ const authUtils = {
       // Super admin has all permissions
       if (user.role === "superadmin") return true;
 
-      // Build cache key
-      const cacheKey = `perm:${user.id}:${module}:${action}:${scope}`;
+      // Build cache key. Keep external API tokens on their own namespace so a
+      // scoped credential can never read a decision cached for the same user's
+      // full-permission dashboard session (see getEffectivePermissions).
+      const cacheKey = user.apiCredentialId
+        ? `perm:apicred:${user.apiCredentialId}:${module}:${action}:${scope}`
+        : `perm:${user.id}:${module}:${action}:${scope}`;
 
       // Check cache first (5 minute TTL)
       const redisClient = getRedisClient();
@@ -111,8 +115,14 @@ const authUtils = {
    */
   getEffectivePermissions: async (user) => {
     try {
-      // Check cache first
-      const cacheKey = `perms:${user.id}`;
+      // Check cache first.
+      // External API tokens carry a NARROWER permission set than the same
+      // user's dashboard session (credential scopes are intersected with the
+      // role defaults at mint time), so they must never share a cache entry
+      // with that session - otherwise a scoped key inherits full permissions.
+      const cacheKey = user.apiCredentialId
+        ? `perms:apicred:${user.apiCredentialId}`
+        : `perms:${user.id}`;
       const redisClient = getRedisClient();
       const cached = await redisClient.get(cacheKey);
       if (cached) return JSON.parse(cached);
@@ -370,17 +380,44 @@ const authMiddleware = {
           });
         }
 
-        // Check if session exists in Redis
-        const session = await redisClient.get(`session:${decoded.userId}`);
+        if (decoded.aud === "external-api") {
+          // External API tokens are minted from API credentials, not from a
+          // portal login, so there is no `session:<userId>` key to check.
+          // Their liveness check is credential/token revocation instead.
+          // This branch is also what lets shipment-service forward the
+          // caller's Authorization to partner-service and wallet-service
+          // (which re-run this middleware) without a spurious 401.
+          const [credRevoked, tokenRevoked] = await Promise.all([
+            decoded.apiCredentialId
+              ? redisClient.get(`apicred:revoked:${decoded.apiCredentialId}`)
+              : null,
+            decoded.jti
+              ? redisClient.get(`apitoken:revoked:${decoded.jti}`)
+              : null,
+          ]);
 
-        if (!session) {
-          return res.status(401).json({
-            status: "error",
-            error: {
-              code: "INVALID_SESSION",
-              message: "Invalid session.",
-            },
-          });
+          if (credRevoked || tokenRevoked) {
+            return res.status(401).json({
+              status: "error",
+              error: {
+                code: "CREDENTIAL_REVOKED",
+                message: "API credential has been revoked.",
+              },
+            });
+          }
+        } else {
+          // Check if session exists in Redis
+          const session = await redisClient.get(`session:${decoded.userId}`);
+
+          if (!session) {
+            return res.status(401).json({
+              status: "error",
+              error: {
+                code: "INVALID_SESSION",
+                message: "Invalid session.",
+              },
+            });
+          }
         }
       } catch (redisError) {
         // If Redis is not available, continue without session validation
@@ -416,6 +453,43 @@ const authMiddleware = {
         },
       });
     }
+  },
+
+  /**
+   * Authorize either a trusted SERVICE principal or a user permission.
+   *
+   * Some operations are performed BY a service ON BEHALF OF a user, where the
+   * user legitimately lacks the permission the operation needs. The canonical
+   * case is the booking-time wallet debit: shipment-service must move money
+   * (`wallet:manage:all`), but the outlet booking the shipment holds only
+   * `wallet:read:own`. Authorizing that hop against the caller's permissions
+   * makes booking impossible for every non-admin role.
+   *
+   * A service principal proves itself with `X-Service-Token` === INTERNAL_SECRET.
+   * That header is stripped from inbound client requests at the API gateway, so
+   * it can only originate from a service on the internal network.
+   *
+   * @param {string} module
+   * @param {string} action
+   * @param {string} scope
+   */
+  requirePermissionOrService: (module, action, scope = "all") => {
+    return async (req, res, next) => {
+      const presented = req.header("X-Service-Token");
+      const expected = process.env.INTERNAL_SECRET;
+
+      if (expected && presented && presented === expected) {
+        req.isServicePrincipal = true;
+        req.servicePrincipalName = req.header("X-Service-Name") || "unknown";
+        return next();
+      }
+
+      return authMiddleware.requirePermission(module, action, scope)(
+        req,
+        res,
+        next,
+      );
+    };
   },
 
   // Permission-based authorization (LEGACY - use requirePermission instead)

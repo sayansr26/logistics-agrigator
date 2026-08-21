@@ -120,9 +120,20 @@ app.get("/openapi.json", (req, res) => {
 // Routes
 const permissionsRoutes = require("./routes/permissions");
 const adminLogsRoutes = require("./routes/adminLogs");
+const {
+  externalAuthRouter,
+  managementRouter: apiCredentialRoutes,
+  internalRouter: apiCredentialInternalRoutes,
+} = require("./routes/apiCredentials");
 app.use("/auth", authRoutes);
 app.use("/api/v1/permissions", permissionsRoutes);
 app.use("/api/v1/admin", adminLogsRoutes);
+// External API credential exchange (public at the gateway) and the portal's
+// credential manager. Kept on separate prefixes: the gateway confines
+// /api/v1/external/* to external-api audience tokens.
+app.use("/api/v1/external/auth", externalAuthRouter);
+app.use("/api/v1/api-credentials", apiCredentialRoutes);
+app.use("/api/v1/internal", apiCredentialInternalRoutes);
 
 /**
  * @swagger

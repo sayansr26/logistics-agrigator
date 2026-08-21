@@ -93,10 +93,12 @@ router.get(
  * GET /api/v1/wallet/admin/wallet
  * Get or create wallet for a specific user (userId in query)
  */
+// Service-callable: shipment-service resolves the outlet's wallet during
+// booking, on behalf of a user who only holds wallet:read:own.
 router.get(
   "/admin/wallet",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "manage", "all"),
+  authMiddleware.requirePermissionOrService("wallet", "manage", "all"),
   validateQuery(adminGetWalletQuerySchema),
   getAdminWallet,
 );
@@ -129,10 +131,13 @@ router.post(
  * POST /api/v1/wallet/admin/debit
  * Debit a user's wallet via external wallet API
  */
+// Service-callable: the booking-time debit. The outlet paying for the shipment
+// holds only wallet:read:own, so gating this on the caller's permissions makes
+// booking impossible for every non-admin role.
 router.post(
   "/admin/debit",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "manage", "all"),
+  authMiddleware.requirePermissionOrService("wallet", "manage", "all"),
   validateBody(adminWalletTransactionSchema),
   adminDebitWallet,
 );
@@ -141,10 +146,11 @@ router.post(
  * POST /api/v1/wallet/admin/refund
  * Refund to a user's wallet via external wallet API
  */
+// Service-callable: the cancellation refund, same rationale as /admin/debit.
 router.post(
   "/admin/refund",
   authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "manage", "all"),
+  authMiddleware.requirePermissionOrService("wallet", "manage", "all"),
   validateBody(adminWalletTransactionSchema),
   refundWallet,
 );

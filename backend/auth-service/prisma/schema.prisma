@@ -44,6 +44,7 @@ model User {
   sessions        Session[]
   auditLogs       AuditLog[]
   userPermissions UserPermission[]
+  apiCredentials  ApiCredential[]  @relation("ApiCredentialActingUser")
 
   @@index([clientId])
   @@index([parentClientId])
@@ -155,4 +156,73 @@ enum AccessLevel {
 enum CommissionType {
   FLAT
   PERCENTAGE
+}
+
+/// External API credential.
+///
+/// Machine credentials for the External Shipment API. A credential is
+/// exchanged for a short-lived JWT at POST /api/v1/external/auth/token.
+///
+/// A credential always binds to exactly ONE acting principal, resolved once at
+/// creation time and frozen here. That is what lets the existing shipment
+/// controllers work unchanged: a credential with `outletId` set always mints a
+/// role="outlet" token for `actingUserId`, so applyScopeFilter() scopes the
+/// data and resolveOutletContext() finds its context with no body params -
+/// regardless of whether a superadmin or the outlet itself created the key.
+model ApiCredential {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Public identifier, e.g. "lgk_live_9f2a...". Safe to display and log.
+  clientId    String @unique @map("client_id") @db.VarChar(64)
+  /// bcrypt hash of the secret. The plaintext is shown exactly once, at
+  /// creation/rotation, and is never recoverable afterwards.
+  secretHash  String @map("secret_hash") @db.VarChar(255)
+  /// Last 4 chars of the secret, for "sk_live_...a1b2" style display.
+  secretLast4 String @map("secret_last4") @db.VarChar(8)
+
+  /// Human label chosen by the owner, e.g. "Warehouse ERP".
+  name String @db.VarChar(120)
+
+  /// Frozen acting principal (see model doc).
+  actingUserId String  @map("acting_user_id") @db.Uuid
+  /// Outlet phone - the external wallet API's user id. Frozen at creation so
+  /// booking never needs a per-request lookup.
+  actingPhone  String? @map("acting_phone") @db.VarChar(20)
+  /// Tenant of the acting principal.
+  tenantId     String? @map("tenant_id") @db.Uuid
+  /// user-service Outlet.id. NULL means a platform-level (superadmin) key.
+  outletId     String? @map("outlet_id") @db.Uuid
+  role         Role
+
+  /// Permission strings ("shipment:create:own"). Intersected with the role's
+  /// defaults at mint time, so a credential is always <= its owner's rights.
+  scopes String[] @map("scopes")
+
+  environment     ApiEnvironment @default(live)
+  /// Empty = allow any source IP.
+  ipAllowlist     String[]       @map("ip_allowlist")
+  rateLimitPerMin Int            @default(60) @map("rate_limit_per_min")
+  /// Dated API version this credential is pinned to, e.g. "2026-08-21".
+  pinnedVersion   String?        @map("pinned_version") @db.VarChar(20)
+
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  createdByUserId String @map("created_by_user_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  actingUser User @relation("ApiCredentialActingUser", fields: [actingUserId], references: [id], onDelete: Cascade)
+
+  @@index([actingUserId])
+  @@index([outletId])
+  @@index([revokedAt])
+  @@map("api_credentials")
+}
+
+enum ApiEnvironment {
+  live
+  test
 }

@@ -153,6 +153,10 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "user:read:own",
     "user:update:own",
     "wallet:read:own",
+    // Required to price a shipment: partner-service's /calculate and /quote
+    // endpoints demand partner:read:own, so without this an outlet cannot
+    // fetch rates and therefore cannot book at all.
+    "partner:read:own",
   ],
 
   affiliate: [

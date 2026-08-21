@@ -1002,3 +1002,45 @@ Derive the "leaving" condition from **store state**, not just local state: on a 
 **Architecture Status**: Stable
 **Last Pattern Review**: August 4, 2026
 **Recent Additions**: Client Session Hydration & Transparent Token Refresh Pattern, Semantic Type Normalization Pattern, Shipment Rerate/Revalue Pattern, Strict Partner Eligibility Pattern (DISTANCE fallback April 2026), Shipment Quote API & Rate Cache Pattern, Dynamic Provider Capability Contract Pattern, Terminal Status Protection Pattern, Global Webhook Ingestion Pattern, Provider-First Cancellation Pattern, Inter-Service Communication Pattern, External Wallet Phone-Based Identity Pattern, Shipment Payment Flow Pattern, Quote Snapshot Storage Pattern, RTK Query Cache Invalidation Pattern, Extensible Enum Pattern, Charges Rule Engine Pattern, RTK Query Response Envelope Pattern, Outlet Module Pattern, Audit Action Standardization, Geography-First Pincode Search Pattern
+
+## Service Principal Authorization (added August 21, 2026)
+
+Some operations are performed **by a service on behalf of a user** who
+legitimately lacks the permission the operation needs. The canonical case is the
+booking-time wallet debit: shipment-service must move money
+(`wallet:manage:all`), but the outlet booking the shipment holds only
+`wallet:read:own`. Authorizing that hop against the caller's permissions makes
+booking impossible for every non-admin role.
+
+```javascript
+// wallet-service/routes/wallet.js
+router.post(
+  "/admin/debit",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermissionOrService("wallet", "manage", "all"),
+  validateBody(adminWalletTransactionSchema),
+  adminDebitWallet,
+);
+```
+
+A service proves itself with `X-Service-Token === INTERNAL_SECRET`; otherwise the
+normal permission check runs. **The API gateway strips `x-service-token`,
+`x-service-name`, `x-internal-request` and every `x-user-*` header from inbound
+client requests**, so these can only originate on the internal network. Apply
+this only to endpoints a service genuinely calls on a user's behalf — reporting
+and admin endpoints keep the strict permission gate.
+
+## External API Token Confinement (added August 21, 2026)
+
+Every JWT in this system is signed with the same `JWT_SECRET`, and
+`shared/lib/auth.js:authenticate` accepts any valid one. External API tokens are
+therefore confined by **audience↔path binding at the gateway**, which is the only
+public ingress:
+
+- `aud === "external-api"` outside `/api/v1/external/*` → 401 `EXTERNAL_TOKEN_PATH_SCOPE`
+- a portal session token _inside_ `/api/v1/external/*` → 401 `SESSION_TOKEN_NOT_ALLOWED`
+
+External tokens deliberately have **no `session:<userId>` Redis key** — their
+liveness check is credential/token revocation instead. Anything mounted under
+`/api/v1/external/*` is therefore reachable only by API credentials; portal-facing
+management surfaces (e.g. `/api/v1/api-credentials`) must live outside that prefix.

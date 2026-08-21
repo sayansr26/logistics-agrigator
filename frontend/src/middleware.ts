@@ -33,6 +33,9 @@ const ROLE_RESTRICTED_ROUTES: Record<string, string[]> = {
   "/partners": ["superadmin", "admin"],
   "/settings/system": ["superadmin", "admin"],
   "/analytics/admin": ["superadmin", "admin"],
+  // External API credentials act as an outlet and can move that outlet's money,
+  // so only the outlet itself and superadmin may manage them.
+  "/developers": ["superadmin", "outlet"],
 };
 
 // Routes that require authentication but any role can access
@@ -41,6 +44,7 @@ const AUTH_REQUIRED_ROUTES = [
   "/profile",
   "/settings",
   "/notifications",
+  "/developers",
 ];
 
 export function middleware(request: NextRequest) {

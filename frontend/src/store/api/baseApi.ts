@@ -271,6 +271,7 @@ export const baseApi = createApi({
     "AiSuggestion",
     "BulkJob",
     "NDR",
+    "ApiCredential",
   ],
 
   // Define endpoints in separate API slices

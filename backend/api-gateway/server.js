@@ -23,6 +23,26 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 app.use(cors(corsConfig.getCorsOptions()));
 
+/**
+ * Strip privilege-bearing headers from inbound client requests.
+ *
+ * Downstream services trust `x-internal-request` (service-to-service origin)
+ * and `x-service-token` (service principal, which bypasses the caller's
+ * permission check on money-movement endpoints). Both are set by the gateway or
+ * by services on the internal network. A client must never be able to supply
+ * its own — this is the boundary where that is guaranteed.
+ */
+app.use((req, _res, next) => {
+  delete req.headers["x-service-token"];
+  delete req.headers["x-service-name"];
+  delete req.headers["x-internal-request"];
+  delete req.headers["x-user-id"];
+  delete req.headers["x-user-email"];
+  delete req.headers["x-user-role"];
+  delete req.headers["x-user-client-id"];
+  next();
+});
+
 // Logging - use shared logger
 app.use(logger.httpLogger);
 
@@ -465,6 +485,22 @@ const services = {
     },
   },
   // Internal Service Communication (in user service) - for inter-service bootstrap, etc.
+  // External (public) Shipment API. Tokens for this prefix carry
+  // aud="external-api" and are rejected everywhere else by authValidator.
+  external: {
+    target: process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
+    pathRewrite: {
+      "^/api/v1/external": "/api/v1/external",
+    },
+  },
+  // Portal-facing credential manager. Deliberately NOT under /api/v1/external -
+  // the gateway bars session tokens from that prefix.
+  "api-credentials": {
+    target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
+    pathRewrite: {
+      "^/api/v1/api-credentials": "/api/v1/api-credentials",
+    },
+  },
   internal: {
     target: process.env.USER_SERVICE_URL || "http://user-service:3003",
     pathRewrite: {
@@ -943,6 +979,44 @@ app.use(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// External API credential exchange -> auth-service.
+//
+// MUST be registered BEFORE the generic service loop: that loop registers
+// `/api/v1/external` (-> shipment-service), which would otherwise swallow
+// `/api/v1/external/auth/*` since Express matches on prefix.
+// ---------------------------------------------------------------------------
+logger.info("Adding manual proxy for External API auth endpoints");
+app.use(
+  "/api/v1/external/auth",
+  createProxyMiddleware({
+    target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
+    changeOrigin: true,
+    pathRewrite: { "^/api/v1/external/auth": "/api/v1/external/auth" },
+    parseReqBody: false,
+    onError: (err, req, res) => {
+      logger.error(`Proxy error for external auth:`, {
+        error: err.message,
+        path: req.path,
+      });
+      res.status(503).json({
+        success: false,
+        error: {
+          type: "service_unavailable_error",
+          code: "service_unavailable",
+          message: "Authentication service is currently unavailable",
+        },
+      });
+    },
+    onProxyReq: (proxyReq) => {
+      const internalSecret = process.env.INTERNAL_SECRET;
+      if (internalSecret) {
+        proxyReq.setHeader("X-Internal-Request", internalSecret);
+      }
+    },
+  }),
+);
+
 // Create proxy middleware for each service
 Object.keys(services).forEach((service) => {
   const config = services[service];
@@ -1029,7 +1103,7 @@ app.use(
         },
       });
     },
-    onProxyReq: (proxyReq, req, _res) => {
+    onProxyReq: (proxyReq, _req, _res) => {
       const internalSecret = process.env.INTERNAL_SECRET;
       if (internalSecret) {
         proxyReq.setHeader("X-Internal-Request", internalSecret);
@@ -1065,7 +1139,7 @@ app.use(
         },
       });
     },
-    onProxyReq: (proxyReq, req, _res) => {
+    onProxyReq: (proxyReq, _req, _res) => {
       const internalSecret = process.env.INTERNAL_SECRET;
       if (internalSecret) {
         proxyReq.setHeader("X-Internal-Request", internalSecret);

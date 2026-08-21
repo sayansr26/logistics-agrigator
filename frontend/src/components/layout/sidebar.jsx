@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Truck,
+  Code2,
   Package,
   Users,
   BarChart3,
@@ -220,6 +221,13 @@ const getNavigationSections = () => {
           href: "/cod/my-settlements",
           icon: Wallet,
           roles: ["outlet"],
+          disabled: false,
+        },
+        {
+          title: "Developers",
+          href: "/developers",
+          icon: Code2,
+          roles: ["superadmin", "outlet"],
           disabled: false,
         },
       ].filter(canSeeMenuItem),

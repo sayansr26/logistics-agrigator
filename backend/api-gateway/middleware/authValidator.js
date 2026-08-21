@@ -18,7 +18,17 @@ const publicPaths = [
   "/api/v1/auth/refresh",
   "/api/v1/geography", // All geographical data endpoints (public)
   "/api/v1/shipments/webhook", // Courier provider webhook callbacks (public)
+  // External API credential exchange. NOTE: only this exact path is public -
+  // the rest of /api/v1/external/auth (credential CRUD) requires a session JWT.
+  "/api/v1/external/auth/token",
 ];
+
+/**
+ * Path prefix owned by the External (public) API. Tokens minted for external
+ * API credentials carry aud="external-api" and are confined to this prefix.
+ */
+const EXTERNAL_API_PREFIX = "/api/v1/external";
+const EXTERNAL_API_AUDIENCE = "external-api";
 
 /**
  * Check if the request path matches any public path
@@ -27,8 +37,45 @@ const publicPaths = [
  */
 function isPublicPath(path) {
   return publicPaths.some((publicPath) => {
-    // Exact match or starts with match (for paths with parameters)
-    return path === publicPath || path.startsWith(publicPath);
+    // Exact match, or a true sub-path. Must NOT be a bare startsWith: that
+    // would make "/api/v1/external/auth/token" whitelist the sibling
+    // "/api/v1/external/auth/token-credentials" style paths too.
+    return path === publicPath || path.startsWith(`${publicPath}/`);
+  });
+}
+
+/**
+ * True when the request targets the External (public) API.
+ */
+function isExternalApiPath(path) {
+  return (
+    path === EXTERNAL_API_PREFIX || path.startsWith(`${EXTERNAL_API_PREFIX}/`)
+  );
+}
+
+/**
+ * Reject a request in the envelope appropriate to its surface.
+ *
+ * The External API is a public contract, so its failures must use the public
+ * error shape even when the gateway rejects them before they reach the service.
+ */
+function reject(req, res, statusCode, code, message, externalType) {
+  if (isExternalApiPath(req.path)) {
+    return res.status(statusCode).json({
+      success: false,
+      error: {
+        type: externalType || "authentication_error",
+        code: code.toLowerCase(),
+        message,
+      },
+      request_id: null,
+    });
+  }
+
+  return res.status(statusCode).json({
+    status: "error",
+    error: { code, message },
+    meta: { timestamp: new Date().toISOString(), path: req.path },
   });
 }
 
@@ -57,17 +104,13 @@ exports.validateJWT = async (req, res, next) => {
         ip: req.ip,
         method: req.method,
       });
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "NO_TOKEN",
-          message: "No authentication token provided",
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-          path: req.path,
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "NO_TOKEN",
+        "No authentication token provided",
+      );
     }
 
     // Check for Bearer token format
@@ -75,36 +118,71 @@ exports.validateJWT = async (req, res, next) => {
       logger.warn(`Invalid authorization header format for ${req.path}`, {
         ip: req.ip,
       });
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "INVALID_TOKEN_FORMAT",
-          message: "Authorization header must be in format: Bearer <token>",
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "INVALID_TOKEN_FORMAT",
+        "Authorization header must be in format: Bearer <token>",
+      );
     }
 
     // Extract token
     const token = authHeader.replace("Bearer ", "");
 
     if (!token) {
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "NO_TOKEN",
-          message: "No authentication token provided",
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "NO_TOKEN",
+        "No authentication token provided",
+      );
     }
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // ==================================================================
+    // Audience <-> path binding.
+    //
+    // Every token in this system is signed with the same JWT_SECRET, so
+    // without this check an External API token would be accepted by every
+    // internal service too (wallet, users, ...) - turning an API key leak
+    // into a full account takeover. The gateway is the only public ingress,
+    // so this is the one place the confinement can be enforced.
+    // ==================================================================
+    const isExternalPath = isExternalApiPath(req.path);
+    const isExternalToken = decoded.aud === EXTERNAL_API_AUDIENCE;
+
+    if (isExternalToken && !isExternalPath) {
+      logger.warn(`External API token rejected outside its scope`, {
+        path: req.path,
+        userId: decoded.userId,
+        apiCredentialId: decoded.apiCredentialId,
+      });
+      return reject(
+        req,
+        res,
+        401,
+        "EXTERNAL_TOKEN_PATH_SCOPE",
+        "This token is only valid for the External API (/api/v1/external/*).",
+      );
+    }
+
+    if (isExternalPath && !isExternalToken) {
+      logger.warn(`Session token rejected on External API path`, {
+        path: req.path,
+        userId: decoded.userId,
+      });
+      return reject(
+        req,
+        res,
+        401,
+        "SESSION_TOKEN_NOT_ALLOWED",
+        "The External API requires a token issued by POST /api/v1/external/auth/token.",
+      );
+    }
 
     // Add user information to request object
     req.user = {
@@ -149,43 +227,33 @@ exports.validateJWT = async (req, res, next) => {
 
     // Handle specific JWT errors
     if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "TOKEN_EXPIRED",
-          message: "Authentication token has expired",
-          expiredAt: error.expiredAt,
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "TOKEN_EXPIRED",
+        "Authentication token has expired",
+      );
     }
 
     if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "INVALID_TOKEN",
-          message: "Invalid authentication token",
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "INVALID_TOKEN",
+        "Invalid authentication token",
+      );
     }
 
     if (error.name === "NotBeforeError") {
-      return res.status(401).json({
-        status: "error",
-        error: {
-          code: "TOKEN_NOT_ACTIVE",
-          message: "Token is not yet active",
-        },
-        meta: {
-          timestamp: new Date().toISOString(),
-        },
-      });
+      return reject(
+        req,
+        res,
+        401,
+        "TOKEN_NOT_ACTIVE",
+        "Token is not yet active",
+      );
     }
 
     // Generic error response
