@@ -3,7 +3,7 @@
 import { FileCheck2, Wallet, Route } from "lucide-react";
 import Link from "next/link";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
-import { useGetMyWalletInfoQuery } from "@/store/api/endpoints/walletApi";
+import { useBookingWallet } from "@/hooks/useBookingWallet";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", {
@@ -15,12 +15,9 @@ function fmt(n: number) {
 export function ConfirmSummary() {
   const store = useShipmentFormStore();
   const quote = store.selectedQuote;
-  const { data: walletInfo } = useGetMyWalletInfoQuery();
-  const wallet =
-    (walletInfo as { data?: { wallet?: { balance?: number } } } | undefined)
-      ?.data?.wallet ||
-    (walletInfo as { wallet?: { balance?: number } } | undefined)?.wallet;
-  const walletBalance: number = Number(wallet?.balance ?? 0);
+  // Same wallet the booking will debit — an admin booking for an outlet spends
+  // the outlet's balance, not their own.
+  const { balance: walletBalance, isKnown: walletKnown } = useBookingWallet();
 
   const markupValue = parseFloat(store.markupValue) || 0;
   const systemCharge = quote?.totalAmount ?? 0;
@@ -40,8 +37,11 @@ export function ConfirmSummary() {
 
   const isPrepaid = store.paymentType === "PREPAID";
   const shortBy =
-    isPrepaid && quote ? Math.max(0, systemCharge - walletBalance) : 0;
-  const insufficient = isPrepaid && !!quote && shortBy > 0;
+    isPrepaid && quote && walletKnown
+      ? Math.max(0, systemCharge - walletBalance)
+      : 0;
+  // Never call a booking short while the balance is still loading.
+  const insufficient = isPrepaid && !!quote && walletKnown && shortBy > 0;
 
   return (
     <div className="bg-card rounded-2xl p-8 border border-border shadow-sm max-w-2xl mx-auto space-y-6">
@@ -166,14 +166,9 @@ export function ConfirmSummary() {
 
 export function useConfirmInsufficient() {
   const store = useShipmentFormStore();
-  const { data: walletInfo } = useGetMyWalletInfoQuery();
-  const wallet =
-    (walletInfo as { data?: { wallet?: { balance?: number } } } | undefined)
-      ?.data?.wallet ||
-    (walletInfo as { wallet?: { balance?: number } } | undefined)?.wallet;
-  const walletBalance: number = Number(wallet?.balance ?? 0);
+  const { balance: walletBalance, isKnown: walletKnown } = useBookingWallet();
   const quote = store.selectedQuote;
   const isPrepaid = store.paymentType === "PREPAID";
-  if (!quote || !isPrepaid) return false;
+  if (!quote || !isPrepaid || !walletKnown) return false;
   return walletBalance < quote.totalAmount;
 }

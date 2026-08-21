@@ -98,6 +98,7 @@ export function DocketSection({ isAdminLike }: { isAdminLike: boolean }) {
   function handleOutletSelect(outlet: Outlet) {
     store.setField("outletId", outlet.id);
     store.setField("outletUserId", outlet.phone || "");
+    store.setField("outletName", outlet.name || outlet.phone || "");
     // Cascade: a different outlet has a different address book, so every
     // previously-picked address (and the same-as flags that depend on them)
     // must be cleared rather than silently pointing at the old outlet's ids.

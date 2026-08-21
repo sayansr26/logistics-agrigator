@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Wallet, Plus } from "lucide-react";
-import { useGetMyWalletInfoQuery } from "@/store/api/endpoints/walletApi";
+import { useBookingWallet } from "@/hooks/useBookingWallet";
 
 interface WalletCardProps {
   /** System charge of the currently-selected quote, if any - drives the sufficiency badge. */
@@ -10,13 +10,11 @@ interface WalletCardProps {
 }
 
 export function WalletCard({ requiredAmount }: WalletCardProps) {
-  const { data: walletInfo } = useGetMyWalletInfoQuery();
-  const wallet =
-    (walletInfo as { data?: { wallet?: { balance?: number } } } | undefined)
-      ?.data?.wallet ||
-    (walletInfo as { wallet?: { balance?: number } } | undefined)?.wallet;
-  const balance: number = Number(wallet?.balance ?? 0);
-  const sufficient = requiredAmount == null || balance >= requiredAmount;
+  const { balance, isKnown, bookingForOutlet, outletName } = useBookingWallet();
+
+  // Don't flash "Insufficient" while the balance is still loading.
+  const sufficient =
+    !isKnown || requiredAmount == null || balance >= requiredAmount;
 
   return (
     <div className="bg-gradient-to-br from-primary/10 via-card to-card border border-primary/20 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -26,7 +24,9 @@ export function WalletCard({ requiredAmount }: WalletCardProps) {
         </div>
         <div>
           <span className="text-xs text-muted-foreground font-medium">
-            Available Wallet Balance
+            {bookingForOutlet
+              ? `Wallet Balance — ${outletName || "selected outlet"}`
+              : "Available Wallet Balance"}
           </span>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-2xl font-black text-foreground tracking-tight">

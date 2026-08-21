@@ -47,6 +47,8 @@ export interface ShipmentFormState {
   serviceType: "ALL" | "STANDARD" | "EXPRESS" | "ECONOMY";
   outletId: string;
   outletUserId: string;
+  /** Display name of the selected outlet, for labels like the wallet card. */
+  outletName: string;
   pickupAddress: string;
   pickupAddressId: string;
   rtoAddressId: string;
@@ -258,6 +260,7 @@ const DEFAULT_STATE = {
   serviceType: "ALL" as const,
   outletId: "",
   outletUserId: "",
+  outletName: "",
   pickupAddress: "",
   pickupAddressId: "",
   rtoAddressId: "",
