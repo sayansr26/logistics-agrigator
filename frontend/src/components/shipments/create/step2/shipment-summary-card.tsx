@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Pencil } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import type { OutletAddress } from "@/store/api/endpoints/outletApi";
 
 interface ShipmentSummaryCardProps {
@@ -15,7 +15,7 @@ export function ShipmentSummaryCard({
   rtoAddr,
 }: ShipmentSummaryCardProps) {
   const router = useRouter();
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
 
   const totalInvoiceAmount = store.invoices.reduce(
     (sum, inv) => sum + (parseFloat(inv.invoiceAmt) || 0),

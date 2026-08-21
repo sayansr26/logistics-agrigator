@@ -1,13 +1,13 @@
 "use client";
 
 import { Package } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 
 const inputClass =
   "w-full text-xs px-3 py-2 rounded-xl border border-input bg-background focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-medium text-foreground";
 
 export function OrderSection() {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const isB2B = store.shipmentType === "B2B";
 
   return (

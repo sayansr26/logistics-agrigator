@@ -2,17 +2,14 @@
 
 import { useMemo } from "react";
 import { Boxes, Plus, Trash2 } from "lucide-react";
-import {
-  assignedBoxCount,
-  boxCount,
-  useShipmentFormStore,
-} from "@/store/shipment-form-store";
+import { assignedBoxCount, boxCount } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 
 const inputClass =
   "w-full text-xs p-2 rounded-lg border border-input bg-background focus:outline-none focus:border-primary text-center font-medium text-foreground";
 
 export function DimensionsSection() {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
 
   const totalWeight = store.actualWeight || "0";
 
@@ -144,7 +141,7 @@ export function DimensionsSection() {
 }
 
 export function useTotalBoxDims() {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   return useMemo(() => {
     const first = store.boxes[0];
     return {

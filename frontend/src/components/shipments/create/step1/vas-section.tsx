@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SlidersHorizontal, ChevronDown, Loader2 } from "lucide-react";
 import { useGetBookingQuestionsQuery } from "@/store/api/endpoints/chargesApi";
 import type { BookingQuestion } from "@/store/api/endpoints/chargesApi";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import { isVasAnswered } from "@/lib/utils/vas";
 
 /**
@@ -15,7 +15,7 @@ import { isVasAnswered } from "@/lib/utils/vas";
  */
 export function VasSection() {
   const [open, setOpen] = useState(false);
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const { data, isLoading } = useGetBookingQuestionsQuery();
   const questions = data?.data?.questions || [];
   const answeredCount = questions.filter((q) =>
@@ -80,7 +80,7 @@ export function VasSection() {
 }
 
 function VasQuestionField({ question }: { question: BookingQuestion }) {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const spec = question.question;
   const answer = store.vasAnswers[question.chargeCode];
 

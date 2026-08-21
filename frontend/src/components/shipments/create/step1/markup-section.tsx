@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { TrendingUp } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import {
   useGetMyOutletQuery,
   useGetOutletQuery,
@@ -24,7 +24,7 @@ export function MarkupSection({
   isOutlet: boolean;
   isAdminLike?: boolean;
 }) {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const selectedOutletId = store.outletId;
 
   const { data: myOutletData } = useGetMyOutletQuery(undefined, {

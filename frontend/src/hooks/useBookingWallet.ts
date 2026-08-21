@@ -5,7 +5,7 @@ import {
   useGetOrCreateWalletQuery,
 } from "@/store/api/endpoints/walletApi";
 import { useRole } from "@/hooks/useRole";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentFormSelector } from "@/components/shipments/create/form-store-context";
 
 type WalletLike = { balance?: number | string };
 type Envelope = {
@@ -69,8 +69,8 @@ export interface BookingWallet {
  */
 export function useBookingWallet(): BookingWallet {
   const { isSystemAdmin } = useRole();
-  const outletUserId = useShipmentFormStore((s) => s.outletUserId);
-  const outletName = useShipmentFormStore((s) => s.outletName);
+  const outletUserId = useShipmentFormSelector((s) => s.outletUserId);
+  const outletName = useShipmentFormSelector((s) => s.outletName);
 
   const bookingForOutlet = isSystemAdmin() && Boolean(outletUserId);
 

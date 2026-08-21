@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo } from "react";
 import { Plus, Receipt, Trash2, Upload } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 
 const inputClass =
   "w-full text-xs px-2.5 py-1.5 rounded-lg border border-input bg-background focus:outline-none focus:border-primary text-foreground font-medium";
 
 export function InvoicePaymentSection() {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const isB2B = store.shipmentType === "B2B";
 
   // One invoice row by default for both types; B2B can add more (several

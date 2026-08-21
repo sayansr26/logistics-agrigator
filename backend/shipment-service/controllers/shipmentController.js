@@ -1972,6 +1972,18 @@ async function getShipmentById(req, res) {
             createdAt: "desc",
           },
         },
+        // Needed to rehydrate the edit wizard, which reconstructs the original
+        // per-box dimension rows and invoice rows from these.
+        boxes: {
+          orderBy: {
+            boxNumber: "asc",
+          },
+        },
+        invoices: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
       },
     });
 
@@ -1992,6 +2004,36 @@ async function getShipmentById(req, res) {
       width: parseFloat(shipment.width),
       height: parseFloat(shipment.height),
       value: shipment.value ? parseFloat(shipment.value) : null,
+      codBaseAmount: shipment.codBaseAmount
+        ? parseFloat(shipment.codBaseAmount)
+        : null,
+      systemCharge: shipment.systemCharge
+        ? parseFloat(shipment.systemCharge)
+        : null,
+      markupValue: shipment.markupValue
+        ? parseFloat(shipment.markupValue)
+        : null,
+      markupAmount: shipment.markupAmount
+        ? parseFloat(shipment.markupAmount)
+        : null,
+      gstPercentage: shipment.gstPercentage
+        ? parseFloat(shipment.gstPercentage)
+        : null,
+      boxes: (shipment.boxes || []).map((box) => ({
+        id: box.id,
+        boxNumber: box.boxNumber,
+        length: parseFloat(box.length),
+        width: parseFloat(box.width),
+        height: parseFloat(box.height),
+      })),
+      invoices: (shipment.invoices || []).map((inv) => ({
+        id: inv.id,
+        eWayBillNo: inv.eWayBillNo,
+        invoiceNo: inv.invoiceNo,
+        invoiceAmt: parseFloat(inv.invoiceAmt),
+        invoiceDate: inv.invoiceDate,
+        attachmentUrl: inv.attachmentUrl,
+      })),
     };
 
     // Fetch provider capabilities if partner is assigned
@@ -2070,6 +2112,111 @@ async function getShipmentById(req, res) {
 /**
  * Update shipment
  */
+/**
+ * Fields that only the full pre-booking edit may touch. Their presence in the
+ * body is what distinguishes a full edit from the lightweight lifecycle patch
+ * (status / specialInstructions) that any shipment accepts at any time.
+ */
+const FULL_EDIT_FIELDS = [
+  "shipmentType",
+  "shipmentDirection",
+  "pickupAddressId",
+  "pickupAddress",
+  "deliveryAddress",
+  "rtoSameAsPickup",
+  "rtoAddress",
+  "billingSameAsDelivery",
+  "billingAddress",
+  "deliveryAddressId",
+  "rtoAddressId",
+  "billingAddressId",
+  "productDescription",
+  "hsnCode",
+  "gstPercentage",
+  "packageDetails",
+  "numberOfBoxes",
+  "boxes",
+  "invoices",
+  "paymentType",
+  "codAmount",
+  "serviceType",
+  "selectedPartnerId",
+  "quoteSnapshot",
+  "quoteToken",
+  "markup",
+  "vasSelections",
+];
+
+/**
+ * Changing any of these invalidates the price the shipment currently carries,
+ * so a shipment that already has a partner must come back with a fresh signed
+ * quote when one of them moves.
+ */
+const PRICING_RELEVANT_FIELDS = [
+  "pickupAddress",
+  "deliveryAddress",
+  "packageDetails",
+  "numberOfBoxes",
+  "boxes",
+  "paymentType",
+  "codAmount",
+  "serviceType",
+  "shipmentType",
+  "vasSelections",
+  "markup",
+];
+
+/**
+ * A shipment is only structurally editable before it becomes a real parcel:
+ * once an AWB exists the courier holds a copy of these details and changing
+ * them here would silently desync the two. Weight/dimension corrections after
+ * booking belong to the re-rate/dispute flow instead.
+ */
+function assertShipmentEditable(shipment) {
+  if (shipment.status !== "CREATED" || shipment.awbNumber) {
+    const err = new APIError(
+      shipment.awbNumber
+        ? "This shipment is already booked with the courier and can no longer be edited. Use re-rate to correct weight or dimensions."
+        : `A shipment in ${shipment.status} status can no longer be edited.`,
+      409,
+      "SHIPMENT_NOT_EDITABLE",
+    );
+    err.details = {
+      status: shipment.status,
+      bookingStatus: shipment.bookingStatus,
+      awbNumber: shipment.awbNumber || null,
+    };
+    throw err;
+  }
+}
+
+/** Rebuild an addressSchema-shaped object from the shipment's stored columns. */
+function addressFromColumns(shipment, prefix) {
+  const get = (suffix) => shipment[`${prefix}${suffix}`];
+  return {
+    name: get("Name"),
+    phone: get("Phone"),
+    email: get("Email") || null,
+    addressLine1: get("Line1"),
+    addressLine2: get("Line2") || null,
+    landmark: get("Landmark") || null,
+    city: get("City"),
+    state: get("State"),
+    pincode: get("Pincode"),
+    country: get("Country") || "India",
+  };
+}
+
+/**
+ * Update shipment.
+ *
+ * Serves two request shapes (see updateShipmentSchema):
+ *  - lifecycle patch: `status` and/or `specialInstructions`, allowed always;
+ *  - full pre-booking edit: the same field set POST /shipments accepts,
+ *    allowed only while the shipment is CREATED with no AWB. It re-prices
+ *    against a freshly signed quote, reconciles the wallet, and replaces the
+ *    box/invoice rows.
+ */
 async function updateShipment(req, res) {
   try {
     const userId = req.user.userId;
@@ -2081,13 +2228,11 @@ async function updateShipment(req, res) {
     let where = { id };
     where = authUtils.applyScopeFilter(req, where);
 
-    // Check if shipment exists
     const existingShipment = await prisma.shipment.findFirst({
       where,
-      select: {
-        id: true,
-        status: true,
-        specialInstructions: true,
+      include: {
+        boxes: { orderBy: { boxNumber: "asc" } },
+        invoices: { orderBy: { createdAt: "asc" } },
       },
     });
 
@@ -2095,7 +2240,25 @@ async function updateShipment(req, res) {
       throw new NotFoundError("Shipment not found");
     }
 
-    // Prepare update data
+    const touchedFullFields = FULL_EDIT_FIELDS.filter(
+      (field) => updateData[field] !== undefined,
+    );
+
+    if (touchedFullFields.length > 0) {
+      return await applyFullShipmentEdit({
+        req,
+        res,
+        shipment: existingShipment,
+        updateData,
+        touchedFullFields,
+        userId,
+        clientId,
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // Lightweight lifecycle patch
+    // ------------------------------------------------------------------
     const prismaUpdateData = {};
 
     if (updateData.status && updateData.status !== existingShipment.status) {
@@ -2145,7 +2308,10 @@ async function updateShipment(req, res) {
         resource: "Shipment",
         resourceId: id,
         changes: {
-          before: existingShipment,
+          before: {
+            status: existingShipment.status,
+            specialInstructions: existingShipment.specialInstructions,
+          },
           after: prismaUpdateData,
         },
         metadata: {
@@ -2185,6 +2351,16 @@ async function updateShipment(req, res) {
       return res.status(404).json(errorResponse);
     }
 
+    if (error instanceof ConflictError) {
+      const errorResponse = APIResponse.error(
+        error.message,
+        "CONFLICT",
+        error.details || null,
+        409,
+      );
+      return res.status(409).json(errorResponse);
+    }
+
     if (error instanceof ValidationError) {
       const errorResponse = APIResponse.error(
         error.message,
@@ -2193,12 +2369,690 @@ async function updateShipment(req, res) {
       return res.status(400).json(errorResponse);
     }
 
+    if (error instanceof APIError) {
+      const statusCode = error.statusCode || 500;
+      const errorResponse = APIResponse.error(
+        error.message,
+        error.code || "SHIPMENT_UPDATE_FAILED",
+        error.details || null,
+        statusCode,
+      );
+      return res.status(statusCode).json(errorResponse);
+    }
+
     const errorResponse = APIResponse.error(
       "Failed to update shipment",
       "SHIPMENT_UPDATE_FAILED",
     );
     res.status(500).json(errorResponse);
   }
+}
+
+/**
+ * Full pre-booking edit: re-runs the create-time pricing, wallet and
+ * persistence logic against an existing CREATED shipment.
+ *
+ * Every unspecified field falls back to what the shipment already holds, so a
+ * partial body behaves like a patch while a complete body (what the edit
+ * wizard sends) behaves like a rewrite.
+ */
+async function applyFullShipmentEdit({
+  req,
+  res,
+  shipment,
+  updateData,
+  touchedFullFields,
+  userId,
+  clientId,
+}) {
+  assertShipmentEditable(shipment);
+
+  const id = shipment.id;
+  const authToken = req.headers.authorization?.replace("Bearer ", "");
+
+  // ------------------------------------------------------------------
+  // 1. Merge the incoming body over the stored record
+  // ------------------------------------------------------------------
+  const pick = (field, fallback) =>
+    updateData[field] !== undefined ? updateData[field] : fallback;
+
+  const shipmentType = pick("shipmentType", shipment.shipmentType);
+  const shipmentDirection = pick(
+    "shipmentDirection",
+    shipment.shipmentDirection,
+  );
+  const serviceType = pick("serviceType", shipment.serviceType);
+  const paymentType = pick("paymentType", shipment.paymentType);
+  const numberOfBoxes = pick("numberOfBoxes", shipment.numberOfBoxes);
+
+  const pickupAddress = pick(
+    "pickupAddress",
+    addressFromColumns(shipment, "pickup"),
+  );
+  const deliveryAddress = pick(
+    "deliveryAddress",
+    addressFromColumns(shipment, "delivery"),
+  );
+  const rtoSameAsPickup = pick("rtoSameAsPickup", shipment.rtoSameAsPickup);
+  const rtoAddress = pick("rtoAddress", addressFromColumns(shipment, "rto"));
+  const billingSameAsDelivery = pick(
+    "billingSameAsDelivery",
+    shipment.billingSameAsDelivery,
+  );
+  const billingAddress = pick(
+    "billingAddress",
+    addressFromColumns(shipment, "billing"),
+  );
+
+  const packageDetails = pick("packageDetails", {
+    weight: toNumber(shipment.weight),
+    dimensions: {
+      length: toNumber(shipment.length),
+      width: toNumber(shipment.width),
+      height: toNumber(shipment.height),
+    },
+    description: shipment.description,
+    value: shipment.value !== null ? toNumber(shipment.value) : null,
+    fragile: shipment.fragile,
+  });
+
+  // Stored codAmount includes the outlet markup; the base is what gets priced
+  // and what the caller edits.
+  const storedCodBase =
+    shipment.codBaseAmount !== null
+      ? toNumber(shipment.codBaseAmount)
+      : shipment.codAmount !== null
+        ? toNumber(shipment.codAmount)
+        : null;
+  const codAmount =
+    paymentType === "COD" ? pick("codAmount", storedCodBase) : null;
+
+  const vasSelections = pick(
+    "vasSelections",
+    Array.isArray(shipment.vasSelections) ? shipment.vasSelections : [],
+  );
+
+  if (paymentType === "COD" && (!codAmount || codAmount <= 0)) {
+    throw new ValidationError(
+      "COD amount is required when payment type is COD",
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 2. Partner selection & quote integrity
+  //
+  // Three cases: a fresh partner+token (re-quote), an explicit detach
+  // (selectedPartnerId null/""), or no mention at all (keep what's stored).
+  // ------------------------------------------------------------------
+  const partnerFieldSent = updateData.selectedPartnerId !== undefined;
+  const selectedPartnerId = partnerFieldSent
+    ? updateData.selectedPartnerId || null
+    : shipment.partnerId;
+  const quoteSnapshot = updateData.quoteSnapshot ?? null;
+  const quoteToken = updateData.quoteToken ?? null;
+
+  const attachingPartner = Boolean(selectedPartnerId && quoteSnapshot);
+  const detachingPartner = partnerFieldSent && !updateData.selectedPartnerId;
+  const keepingStoredPartner =
+    !attachingPartner && !detachingPartner && Boolean(shipment.partnerId);
+
+  if (selectedPartnerId && partnerFieldSent && !quoteSnapshot) {
+    throw new ValidationError(
+      "selectedPartnerId and quoteSnapshot must be provided together",
+    );
+  }
+
+  // The stored price was computed for the old inputs. If any of them moved and
+  // the caller did not bring a fresh quote, refuse rather than silently
+  // charging a stale amount.
+  if (keepingStoredPartner) {
+    const stalePricingFields = touchedFullFields.filter((field) =>
+      PRICING_RELEVANT_FIELDS.includes(field),
+    );
+    if (stalePricingFields.length > 0) {
+      const staleError = new APIError(
+        "These changes affect pricing. Please fetch fresh partner quotes and re-select a partner before saving.",
+        409,
+        "QUOTE_REQUIRED",
+      );
+      staleError.details = { changedFields: stalePricingFields };
+      throw staleError;
+    }
+  }
+
+  let verifiedTotalAmount = null;
+  if (attachingPartner) {
+    if (!quoteToken) {
+      throw new ValidationError(
+        "quoteToken is required when booking with a selected partner",
+      );
+    }
+
+    const { claims, expired } =
+      quoteSigningService.verifyQuoteToken(quoteToken);
+
+    quoteSigningService.assertClaimsMatchPayload(claims, {
+      partnerId: selectedPartnerId,
+      fromPincode: pickupAddress?.pincode,
+      toPincode: deliveryAddress?.pincode,
+      weight: packageDetails?.weight,
+      paymentType,
+      codAmount,
+      shipmentType,
+      vasSelections,
+    });
+
+    verifiedTotalAmount = claims.totalAmount;
+
+    if (expired) {
+      // Idled past the token TTL — re-quote server-side and demand the same price
+      const freshRates = await partnerIntegrationService.calculateRates(
+        {
+          fromPincode: claims.fromPincode,
+          toPincode: claims.toPincode,
+          weight: claims.weight,
+          serviceType: (serviceType || "STANDARD").toUpperCase(),
+          dimensions: packageDetails?.dimensions,
+          numberOfBoxes,
+          codAmount: claims.paymentType === "COD" ? claims.codAmount : null,
+          declaredValue: packageDetails?.value || 0,
+          paymentMode: claims.paymentType,
+          isFragile: packageDetails?.fragile || false,
+          outletId: shipment.outletId || null,
+          partnerId: claims.partnerId,
+          shipmentType: claims.shipmentType,
+          vasSelections,
+        },
+        req.header("Authorization"),
+      );
+
+      const freshRate = (freshRates.rates || []).find(
+        (r) => r.partnerId === claims.partnerId,
+      );
+      const freshTotal = freshRate
+        ? Number(freshRate.totalRate || freshRate.totalAmount || 0)
+        : null;
+
+      if (freshTotal === null || freshTotal !== claims.totalAmount) {
+        const staleError = new APIError(
+          "The quoted price has expired and current pricing differs. Please fetch fresh quotes.",
+          409,
+          "QUOTE_STALE",
+        );
+        staleError.details = {
+          quotedAmount: claims.totalAmount,
+          currentAmount: freshTotal,
+        };
+        throw staleError;
+      }
+    }
+  }
+
+  const hasAssignedPartner = attachingPartner || keepingStoredPartner;
+  const effectiveQuoteSnapshot = attachingPartner
+    ? quoteSnapshot
+    : keepingStoredPartner
+      ? shipment.quoteSnapshot
+      : null;
+
+  const metrics = buildCourierMetrics({
+    quoteSnapshot: effectiveQuoteSnapshot,
+    weight: toNumber(packageDetails.weight),
+    numberOfBoxes,
+    dimensions: packageDetails.dimensions,
+  });
+
+  // systemCharge is the platform price — the wallet debit amount.
+  const systemCharge = attachingPartner
+    ? (verifiedTotalAmount ?? metrics.totalCost)
+    : keepingStoredPartner
+      ? toNumber(shipment.systemCharge)
+      : 0;
+
+  // ------------------------------------------------------------------
+  // 3. Outlet markup (charges-engine v3), same rules as creation
+  // ------------------------------------------------------------------
+  let markupType = null;
+  let markupValue = null;
+  let markupAmount = 0;
+  let outletContext = null;
+
+  if (hasAssignedPartner) {
+    outletContext = shipment.outletId
+      ? await outletWalletContextService.resolveOutletWalletByOutletId(
+          shipment.outletId,
+        )
+      : await outletWalletContextService.resolveOutletWalletByUserId(
+          shipment.userId,
+        );
+
+    // An explicit `markup: null` clears it; omitting the field keeps whatever
+    // the shipment already carries.
+    const storedMarkup =
+      shipment.markupType && shipment.markupValue !== null
+        ? {
+            type: shipment.markupType,
+            value: toNumber(shipment.markupValue),
+          }
+        : null;
+    const effectiveMarkup =
+      updateData.markup !== undefined ? updateData.markup : storedMarkup;
+
+    if (effectiveMarkup) {
+      if (!outletContext) {
+        throw new ValidationError(
+          "Markup can only be applied to shipments booked for an outlet",
+        );
+      }
+
+      markupType = effectiveMarkup.type;
+      markupValue = Number(effectiveMarkup.value);
+
+      if (
+        markupType === "FLAT" &&
+        outletContext.maxMarkupFlat !== null &&
+        markupValue > Number(outletContext.maxMarkupFlat)
+      ) {
+        throw new ValidationError(
+          `Markup exceeds the allowed flat cap of ₹${outletContext.maxMarkupFlat}`,
+        );
+      }
+      if (
+        markupType === "PERCENTAGE" &&
+        outletContext.maxMarkupPercent !== null &&
+        markupValue > Number(outletContext.maxMarkupPercent)
+      ) {
+        throw new ValidationError(
+          `Markup exceeds the allowed percentage cap of ${outletContext.maxMarkupPercent}%`,
+        );
+      }
+
+      markupAmount =
+        markupType === "FLAT"
+          ? Math.round(markupValue * 100) / 100
+          : Math.round(systemCharge * markupValue) / 100;
+    }
+  }
+
+  const totalCost = hasAssignedPartner ? systemCharge + markupAmount : 0;
+
+  const codBaseAmount = paymentType === "COD" ? Number(codAmount) || 0 : null;
+  const finalCodAmount =
+    paymentType === "COD" ? codBaseAmount + markupAmount : null;
+  if (paymentType === "COD" && finalCodAmount > 100000) {
+    throw new ValidationError(
+      `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit after markup`,
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 4. Wallet reconciliation
+  //
+  // The shipment may already hold a PREPAID debit. Refund it and charge the
+  // new amount whenever either the amount or the payment type moves, mirroring
+  // the re-rate flow. A failed re-charge rolls the refund back into a HOLD
+  // rather than leaving the customer both refunded and shipped.
+  // ------------------------------------------------------------------
+  const previousDebit =
+    shipment.paymentType === "PREPAID" && shipment.walletTransactionId
+      ? toNumber(shipment.systemCharge, toNumber(shipment.totalCost))
+      : 0;
+  const newDebit = paymentType === "PREPAID" ? systemCharge : 0;
+
+  let walletTransactionId = shipment.walletTransactionId;
+  let paymentReference = shipment.paymentReference;
+  let refundTransactionId = shipment.refundTransactionId;
+  let refundAmount = shipment.refundAmount
+    ? toNumber(shipment.refundAmount)
+    : null;
+  let holdReason = null;
+
+  if (previousDebit !== newDebit) {
+    const walletTarget = (
+      await shipmentWalletService.resolveShipmentWalletTarget(shipment)
+    ).walletUserId;
+
+    if (previousDebit > 0) {
+      if (!walletTarget) {
+        throw new ValidationError(
+          "Unable to resolve the wallet holding this shipment's payment. Please contact support.",
+        );
+      }
+      try {
+        const refundResult =
+          await paymentProcessingService.processShipmentRefund(
+            walletTarget,
+            previousDebit,
+            shipment.id,
+            `Edit refund for shipment ${shipment.orderId}`,
+            authToken,
+          );
+        refundTransactionId = refundResult.refundTransactionId;
+        refundAmount = previousDebit;
+        walletTransactionId = null;
+        paymentReference = null;
+      } catch (refundErr) {
+        logger.error("Shipment edit refund failed", {
+          service: "shipment-service",
+          shipmentId: id,
+          amount: previousDebit,
+          error: refundErr.message,
+        });
+        throw new APIError(
+          "Could not refund the original shipment charge. No changes were saved — please try again.",
+          502,
+          "EDIT_REFUND_FAILED",
+        );
+      }
+    }
+
+    if (newDebit > 0) {
+      if (!walletTarget) {
+        throw new ValidationError(
+          "outletUserId (phone) is required for wallet payment processing",
+        );
+      }
+      try {
+        const chargeResult =
+          await paymentProcessingService.processShipmentPayment(
+            walletTarget,
+            newDebit,
+            shipment.orderId,
+            `Shipment charge for order ${shipment.orderId} (edited)`,
+            authToken,
+          );
+        walletTransactionId = chargeResult.walletTransactionId;
+        paymentReference = chargeResult.paymentReference;
+      } catch (chargeErr) {
+        logger.warn("Shipment edit charge failed - putting shipment on hold", {
+          service: "shipment-service",
+          shipmentId: id,
+          amount: newDebit,
+          error: chargeErr.message,
+        });
+        holdReason = `Edit re-charge of ₹${newDebit} failed: ${chargeErr.message}`;
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 5. Address blocks
+  // ------------------------------------------------------------------
+  const rtoSource = rtoSameAsPickup ? pickupAddress : rtoAddress;
+  const rtoFields = {
+    rtoSameAsPickup,
+    rtoName: rtoSource?.name || null,
+    rtoPhone: rtoSource?.phone || null,
+    rtoLine1: rtoSource?.addressLine1 || null,
+    rtoLine2: rtoSource?.addressLine2 || null,
+    rtoLandmark: rtoSource?.landmark || null,
+    rtoCity: rtoSource?.city || null,
+    rtoState: rtoSource?.state || null,
+    rtoPincode: rtoSource?.pincode || null,
+    rtoCountry: rtoSource?.country || "India",
+  };
+
+  const billingSource = billingSameAsDelivery
+    ? deliveryAddress
+    : billingAddress;
+  const billingFields = {
+    billingSameAsDelivery,
+    billingName: billingSource?.name || null,
+    billingPhone: billingSource?.phone || null,
+    billingEmail: billingSource?.email || null,
+    billingLine1: billingSource?.addressLine1 || null,
+    billingLine2: billingSource?.addressLine2 || null,
+    billingLandmark: billingSource?.landmark || null,
+    billingCity: billingSource?.city || null,
+    billingState: billingSource?.state || null,
+    billingPincode: billingSource?.pincode || null,
+    billingCountry: billingSource?.country || "India",
+  };
+
+  // ------------------------------------------------------------------
+  // 6. Persist
+  // ------------------------------------------------------------------
+  const updatedShipment = await prisma.$transaction(async (tx) => {
+    const updated = await tx.shipment.update({
+      where: { id },
+      data: {
+        shipmentType,
+        shipmentDirection,
+        status: holdReason ? "HOLD" : "CREATED",
+        bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
+        holdReason,
+        paymentType,
+        paymentStatus: hasAssignedPartner
+          ? paymentType === "COD"
+            ? "CONFIRMED"
+            : walletTransactionId
+              ? "CONFIRMED"
+              : "PENDING"
+          : "PENDING",
+        codAmount: paymentType === "COD" ? finalCodAmount : null,
+        totalCost,
+        systemCharge: hasAssignedPartner ? systemCharge : null,
+        markupType,
+        markupValue,
+        markupAmount: markupAmount > 0 ? markupAmount : null,
+        codBaseAmount,
+        vasSelections: vasSelections.length > 0 ? vasSelections : null,
+
+        pickupAddressId: pick("pickupAddressId", shipment.pickupAddressId),
+        pickupName: pickupAddress.name,
+        pickupPhone: pickupAddress.phone,
+        pickupEmail: pickupAddress.email || null,
+        pickupLine1: pickupAddress.addressLine1,
+        pickupLine2: pickupAddress.addressLine2 || null,
+        pickupLandmark: pickupAddress.landmark || null,
+        pickupCity: pickupAddress.city,
+        pickupState: pickupAddress.state,
+        pickupPincode: pickupAddress.pincode,
+        pickupCountry: pickupAddress.country || "India",
+
+        deliveryName: deliveryAddress.name,
+        deliveryPhone: deliveryAddress.phone,
+        deliveryEmail: deliveryAddress.email || null,
+        deliveryLine1: deliveryAddress.addressLine1,
+        deliveryLine2: deliveryAddress.addressLine2 || null,
+        deliveryLandmark: deliveryAddress.landmark || null,
+        deliveryCity: deliveryAddress.city,
+        deliveryState: deliveryAddress.state,
+        deliveryPincode: deliveryAddress.pincode,
+        deliveryCountry: deliveryAddress.country || "India",
+
+        ...rtoFields,
+        ...billingFields,
+
+        deliveryAddressId: pick(
+          "deliveryAddressId",
+          shipment.deliveryAddressId,
+        ),
+        rtoAddressId: rtoSameAsPickup
+          ? null
+          : pick("rtoAddressId", shipment.rtoAddressId),
+        billingAddressId: billingSameAsDelivery
+          ? null
+          : pick("billingAddressId", shipment.billingAddressId),
+
+        productDescription: pick(
+          "productDescription",
+          shipment.productDescription,
+        ),
+        hsnCode: pick("hsnCode", shipment.hsnCode),
+        gstPercentage: pick("gstPercentage", shipment.gstPercentage),
+
+        numberOfBoxes,
+        weight: packageDetails.weight,
+        length: packageDetails.dimensions.length,
+        width: packageDetails.dimensions.width,
+        height: packageDetails.dimensions.height,
+        volumetricWeight: metrics.volumetricWeight,
+        chargeableWeight: metrics.chargeableWeight,
+        volumetricDivisor: metrics.divisor,
+        volumetricFactor: metrics.factor,
+        description: packageDetails.description || null,
+        value: packageDetails.value ?? null,
+        fragile: packageDetails.fragile || false,
+
+        serviceType,
+        specialInstructions:
+          updateData.specialInstructions !== undefined
+            ? updateData.specialInstructions
+            : shipment.specialInstructions,
+
+        partnerId: hasAssignedPartner
+          ? attachingPartner
+            ? selectedPartnerId
+            : shipment.partnerId
+          : null,
+        partnerName: hasAssignedPartner
+          ? attachingPartner
+            ? effectiveQuoteSnapshot?.partnerName || null
+            : shipment.partnerName
+          : null,
+        quoteSnapshot: hasAssignedPartner ? effectiveQuoteSnapshot : null,
+
+        estimatedDelivery: hasAssignedPartner
+          ? metrics.estimatedDelivery
+          : null,
+
+        walletTransactionId,
+        paymentReference,
+        refundTransactionId,
+        refundAmount,
+      },
+    });
+
+    // Box rows and invoice rows are replaced wholesale when supplied — the
+    // wizard always sends the complete set, and matching them up row by row
+    // would preserve ids nothing else references.
+    if (updateData.boxes !== undefined) {
+      await tx.shipmentBox.deleteMany({ where: { shipmentId: id } });
+      if (updateData.boxes && updateData.boxes.length > 0) {
+        await tx.shipmentBox.createMany({
+          data: updateData.boxes.map((box) => ({
+            shipmentId: id,
+            boxNumber: box.boxNumber,
+            length: box.length,
+            width: box.width,
+            height: box.height,
+          })),
+        });
+      }
+    }
+
+    if (updateData.invoices !== undefined) {
+      await tx.shipmentInvoice.deleteMany({ where: { shipmentId: id } });
+      if (updateData.invoices && updateData.invoices.length > 0) {
+        await tx.shipmentInvoice.createMany({
+          data: updateData.invoices.map((inv) => ({
+            shipmentId: id,
+            eWayBillNo: inv.eWayBillNo || null,
+            invoiceNo: inv.invoiceNo,
+            invoiceAmt: inv.invoiceAmt,
+            invoiceDate: new Date(inv.invoiceDate),
+            attachmentUrl: inv.attachmentUrl || null,
+          })),
+        });
+      }
+    }
+
+    // The accrual has to track the re-priced markup, so it is rebuilt rather
+    // than left pointing at the old systemCharge.
+    await tx.outletEarning.deleteMany({ where: { shipmentId: id } });
+    if (markupAmount > 0 && outletContext) {
+      await tx.outletEarning.create({
+        data: {
+          shipmentId: id,
+          outletId: outletContext.outletId,
+          clientId: outletContext.clientId || clientId || null,
+          markupType,
+          markupValue,
+          systemCharge,
+          markupAmount,
+        },
+      });
+    }
+
+    return updated;
+  });
+
+  await trackingService.createTrackingEvent(
+    id,
+    {
+      status: holdReason ? "HOLD" : "CREATED",
+      message: holdReason
+        ? `Shipment edited but placed on hold: ${holdReason}`
+        : `Shipment details updated (${touchedFullFields.join(", ")})`,
+      eventMetadata: {
+        updatedFields: touchedFullFields,
+        partnerId: updatedShipment.partnerId,
+        partnerName: updatedShipment.partnerName,
+        totalCost: totalCost.toString(),
+        previousTotalCost: toNumber(shipment.totalCost).toString(),
+      },
+      source: trackingService.EVENT_SOURCES.SYSTEM,
+    },
+    userId,
+  );
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: "UPDATE",
+      resource: "Shipment",
+      resourceId: id,
+      changes: {
+        before: {
+          totalCost: toNumber(shipment.totalCost),
+          systemCharge: shipment.systemCharge
+            ? toNumber(shipment.systemCharge)
+            : null,
+          partnerId: shipment.partnerId,
+          weight: toNumber(shipment.weight),
+          paymentType: shipment.paymentType,
+        },
+        after: {
+          totalCost,
+          systemCharge: hasAssignedPartner ? systemCharge : null,
+          partnerId: updatedShipment.partnerId,
+          weight: packageDetails.weight,
+          paymentType,
+        },
+        fields: touchedFullFields,
+      },
+      metadata: {
+        source: "shipment-service",
+        endpoint: "/api/v1/shipments/:id",
+        editType: "FULL",
+        walletReconciled: previousDebit !== newDebit,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+      clientId,
+    },
+  });
+
+  logger.info("Shipment fully updated", {
+    service: "shipment-service",
+    shipmentId: id,
+    userId,
+    clientId,
+    fields: touchedFullFields,
+    previousDebit,
+    newDebit,
+    holdReason,
+  });
+
+  return res.json(
+    APIResponse.success(
+      { shipment: updatedShipment },
+      holdReason
+        ? "Shipment updated but placed on hold - payment could not be collected"
+        : "Shipment updated successfully",
+    ),
+  );
 }
 
 /**

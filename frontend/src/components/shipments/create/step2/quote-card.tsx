@@ -4,7 +4,7 @@ import { useState, type MouseEvent } from "react";
 import { Building, ChevronDown, Sparkles, Loader2 } from "lucide-react";
 import type { PartnerQuote } from "@/store/api/endpoints/shipmentApi";
 import { useExplainQuoteMutation } from "@/store/api/endpoints/shipmentApi";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", {
@@ -58,7 +58,7 @@ export function QuoteCard({
     highlights: string[];
   } | null>(null);
   const [explainQuote, { isLoading: explaining }] = useExplainQuoteMutation();
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
 
   const markupValue = parseFloat(store.markupValue) || 0;
   const markupAmount =

@@ -392,21 +392,60 @@ interface RerateShipmentRequest {
   codAction?: "DEDUCT_WALLET" | "UPDATE_COD";
 }
 
+/**
+ * PUT /shipments/:id accepts two shapes:
+ *
+ * - the lifecycle patch (`status` / `specialInstructions`), valid at any point
+ *   in a shipment's life; and
+ * - the full pre-booking edit, which mirrors CreateShipmentRequest and is only
+ *   honoured while the shipment is CREATED with no AWB. Sending a
+ *   pricing-relevant field on a shipment that has a partner requires a fresh
+ *   `quoteToken`, or the server answers 409 QUOTE_REQUIRED.
+ */
 interface UpdateShipmentRequest {
-  weight?: number;
-  dimensions?: {
-    length: number;
-    width: number;
-    height: number;
-  };
-  paymentMode?: "prepaid" | "cod";
-  codAmount?: number;
-  shipmentValue?: number;
-  description?: string;
-  isFragile?: boolean;
+  // Lifecycle patch
   status?: string;
   specialInstructions?: string;
-  estimatedDelivery?: string;
+
+  // Full pre-booking edit
+  shipmentType?: "B2B" | "B2C";
+  shipmentDirection?: "FORWARD" | "REVERSE";
+  pickupAddressId?: string | null;
+  pickupLocation?: string;
+  pickupAddress?: AddressPayload;
+  deliveryAddress?: AddressPayload;
+  deliveryAddressId?: string | null;
+  rtoSameAsPickup?: boolean;
+  rtoAddress?: AddressPayload;
+  rtoAddressId?: string | null;
+  billingSameAsDelivery?: boolean;
+  billingAddress?: AddressPayload;
+  billingAddressId?: string | null;
+  productDescription?: string;
+  hsnCode?: string;
+  gstPercentage?: number;
+  packageDetails?: {
+    weight: number;
+    dimensions: { length: number; width: number; height: number };
+    description?: string;
+    value?: number;
+    fragile?: boolean;
+  };
+  numberOfBoxes?: number;
+  /** Replaces the stored rows wholesale; omit to leave them untouched. */
+  boxes?: BoxPayload[];
+  /** Replaces the stored rows wholesale; omit to leave them untouched. */
+  invoices?: InvoicePayload[];
+  paymentType?: "PREPAID" | "COD";
+  codAmount?: number;
+  serviceType?: "STANDARD" | "EXPRESS" | "ECONOMY";
+  /** `null` detaches the current partner and refunds the shipment. */
+  selectedPartnerId?: string | null;
+  quoteSnapshot?: PartnerQuote;
+  /** Required whenever selectedPartnerId names a partner. */
+  quoteToken?: string;
+  markup?: MarkupInput | null;
+  vasSelections?: VasSelection[];
 }
 
 interface RetryCourierBookingRequest {
@@ -519,6 +558,43 @@ interface Shipment {
   deliveryState?: string;
   deliveryPincode?: string;
   deliveryCountry?: string;
+
+  // Charges-engine v3 money split (detail only)
+  systemCharge?: number | null;
+  markupType?: string | null;
+  markupValue?: number | null;
+  markupAmount?: number | null;
+  codBaseAmount?: number | null;
+  vasSelections?: Array<{ chargeCode: string; answer: unknown }> | null;
+
+  // Shipment-level flags needed to rebuild the edit form (detail only)
+  shipmentDirection?: string;
+  walletUserId?: string | null;
+  productDescription?: string | null;
+  hsnCode?: string | null;
+  gstPercentage?: number | null;
+  deliveryAddressId?: string | null;
+  rtoAddressId?: string | null;
+  billingAddressId?: string | null;
+  rtoSameAsPickup?: boolean;
+  billingSameAsDelivery?: boolean;
+
+  // Per-box dimension rows and invoice rows (detail only)
+  boxes?: Array<{
+    id: string;
+    boxNumber: number;
+    length: number;
+    width: number;
+    height: number;
+  }>;
+  invoices?: Array<{
+    id: string;
+    eWayBillNo?: string | null;
+    invoiceNo: string;
+    invoiceAmt: number;
+    invoiceDate: string;
+    attachmentUrl?: string | null;
+  }>;
 
   // Package (detail only)
   numberOfBoxes?: number;

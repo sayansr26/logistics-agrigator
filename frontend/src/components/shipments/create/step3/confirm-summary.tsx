@@ -2,7 +2,7 @@
 
 import { FileCheck2, Wallet, Route } from "lucide-react";
 import Link from "next/link";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import { useBookingWallet } from "@/hooks/useBookingWallet";
 
 function fmt(n: number) {
@@ -12,8 +12,18 @@ function fmt(n: number) {
   });
 }
 
-export function ConfirmSummary() {
-  const store = useShipmentFormStore();
+/**
+ * `mode` only swaps the wording — an edit re-saves an existing shipment
+ * rather than dispatching a brand-new one, and (for PREPAID) settles the
+ * difference against the wallet instead of debiting from scratch.
+ */
+export function ConfirmSummary({
+  mode = "create",
+}: {
+  mode?: "create" | "edit";
+}) {
+  const store = useShipmentForm();
+  const isEdit = mode === "edit";
   const quote = store.selectedQuote;
   // Same wallet the booking will debit — an admin booking for an outlet spends
   // the outlet's balance, not their own.
@@ -51,10 +61,12 @@ export function ConfirmSummary() {
         </div>
         <div className="space-y-1">
           <h2 className="text-lg font-bold text-foreground">
-            Final Confirmation
+            {isEdit ? "Confirm Changes" : "Final Confirmation"}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Review your final shipment details before dispatching the order
+            {isEdit
+              ? "Review the updated shipment details before saving"
+              : "Review your final shipment details before dispatching the order"}
             {quote ? " to your chosen logistics partner." : "."}
           </p>
         </div>
@@ -154,18 +166,29 @@ export function ConfirmSummary() {
 
       <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1">
         <Route className="h-3 w-3" />
-        By clicking &quot;Book Shipment&quot;, you agree to manifest this
-        shipment
-        {quote && isPrepaid
-          ? ` and deduct ₹${fmt(systemCharge)} from your wallet.`
-          : "."}
+        {isEdit ? (
+          <>
+            Saving replaces this shipment&apos;s stored details
+            {quote && isPrepaid
+              ? ` and settles the difference against your wallet (new charge ₹${fmt(systemCharge)}).`
+              : "."}
+          </>
+        ) : (
+          <>
+            By clicking &quot;Book Shipment&quot;, you agree to manifest this
+            shipment
+            {quote && isPrepaid
+              ? ` and deduct ₹${fmt(systemCharge)} from your wallet.`
+              : "."}
+          </>
+        )}
       </p>
     </div>
   );
 }
 
 export function useConfirmInsufficient() {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const { balance: walletBalance, isKnown: walletKnown } = useBookingWallet();
   const quote = store.selectedQuote;
   const isPrepaid = store.paymentType === "PREPAID";

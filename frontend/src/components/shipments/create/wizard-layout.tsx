@@ -3,13 +3,15 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { RotateCw, Loader2 } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 
-const STEPS = [
-  { key: 1, label: "Shipment Details", path: "/shipments/create/details" },
-  { key: 2, label: "Partner Selection", path: "/shipments/create/partners" },
-  { key: 3, label: "Confirm & Book", path: "/shipments/create/confirm" },
+const STEP_LABELS = [
+  "Shipment Details",
+  "Partner Selection",
+  "Confirm & Book",
 ] as const;
+
+const STEP_SEGMENTS = ["details", "partners", "confirm"] as const;
 
 export interface WizardActionButton {
   label: string;
@@ -24,6 +26,23 @@ interface WizardLayoutProps {
   children: React.ReactNode;
   left: WizardActionButton;
   right: WizardActionButton;
+  /**
+   * Route prefix the stepper navigates within — "/shipments/create" for a new
+   * shipment, "/shipments/<id>/edit" when editing an existing one. The three
+   * step segments are appended to it.
+   */
+  basePath?: string;
+  title?: string;
+  subtitle?: string;
+  /** Label for the header's discard action. */
+  resetLabel?: string;
+  /** Confirmation text shown before discarding. */
+  resetConfirmMessage?: string;
+  /**
+   * Discard handler. Defaults to clearing the form; the edit wizard passes one
+   * that reloads the shipment's saved values instead.
+   */
+  onReset?: () => void;
 }
 
 export function WizardLayout({
@@ -31,19 +50,33 @@ export function WizardLayout({
   children,
   left,
   right,
+  basePath = "/shipments/create",
+  title = "Create New Shipment",
+  subtitle = "Fill in the details below to create a new shipment and optionally assign a partner",
+  resetLabel = "Reset",
+  resetConfirmMessage = "Are you sure you want to reset the shipment form? All entered data will be lost.",
+  onReset,
 }: WizardLayoutProps) {
   const router = useRouter();
-  const { resetForm, lastSavedAt } = useShipmentFormStore();
+  const { resetForm, lastSavedAt } = useShipmentForm();
+
+  const steps = STEP_LABELS.map((label, idx) => ({
+    key: (idx + 1) as 1 | 2 | 3,
+    label,
+    path: `${basePath}/${STEP_SEGMENTS[idx]}`,
+  }));
 
   function handleReset() {
     if (typeof window !== "undefined") {
-      const ok = window.confirm(
-        "Are you sure you want to reset the shipment form? All entered data will be lost.",
-      );
+      const ok = window.confirm(resetConfirmMessage);
       if (!ok) return;
     }
+    if (onReset) {
+      onReset();
+      return;
+    }
     resetForm();
-    router.push("/shipments/create/details");
+    router.push(`${basePath}/details`);
   }
 
   return (
@@ -55,7 +88,7 @@ export function WizardLayout({
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-xl font-bold text-foreground tracking-tight">
-                  Create New Shipment
+                  {title}
                 </h1>
                 {lastSavedAt != null && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
@@ -64,24 +97,21 @@ export function WizardLayout({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Fill in the details below to create a new shipment and
-                optionally assign a partner
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
             </div>
             <button
               type="button"
               onClick={handleReset}
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              <RotateCw className="h-3 w-3" /> Reset
+              <RotateCw className="h-3 w-3" /> {resetLabel}
             </button>
           </div>
 
           {/* Progress Stepper */}
           <div className="pt-2">
             <div className="flex items-center justify-between w-full">
-              {STEPS.map((s, idx) => (
+              {steps.map((s, idx) => (
                 <React.Fragment key={s.key}>
                   <button
                     type="button"
@@ -112,7 +142,7 @@ export function WizardLayout({
                     </span>
                     <span className="hidden sm:inline">{s.label}</span>
                   </button>
-                  {idx < STEPS.length - 1 && (
+                  {idx < steps.length - 1 && (
                     <div
                       className={[
                         "flex-1 mx-3 h-0.5",

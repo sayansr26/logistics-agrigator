@@ -151,6 +151,84 @@ export interface ShipmentFormState {
   validateDocket: () => boolean;
   validateDelivery: () => boolean;
   validateStep1: () => boolean;
+
+  // Edit mode
+  /**
+   * Id of the shipment this form is editing, or "" for the create wizard.
+   * The edit wizard re-hydrates whenever this stops matching the shipment in
+   * the URL, so navigating between steps keeps the in-progress draft while
+   * opening a different shipment starts clean.
+   */
+  editingShipmentId: string;
+  /** Replace the whole form with a saved shipment's stored values. */
+  hydrateFromShipment: (shipment: HydratableShipment) => void;
+}
+
+/**
+ * The subset of the shipment detail response the form can be rebuilt from.
+ * Kept structural rather than importing the API's `Shipment` so the store
+ * stays independent of the RTK layer.
+ */
+export interface HydratableShipment {
+  id: string;
+  orderId: string;
+  outletId?: string | null;
+  walletUserId?: string | null;
+  shipmentType?: string | null;
+  shipmentDirection?: string | null;
+  serviceType?: string | null;
+  paymentType?: string | null;
+  codAmount?: number | null;
+  codBaseAmount?: number | null;
+  weight?: number | null;
+  numberOfBoxes?: number | null;
+  length?: number | null;
+  width?: number | null;
+  height?: number | null;
+  description?: string | null;
+  value?: number | null;
+  fragile?: boolean | null;
+  productDescription?: string | null;
+  hsnCode?: string | null;
+  gstPercentage?: number | null;
+  specialInstructions?: string | null;
+
+  pickupAddressId?: string | null;
+  deliveryAddressId?: string | null;
+  rtoAddressId?: string | null;
+  billingAddressId?: string | null;
+  rtoSameAsPickup?: boolean | null;
+  billingSameAsDelivery?: boolean | null;
+
+  deliveryName?: string | null;
+  deliveryPhone?: string | null;
+  deliveryEmail?: string | null;
+  deliveryLine1?: string | null;
+  deliveryLandmark?: string | null;
+  deliveryCity?: string | null;
+  deliveryState?: string | null;
+  deliveryPincode?: string | null;
+
+  markupType?: string | null;
+  markupValue?: number | null;
+
+  partnerId?: string | null;
+  quoteSnapshot?: Record<string, unknown> | null;
+
+  vasSelections?: Array<{ chargeCode: string; answer: unknown }> | null;
+  boxes?: Array<{
+    boxNumber: number;
+    length: number;
+    width: number;
+    height: number;
+  }> | null;
+  invoices?: Array<{
+    eWayBillNo?: string | null;
+    invoiceNo: string;
+    invoiceAmt: number;
+    invoiceDate: string;
+    attachmentUrl?: string | null;
+  }> | null;
 }
 
 function uid(): string {
@@ -248,6 +326,75 @@ function scheduleDraftSaved(set: (patch: Partial<ShipmentFormState>) => void) {
   saveTimer = setTimeout(() => set({ lastSavedAt: Date.now() }), 600);
 }
 
+/**
+ * Collapse the stored per-box rows (one row per physical box) back into the
+ * grouped rows the dimensions section edits, merging runs of identical
+ * dimensions into a single row with a count.
+ */
+function groupStoredBoxes(
+  stored: Array<{ length: number; width: number; height: number }>,
+): Box[] {
+  if (stored.length === 0) return [makeBox()];
+
+  const grouped: Box[] = [];
+  for (const row of stored) {
+    const last = grouped[grouped.length - 1];
+    const sameAsLast =
+      last &&
+      last.length === String(row.length) &&
+      last.width === String(row.width) &&
+      last.height === String(row.height);
+
+    if (sameAsLast) {
+      last.count += 1;
+    } else {
+      grouped.push({
+        id: `box-${uid()}`,
+        length: String(row.length),
+        width: String(row.width),
+        height: String(row.height),
+        count: 1,
+      });
+    }
+  }
+  return grouped;
+}
+
+/**
+ * Invert `buildVasSelections`: a follow-up answer arrives as
+ * `{enabled: true, ...followUps}` and everything else as a bare scalar.
+ */
+function vasAnswersFromSelections(
+  selections: Array<{ chargeCode: string; answer: unknown }>,
+): VasAnswers {
+  const answers: VasAnswers = {};
+  for (const sel of selections) {
+    if (
+      sel.answer &&
+      typeof sel.answer === "object" &&
+      !Array.isArray(sel.answer)
+    ) {
+      const { enabled, ...followUpValues } = sel.answer as Record<
+        string,
+        unknown
+      >;
+      answers[sel.chargeCode] = {
+        value: enabled ?? true,
+        followUpValues,
+      };
+    } else {
+      answers[sel.chargeCode] = { value: sel.answer };
+    }
+  }
+  return answers;
+}
+
+/** ISO timestamp -> the `yyyy-mm-dd` a date input expects. */
+function toDateInputValue(iso?: string | null): string {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
+}
+
 const DEFAULT_STATE = {
   currentStep: 1,
 
@@ -305,271 +452,419 @@ const DEFAULT_STATE = {
 
   errors: {} as FormErrors,
   lastSavedAt: null as number | null,
+
+  editingShipmentId: "",
 };
 
-export const useShipmentFormStore = create<ShipmentFormState>()(
-  persist(
-    (set, get) => ({
-      ...DEFAULT_STATE,
-      referenceNo: generateReferenceNo(),
+/**
+ * Builds an independent form store persisted under its own localStorage key.
+ *
+ * The create wizard and the edit wizard run the exact same components against
+ * two separate instances, so opening an existing shipment for editing never
+ * clobbers a half-finished new-shipment draft (and vice versa). Components
+ * reach whichever instance their route provides via `useShipmentForm()`.
+ */
+function createShipmentFormStore(persistKey: string) {
+  return create<ShipmentFormState>()(
+    persist(
+      (set, get) => ({
+        ...DEFAULT_STATE,
+        referenceNo: generateReferenceNo(),
 
-      setStep: (step) => set({ currentStep: step }),
+        setStep: (step) => set({ currentStep: step }),
 
-      setField: (field, value) => {
-        set((s) => ({
-          ...s,
-          [field]: value,
-          errors: { ...s.errors, [field]: "" },
-        }));
-        scheduleDraftSaved(set);
-      },
+        setField: (field, value) => {
+          set((s) => ({
+            ...s,
+            [field]: value,
+            errors: { ...s.errors, [field]: "" },
+          }));
+          scheduleDraftSaved(set);
+        },
 
-      regenerateReferenceNo: () =>
-        set((s) => ({
-          referenceNo: generateReferenceNo(),
-          errors: { ...s.errors, referenceNo: "" },
-        })),
+        regenerateReferenceNo: () =>
+          set((s) => ({
+            referenceNo: generateReferenceNo(),
+            errors: { ...s.errors, referenceNo: "" },
+          })),
 
-      setError: (field, error) =>
-        set((s) => ({ errors: { ...s.errors, [field]: error } })),
+        setError: (field, error) =>
+          set((s) => ({ errors: { ...s.errors, [field]: error } })),
 
-      clearError: (field) =>
-        set((s) => ({ errors: { ...s.errors, [field]: "" } })),
+        clearError: (field) =>
+          set((s) => ({ errors: { ...s.errors, [field]: "" } })),
 
-      setErrors: (errors) => set({ errors }),
+        setErrors: (errors) => set({ errors }),
 
-      clearAllErrors: () => set({ errors: {} }),
+        clearAllErrors: () => set({ errors: {} }),
 
-      setHasHydrated: (value) => set({ hasHydrated: value }),
+        setHasHydrated: (value) => set({ hasHydrated: value }),
 
-      resetForm: () =>
-        set({
-          ...DEFAULT_STATE,
-          referenceNo: generateReferenceNo(),
-          boxes: [makeBox()],
-        }),
+        resetForm: () =>
+          set({
+            ...DEFAULT_STATE,
+            referenceNo: generateReferenceNo(),
+            boxes: [makeBox()],
+          }),
 
-      // A new group can only be added while boxes are still unassigned - the
-      // rows describe how the numberOfBoxes physical boxes are grouped, so
-      // their counts can never add up to more than that.
-      addBox: () => {
-        set((s) => {
-          if (assignedBoxCount(s.boxes) >= s.numberOfBoxes) return s;
-          return { boxes: [...s.boxes, makeBox()] };
-        });
-        scheduleDraftSaved(set);
-      },
+        // A new group can only be added while boxes are still unassigned - the
+        // rows describe how the numberOfBoxes physical boxes are grouped, so
+        // their counts can never add up to more than that.
+        addBox: () => {
+          set((s) => {
+            if (assignedBoxCount(s.boxes) >= s.numberOfBoxes) return s;
+            return { boxes: [...s.boxes, makeBox()] };
+          });
+          scheduleDraftSaved(set);
+        },
 
-      removeBox: (id) => {
-        set((s) => {
-          if (s.boxes.length <= 1) return s;
-          return { boxes: s.boxes.filter((b) => b.id !== id) };
-        });
-        scheduleDraftSaved(set);
-      },
+        removeBox: (id) => {
+          set((s) => {
+            if (s.boxes.length <= 1) return s;
+            return { boxes: s.boxes.filter((b) => b.id !== id) };
+          });
+          scheduleDraftSaved(set);
+        },
 
-      // Clamped to what is still unassigned, so the groups can never claim
-      // more boxes than the shipment has.
-      setBoxCount: (id, value) => {
-        set((s) => {
-          const others = s.boxes
-            .filter((b) => b.id !== id)
-            .reduce((sum, b) => sum + boxCount(b), 0);
-          const available = Math.max(1, s.numberOfBoxes - others);
-          const next = Math.max(1, Math.min(available, Math.round(value) || 1));
-          return {
-            boxes: s.boxes.map((b) =>
-              b.id === id ? { ...b, count: next } : b,
-            ),
-          };
-        });
-        scheduleDraftSaved(set);
-      },
-
-      updateBox: (id, field, value) => {
-        set((s) => ({
-          boxes: s.boxes.map((b) =>
-            b.id === id ? { ...b, [field]: value } : b,
-          ),
-        }));
-        scheduleDraftSaved(set);
-      },
-
-      // Clamps 1-100 and refits the grouping: the dimension rows describe how
-      // those boxes are grouped, so their counts are rescaled rather than one
-      // row being created per box. Invoice rows are capped at the box count
-      // (several boxes may share one invoice, never the other way round).
-      setNumberOfBoxes: (count) => {
-        set((s) => {
-          const clamped = Math.max(1, Math.min(100, Math.round(count) || 1));
-          const boxes = fitBoxesTo(s.boxes, clamped);
-          const invoices =
-            s.invoices.length > clamped
-              ? s.invoices.slice(0, clamped)
-              : s.invoices;
-
-          return { numberOfBoxes: clamped, boxes, invoices };
-        });
-        scheduleDraftSaved(set);
-      },
-
-      // One invoice can cover several boxes, so the row count is capped at the
-      // number of boxes rather than tied to it.
-      addInvoice: () => {
-        set((s) => {
-          if (s.invoices.length >= s.numberOfBoxes) return s;
-          return { invoices: [...s.invoices, makeInvoice()] };
-        });
-        scheduleDraftSaved(set);
-      },
-
-      removeInvoice: (id) => {
-        set((s) => {
-          if (s.invoices.length <= 1) return s;
-          return { invoices: s.invoices.filter((inv) => inv.id !== id) };
-        });
-        scheduleDraftSaved(set);
-      },
-
-      // Drop fully-empty invoice rows beyond the first. Heals drafts that
-      // accumulated duplicate blank rows (pre-hydration append race in an
-      // earlier build) without touching rows the user actually filled in.
-      pruneEmptyInvoices: () => {
-        set((s) => {
-          const hasData = (inv: Invoice) =>
-            Boolean(
-              inv.eWayBillNo ||
-              inv.invoiceNo ||
-              inv.invoiceAmt ||
-              inv.invoiceDate ||
-              inv.attachmentUrl,
+        // Clamped to what is still unassigned, so the groups can never claim
+        // more boxes than the shipment has.
+        setBoxCount: (id, value) => {
+          set((s) => {
+            const others = s.boxes
+              .filter((b) => b.id !== id)
+              .reduce((sum, b) => sum + boxCount(b), 0);
+            const available = Math.max(1, s.numberOfBoxes - others);
+            const next = Math.max(
+              1,
+              Math.min(available, Math.round(value) || 1),
             );
-          const pruned = s.invoices.filter(
-            (inv, idx) => idx === 0 || hasData(inv),
-          );
-          return pruned.length === s.invoices.length
-            ? s
-            : { ...s, invoices: pruned };
-        });
-      },
+            return {
+              boxes: s.boxes.map((b) =>
+                b.id === id ? { ...b, count: next } : b,
+              ),
+            };
+          });
+          scheduleDraftSaved(set);
+        },
 
-      updateInvoice: (id, field, value) => {
-        set((s) => ({
-          invoices: s.invoices.map((inv) =>
-            inv.id === id ? { ...inv, [field]: value } : inv,
-          ),
-        }));
-        scheduleDraftSaved(set);
-      },
+        updateBox: (id, field, value) => {
+          set((s) => ({
+            boxes: s.boxes.map((b) =>
+              b.id === id ? { ...b, [field]: value } : b,
+            ),
+          }));
+          scheduleDraftSaved(set);
+        },
 
-      setVasValue: (chargeCode, value) => {
-        set((s) => ({
-          vasAnswers: {
-            ...s.vasAnswers,
-            [chargeCode]: { ...s.vasAnswers[chargeCode], value },
-          },
-        }));
-        scheduleDraftSaved(set);
-      },
+        // Clamps 1-100 and refits the grouping: the dimension rows describe how
+        // those boxes are grouped, so their counts are rescaled rather than one
+        // row being created per box. Invoice rows are capped at the box count
+        // (several boxes may share one invoice, never the other way round).
+        setNumberOfBoxes: (count) => {
+          set((s) => {
+            const clamped = Math.max(1, Math.min(100, Math.round(count) || 1));
+            const boxes = fitBoxesTo(s.boxes, clamped);
+            const invoices =
+              s.invoices.length > clamped
+                ? s.invoices.slice(0, clamped)
+                : s.invoices;
 
-      setVasFollowUp: (chargeCode, key, value) => {
-        set((s) => ({
-          vasAnswers: {
-            ...s.vasAnswers,
-            [chargeCode]: {
-              value: s.vasAnswers[chargeCode]?.value,
-              followUpValues: {
-                ...s.vasAnswers[chargeCode]?.followUpValues,
-                [key]: value,
+            return { numberOfBoxes: clamped, boxes, invoices };
+          });
+          scheduleDraftSaved(set);
+        },
+
+        // One invoice can cover several boxes, so the row count is capped at the
+        // number of boxes rather than tied to it.
+        addInvoice: () => {
+          set((s) => {
+            if (s.invoices.length >= s.numberOfBoxes) return s;
+            return { invoices: [...s.invoices, makeInvoice()] };
+          });
+          scheduleDraftSaved(set);
+        },
+
+        removeInvoice: (id) => {
+          set((s) => {
+            if (s.invoices.length <= 1) return s;
+            return { invoices: s.invoices.filter((inv) => inv.id !== id) };
+          });
+          scheduleDraftSaved(set);
+        },
+
+        // Drop fully-empty invoice rows beyond the first. Heals drafts that
+        // accumulated duplicate blank rows (pre-hydration append race in an
+        // earlier build) without touching rows the user actually filled in.
+        pruneEmptyInvoices: () => {
+          set((s) => {
+            const hasData = (inv: Invoice) =>
+              Boolean(
+                inv.eWayBillNo ||
+                inv.invoiceNo ||
+                inv.invoiceAmt ||
+                inv.invoiceDate ||
+                inv.attachmentUrl,
+              );
+            const pruned = s.invoices.filter(
+              (inv, idx) => idx === 0 || hasData(inv),
+            );
+            return pruned.length === s.invoices.length
+              ? s
+              : { ...s, invoices: pruned };
+          });
+        },
+
+        updateInvoice: (id, field, value) => {
+          set((s) => ({
+            invoices: s.invoices.map((inv) =>
+              inv.id === id ? { ...inv, [field]: value } : inv,
+            ),
+          }));
+          scheduleDraftSaved(set);
+        },
+
+        setVasValue: (chargeCode, value) => {
+          set((s) => ({
+            vasAnswers: {
+              ...s.vasAnswers,
+              [chargeCode]: { ...s.vasAnswers[chargeCode], value },
+            },
+          }));
+          scheduleDraftSaved(set);
+        },
+
+        setVasFollowUp: (chargeCode, key, value) => {
+          set((s) => ({
+            vasAnswers: {
+              ...s.vasAnswers,
+              [chargeCode]: {
+                value: s.vasAnswers[chargeCode]?.value,
+                followUpValues: {
+                  ...s.vasAnswers[chargeCode]?.followUpValues,
+                  [key]: value,
+                },
               },
             },
-          },
-        }));
-        scheduleDraftSaved(set);
-      },
+          }));
+          scheduleDraftSaved(set);
+        },
 
-      selectQuote: (quote) =>
-        set({
-          selectedPartnerId: quote.partnerId,
-          selectedQuote: quote,
-          quoteToken: quote.quoteToken || "",
+        selectQuote: (quote) =>
+          set({
+            selectedPartnerId: quote.partnerId,
+            selectedQuote: quote,
+            quoteToken: quote.quoteToken || "",
+          }),
+
+        clearSelectedQuote: () =>
+          set({ selectedPartnerId: "", selectedQuote: null, quoteToken: "" }),
+
+        validateDocket: () => {
+          const s = get();
+          const errs: FormErrors = {};
+          if (!s.referenceNo.trim())
+            errs.referenceNo = "Reference No is required";
+          if (!s.actualWeight.trim() || parseFloat(s.actualWeight) <= 0)
+            errs.actualWeight = "Valid weight is required";
+          if (!s.pickupAddress)
+            errs.pickupAddress = "Pickup address is required";
+          if (!s.rtoSameAsPickup && !s.rtoAddressId)
+            errs.rtoAddressId = "RTO address is required";
+          if (!s.productDescription.trim())
+            errs.productDescription = "Product description is required";
+          if (
+            s.paymentType === "COD" &&
+            (!s.codAmount || parseFloat(s.codAmount) <= 0)
+          )
+            errs.codAmount = "COD collectable amount is required";
+          set((state) => ({ errors: { ...state.errors, ...errs } }));
+          return Object.keys(errs).length === 0;
+        },
+
+        // Delivery is now select-only from the address book (DELIVERY type).
+        // The legacy phone/receiverName/address/pincode/city/state fields are
+        // synced from the selected address on select (see address-section.tsx)
+        // and kept only so payload builders don't need a second source of
+        // truth — validation just confirms a delivery (and, when applicable,
+        // billing) address was actually picked.
+        validateDelivery: () => {
+          const s = get();
+          const errs: FormErrors = {};
+          if (!s.deliveryAddressId)
+            errs.deliveryAddressId = "A delivery address is required";
+          if (!s.billingSameAsDelivery && !s.billingAddressId)
+            errs.billingAddressId = "A billing address is required";
+          set((state) => ({ errors: { ...state.errors, ...errs } }));
+          return Object.keys(errs).length === 0;
+        },
+
+        validateStep1: () => {
+          const s = get();
+          s.clearAllErrors();
+          const docketOk = s.validateDocket();
+          const deliveryOk = s.validateDelivery();
+          return docketOk && deliveryOk;
+        },
+
+        // Rebuild the whole form from a saved shipment. Starts from
+        // DEFAULT_STATE so nothing leaks in from a previous draft, and keeps
+        // the shipment's own reference number rather than minting a new one.
+        hydrateFromShipment: (shipment) => {
+          const storedBoxes = shipment.boxes || [];
+          const numberOfBoxes = Math.max(
+            1,
+            Math.min(100, shipment.numberOfBoxes || 1),
+          );
+
+          // Older shipments predate the per-box rows; fall back to the single
+          // dimension triple stored on the shipment itself.
+          const boxes =
+            storedBoxes.length > 0
+              ? groupStoredBoxes(storedBoxes)
+              : [
+                  {
+                    id: `box-${uid()}`,
+                    length:
+                      shipment.length != null ? String(shipment.length) : "",
+                    width: shipment.width != null ? String(shipment.width) : "",
+                    height:
+                      shipment.height != null ? String(shipment.height) : "",
+                    count: numberOfBoxes,
+                  },
+                ];
+
+          const invoices =
+            shipment.invoices && shipment.invoices.length > 0
+              ? shipment.invoices.map((inv) => ({
+                  id: `inv-${uid()}`,
+                  eWayBillNo: inv.eWayBillNo || "",
+                  invoiceNo: inv.invoiceNo || "",
+                  invoiceAmt:
+                    inv.invoiceAmt != null ? String(inv.invoiceAmt) : "",
+                  invoiceDate: toDateInputValue(inv.invoiceDate),
+                  attachment: null,
+                  attachmentUrl: inv.attachmentUrl || "",
+                }))
+              : [makeInvoice()];
+
+          // The stored codAmount includes the outlet markup; the form edits the
+          // base the customer was quoted on.
+          const codBase =
+            shipment.codBaseAmount != null
+              ? shipment.codBaseAmount
+              : shipment.codAmount;
+
+          set({
+            ...DEFAULT_STATE,
+            editingShipmentId: shipment.id,
+            hasHydrated: true,
+
+            referenceNo: shipment.orderId || "",
+            actualWeight:
+              shipment.weight != null ? String(shipment.weight) : "",
+            shipmentType: shipment.shipmentType === "B2B" ? "B2B" : "B2C",
+            shipmentDirection:
+              shipment.shipmentDirection === "REVERSE" ? "REVERSE" : "FORWARD",
+            paymentType: shipment.paymentType === "COD" ? "COD" : "PREPAID",
+            codAmount: codBase != null ? String(codBase) : "",
+            serviceType:
+              shipment.serviceType === "EXPRESS" ||
+              shipment.serviceType === "ECONOMY" ||
+              shipment.serviceType === "STANDARD"
+                ? shipment.serviceType
+                : "ALL",
+            outletId: shipment.outletId || "",
+            outletUserId: shipment.walletUserId || "",
+
+            pickupAddress: shipment.pickupAddressId || "",
+            pickupAddressId: shipment.pickupAddressId || "",
+            rtoAddressId: shipment.rtoAddressId || "",
+            deliveryAddressId: shipment.deliveryAddressId || "",
+            billingSameAsDelivery: shipment.billingSameAsDelivery !== false,
+            billingAddressId: shipment.billingAddressId || "",
+            rtoSameAsPickup: shipment.rtoSameAsPickup !== false,
+
+            productDescription: shipment.productDescription || "",
+            hsnCode: shipment.hsnCode || "",
+            gstPercentage:
+              shipment.gstPercentage != null
+                ? String(shipment.gstPercentage)
+                : "",
+            isFragile: Boolean(shipment.fragile),
+
+            // Legacy delivery mirror fields, synced from the stored snapshot
+            phoneNumber: shipment.deliveryPhone || "",
+            email: shipment.deliveryEmail || "",
+            receiverName: shipment.deliveryName || "",
+            address: shipment.deliveryLine1 || "",
+            landmark: shipment.deliveryLandmark || "",
+            pincode: shipment.deliveryPincode || "",
+            city: shipment.deliveryCity || "",
+            state: shipment.deliveryState || "",
+
+            numberOfBoxes,
+            // Dimensions are persisted in centimetres.
+            dimensionUnit: "CM",
+            boxes,
+            invoices,
+
+            vasAnswers: vasAnswersFromSelections(shipment.vasSelections || []),
+
+            markupType:
+              shipment.markupType === "FLAT" ||
+              shipment.markupType === "PERCENTAGE"
+                ? shipment.markupType
+                : null,
+            markupValue:
+              shipment.markupValue != null ? String(shipment.markupValue) : "",
+
+            // The stored quote is stale the moment anything changes, so step 2
+            // always re-quotes rather than pre-selecting the old partner.
+            selectedPartnerId: "",
+            selectedQuote: null,
+            quoteToken: "",
+          });
+        },
+      }),
+      {
+        name: persistKey,
+        storage: createJSONStorage(() => localStorage),
+        // Errors are transient/derived; File objects can't survive JSON
+        // round-tripping (and shouldn't - user re-attaches on reload).
+        partialize: (state) => ({
+          ...state,
+          errors: {},
+          // Hydration status is runtime-only — persisting it would mark a
+          // fresh page load as "already hydrated" before rehydration runs.
+          hasHydrated: false,
+          invoices: state.invoices.map((inv) => ({ ...inv, attachment: null })),
         }),
-
-      clearSelectedQuote: () =>
-        set({ selectedPartnerId: "", selectedQuote: null, quoteToken: "" }),
-
-      validateDocket: () => {
-        const s = get();
-        const errs: FormErrors = {};
-        if (!s.referenceNo.trim())
-          errs.referenceNo = "Reference No is required";
-        if (!s.actualWeight.trim() || parseFloat(s.actualWeight) <= 0)
-          errs.actualWeight = "Valid weight is required";
-        if (!s.pickupAddress) errs.pickupAddress = "Pickup address is required";
-        if (!s.rtoSameAsPickup && !s.rtoAddressId)
-          errs.rtoAddressId = "RTO address is required";
-        if (!s.productDescription.trim())
-          errs.productDescription = "Product description is required";
-        if (
-          s.paymentType === "COD" &&
-          (!s.codAmount || parseFloat(s.codAmount) <= 0)
-        )
-          errs.codAmount = "COD collectable amount is required";
-        set((state) => ({ errors: { ...state.errors, ...errs } }));
-        return Object.keys(errs).length === 0;
+        merge: (persisted, current) => ({
+          ...current,
+          ...(persisted as Partial<ShipmentFormState>),
+          errors: {},
+          hasHydrated: false,
+        }),
+        onRehydrateStorage: () => (state) => {
+          state?.pruneEmptyInvoices();
+          // Drafts saved before dimension rows carried a count have one row per
+          // box and no `count` field — refitting normalises them in place.
+          state?.setNumberOfBoxes(state.numberOfBoxes);
+          state?.setHasHydrated(true);
+        },
       },
+    ),
+  );
+}
 
-      // Delivery is now select-only from the address book (DELIVERY type).
-      // The legacy phone/receiverName/address/pincode/city/state fields are
-      // synced from the selected address on select (see address-section.tsx)
-      // and kept only so payload builders don't need a second source of
-      // truth — validation just confirms a delivery (and, when applicable,
-      // billing) address was actually picked.
-      validateDelivery: () => {
-        const s = get();
-        const errs: FormErrors = {};
-        if (!s.deliveryAddressId)
-          errs.deliveryAddressId = "A delivery address is required";
-        if (!s.billingSameAsDelivery && !s.billingAddressId)
-          errs.billingAddressId = "A billing address is required";
-        set((state) => ({ errors: { ...state.errors, ...errs } }));
-        return Object.keys(errs).length === 0;
-      },
+export type ShipmentFormStoreApi = ReturnType<typeof createShipmentFormStore>;
 
-      validateStep1: () => {
-        const s = get();
-        s.clearAllErrors();
-        const docketOk = s.validateDocket();
-        const deliveryOk = s.validateDelivery();
-        return docketOk && deliveryOk;
-      },
-    }),
-    {
-      name: "shipment-form-draft",
-      storage: createJSONStorage(() => localStorage),
-      // Errors are transient/derived; File objects can't survive JSON
-      // round-tripping (and shouldn't - user re-attaches on reload).
-      partialize: (state) => ({
-        ...state,
-        errors: {},
-        // Hydration status is runtime-only — persisting it would mark a
-        // fresh page load as "already hydrated" before rehydration runs.
-        hasHydrated: false,
-        invoices: state.invoices.map((inv) => ({ ...inv, attachment: null })),
-      }),
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as Partial<ShipmentFormState>),
-        errors: {},
-        hasHydrated: false,
-      }),
-      onRehydrateStorage: () => (state) => {
-        state?.pruneEmptyInvoices();
-        // Drafts saved before dimension rows carried a count have one row per
-        // box and no `count` field — refitting normalises them in place.
-        state?.setNumberOfBoxes(state.numberOfBoxes);
-        state?.setHasHydrated(true);
-      },
-    },
-  ),
+/** Store backing the create wizard (/shipments/create/*). */
+export const useShipmentFormStore = createShipmentFormStore(
+  "shipment-form-draft",
+);
+
+/** Store backing the edit wizard (/shipments/[id]/edit/*). */
+export const useShipmentEditFormStore = createShipmentFormStore(
+  "shipment-edit-draft",
 );

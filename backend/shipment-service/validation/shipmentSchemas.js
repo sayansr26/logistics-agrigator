@@ -572,7 +572,17 @@ const assignPartnerSchema = Joi.object({
 });
 
 // Update shipment validation schema
+// Update shipment validation schema.
+//
+// Two shapes share this endpoint:
+//  - the lightweight lifecycle patch (status / specialInstructions), which any
+//    shipment accepts at any point in its life; and
+//  - the full pre-booking edit, mirroring createShipmentSchema field for
+//    field, which the controller only honours while the shipment is still
+//    CREATED and has no AWB (see updateShipment).
+// Every field is optional here; `.min(1)` just rejects an empty body.
 const updateShipmentSchema = Joi.object({
+  // --- Lifecycle patch -------------------------------------------------
   status: Joi.string()
     .valid(
       "CREATED",
@@ -598,6 +608,166 @@ const updateShipmentSchema = Joi.object({
     .messages({
       "string.max": "Special instructions cannot exceed 500 characters",
     }),
+
+  // --- Full pre-booking edit -------------------------------------------
+  shipmentType: Joi.string().valid("B2B", "B2C").optional().messages({
+    "any.only": "Shipment type must be either B2B or B2C",
+  }),
+
+  shipmentDirection: Joi.string()
+    .valid("FORWARD", "REVERSE")
+    .optional()
+    .messages({
+      "any.only": "Shipment direction must be either FORWARD or REVERSE",
+    }),
+
+  pickupAddressId: Joi.string().uuid().optional().allow(null).messages({
+    "string.guid": "Pickup address ID must be a valid UUID",
+  }),
+
+  pickupLocation: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .allow(null, ""),
+
+  pickupAddress: addressSchema.optional(),
+
+  deliveryAddress: addressSchema.optional(),
+
+  rtoSameAsPickup: Joi.boolean().optional(),
+
+  // Only demanded when the caller explicitly turns the flag off in this same
+  // request; an untouched flag leaves the stored RTO block alone.
+  rtoAddress: Joi.when("rtoSameAsPickup", {
+    is: false,
+    then: rtoAddressSchema.required().messages({
+      "any.required": "RTO address is required when not same as pickup",
+    }),
+    otherwise: Joi.optional().allow(null),
+  }),
+
+  billingSameAsDelivery: Joi.boolean().optional(),
+
+  billingAddress: Joi.when("billingSameAsDelivery", {
+    is: false,
+    then: addressSchema.required().messages({
+      "any.required": "Billing address is required when not same as delivery",
+    }),
+    otherwise: Joi.optional().allow(null),
+  }),
+
+  deliveryAddressId: Joi.string().uuid().optional().allow(null),
+  rtoAddressId: Joi.string().uuid().optional().allow(null),
+  billingAddressId: Joi.string().uuid().optional().allow(null),
+
+  productDescription: Joi.string()
+    .trim()
+    .max(1000)
+    .optional()
+    .allow(null, "")
+    .messages({
+      "string.max": "Product description cannot exceed 1000 characters",
+    }),
+
+  hsnCode: Joi.string().trim().max(20).optional().allow(null, ""),
+
+  gstPercentage: Joi.number()
+    .min(0)
+    .max(100)
+    .precision(2)
+    .optional()
+    .allow(null),
+
+  packageDetails: packageSchema.optional(),
+
+  numberOfBoxes: Joi.number().integer().min(1).max(100).optional().messages({
+    "number.min": "Number of boxes must be at least 1",
+    "number.max": "Number of boxes cannot exceed 100",
+  }),
+
+  // Sending `boxes` / `invoices` REPLACES the stored rows wholesale; omitting
+  // them leaves the existing rows untouched.
+  boxes: Joi.array().items(boxItemSchema).optional().allow(null).messages({
+    "array.base": "Boxes must be an array",
+  }),
+
+  invoices: Joi.array()
+    .items(invoiceItemSchema)
+    .optional()
+    .allow(null)
+    .messages({
+      "array.base": "Invoices must be an array",
+    }),
+
+  paymentType: Joi.string().valid("PREPAID", "COD").optional().messages({
+    "any.only": "Payment type must be either PREPAID or COD",
+  }),
+
+  // Required alongside an explicit switch to COD; a COD shipment whose amount
+  // is not being changed simply omits it.
+  codAmount: Joi.when("paymentType", {
+    is: "COD",
+    then: Joi.number().positive().precision(2).max(100000).required().messages({
+      "number.max": "COD amount cannot exceed ₹1,00,000",
+      "any.required": "COD amount is required when payment type is COD",
+    }),
+    otherwise: Joi.number().optional().allow(null, 0),
+  }),
+
+  serviceType: Joi.string()
+    .valid("STANDARD", "EXPRESS", "ECONOMY")
+    .optional()
+    .messages({
+      "any.only": "Service type must be STANDARD, EXPRESS, or ECONOMY",
+    }),
+
+  // Partner re-selection. Passing `null` detaches the current partner and
+  // refunds the shipment; passing an id requires a matching signed token.
+  selectedPartnerId: Joi.string().optional().allow(null, ""),
+
+  quoteSnapshot: Joi.object().optional().allow(null),
+
+  quoteToken: Joi.string()
+    .max(2048)
+    .when("selectedPartnerId", {
+      is: Joi.string().min(1).exist(),
+      then: Joi.required().messages({
+        "any.required": "quoteToken is required when a partner is selected",
+      }),
+      otherwise: Joi.optional().allow(null),
+    }),
+
+  markup: Joi.object({
+    type: Joi.string().valid("FLAT", "PERCENTAGE").required(),
+    value: Joi.number()
+      .min(0)
+      .precision(2)
+      .when("type", { is: "PERCENTAGE", then: Joi.number().max(100) })
+      .required(),
+  })
+    .optional()
+    .allow(null),
+
+  vasSelections: Joi.array()
+    .items(
+      Joi.object({
+        chargeCode: Joi.string()
+          .pattern(/^[A-Z0-9_]{2,60}$/)
+          .required(),
+        answer: Joi.alternatives()
+          .try(
+            Joi.string().max(200),
+            Joi.number(),
+            Joi.boolean(),
+            Joi.object().unknown(true).max(10),
+          )
+          .required(),
+      }),
+    )
+    .max(20)
+    .optional(),
 })
   .min(1)
   .messages({

@@ -1,7 +1,7 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import { useShipmentAddresses } from "@/hooks/useShipmentAddresses";
 import { sanitizeIndianPhone } from "@/lib/utils/phone";
 import type { OutletAddress } from "@/store/api/endpoints/outletApi";
@@ -13,7 +13,7 @@ interface AddressSectionProps {
 }
 
 export function AddressSection({ isOutlet, isAdminLike }: AddressSectionProps) {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
 
   const { activeAddresses, isLoading, needsOutletFirst } = useShipmentAddresses(
     {

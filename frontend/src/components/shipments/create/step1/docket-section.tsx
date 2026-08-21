@@ -8,7 +8,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { useShipmentFormStore } from "@/store/shipment-form-store";
+import { useShipmentForm } from "@/components/shipments/create/form-store-context";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   useListOutletsQuery,
@@ -21,7 +21,7 @@ const inputClass =
 const selectClass = `${inputClass} cursor-pointer pr-8`;
 
 export function DocketSection({ isAdminLike }: { isAdminLike: boolean }) {
-  const store = useShipmentFormStore();
+  const store = useShipmentForm();
   const isB2B = store.shipmentType === "B2B";
 
   const {
