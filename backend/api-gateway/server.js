@@ -336,6 +336,12 @@ const services = {
       "^/api/v1/shipments": "/api/v1/shipments", // API endpoints → /api/v1/shipments/*
     },
   },
+  invoices: {
+    target: process.env.SHIPMENT_SERVICE_URL || "http://shipment-service:3004",
+    pathRewrite: {
+      "^/api/v1/invoices": "/api/v1/invoices", // API endpoints → /api/v1/invoices/*
+    },
+  },
   partners: {
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     pathRewrite: {

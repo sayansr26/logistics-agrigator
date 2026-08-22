@@ -177,3 +177,6 @@ backend/partner-service/data/*.old-*
 
 # Database dump bundles (make db-dump / make backup)
 backups/
+
+
+*.pdf

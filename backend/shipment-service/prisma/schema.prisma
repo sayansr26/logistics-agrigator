@@ -190,6 +190,7 @@ model Shipment {
   ndrCases             NDRCase[]
   financialAdjustments ShipmentFinancialAdjustment[]
   invoices             ShipmentInvoice[]
+  taxInvoices          Invoice[]
   boxes                ShipmentBox[]
   documents            ShipmentDocument[]
   outletEarning        OutletEarning?
@@ -390,6 +391,94 @@ model ShipmentFinancialAdjustment {
   @@index([shipmentId])
   @@index([adjustmentType])
   @@map("shipment_financial_adjustments")
+}
+
+model InvoiceCounter {
+  id            String   @id @default(uuid()) @db.Uuid
+  financialYear String   @unique @map("financial_year") @db.VarChar(10) // e.g. "2026-27"
+  lastNumber    Int      @default(0) @map("last_number")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("invoice_counters")
+}
+
+model Invoice {
+  id            String   @id @default(uuid()) @db.Uuid
+  shipmentId    String   @map("shipment_id") @db.Uuid
+  invoiceType   String   @default("TAX_INVOICE") @map("invoice_type") @db.VarChar(20) // TAX_INVOICE | CREDIT_NOTE | DEBIT_NOTE
+  invoiceNumber String   @unique @map("invoice_number") @db.VarChar(50) // e.g. INV/2026-27/000123 or CN/2026-27/000045
+  financialYear String   @map("financial_year") @db.VarChar(10)
+  status        String   @default("ISSUED") @map("status") @db.VarChar(20) // ISSUED | CANCELLED
+  issueDate     DateTime @default(now()) @map("issue_date")
+
+  originalInvoiceId     String? @map("original_invoice_id") @db.Uuid // for CREDIT_NOTE/DEBIT_NOTE: the TAX_INVOICE it corrects
+  financialAdjustmentId String? @map("financial_adjustment_id") @db.Uuid // links to shipment_financial_adjustments row that triggered a note
+
+  // Billed-to snapshot — fetched from user-service at issue time, NEVER re-fetched/recomputed after
+  outletId           String? @map("outlet_id") @db.Uuid
+  clientId           String? @map("client_id") @db.Uuid
+  billedName         String  @map("billed_name") @db.VarChar(200)
+  billedGstin        String? @map("billed_gstin") @db.VarChar(20)
+  billedAddressLine1 String? @map("billed_address_line1") @db.VarChar(255)
+  billedAddressLine2 String? @map("billed_address_line2") @db.VarChar(255)
+  billedCity         String? @map("billed_city") @db.VarChar(100)
+  billedState        String? @map("billed_state") @db.VarChar(50)
+  billedStateCode    String? @map("billed_state_code") @db.VarChar(2)
+  billedPincode      String? @map("billed_pincode") @db.VarChar(6)
+
+  // Shipment snapshot — what the customer is actually being billed FOR.
+  // Snapshotted at issue time like the billed-to block: an invoice must stay
+  // readable on its own, and a bare shipment UUID tells the recipient nothing.
+  orderId            String?   @map("order_id") @db.VarChar(100)
+  awbNumber          String?   @map("awb_number") @db.VarChar(50)
+  partnerName        String?   @map("partner_name") @db.VarChar(100)
+  serviceType        String?   @map("service_type") @db.VarChar(50)
+  shipmentDate       DateTime? @map("shipment_date")
+  originCity         String?   @map("origin_city") @db.VarChar(100)
+  originPincode      String?   @map("origin_pincode") @db.VarChar(6)
+  destinationCity    String?   @map("destination_city") @db.VarChar(100)
+  destinationPincode String?   @map("destination_pincode") @db.VarChar(6)
+  chargeableWeight   Decimal?  @map("chargeable_weight") @db.Decimal(10, 3)
+
+  // Supplier place of supply
+  placeOfSupplyState     String @map("place_of_supply_state") @db.VarChar(50)
+  placeOfSupplyStateCode String @map("place_of_supply_state_code") @db.VarChar(2)
+  supplyType             String @map("supply_type") @db.VarChar(10) // INTRA | INTER
+
+  // Amounts — snapshot at issue time, immutable
+  taxableValue Decimal  @map("taxable_value") @db.Decimal(12, 2)
+  cgstRate     Decimal? @map("cgst_rate") @db.Decimal(5, 2)
+  cgstAmount   Decimal? @map("cgst_amount") @db.Decimal(12, 2)
+  sgstRate     Decimal? @map("sgst_rate") @db.Decimal(5, 2)
+  sgstAmount   Decimal? @map("sgst_amount") @db.Decimal(12, 2)
+  igstRate     Decimal? @map("igst_rate") @db.Decimal(5, 2)
+  igstAmount   Decimal? @map("igst_amount") @db.Decimal(12, 2)
+  totalAmount  Decimal  @map("total_amount") @db.Decimal(12, 2) // signed: positive for TAX_INVOICE/DEBIT_NOTE, negative for CREDIT_NOTE
+  hsnSacCode   String   @default("996812") @map("hsn_sac_code") @db.VarChar(10) // SAC for freight/courier services
+
+  lineItems Json @map("line_items") // snapshot of chargeBreakdown array at issue time, never recomputed
+
+  pdfUrl String? @map("pdf_url") @db.VarChar(500)
+
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+
+  @@index([shipmentId])
+  @@index([financialYear, invoiceNumber])
+  @@index([outletId])
+  @@index([clientId])
+  @@index([status])
+  @@index([originalInvoiceId])
+  // NOTE: a DB-level partial unique index enforcing "at most one ISSUED
+  // TAX_INVOICE per shipment" exists via raw migration DDL (migration
+  // 20260822120000_add_one_tax_invoice_per_shipment_index) since Prisma's
+  // schema.prisma does not support partial (WHERE-clause) unique indexes.
+  // It is NOT declared here as @@unique/@@index because Prisma would try
+  // to (re)create it as a non-partial index, dropping the WHERE clause.
+  @@map("invoices")
 }
 
 // Enums

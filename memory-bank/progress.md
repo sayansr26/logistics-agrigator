@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: August 21, 2026
+> Development status and changelog | Last Updated: August 22, 2026
 
 ## Overall Project Status
 
@@ -153,7 +153,7 @@ Overall Project Progress          [███████████████
   - Frontend: `phone` field added to User interface in authSlice and authApi
   - Sidebar: `outlet` role added to wallet nav item
 
-#### Shipment Service (95% Complete)
+#### Shipment Service (96% Complete)
 
 - ✅ Single order creation
 - ✅ AWB generation
@@ -196,6 +196,18 @@ Overall Project Progress          [███████████████
 - ✅ **Shipment quotes & assign-partner pipeline (April 8, 2026)**
   - ✅ `getShipmentQuotes`: single path through `partnerIntegrationService.calculateRates` (removed duplicate serviceability filtering)
   - ✅ Rate Redis: delete cache entry when stored `rates` is empty; do not write cache when `rates.length === 0`
+- ✅ **Shipment Tax Invoice System (NEW - August 22, 2026)**
+  - ✅ New `Invoice`/`InvoiceCounter` Prisma models, distinct from the pre-existing `ShipmentInvoice` (customer's commercial/e-way-bill invoice, unchanged)
+  - ✅ Financial-year-aware, gap-free invoice numbering (`INV/{FY}/{seq}` tax invoices, `CN`/`DN`/{FY}/{seq} notes) via `services/invoiceService.js`
+  - ✅ Concurrency-safe idempotent issuance: partial unique index `invoices_one_tax_invoice_per_shipment` (raw-SQL migration `20260822120000_add_one_tax_invoice_per_shipment_index`, Prisma schema can't express partial indexes) + P2002 catch-and-return-winner
+  - ✅ `issueAdjustmentNote` for credit/debit notes on re-rates, hooked into `rerateShipment` as best-effort (never rolls back the wallet adjustment)
+  - ✅ GSTIN/company details snapshotted at issue time from two new user-service internal endpoints (`GET /internal/outlets/:outletId/billing-details`, `GET /internal/clients/:clientId/billing-details`), never re-fetched after
+  - ✅ Real PDF generation via `pdfkit` (`services/invoicePdfService.js`), stored under `generated/invoices/`
+  - ✅ `controllers/invoiceController.js` + `routes/invoices.js` mounted at `/api/v1/invoices`; api-gateway proxy map updated
+  - ✅ Frontend: `app/wallet/invoices/page.tsx` (list) + `app/wallet/invoices/[id]/page.tsx` (detail with GST breakdown, related notes, PDF download) — replaces the old mock-data stub `page.jsx`
+  - ⚠️ `Client` model has no GSTIN field — client-billed invoices always have `billedGstin: null` (data-model gap, not a bug)
+  - ⚠️ Platform GSTIN/company env vars (`PLATFORM_GSTIN`, `PLATFORM_COMPANY_NAME`) are unset placeholders; PDF shows clearly-marked placeholders until configured
+  - ⚠️ `GET /api/v1/invoices` has no `shipmentId` filter yet — frontend works around it client-side
 - ⏳ Bulk operations (planned)
 - ⏳ Bulk label printing (planned)
 
@@ -651,6 +663,128 @@ Overall Project Progress          [███████████████
 ### August 2026
 
 ```
+[2026-08-22] Operations/Financial Dashboard Rebuild - COMPLETE
+  Need: /dashboard only showed partner/zone/charge-definition counts; no
+        shipment volume, financial, or exception visibility for operators.
+
+  Shipped: 5 new shipment-service aggregation endpoints
+           (/api/v1/shipments/dashboard/summary|trend|couriers|outlets|adjustments)
+           and 2 wallet-service endpoints
+           (/api/v1/wallet/dashboard/summary|trend), all read-only, Redis-cached
+           ~90s, scoped via authUtils.applyScopeFilter (shipment) / clientCode
+           + per-user external-API scoping (wallet). Frontend dashboard/page.tsx
+           rebuilt with KPI tiles, recharts charts (project's first chart lib,
+           theme-aware via new --chart-* CSS vars), and tables; role-adaptive
+           (outlet sees only its own data, backend-enforced not just UI-hidden).
+
+  Course correction mid-task: wallet-service runs STATELESS (no local DB of
+        record - confirmed via its own health check). First pass queried the
+        local Prisma Wallet/Transaction tables directly, which are always
+        empty; endpoints returned schema-correct but permanently-zero data.
+        Reworked to go through services/externalWalletClient.js (the real
+        source of truth, same client adminWalletController.js/
+        outletWalletController.js already use) - now returns real data
+        (2 wallets, Rs.2664.80 total, 19 transactions for client LOGISTICS,
+        cross-checked against the pre-existing /admin/client-wallets
+        endpoint). External API's transaction types are TOP_UP/REFUND/DEBIT,
+        not the local Prisma TransactionType enum values - verified against
+        live responses rather than assumed.
+
+  Verified: code review 11/11 rule-compliance checks pass (controller
+        pattern, Prisma-only/no raw SQL for shipment-service, Joi validation
+        enforced, tenant scoping on every endpoint, no mock data, theme-aware
+        chart colors, no N+1). Curl-tested all 7 endpoints through the
+        gateway with superadmin AND outlet tokens confirming scope isolation.
+        tsc clean, Docker logs clean across all 4 services, live browser load
+        confirmed end-to-end in gateway logs.
+
+  Known gaps (honest, not faked): shipment-service cannot determine true COD
+        settlement status (lives in wallet-service's external API, not wired
+        cross-service this pass). Wallet-service transaction date-range
+        filtering is bounded (external API's from/to params don't work;
+        paged newest-first up to a cap with a `truncated` flag).
+
+  Unrelated pre-existing bug found, NOT fixed (flagged as separate task):
+        GET /api/v1/shipments?page=abc returns 500 instead of 400
+        (shipmentController.js ~line 1937, missing guard before Prisma skip).
+
+  Housekeeping: outlet account sales@subsolution.in had its password reset
+        during scope-isolation testing (pre-authorized for this task) -
+        temporary password Outletd73435bfc41069bb@123! should be
+        communicated to the account owner.
+```
+
+```
+[2026-08-22] Shipment Tax Invoice System - COMPLETE
+  Need: shipments had no proper GST tax invoice — only the pre-existing
+        ShipmentInvoice model (the customer's commercial invoice/e-way-bill
+        captured at booking), which is a different concern and was left
+        untouched.
+
+  Shipped (shipment-service): new Invoice + InvoiceCounter Prisma models.
+        Financial-year-aware, gap-free numbering (INV/{FY}/{seq} for tax
+        invoices, CN/DN/{FY}/{seq} for credit/debit notes, separate counter
+        series) in the new services/invoiceService.js. issueTaxInvoice is
+        idempotent and concurrency-safe: partial unique index
+        invoices_one_tax_invoice_per_shipment on (shipment_id) WHERE
+        invoice_type='TAX_INVOICE' AND status='ISSUED', added via raw
+        migration SQL (20260822120000_add_one_tax_invoice_per_shipment_index,
+        after 20260822095413_add_tax_invoice_system) since Prisma 5.22's
+        schema.prisma can't express partial indexes; a P2002 collision is
+        caught and resolved by returning the winning row.
+        issueAdjustmentNote issues credit/debit notes for re-rates, hooked
+        into rerateShipment in shipmentController.js as best-effort
+        try/catch (never rolls back the wallet adjustment that already
+        happened). New services/gstStateCodeMap.js hardcodes the India
+        state/UT -> GST state code table. Real PDF generation via pdfkit
+        (new dependency) in services/invoicePdfService.js, stored under
+        generated/invoices/ following the labelGenerationService.js
+        convention. New controllers/invoiceController.js,
+        validation/invoiceSchemas.js, routes/invoices.js mounted at
+        /api/v1/invoices: POST /invoices/shipments/:shipmentId/issue,
+        GET /invoices/:id, GET /invoices (filtered/paginated),
+        POST /invoices/notes ({financialAdjustmentId}), GET /invoices/:id/pdf.
+
+  Shipped (user-service): two new internal billing-details endpoints —
+        GET /api/v1/internal/outlets/:outletId/billing-details and
+        GET /api/v1/internal/clients/:clientId/billing-details (behind
+        requireInternalRequest, same as existing internal routes) —
+        shipment-service snapshots GSTIN/company-name/address from these
+        onto the invoice at issue time and never re-fetches them.
+
+  Shipped (api-gateway): invoices entry added to the service proxy map,
+        routing /api/v1/invoices to shipment-service:3004.
+
+  Shipped (frontend): store/api/endpoints/invoiceApi.ts (RTK Query:
+        issueInvoice/getInvoice/listInvoices/issueNote/downloadInvoicePdf),
+        new app/wallet/invoices/page.tsx (list) and
+        app/wallet/invoices/[id]/page.tsx (full detail: GST breakdown,
+        related credit/debit notes, PDF download) — replaces the old
+        mock-data stub page.jsx, which was deleted.
+
+  Known limitations (recorded, not fixed here):
+  - Place of supply is read as billingState with pickupState as the
+        supplier's state — a reasonable B2B freight-services GST reading,
+        but the platform has no explicit "registered supplier state per
+        invoice" concept anywhere else. Flagged in invoiceService.js
+        comments; needs accountant sign-off before real GST filings.
+  - PLATFORM_GSTIN / PLATFORM_COMPANY_NAME are unset placeholder env vars —
+        PDF renders clearly-marked placeholders until configured.
+  - Client Prisma model (user-service) has no GSTIN field at all, so
+        client-billed invoices always have billedGstin: null — a real
+        data-model gap, not a bug.
+  - GET /api/v1/invoices has no shipmentId filter — the detail page's
+        "related notes for this shipment" feature filters client-side
+        after fetching by outlet/client instead, which won't scale.
+  - CGST/SGST 50/50 splits assign the odd-paisa rounding remainder to the
+        SGST leg (sgstAmount = gstTotal - cgstAmount) so the two always sum
+        exactly to the GST total.
+  - Dev-environment finding, not introduced by this task: no shipment in
+        the dev DB had a real walletTransactionId set at time of building
+        (wallet integration appears broken in this environment, consistent
+        with the recent fix: wallet_issue_during_shipment_creation commit)
+        — verification required patching test fixtures directly via Prisma.
+
 [2026-08-07] Landing Page Migrated to "Subsolution" Scroll-Deck Design - COMPLETE
   Need: replace the old teal-brand single-file landing page (488-line
         src/app/page.tsx + scoped BRAND_CSS) with the approved dark-glass

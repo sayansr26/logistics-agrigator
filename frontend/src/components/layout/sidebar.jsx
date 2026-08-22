@@ -178,6 +178,13 @@ const getNavigationSections = () => {
           disabled: false,
         },
         {
+          title: "Invoices",
+          href: "/wallet/invoices",
+          icon: FileText,
+          roles: ["superadmin", "admin", "accounts", "client", "outlet"],
+          disabled: false,
+        },
+        {
           title: "Earnings",
           href: "/earnings",
           icon: TrendingUp,
@@ -247,6 +254,15 @@ export function Sidebar({ className }) {
   const pathname = usePathname();
   const navigationSections = getNavigationSections();
 
+  // Only the deepest matching item is active. A plain per-item prefix test lit
+  // up both "Wallet" (/wallet) and "Invoices" (/wallet/invoices) on an invoice
+  // page, because the shorter href is a prefix of the longer one.
+  const activeHref = navigationSections
+    .flatMap((section) => section.items)
+    .map((item) => item.href)
+    .filter((href) => pathname === href || pathname.startsWith(href + "/"))
+    .sort((a, b) => b.length - a.length)[0];
+
   return (
     <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", className)}>
       <div className="space-y-3 py-3">
@@ -267,7 +283,7 @@ export function Sidebar({ className }) {
                     <NavItemComponent
                       key={item.href}
                       item={item}
-                      pathname={pathname}
+                      isActive={item.href === activeHref}
                     />
                   ))}
                 </div>
@@ -286,10 +302,7 @@ export function Sidebar({ className }) {
   );
 }
 
-function NavItemComponent({ item, pathname }) {
-  const isActive =
-    pathname === item.href || pathname.startsWith(item.href + "/");
-
+function NavItemComponent({ item, isActive }) {
   // Handle disabled items
   if (item.disabled) {
     return (

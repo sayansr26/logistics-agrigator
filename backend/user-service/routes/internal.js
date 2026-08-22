@@ -7,6 +7,7 @@ const router = express.Router();
 // Controllers
 const bootstrapController = require("../controllers/bootstrapController");
 const internalOutletController = require("../controllers/internalOutletController");
+const internalClientController = require("../controllers/internalClientController");
 
 // Middleware
 const { requireInternalRequest } = require("../middleware/internal");
@@ -257,6 +258,64 @@ router.get(
   "/outlets/:outletId/badge",
   requireInternalRequest,
   internalOutletController.getOutletBadgeById,
+);
+
+/**
+ * @swagger
+ * /api/v1/internal/outlets/{outletId}/billing-details:
+ *   get:
+ *     summary: Get outlet billing/legal details by outlet ID
+ *     description: Resolves company name, GSTIN, TAN/PAN and company address for an outlet. Called by shipment-service to snapshot billed-to details onto a tax invoice at issue time.
+ *     tags: [Internal]
+ *     security:
+ *       - internalAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: outletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The outlet ID
+ *     responses:
+ *       200:
+ *         description: Outlet billing details resolved
+ *       403:
+ *         description: Unauthorized - missing internal request header
+ */
+router.get(
+  "/outlets/:outletId/billing-details",
+  requireInternalRequest,
+  internalOutletController.getOutletBillingDetails,
+);
+
+/**
+ * @swagger
+ * /api/v1/internal/clients/{clientId}/billing-details:
+ *   get:
+ *     summary: Get client billing/legal details by client ID
+ *     description: Resolves legal name, business address and contact details for a client. Called by shipment-service to snapshot billed-to details onto a tax invoice at issue time. NOTE - the Client model has no GSTIN field today; `gst` is always returned as null.
+ *     tags: [Internal]
+ *     security:
+ *       - internalAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: clientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The client ID
+ *     responses:
+ *       200:
+ *         description: Client billing details resolved
+ *       403:
+ *         description: Unauthorized - missing internal request header
+ */
+router.get(
+  "/clients/:clientId/billing-details",
+  requireInternalRequest,
+  internalClientController.getClientBillingDetails,
 );
 
 module.exports = router;

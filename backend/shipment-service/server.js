@@ -11,6 +11,7 @@ const helmet = require("helmet");
 const logger = require("./shared/lib/logger");
 
 const shipmentRoutes = require("./routes/shipments");
+const invoiceRoutes = require("./routes/invoices");
 const { errorHandler } = require("./middleware/errorHandler");
 const { connectDB, prisma } = require("./config/database");
 const { connectRedis, getRedisClient } = require("./config/redis");
@@ -123,6 +124,7 @@ app.get("/openapi.json", (req, res) => {
 
 // Routes
 app.use("/api/v1/shipments", shipmentRoutes);
+app.use("/api/v1/invoices", invoiceRoutes);
 
 // External (public) Shipment API. Authenticated by API credentials rather than
 // a portal session; the gateway confines aud="external-api" tokens to this

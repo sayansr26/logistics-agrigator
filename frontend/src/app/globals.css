@@ -24,6 +24,24 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* Chart categorical palette (validated, fixed order — see dataviz skill) */
+    --chart-1: #2a78d6; /* blue */
+    --chart-2: #eb6834; /* orange */
+    --chart-3: #1baf7a; /* aqua */
+    --chart-4: #eda100; /* yellow */
+    --chart-5: #e87ba4; /* magenta */
+    --chart-6: #008300; /* green */
+    --chart-7: #4a3aa7; /* violet */
+    --chart-8: #e34948; /* red */
+    /* Chart status palette (fixed — never themed) */
+    --chart-good: #0ca30c;
+    --chart-warning: #fab219;
+    --chart-serious: #ec835a;
+    --chart-critical: #d03b3b;
+    /* Chart chrome */
+    --chart-grid: #e1e0d9;
+    --chart-axis: #c3c2b7;
   }
 
   .dark {
@@ -46,6 +64,24 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
+
+    /* Chart categorical palette, stepped for the dark surface */
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #008300;
+    --chart-7: #9085e9;
+    --chart-8: #e66767;
+    /* Status palette — same steps, still clear 3:1 on the dark surface */
+    --chart-good: #0ca30c;
+    --chart-warning: #fab219;
+    --chart-serious: #ec835a;
+    --chart-critical: #d03b3b;
+    /* Chart chrome */
+    --chart-grid: #2c2c2a;
+    --chart-axis: #383835;
   }
 
   * {

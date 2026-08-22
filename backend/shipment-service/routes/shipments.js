@@ -446,6 +446,17 @@ const {
   getOutletEarningsSummary,
 } = require("../controllers/outletEarningsController");
 
+// Read-only operations-dashboard aggregation endpoints (no schema changes;
+// each handler applies authUtils.applyScopeFilter and Redis-caches its
+// result — see controllers/dashboardController.js for details).
+const {
+  getDashboardSummary,
+  getDashboardTrend,
+  getDashboardCouriers,
+  getDashboardOutlets,
+  getDashboardAdjustments,
+} = require("../controllers/dashboardController");
+
 /**
  * @swagger
  * /api/v1/shipments/earnings:
@@ -480,6 +491,53 @@ router.get(
   authMiddleware.enrichUserContext,
   authMiddleware.requirePermission("shipment", "read", "own"),
   getOutletEarningsSummary,
+);
+
+// NOTE: must precede "/:id" - Express matches in registration order, and
+// "/:id" would otherwise capture "dashboard" as a shipment ID.
+router.get(
+  "/dashboard/summary",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getDashboardSummary,
+);
+
+router.get(
+  "/dashboard/trend",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getDashboardTrend,
+);
+
+router.get(
+  "/dashboard/couriers",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getDashboardCouriers,
+);
+
+router.get(
+  "/dashboard/outlets",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getDashboardOutlets,
+);
+
+router.get(
+  "/dashboard/adjustments",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "own"),
+  getDashboardAdjustments,
 );
 
 // NOTE: must precede "/:id" - Express matches in registration order, and

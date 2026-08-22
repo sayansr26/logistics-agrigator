@@ -29,6 +29,7 @@ const {
 const { toPublicTracking } = require("../services/publicTrackingMilestones");
 const quoteSigningService = require("../services/quoteSigningService");
 const quoteService = require("../services/quoteService");
+const invoiceService = require("../services/invoiceService");
 const outletWalletContextService = require("../services/outletWalletContextService");
 const markupService = require("../services/markupService");
 const weightCalc = require("../shared/utils/weightCalc");
@@ -4651,23 +4652,48 @@ async function rerateShipment(req, res) {
     });
 
     // Record financial adjustment
-    await prisma.shipmentFinancialAdjustment.create({
-      data: {
-        shipmentId: id,
-        adjustmentType: "DISPUTE_RERATE",
-        reason,
-        oldAmount: oldCost,
-        newAmount: newCost,
-        difference,
-        refundTransactionId: refundTxId,
-        chargeTransactionId: chargeTxId,
-        disputedWeight: newWeight,
-        disputedLength: newLength,
-        disputedWidth: newWidth,
-        disputedHeight: newHeight,
-        createdById: userId,
+    const financialAdjustment = await prisma.shipmentFinancialAdjustment.create(
+      {
+        data: {
+          shipmentId: id,
+          adjustmentType: "DISPUTE_RERATE",
+          reason,
+          oldAmount: oldCost,
+          newAmount: newCost,
+          difference,
+          refundTransactionId: refundTxId,
+          chargeTransactionId: chargeTxId,
+          disputedWeight: newWeight,
+          disputedLength: newLength,
+          disputedWidth: newWidth,
+          disputedHeight: newHeight,
+          createdById: userId,
+        },
       },
-    });
+    );
+
+    // Issue a GST credit/debit note for this adjustment, best-effort. The
+    // wallet adjustment above already happened and is the source of truth
+    // for money moved; a failed note issuance must NOT roll back the rerate
+    // response (the shipment is already correctly re-rated and the customer
+    // already refunded/charged). If this fails, a note can be issued
+    // manually later via POST /api/v1/invoices/notes using the same
+    // financialAdjustment.id.
+    try {
+      await invoiceService.issueAdjustmentNote(
+        financialAdjustment.id,
+        userId,
+        req.ip,
+        req.get("User-Agent"),
+      );
+    } catch (noteError) {
+      logger.error("Failed to auto-issue adjustment note after rerate", {
+        service: "shipment-service",
+        shipmentId: id,
+        financialAdjustmentId: financialAdjustment.id,
+        error: noteError.message,
+      });
+    }
 
     const trackingMessage = holdApplied
       ? `Shipment on hold: insufficient balance after re-rate (₹${oldCost} → ₹${newCost})`

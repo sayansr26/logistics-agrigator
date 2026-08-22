@@ -899,6 +899,105 @@ export interface ExplainQuoteResponse {
 }
 
 // ===========================
+// Dashboard types
+// ===========================
+
+export interface DashboardSummaryResponse {
+  status: string;
+  data: {
+    range: { days: number; from: string; to: string };
+    totals: { count: number };
+    byStatus: Record<string, number>;
+    byShipmentType: Record<string, number>;
+    rates: {
+      ndr: { count: number; rate: number };
+      rto: { count: number; rate: number };
+      delivered: { count: number; rate: number };
+    };
+    exceptions: { hold: { count: number } };
+    bookingFailures: { pendingBooking: { count: number } };
+    tat: { avgHours: number | null; sampleSize: number };
+    financials: {
+      currency: string;
+      revenue: number;
+      courierCost: number;
+      profitMargin: number;
+      courierCostPendingCount: number;
+    };
+    cod: {
+      byStatus: Record<string, { count: number; amount: number }>;
+      buckets: {
+        inTransit: { count: number; amount: number };
+        delivered: { count: number; amount: number };
+        rto: { count: number; amount: number };
+      };
+      note: string;
+    };
+  };
+}
+
+export interface DashboardTrendResponse {
+  status: string;
+  data: {
+    range: { days: number; from: string; to: string };
+    series: Array<{ date: string; count: number; revenue: number }>;
+  };
+}
+
+export interface DashboardCourierRow {
+  partnerId: string;
+  partnerName: string;
+  shipmentCount: number;
+  revenue: number;
+  courierCost: number;
+  margin: number;
+}
+
+export interface DashboardCouriersResponse {
+  status: string;
+  data: {
+    range: { days: number; from: string; to: string };
+    couriers: DashboardCourierRow[];
+  };
+}
+
+export interface DashboardOutletRow {
+  outletId: string;
+  /** Resolved from user-service; null when that lookup failed. */
+  outletName: string | null;
+  shipmentCount: number;
+  revenue: number;
+}
+
+export interface DashboardOutletsResponse {
+  status: string;
+  data: {
+    range: { days: number; from: string; to: string };
+    limit: number;
+    topByVolume: DashboardOutletRow[];
+    topByRevenue: DashboardOutletRow[];
+  };
+}
+
+export interface DashboardAdjustmentRow {
+  adjustmentType: string;
+  count: number;
+  totalDifference: number;
+}
+
+export interface DashboardAdjustmentsResponse {
+  status: string;
+  data: {
+    range: { days: number; from: string; to: string };
+    adjustments: DashboardAdjustmentRow[];
+  };
+}
+
+export interface DashboardParams {
+  days?: number;
+}
+
+// ===========================
 // RTK Query API Definition
 // ===========================
 
@@ -1320,6 +1419,86 @@ export const shipmentApi = baseApi.injectEndpoints({
         body,
       }),
     }),
+
+    // ===========================
+    // Operations Dashboard
+    // ===========================
+
+    /** KPI summary (status/type breakdowns, rates, exceptions, financials, COD). */
+    getDashboardSummary: builder.query<
+      DashboardSummaryResponse,
+      DashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/shipments/dashboard/summary",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Shipment", id: "DASHBOARD_SUMMARY" }],
+    }),
+
+    /** Daily volume/revenue series for the trend chart. */
+    getDashboardTrend: builder.query<
+      DashboardTrendResponse,
+      DashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/shipments/dashboard/trend",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Shipment", id: "DASHBOARD_TREND" }],
+    }),
+
+    /** Top couriers by volume/revenue/cost/margin. */
+    getDashboardCouriers: builder.query<
+      DashboardCouriersResponse,
+      DashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/shipments/dashboard/couriers",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Shipment", id: "DASHBOARD_COURIERS" }],
+    }),
+
+    /** Top outlets by volume/revenue (platform/client scope; redundant for a single outlet). */
+    getDashboardOutlets: builder.query<
+      DashboardOutletsResponse,
+      (DashboardParams & { limit?: number }) | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        const limit = arg ? arg.limit : undefined;
+        return {
+          url: "/api/v1/shipments/dashboard/outlets",
+          params: { ...(days ? { days } : {}), ...(limit ? { limit } : {}) },
+        };
+      },
+      providesTags: [{ type: "Shipment", id: "DASHBOARD_OUTLETS" }],
+    }),
+
+    /** Weight-dispute re-rate stats, grouped by adjustment type. */
+    getDashboardAdjustments: builder.query<
+      DashboardAdjustmentsResponse,
+      DashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/shipments/dashboard/adjustments",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Shipment", id: "DASHBOARD_ADJUSTMENTS" }],
+    }),
   }),
 });
 
@@ -1358,6 +1537,12 @@ export const {
   useGetOutletEarningsQuery,
   useGetOutletEarningsSummaryQuery,
   useExplainQuoteMutation,
+  // Dashboard
+  useGetDashboardSummaryQuery,
+  useGetDashboardTrendQuery,
+  useGetDashboardCouriersQuery,
+  useGetDashboardOutletsQuery,
+  useGetDashboardAdjustmentsQuery,
 } = shipmentApi;
 
 // ===========================

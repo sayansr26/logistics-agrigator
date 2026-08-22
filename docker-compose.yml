@@ -192,6 +192,15 @@ services:
       # its own. Priced inside the taxable subtotal by the charges engine.
       - PLATFORM_DEFAULT_MARKUP_TYPE=${PLATFORM_DEFAULT_MARKUP_TYPE:-}
       - PLATFORM_DEFAULT_MARKUP_VALUE=${PLATFORM_DEFAULT_MARKUP_VALUE:-}
+      # Supplier identity printed on tax invoices. Defaults live in
+      # invoicePdfService.js; GSTIN has no default on purpose — an invented
+      # number on a tax invoice is a compliance problem.
+      - PLATFORM_COMPANY_NAME=${PLATFORM_COMPANY_NAME:-}
+      - PLATFORM_GSTIN=${PLATFORM_GSTIN:-}
+      - PLATFORM_ADDRESS=${PLATFORM_ADDRESS:-}
+      - PLATFORM_PHONE=${PLATFORM_PHONE:-}
+      - PLATFORM_EMAIL=${PLATFORM_EMAIL:-}
+      - PLATFORM_WEBSITE=${PLATFORM_WEBSITE:-}
       - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
       - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
       - STAGING_ORIGINS=${STAGING_ORIGINS}

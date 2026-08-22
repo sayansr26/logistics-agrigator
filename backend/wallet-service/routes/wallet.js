@@ -57,6 +57,11 @@ const {
   getMyTransactionStatistics,
   getMyWalletInfo,
 } = require("../controllers/outletWalletController");
+const {
+  getSummary: getDashboardSummary,
+  getTrend: getDashboardTrend,
+} = require("../controllers/dashboardController");
+const { dashboardRangeQuerySchema } = require("../validation/dashboardSchema");
 
 const router = express.Router();
 
@@ -239,6 +244,38 @@ router.get(
   authMiddleware.authenticate,
   authMiddleware.requirePermission("wallet", "read", "own"),
   getMyTransactionStatistics,
+);
+
+// -------------------------------------------------------------------------
+// Dashboard routes — read-only aggregation for the ops/financial dashboard
+// (backed by the local Wallet/Transaction ledger). Scoped the same way as
+// the outlet "my/*" routes: outlet sees only their own wallet's data,
+// admin/superadmin see everything. MUST be defined BEFORE /:userId routes.
+// -------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/wallet/dashboard/summary
+ * Total balance, wallet status breakdown, top-up/debit sums, transaction
+ * counts and low-balance wallets within the given day range.
+ */
+router.get(
+  "/dashboard/summary",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  validateQuery(dashboardRangeQuerySchema),
+  getDashboardSummary,
+);
+
+/**
+ * GET /api/v1/wallet/dashboard/trend
+ * Daily time series of top-up and debit totals within the given day range.
+ */
+router.get(
+  "/dashboard/trend",
+  authMiddleware.authenticate,
+  authMiddleware.requirePermission("wallet", "read", "own"),
+  validateQuery(dashboardRangeQuerySchema),
+  getDashboardTrend,
 );
 
 // -------------------------------------------------------------------------

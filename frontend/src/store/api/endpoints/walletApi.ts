@@ -183,6 +183,57 @@ interface Last30Days {
   total_transactions: number;
 }
 
+// ===========================
+// Dashboard types
+// ===========================
+
+export interface WalletDashboardParams {
+  days?: number;
+}
+
+export interface WalletDashboardLowBalanceRow {
+  id: string;
+  userId: string;
+  clientCode: string;
+  balance: number;
+  status: string;
+}
+
+export interface WalletDashboardSummaryResponse {
+  status: string;
+  data: {
+    range: { days: number; since: string };
+    wallets: {
+      count: number;
+      totalBalance: number;
+      byStatus: Record<string, number>;
+    };
+    transactions: {
+      topUpSum: number;
+      debitSum: number;
+      topUpTypes: string[];
+      debitTypes: string[];
+      countsByType: Record<string, number>;
+      countsByStatus: Record<string, number>;
+    };
+    lowBalance: {
+      threshold: number;
+      count: number;
+      wallets: WalletDashboardLowBalanceRow[];
+    };
+  };
+}
+
+export interface WalletDashboardTrendResponse {
+  status: string;
+  data: {
+    range: { days: number; since: string };
+    topUpTypes: string[];
+    debitTypes: string[];
+    series: Array<{ date: string; topUp: number; debit: number }>;
+  };
+}
+
 interface MyStatisticsData {
   user_id: string;
   success: boolean;
@@ -392,6 +443,40 @@ export const walletApi = baseApi.injectEndpoints({
       transformResponse: (response: any) => response.data || response,
       providesTags: [{ type: "Wallet", id: "MY_STATS" }],
     }),
+
+    // ===========================
+    // Operations Dashboard
+    // ===========================
+
+    /** Wallet totals, top-up/debit sums, and low-balance list (scoped server-side). */
+    getWalletDashboardSummary: builder.query<
+      WalletDashboardSummaryResponse,
+      WalletDashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/wallet/dashboard/summary",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Wallet", id: "DASHBOARD_SUMMARY" }],
+    }),
+
+    /** Daily top-up vs debit series for the wallet trend chart. */
+    getWalletDashboardTrend: builder.query<
+      WalletDashboardTrendResponse,
+      WalletDashboardParams | void
+    >({
+      query: (arg) => {
+        const days = arg ? arg.days : undefined;
+        return {
+          url: "/api/v1/wallet/dashboard/trend",
+          params: days ? { days } : {},
+        };
+      },
+      providesTags: [{ type: "Wallet", id: "DASHBOARD_TREND" }],
+    }),
   }),
 });
 
@@ -413,6 +498,9 @@ export const {
   useGetMyWalletInfoQuery,
   useGetMyTransactionsQuery,
   useGetMyStatisticsQuery,
+  // Dashboard
+  useGetWalletDashboardSummaryQuery,
+  useGetWalletDashboardTrendQuery,
 } = walletApi;
 
 // ===========================

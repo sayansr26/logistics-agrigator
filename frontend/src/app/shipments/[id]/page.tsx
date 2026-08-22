@@ -15,6 +15,11 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
+  useIssueInvoiceMutation,
+  useListInvoicesQuery,
+  useDownloadInvoicePdfMutation,
+} from "@/store/api/endpoints/invoiceApi";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -240,6 +245,52 @@ export default function ShipmentDetailPage() {
   const [fieldIssues, setFieldIssues] = useState<BookingFieldIssue[]>([]);
   const [corrections, setCorrections] = useState<Record<string, string>>({});
   const toast = useToast();
+
+  // A tax invoice belongs to the shipment it bills, so it is read and issued
+  // from here rather than a standalone section. The list returns the whole
+  // document set for this shipment — the tax invoice plus any credit/debit
+  // notes raised against it by a re-rate.
+  const {
+    data: invoiceData,
+    isLoading: invoicesLoading,
+    refetch: refetchInvoices,
+  } = useListInvoicesQuery({ shipmentId: id });
+  const [issueInvoice, { isLoading: issuingInvoice }] =
+    useIssueInvoiceMutation();
+  const [downloadInvoicePdf] = useDownloadInvoicePdfMutation();
+
+  const invoices = invoiceData?.data?.invoices ?? [];
+  const taxInvoice = invoices.find((i) => i.invoiceType === "TAX_INVOICE");
+  const adjustmentNotes = invoices.filter(
+    (i) => i.invoiceType !== "TAX_INVOICE",
+  );
+
+  const handleIssueInvoice = async () => {
+    try {
+      await issueInvoice(id).unwrap();
+      toast.success("Tax invoice issued");
+      await refetchInvoices();
+    } catch (e) {
+      const err = e as { data?: { error?: { message?: string } } };
+      toast.error(
+        err?.data?.error?.message || "Could not issue the tax invoice",
+      );
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId: string, number: string) => {
+    try {
+      const blob = await downloadInvoicePdf(invoiceId).unwrap();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${number.replace(/[/\\]/g, "-")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Could not download the invoice PDF");
+    }
+  };
   const [assignPartnerOpen, setAssignPartnerOpen] = useState(false);
   const [selectedAssignmentQuote, setSelectedAssignmentQuote] =
     useState<PartnerQuote | null>(null);
@@ -1523,6 +1574,172 @@ export default function ShipmentDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Tax invoice for this shipment, plus any adjustment notes. */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-600" /> Tax Invoice
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {invoicesLoading ? (
+                  <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                ) : taxInvoice ? (
+                  <>
+                    <div className="rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          {/* The number is the handle people quote, so it is
+                              also the way into the full invoice. */}
+                          <Link
+                            href={`/wallet/invoices/${taxInvoice.id}`}
+                            className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-blue-600 hover:underline"
+                          >
+                            {taxInvoice.invoiceNumber}
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(taxInvoice.issueDate).toLocaleDateString(
+                              "en-IN",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}{" "}
+                            · FY {taxInvoice.financialYear} ·{" "}
+                            {taxInvoice.supplyType}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold">
+                          ₹{Number(taxInvoice.totalAmount).toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 space-y-1 border-t pt-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Taxable value
+                          </span>
+                          <span className="tabular-nums">
+                            ₹{Number(taxInvoice.taxableValue).toFixed(2)}
+                          </span>
+                        </div>
+                        {taxInvoice.igstAmount != null ? (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">IGST</span>
+                            <span className="tabular-nums">
+                              ₹{Number(taxInvoice.igstAmount).toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                CGST
+                              </span>
+                              <span className="tabular-nums">
+                                ₹{Number(taxInvoice.cgstAmount ?? 0).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                SGST
+                              </span>
+                              <span className="tabular-nums">
+                                ₹{Number(taxInvoice.sgstAmount ?? 0).toFixed(2)}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 w-full"
+                        onClick={() =>
+                          void handleDownloadInvoice(
+                            taxInvoice.id,
+                            taxInvoice.invoiceNumber,
+                          )
+                        }
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download invoice PDF
+                      </Button>
+                    </div>
+
+                    {adjustmentNotes.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Adjustment notes
+                        </p>
+                        {adjustmentNotes.map((n) => (
+                          <div
+                            key={n.id}
+                            className="flex items-center justify-between rounded-lg border px-3 py-2"
+                          >
+                            <div>
+                              <Link
+                                href={`/wallet/invoices/${n.id}`}
+                                className="inline-flex items-center gap-1 font-mono text-xs font-medium text-blue-600 hover:underline"
+                              >
+                                {n.invoiceNumber}
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                              <p className="text-[11px] text-muted-foreground">
+                                {n.invoiceType === "CREDIT_NOTE"
+                                  ? "Credit note"
+                                  : "Debit note"}{" "}
+                                · ₹{Number(n.totalAmount).toFixed(2)}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                void handleDownloadInvoice(
+                                  n.id,
+                                  n.invoiceNumber,
+                                )
+                              }
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      No tax invoice has been issued for this shipment yet.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => void handleIssueInvoice()}
+                      disabled={issuingInvoice}
+                    >
+                      {issuingInvoice ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Issuing…
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="mr-2 h-4 w-4" />
+                          Issue tax invoice
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Documents */}
             {shipment.documents && shipment.documents.length > 0 && (

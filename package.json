@@ -149,5 +149,8 @@
     "**/*.prisma": [
       "prettier --write"
     ]
+  },
+  "resolutions": {
+    "zod": "^3.25.76"
   }
 }
