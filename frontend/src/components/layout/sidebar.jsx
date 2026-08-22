@@ -184,13 +184,18 @@ const getNavigationSections = () => {
           roles: ["superadmin", "admin", "accounts", "client", "outlet"],
           disabled: false,
         },
-        {
-          title: "Earnings",
-          href: "/earnings",
-          icon: TrendingUp,
-          roles: ["superadmin", "admin", "client", "outlet"],
-          disabled: false,
-        },
+        // Earnings is the outlet markup-commission ledger, and markup is
+        // currently retired (see markup-section.tsx and the disabled
+        // PLATFORM_DEFAULT_MARKUP env). With markup off, outlet_earnings rows
+        // are never written, so the page can only ever show zero. Hidden
+        // rather than deleted — uncomment when markup is developed.
+        // {
+        //   title: "Earnings",
+        //   href: "/earnings",
+        //   icon: TrendingUp,
+        //   roles: ["superadmin", "admin", "client", "outlet"],
+        //   disabled: false,
+        // },
       ].filter(canSeeMenuItem),
     },
     {

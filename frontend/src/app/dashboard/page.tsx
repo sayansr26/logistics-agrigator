@@ -27,10 +27,10 @@ import {
 } from "@/components/shared";
 import {
   Package,
+  PackageSearch,
   IndianRupee,
   ShieldAlert,
   TrendingDown,
-  TrendingUp,
   Clock,
   Wallet as WalletIcon,
   Truck,
@@ -47,6 +47,7 @@ import {
   useGetDashboardCouriersQuery,
   useGetDashboardOutletsQuery,
   useGetDashboardAdjustmentsQuery,
+  useGetShipmentsQuery,
 } from "@/store/api/endpoints/shipmentApi";
 import {
   useGetWalletDashboardSummaryQuery,
@@ -103,8 +104,17 @@ export default function DashboardPage() {
   const walletSummary = walletSummaryData?.data;
   const walletTrend = walletTrendData?.data?.series || [];
 
-  const provisionalMargin =
-    (summary?.financials.courierCostPendingCount ?? 0) > 0;
+  // This is a logistics portal — the dashboard should show actual consignments,
+  // not only aggregates. Small page, newest first; the full list lives on
+  // /shipments.
+  const { data: recentData, isLoading: recentLoading } = useGetShipmentsQuery({
+    page: 1,
+    limit: 8,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  });
+  const recentShipments = recentData?.data?.shipments ?? [];
+
   const totalAdjustmentDiff = adjustments.reduce(
     (sum, a) => sum + Math.abs(a.totalDifference),
     0,
@@ -157,17 +167,28 @@ export default function DashboardPage() {
               iconColor="text-green-500"
               isLoading={summaryLoading}
             />
+            {/* Profit Margin removed. It needs the courier's actual cost, and
+                Delhivery does not return one at booking — /api/cmu/create.json
+                carries no charge field, and we do not call their Invoice
+                Charges API. The tile could only ever read ₹0 "provisional".
+                Restore it once courier cost is genuinely captured. */}
             <StatsCard
-              title="Profit Margin"
-              value={formatINR(summary?.financials.profitMargin)}
+              title={isOutlet ? "Wallet Balance" : "Total Wallet Balance"}
+              value={formatINR(walletSummary?.wallets.totalBalance)}
               description={
-                provisionalMargin
-                  ? `Provisional — ${summary?.financials.courierCostPendingCount} shipment(s) pending courier cost`
-                  : "Revenue minus courier cost"
+                isOutlet
+                  ? "Current available balance"
+                  : (walletSummary?.lowBalance.count ?? 0) > 0
+                    ? `${walletSummary?.lowBalance.count} wallet(s) below ₹${walletSummary?.lowBalance.threshold}`
+                    : `${formatNumber(walletSummary?.wallets.count)} wallet(s) across the platform`
               }
-              icon={TrendingUp}
-              iconColor="text-blue-500"
-              isLoading={summaryLoading}
+              icon={WalletIcon}
+              iconColor={
+                (walletSummary?.lowBalance.count ?? 0) > 0
+                  ? "text-amber-500"
+                  : "text-primary"
+              }
+              isLoading={walletSummaryLoading}
             />
             <StatsCard
               title="On Hold — At Risk"
@@ -314,6 +335,93 @@ export default function DashboardPage() {
             </Card>
           </div>
 
+          {/* Recent shipments — the consignments themselves, not a roll-up. */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <CardTitle>Recent Shipments</CardTitle>
+                    <CardDescription>
+                      Latest consignments across the platform
+                    </CardDescription>
+                  </div>
+                </div>
+                <Link
+                  href="/shipments"
+                  className="text-sm font-medium text-blue-600 hover:underline"
+                >
+                  View all
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {recentLoading ? (
+                <div className="h-[220px] animate-pulse rounded-lg bg-muted" />
+              ) : recentShipments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-center">
+                  <Package className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm font-medium">No shipments yet</p>
+                  <p className="text-xs text-muted-foreground">
+                    Bookings will appear here as they are created.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="pb-2 font-medium">Order</th>
+                        <th className="pb-2 font-medium">Route</th>
+                        <th className="pb-2 font-medium">Courier</th>
+                        <th className="pb-2 font-medium">Status</th>
+                        <th className="pb-2 text-right font-medium">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentShipments.map((sh) => (
+                        <tr key={sh.id} className="border-b last:border-0">
+                          <td className="py-2.5">
+                            <Link
+                              href={`/shipments/${sh.id}`}
+                              className="font-mono text-xs font-medium text-blue-600 hover:underline"
+                            >
+                              {sh.orderId}
+                            </Link>
+                            {sh.awbNumber && (
+                              <div className="font-mono text-[10px] text-muted-foreground">
+                                AWB {sh.awbNumber}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-xs">
+                            {sh.pickupCity || "—"} → {sh.deliveryCity || "—"}
+                          </td>
+                          <td className="py-2.5 text-xs">
+                            {sh.partnerName || (
+                              <span className="text-muted-foreground">
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5">
+                            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase">
+                              {sh.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right tabular-nums">
+                            {formatINR(sh.totalCost)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Top outlets (admin/client only — meaningless for a single-outlet viewer) */}
           {!isOutlet && (
             <Card>
@@ -393,45 +501,10 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Wallet section */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Wallet section. The balance now lives in the KPI row above,
+              so the trend gets the full width here. */}
+          <div className="grid grid-cols-1 gap-6">
             <Card>
-              <CardHeader>
-                <CardTitle>
-                  {isOutlet ? "Your Wallet Balance" : "Total Wallet Balance"}
-                </CardTitle>
-                <CardDescription>
-                  {isOutlet
-                    ? "Current available balance"
-                    : `${formatNumber(walletSummary?.wallets.count)} wallet(s) across the platform`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {walletSummaryLoading ? (
-                  <div className="h-8 w-32 animate-pulse rounded bg-muted" />
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-primary/10 p-3">
-                      <WalletIcon className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {formatINR(walletSummary?.wallets.totalBalance)}
-                      </p>
-                      {!isOutlet &&
-                        (walletSummary?.lowBalance.count ?? 0) > 0 && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400">
-                            {walletSummary?.lowBalance.count} wallet(s) below ₹
-                            {walletSummary?.lowBalance.threshold}
-                          </p>
-                        )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Top-ups vs Debits</CardTitle>
                 <CardDescription>Daily wallet activity trend</CardDescription>
@@ -599,12 +672,24 @@ export default function DashboardPage() {
               iconColor="text-green-500"
               isLoading={summaryLoading}
             />
+            {/* Shipments sitting at CREATED have been paid for but never
+                accepted by a courier — no AWB, nothing moving. That backlog is
+                invisible in the delivery-performance numbers beside it, so it
+                gets its own tile. */}
             <StatsCard
-              title="Courier Cost Pending"
-              value={formatNumber(summary?.financials.courierCostPendingCount)}
-              description="Shipments awaiting confirmed courier cost"
-              icon={IndianRupee}
-              iconColor="text-muted-foreground"
+              title="Awaiting Courier Booking"
+              value={formatNumber(summary?.byStatus?.CREATED ?? 0)}
+              description={
+                (summary?.byStatus?.CREATED ?? 0) > 0
+                  ? "Created but not booked with a courier"
+                  : "All shipments booked"
+              }
+              icon={PackageSearch}
+              iconColor={
+                (summary?.byStatus?.CREATED ?? 0) > 0
+                  ? "text-amber-500"
+                  : "text-muted-foreground"
+              }
               isLoading={summaryLoading}
             />
           </StatsGrid>
