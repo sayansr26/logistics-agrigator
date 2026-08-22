@@ -50,7 +50,8 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         restart restart-uat ps ps-uat logs logs-uat \
         logs-api-gateway logs-auth logs-user logs-shipment logs-partner \
         logs-wallet logs-support logs-platform logs-license logs-frontend \
-        logs-db logs-redis psql backup db-init migrate migrate-all db-sync \
+        logs-db logs-redis psql backup db-dump db-dump-uat db-dump-dev \
+        db-restore db-restore-prod redis-flush db-init migrate migrate-all db-sync \
         seed import-pincodes classify-cities load-pincodes seed-geo \
         dev dev-down dev-logs
 
@@ -80,6 +81,15 @@ help:
 	@echo "  make down | down-uat        Stop and remove containers (keeps volumes)"
 	@echo "  make psql                   Open psql shell in the postgres container"
 	@echo "  make backup                 pg_dump each DB to ./backups/<db>-<timestamp>.sql.gz"
+	@echo ""
+	@echo "  Full dump / restore (Postgres + Redis in ONE bundle):"
+	@echo "  make db-dump                Dump PROD stack  -> ./backups/logistics-dump-<ts>.tar.gz"
+	@echo "  make db-dump-uat            Dump UAT stack   -> ./backups/logistics-dump-uat-<ts>.tar.gz"
+	@echo "  make db-dump-dev            Dump local dev stack (docker-compose.yml)"
+	@echo "  make db-restore FILE=<f>    Restore a bundle into the LOCAL DEV stack (destructive)"
+	@echo "                              Stops app services, restores, starts them back up."
+	@echo "                              Omit FILE to auto-pick the newest ./backups/*.tar.gz"
+	@echo "  make db-restore-prod FILE=<f>  Restore into the PROD/UAT stack (ENV_FILE selects)"
 	@echo ""
 	@echo "  Data & DB (exec into the running stack; ENV_FILE=.env.uat for UAT):"
 	@echo "  make db-init                Create DBs + migrate + db-sync + seed (full init)"
@@ -239,6 +249,117 @@ backup:
 	    || { echo "!!! Dump FAILED for $$db"; rm -f "$$out"; }; \
 	done; \
 	echo ">>> Backups written to ./backups/"
+
+# ============================================================================
+# Full dump / restore — Postgres + Redis in a single portable bundle
+# ============================================================================
+# db-dump produces ./backups/logistics-dump-<ts>.tar.gz containing:
+#   postgres.sql.gz  pg_dumpall --clean --if-exists --no-role-passwords
+#                    (ALL databases + roles; role passwords are deliberately
+#                    excluded so a prod bundle carries no credentials and can't
+#                    overwrite the target's local password)
+#   redis.rdb        point-in-time RDB snapshot (redis-cli SAVE, then copied out)
+#   MANIFEST.txt     what/when/where it came from
+# db-restore imports that bundle into the LOCAL dev stack so you can work with
+# real data. Both sides use only the containers — nothing needs psql/redis-cli
+# installed on the host.
+
+# Which stack each side talks to (override on the command line if needed).
+DUMP_COMPOSE    ?= $(COMPOSE_PROD)
+RESTORE_COMPOSE ?= $(COMPOSE_DEV)
+DUMP_LABEL      ?= prod
+
+db-dump: ## Full Postgres+Redis dump of the PROD stack
+	@mkdir -p backups
+	@ts=$$(date +%Y%m%d-%H%M%S); \
+	stage="backups/.stage-$$ts"; \
+	out="backups/logistics-dump-$(DUMP_LABEL)-$$ts.tar.gz"; \
+	mkdir -p "$$stage"; \
+	trap 'rm -rf "$$stage"' EXIT; \
+	echo ">>> [1/3] pg_dumpall (all databases + roles)"; \
+	$(DUMP_COMPOSE) exec -T postgres sh -c \
+	  'pg_dumpall -U "$$POSTGRES_USER" --clean --if-exists --no-role-passwords' \
+	  | gzip > "$$stage/postgres.sql.gz" \
+	  || { echo "!!! Postgres dump FAILED"; exit 1; }; \
+	[ -s "$$stage/postgres.sql.gz" ] || { echo "!!! Postgres dump is empty"; exit 1; }; \
+	echo ">>> [2/3] Redis SAVE + copy dump.rdb"; \
+	$(DUMP_COMPOSE) exec -T redis redis-cli SAVE > /dev/null \
+	  || { echo "!!! Redis SAVE FAILED"; exit 1; }; \
+	$(DUMP_COMPOSE) cp redis:/data/dump.rdb "$$stage/redis.rdb" \
+	  || { echo "!!! Redis copy FAILED"; exit 1; }; \
+	echo ">>> [3/3] packing bundle"; \
+	{ echo "source     : $(DUMP_LABEL) ($(DUMP_COMPOSE))"; \
+	  echo "created_at : $$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+	  echo "host       : $$(hostname)"; \
+	  echo "postgres   : pg_dumpall --clean --if-exists --no-role-passwords"; \
+	  echo "redis      : RDB snapshot via redis-cli SAVE"; } > "$$stage/MANIFEST.txt"; \
+	tar -czf "$$out" -C "$$stage" postgres.sql.gz redis.rdb MANIFEST.txt; \
+	echo ""; \
+	echo ">>> Dump written: $$out ($$(du -h "$$out" | cut -f1))"; \
+	echo ">>> Import locally with: make db-restore FILE=$$out"
+
+db-dump-uat: ENV_FILE = .env.uat
+db-dump-uat: DUMP_LABEL = uat
+db-dump-uat: db-dump ## Full Postgres+Redis dump of the UAT stack
+
+db-dump-dev: DUMP_COMPOSE = $(COMPOSE_DEV)
+db-dump-dev: DUMP_LABEL = dev
+db-dump-dev: db-dump ## Full Postgres+Redis dump of the local dev stack
+
+# Restore a bundle. DESTRUCTIVE: pg_dumpall --clean drops and recreates every
+# database in the target, and Redis is replaced wholesale by the snapshot.
+# Usage: make db-restore FILE=backups/logistics-dump-prod-20250101-120000.tar.gz
+#        make db-restore                    (auto-picks the newest bundle)
+#        make db-restore-prod FILE=...      (targets the PROD/UAT stack instead)
+db-restore: ## Restore a dump bundle into the LOCAL dev stack (destructive)
+	@file="$(FILE)$(BACKUP)"; \
+	if [ -z "$$file" ]; then \
+	  file=$$(ls -t backups/logistics-dump-*.tar.gz 2>/dev/null | head -1); \
+	  [ -n "$$file" ] || { echo "No bundle found. Usage: make db-restore FILE=backups/<bundle>.tar.gz"; exit 1; }; \
+	  echo ">>> No FILE given — using newest bundle: $$file"; \
+	fi; \
+	[ -f "$$file" ] || { echo "!!! Not found: $$file"; exit 1; }; \
+	stage="backups/.restore-$$$$"; \
+	mkdir -p "$$stage"; \
+	trap 'rm -rf "$$stage"' EXIT; \
+	tar -xzf "$$file" -C "$$stage" || { echo "!!! Could not unpack $$file"; exit 1; }; \
+	echo ">>> Restoring $$file"; \
+	cat "$$stage/MANIFEST.txt" 2>/dev/null; \
+	echo ""; \
+	echo ">>> [1/4] stopping app services (open connections block DROP DATABASE)"; \
+	$(RESTORE_COMPOSE) stop $(BACKEND_SERVICES) frontend > /dev/null 2>&1 || true; \
+	echo ">>> [2/4] restoring Postgres (drops + recreates every database)"; \
+	$(RESTORE_COMPOSE) exec -T postgres sh -c \
+	  'psql -U "$$POSTGRES_USER" -d postgres -q -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IS NOT NULL AND datname NOT IN ('"'"'postgres'"'"','"'"'template0'"'"','"'"'template1'"'"') AND pid <> pg_backend_pid();"' \
+	  > /dev/null 2>&1 || true; \
+	gunzip -c "$$stage/postgres.sql.gz" \
+	  | $(RESTORE_COMPOSE) exec -T postgres sh -c \
+	      'psql -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=0 --quiet -o /dev/null' \
+	  || { echo "!!! Postgres restore FAILED"; exit 1; }; \
+	echo "    (benign: \"role ... already exists\" / \"current user cannot be dropped\")"; \
+	echo ">>> resetting the DB role password to this stack's own POSTGRES_PASSWORD"; \
+	$(RESTORE_COMPOSE) exec -T postgres sh -c \
+	  'psql -U "$$POSTGRES_USER" -d postgres -q -o /dev/null -c "ALTER ROLE \"$$POSTGRES_USER\" WITH LOGIN SUPERUSER PASSWORD '"'"'$$POSTGRES_PASSWORD'"'"';"' \
+	  || echo "  !! could not reset role password — services may fail to authenticate"; \
+	echo ">>> [3/4] restoring Redis (replaces the whole keyspace)"; \
+	if [ -f "$$stage/redis.rdb" ]; then \
+	  $(RESTORE_COMPOSE) exec -T redis redis-cli FLUSHALL > /dev/null; \
+	  $(RESTORE_COMPOSE) stop redis; \
+	  $(RESTORE_COMPOSE) cp "$$stage/redis.rdb" redis:/data/dump.rdb \
+	    || { echo "!!! Redis copy FAILED"; $(RESTORE_COMPOSE) start redis; exit 1; }; \
+	  $(RESTORE_COMPOSE) run --rm --no-deps --entrypoint sh -T redis -c \
+	    'rm -rf /data/appendonlydir /data/appendonly.aof' > /dev/null 2>&1 || true; \
+	  $(RESTORE_COMPOSE) start redis; \
+	else \
+	  echo "  (no redis.rdb in bundle — skipping Redis)"; \
+	fi; \
+	echo ">>> [4/4] starting app services back up"; \
+	$(RESTORE_COMPOSE) start $(BACKEND_SERVICES) frontend > /dev/null 2>&1 || true; \
+	echo ""; \
+	echo ">>> Restore complete."
+
+db-restore-prod: RESTORE_COMPOSE = $(COMPOSE_PROD)
+db-restore-prod: db-restore ## Restore a bundle into the PROD/UAT stack (ENV_FILE selects)
 
 # ============================================================================
 # Data & DB operations (exec into the running stack; ENV_FILE selects PROD/UAT)
