@@ -37,7 +37,10 @@ import {
   type OutletEarningStatus,
 } from "@/store/api/endpoints/shipmentApi";
 import { useRole } from "@/hooks/useRole";
-import { MarkupSettingsCard } from "@/components/outlets/markup-settings-card";
+// Markup is retired — the settings card is hidden so an outlet cannot set a
+// defaultMarkup that would revive the OUTLET_DEFAULT fallback in
+// markupService.resolveEffectiveMarkup.
+// import { MarkupSettingsCard } from "@/components/outlets/markup-settings-card";
 
 function formatCurrency(value: number | string | null | undefined) {
   if (value === null || value === undefined) return "-";
@@ -93,7 +96,7 @@ export default function EarningsPage() {
           description="Markup commission accrued from your bookings"
         />
 
-        {isRole("outlet") && <MarkupSettingsCard />}
+        {/* {isRole("outlet") && <MarkupSettingsCard />} */}
 
         <StatsGrid columns={3}>
           <StatsCard

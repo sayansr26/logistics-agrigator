@@ -18,6 +18,10 @@ const bulkRerateService = require("../services/bulkRerateService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
+const {
+  diagnoseShipment,
+  isDataQualityRejection,
+} = require("../services/bookingFieldDiagnostics");
 const quoteSigningService = require("../services/quoteSigningService");
 const quoteService = require("../services/quoteService");
 const outletWalletContextService = require("../services/outletWalletContextService");
@@ -1567,7 +1571,7 @@ async function retryCourierBooking(req, res) {
   try {
     const userId = req.user.userId || req.user.id;
     const { id } = req.params;
-    const { pickupLocation = null } = req.body || {};
+    const { pickupLocation = null, corrections = null } = req.body || {};
 
     let where = { id };
     where = authUtils.applyScopeFilter(req, where);
@@ -1620,6 +1624,37 @@ async function retryCourierBooking(req, res) {
 
     if (!shipment.partnerId) {
       throw new ValidationError("Shipment has no partner assigned for booking");
+    }
+
+    // Apply the operator's fixes for the fields the courier rejected, then book
+    // with the corrected values in the same request — a retry that reused the
+    // stale record would just fail the same way.
+    if (corrections && Object.keys(corrections).length > 0) {
+      const before = {};
+      for (const key of Object.keys(corrections)) before[key] = shipment[key];
+
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: corrections,
+      });
+      Object.assign(shipment, corrections);
+
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          action: "UPDATE",
+          resource: "Shipment",
+          resourceId: shipment.id,
+          changes: { before, after: corrections },
+          metadata: {
+            source: "shipment-service",
+            endpoint: "/api/v1/shipments/:id/retry-booking",
+            reason: "Courier rejected the booking on data quality",
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
     }
 
     const authToken = req.headers.authorization?.replace("Bearer ", "");
@@ -1768,8 +1803,34 @@ async function retryCourierBooking(req, res) {
       error.message ||
       error.response?.data?.error?.message ||
       "Courier booking failed";
-    const partnerDetails =
+    let partnerDetails =
       error.details || error.response?.data?.error?.details || null;
+
+    // A courier's data-quality rejection names no field ("suspicious
+    // order/consignee"), leaving the operator with nothing to act on. Attach
+    // the fields we can see are wrong so the UI can offer to edit and retry
+    // them rather than just printing the courier's sentence.
+    if (isDataQualityRejection(partnerMessage, partnerCode)) {
+      const shipmentForDiagnosis = await prisma.shipment.findUnique({
+        where: { id: req.params.id },
+        select: {
+          deliveryName: true,
+          deliveryPhone: true,
+          deliveryLine1: true,
+          pickupName: true,
+          pickupPhone: true,
+          pickupLine1: true,
+          productDescription: true,
+          description: true,
+        },
+      });
+      const fieldIssues = shipmentForDiagnosis
+        ? diagnoseShipment(shipmentForDiagnosis)
+        : [];
+      if (fieldIssues.length > 0) {
+        partnerDetails = { ...(partnerDetails || {}), fieldIssues };
+      }
+    }
 
     res
       .status(status)

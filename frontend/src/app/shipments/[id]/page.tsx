@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  type BookingFieldIssue,
   useGetShipmentByIdQuery,
   useCancelShipmentMutation,
   useDownloadLabelMutation,
@@ -224,6 +226,11 @@ export default function ShipmentDetailPage() {
   const [retryOpen, setRetryOpen] = useState(false);
   const [retryPickupLocation, setRetryPickupLocation] = useState("");
   const [retryError, setRetryError] = useState<string | null>(null);
+  // Fields the courier's rejection pointed at, and the operator's fixes for
+  // them. Populated from error.details.fieldIssues on a failed retry.
+  const [fieldIssues, setFieldIssues] = useState<BookingFieldIssue[]>([]);
+  const [corrections, setCorrections] = useState<Record<string, string>>({});
+  const toast = useToast();
   const [assignPartnerOpen, setAssignPartnerOpen] = useState(false);
   const [selectedAssignmentQuote, setSelectedAssignmentQuote] =
     useState<PartnerQuote | null>(null);
@@ -347,21 +354,45 @@ export default function ShipmentDetailPage() {
       await retryCourierBooking({
         id,
         pickupLocation: pickupLocation.trim() || undefined,
+        corrections:
+          Object.keys(corrections).length > 0 ? corrections : undefined,
       }).unwrap();
       setRetryOpen(false);
+      setFieldIssues([]);
+      setCorrections({});
       await refetch();
     } catch (e) {
       const err = e as {
-        data?: { error?: { message?: string } };
+        data?: {
+          error?: {
+            message?: string;
+            details?: { fieldIssues?: BookingFieldIssue[] };
+          };
+        };
         error?: { message?: string };
         message?: string;
       };
-      setRetryError(
+      const message =
         err?.data?.error?.message ||
-          err?.error?.message ||
-          err?.message ||
-          "Failed to retry courier booking",
-      );
+        err?.error?.message ||
+        err?.message ||
+        "Failed to retry courier booking";
+      setRetryError(message);
+      // retryError only renders inside the dialog, and the direct-retry path
+      // (when the pickup address already has a warehouse label) never opens it —
+      // without a toast the courier's rejection was swallowed entirely.
+      toast.error(message);
+      // The courier names no field, so the API works out which ones look wrong.
+      // Open the dialog with those fields editable rather than leaving the
+      // operator with a dead-end error string.
+      const issues = err?.data?.error?.details?.fieldIssues;
+      if (issues && issues.length > 0) {
+        setFieldIssues(issues);
+        setCorrections(
+          Object.fromEntries(issues.map((i) => [i.field, i.value ?? ""])),
+        );
+        setRetryOpen(true);
+      }
     }
   };
 
@@ -1612,6 +1643,36 @@ export default function ShipmentDetailPage() {
             </p>
             {retryError && (
               <p className="text-sm text-destructive">{retryError}</p>
+            )}
+
+            {fieldIssues.length > 0 && (
+              <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <p className="text-xs text-amber-900 dark:text-amber-200">
+                  The courier rejected this booking on the shipment data. It
+                  does not say which field, so these are the ones that look
+                  wrong — correct them and retry.
+                </p>
+                {fieldIssues.map((fi) => (
+                  <div key={fi.field} className="space-y-1">
+                    <Label htmlFor={`fix-${fi.field}`} className="text-xs">
+                      {fi.label}
+                    </Label>
+                    <Input
+                      id={`fix-${fi.field}`}
+                      value={corrections[fi.field] ?? ""}
+                      onChange={(e) =>
+                        setCorrections((prev) => ({
+                          ...prev,
+                          [fi.field]: e.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                      {fi.reason} {fi.fix}
+                    </p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

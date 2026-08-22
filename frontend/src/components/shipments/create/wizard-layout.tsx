@@ -4,6 +4,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { RotateCw, Loader2 } from "lucide-react";
 import { useShipmentForm } from "@/components/shipments/create/form-store-context";
+import { useHasMounted } from "@/hooks/useHasMounted";
 
 const STEP_LABELS = [
   "Shipment Details",
@@ -59,6 +60,13 @@ export function WizardLayout({
 }: WizardLayoutProps) {
   const router = useRouter();
   const { resetForm, lastSavedAt } = useShipmentForm();
+  // The form store is restored from localStorage, which the server cannot
+  // see: it renders DEFAULT_STATE while the browser renders the saved draft.
+  // Every persisted field mismatches on hydration (referenceNo loudest, since
+  // it is generated from the clock and Math.random), and React bails the whole
+  // root to client rendering. Holding the draft-dependent parts back until
+  // after mount keeps the server and first client render identical.
+  const hasMounted = useHasMounted();
 
   const steps = STEP_LABELS.map((label, idx) => ({
     key: (idx + 1) as 1 | 2 | 3,
@@ -90,7 +98,7 @@ export function WizardLayout({
                 <h1 className="text-xl font-bold text-foreground tracking-tight">
                   {title}
                 </h1>
-                {lastSavedAt != null && (
+                {hasMounted && lastSavedAt !== null && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     Draft saved
@@ -157,7 +165,9 @@ export function WizardLayout({
         </div>
       </header>
 
-      <main className="pt-6 flex-1 w-full">{children}</main>
+      <main className="pt-6 flex-1 w-full">
+        {hasMounted ? children : <div className="min-h-[50vh]" />}
+      </main>
 
       {/* STICKY BOTTOM ACTION FOOTER */}
       <footer className="fixed bottom-0 left-0 right-0 md:left-64 bg-background/95 backdrop-blur border-t border-border py-3.5 z-20 shadow-lg">

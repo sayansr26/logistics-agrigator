@@ -846,6 +846,14 @@ function createShipmentFormStore(persistKey: string) {
           hasHydrated: false,
         }),
         onRehydrateStorage: () => (state) => {
+          // Outlet markup is retired. Drafts saved while the markup section
+          // still existed carry a value that nothing can clear any more, and it
+          // would keep pricing into every quote — so drop just those two fields
+          // on load. Everything else in the draft is left untouched.
+          if (state && (state.markupType || state.markupValue)) {
+            state.markupType = null;
+            state.markupValue = "";
+          }
           state?.pruneEmptyInvoices();
           // Drafts saved before dimension rows carried a count have one row per
           // box and no `count` field — refitting normalises them in place.

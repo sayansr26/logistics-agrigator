@@ -55,6 +55,7 @@ export default function ConfirmBookPage() {
   const [success, setSuccess] = useState<{
     shipmentId?: string;
     awbNumber?: string | null;
+    bookingError?: string | null;
   } | null>(null);
 
   async function handleBook() {
@@ -215,19 +216,24 @@ export default function ConfirmBookPage() {
       quoteSnapshot: quote || undefined,
       quoteToken: quote?.quoteToken || undefined,
       vasSelections: vasSelections.length > 0 ? vasSelections : undefined,
-      markup:
-        quote && store.markupType && parseFloat(store.markupValue) > 0
-          ? { type: store.markupType, value: parseFloat(store.markupValue) }
-          : null,
+      // Outlet markup is retired — the booking never carries one.
+      markup: null,
     };
 
     try {
       const result = await createShipment(payload).unwrap();
       const createdShipment = result?.data?.shipment;
+      const courierBooking = result?.data?.courierBooking;
       store.resetForm();
       setSuccess({
         shipmentId: createdShipment?.id,
         awbNumber: createdShipment?.awbNumber,
+        // Courier booking is non-blocking server-side, so a 201 does not mean
+        // the courier accepted it — carry the rejection through to the modal.
+        bookingError:
+          courierBooking && !courierBooking.booked
+            ? courierBooking.message || null
+            : null,
       });
     } catch (err) {
       const rtkErr = err as RtkErrorLike;
@@ -263,6 +269,7 @@ export default function ConfirmBookPage() {
           open={success !== null}
           shipmentId={success?.shipmentId}
           awbNumber={success?.awbNumber}
+          bookingError={success?.bookingError}
         />
       </WizardLayout>
     </DashboardLayout>

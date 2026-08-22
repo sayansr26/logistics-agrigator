@@ -218,10 +218,8 @@ export default function EditConfirmPage() {
           quoteSnapshot: quote || undefined,
           quoteToken: quote?.quoteToken || undefined,
           vasSelections: vasSelections.length > 0 ? vasSelections : undefined,
-          markup:
-            quote && store.markupType && parseFloat(store.markupValue) > 0
-              ? { type: store.markupType, value: parseFloat(store.markupValue) }
-              : null,
+          // Outlet markup is retired — the booking never carries one.
+          markup: null,
         },
       }).unwrap();
 

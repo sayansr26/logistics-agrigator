@@ -186,14 +186,14 @@ class DelhiveryAdapter extends BaseCourierAdapter {
           city: shipmentData.deliveryAddress.city,
           state: shipmentData.deliveryAddress.state,
           country: "India",
-          phone: shipmentData.deliveryAddress.phone,
+          phone: this.normalizePhone(shipmentData.deliveryAddress.phone),
           order: shipmentData.orderId,
           payment_mode: shipmentData.paymentType === "COD" ? "COD" : "Prepaid",
           cod_amount:
             shipmentData.paymentType === "COD" ? shipmentData.codAmount : 0,
           return_pin: String(shipmentData.pickupAddress.pincode || ""),
           return_city: shipmentData.pickupAddress.city,
-          return_phone: shipmentData.pickupAddress.phone,
+          return_phone: this.normalizePhone(shipmentData.pickupAddress.phone),
           return_add: shipmentData.pickupAddress.address,
           return_state: shipmentData.pickupAddress.state,
           return_country: "India",
@@ -228,7 +228,14 @@ class DelhiveryAdapter extends BaseCourierAdapter {
     });
   }
 
-  normalizeWarehousePhone(phone) {
+  /**
+   * Delhivery's create.json expects a bare 10-digit Indian mobile. Anything
+   * else — a "+91" prefix, spaces, dashes — reads to them as a malformed
+   * consignee and the package is rejected with
+   * "suspicious order/consignee", which surfaces as a generic internal error.
+   * Applied to every phone in the payload, not just the warehouse.
+   */
+  normalizePhone(phone) {
     const digits = String(phone || "").replace(/\D/g, "");
     if (digits.length === 10) return digits;
     if (digits.length > 10) return digits.slice(-10);
@@ -248,7 +255,7 @@ class DelhiveryAdapter extends BaseCourierAdapter {
       "";
     const city = pickupAddress?.city || pickupAddress?.pickupCity || "";
     const state = pickupAddress?.state || pickupAddress?.pickupState || "";
-    const phone = this.normalizeWarehousePhone(
+    const phone = this.normalizePhone(
       pickupAddress?.phone || pickupAddress?.pickupPhone,
     );
 
@@ -532,17 +539,77 @@ class DelhiveryAdapter extends BaseCourierAdapter {
       responseType: "arraybuffer",
     });
 
-    const labelData = Buffer.isBuffer(response)
-      ? response.toString("base64")
-      : response;
+    const { labelData, downloadUrl } = this.extractLabelPdf(
+      response,
+      awbNumber,
+    );
 
     return {
       success: true,
       awbNumber,
       labelData,
+      downloadUrl,
       format: "pdf",
       rawResponse: response,
     };
+  }
+
+  /**
+   * Pull the base64 PDF out of a packing_slip response.
+   *
+   * Despite `pdf=true`, Delhivery does NOT return PDF bytes — it returns a JSON
+   * envelope:
+   *   { packages: [{ pdf_download_link, pdf_encoding, wbn }], packages_found }
+   * where `pdf_encoding` is the base64 PDF. Base64-ing the raw body instead
+   * yields a file whose bytes are that JSON text, which every reader rejects as
+   * a corrupt PDF. Raw PDF bytes are still handled, in case the API changes or
+   * another endpoint is used.
+   *
+   * @returns {{labelData: ?string, downloadUrl: ?string}} base64 PDF
+   */
+  extractLabelPdf(response, awbNumber) {
+    if (!Buffer.isBuffer(response)) {
+      // Already-parsed JSON body (axios can bypass responseType on some errors)
+      const pkg = response?.packages?.[0];
+      if (pkg?.pdf_encoding) {
+        return {
+          labelData: pkg.pdf_encoding,
+          downloadUrl: pkg.pdf_download_link || null,
+        };
+      }
+      return { labelData: response, downloadUrl: null };
+    }
+
+    // Genuine PDF bytes — "%PDF-" magic number.
+    if (response.subarray(0, 5).toString("latin1") === "%PDF-") {
+      return { labelData: response.toString("base64"), downloadUrl: null };
+    }
+
+    try {
+      const parsed = JSON.parse(response.toString("utf8"));
+      const pkg = parsed?.packages?.[0];
+
+      if (pkg?.pdf_encoding) {
+        return {
+          labelData: pkg.pdf_encoding,
+          downloadUrl: pkg.pdf_download_link || null,
+        };
+      }
+
+      logger.warn("Delhivery packing slip carried no PDF", {
+        awbNumber,
+        packagesFound: parsed?.packages_found,
+        error: parsed?.Error || null,
+      });
+      return { labelData: null, downloadUrl: pkg?.pdf_download_link || null };
+    } catch {
+      // Not JSON and not a PDF — hand the bytes on rather than losing them.
+      logger.warn("Unrecognised Delhivery packing slip response", {
+        awbNumber,
+        head: response.subarray(0, 40).toString("latin1"),
+      });
+      return { labelData: response.toString("base64"), downloadUrl: null };
+    }
   }
 
   /**

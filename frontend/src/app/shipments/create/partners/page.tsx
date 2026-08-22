@@ -89,16 +89,11 @@ export default function PartnerSelectionPage() {
         isFragile: store.isFragile || undefined,
         outletId: store.outletId || undefined,
         vasSelections: vasSelections.length > 0 ? vasSelections : undefined,
-        // Markup is priced inside the quoted subtotal, so it has to be sent
-        // with the quote request. Omitted when unset so the server falls back
-        // to the outlet default, then the platform default.
-        markup:
-          store.markupType && parseFloat(store.markupValue) > 0
-            ? {
-                type: store.markupType,
-                value: parseFloat(store.markupValue),
-              }
-            : undefined,
+        // Outlet markup is retired — the form no longer collects one.
+        // NOTE: omitting it is not enough on its own. resolveEffectiveMarkup
+        // falls back REQUEST -> OUTLET_DEFAULT -> PLATFORM_DEFAULT, so the
+        // platform env default must stay unset for quotes to carry no markup.
+        markup: undefined,
       }).unwrap();
       setQuotesLoaded(true);
     } catch {

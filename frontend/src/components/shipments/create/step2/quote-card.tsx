@@ -63,7 +63,10 @@ export function QuoteCard({
   // Markup is priced by the charges engine as a taxable line INSIDE the
   // quoted subtotal, so quote.totalAmount already contains it (and the GST on
   // it). Nothing is added on top here — the card just reports what was quoted.
-  const markupAmount = quote.pricing?.markup ?? 0;
+  // Outlet markup is retired — forced to 0 so the markup line and the
+  // "your markup" caption below never render. Restore the read from
+  // quote.pricing?.markup to bring it back.
+  const markupAmount = 0;
   const finalTotal = quote.totalAmount;
 
   async function handleExplain(e: MouseEvent) {

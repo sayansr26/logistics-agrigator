@@ -1255,6 +1255,20 @@ const retryBookingSchema = {
       .max(100)
       .optional()
       .allow(null, ""),
+    // Fixes for the fields a courier data-quality rejection flagged. Kept on
+    // this endpoint (rather than a separate update call) so correcting and
+    // rebooking is one atomic action from the operator's point of view.
+    corrections: Joi.object({
+      deliveryName: Joi.string().trim().min(1).max(100).optional(),
+      deliveryPhone: Joi.string().trim().min(1).max(20).optional(),
+      deliveryLine1: Joi.string().trim().min(1).max(255).optional(),
+      pickupName: Joi.string().trim().min(1).max(100).optional(),
+      pickupPhone: Joi.string().trim().min(1).max(20).optional(),
+      pickupLine1: Joi.string().trim().min(1).max(255).optional(),
+      productDescription: Joi.string().trim().min(1).max(255).optional(),
+    })
+      .min(1)
+      .optional(),
   }),
 };
 

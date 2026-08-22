@@ -453,9 +453,21 @@ interface UpdateShipmentRequest {
   vasSelections?: VasSelection[];
 }
 
+/** A field the courier's data-quality rejection points at, from error.details. */
+export interface BookingFieldIssue {
+  field: string;
+  label: string;
+  value: string | null;
+  reason: string;
+  fix: string;
+  blocking: boolean;
+}
+
 interface RetryCourierBookingRequest {
   id: string;
   pickupLocation?: string;
+  /** Fixes for the flagged fields — saved and rebooked in one call. */
+  corrections?: Record<string, string>;
 }
 
 interface AssignPartnerRequest {
@@ -985,10 +997,15 @@ export const shipmentApi = baseApi.injectEndpoints({
       RetryCourierBookingResponse,
       RetryCourierBookingRequest
     >({
-      query: ({ id, pickupLocation }) => ({
+      query: ({ id, pickupLocation, corrections }) => ({
         url: `/api/v1/shipments/${id}/retry-booking`,
         method: "POST",
-        body: pickupLocation ? { pickupLocation } : {},
+        body: {
+          ...(pickupLocation ? { pickupLocation } : {}),
+          ...(corrections && Object.keys(corrections).length > 0
+            ? { corrections }
+            : {}),
+        },
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: "Shipment", id },

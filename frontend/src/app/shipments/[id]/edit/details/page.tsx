@@ -10,7 +10,8 @@ import { AddressSection } from "@/components/shipments/create/step1/address-sect
 import { DimensionsSection } from "@/components/shipments/create/step1/dimensions-section";
 import { DocumentsSection } from "@/components/shipments/create/step1/documents-section";
 import { VasSection } from "@/components/shipments/create/step1/vas-section";
-import { MarkupSection } from "@/components/shipments/create/step1/markup-section";
+// Markup section hidden — keep the import so it can be re-enabled in one step.
+// import { MarkupSection } from "@/components/shipments/create/step1/markup-section";
 import { useShipmentEditFormStore } from "@/store/shipment-form-store";
 import { useRole } from "@/hooks/useRole";
 
@@ -60,7 +61,8 @@ export default function EditShipmentDetailsPage() {
           <DimensionsSection />
           <DocumentsSection />
           <VasSection />
-          <MarkupSection isOutlet={isOutlet} isAdminLike={isAdminLike} />
+          {/* Markup section hidden — uncomment to re-enable. */}
+          {/* <MarkupSection isOutlet={isOutlet} isAdminLike={isAdminLike} /> */}
         </div>
       </div>
     </EditWizardFrame>

@@ -69,6 +69,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PromptTemplates } from "@/components/charges/prompt-templates";
 import {
   useGetPartnersQuery,
   type Partner,
@@ -681,8 +682,12 @@ export default function ChargeConfigsPage() {
               value={aiDescription}
               onChange={(e) => setAiDescription(e.target.value)}
               placeholder='e.g. "Add a fuel surcharge of 8% on the base freight for this partner"'
-              rows={3}
+              rows={aiDescription.includes("\n") ? 14 : 3}
+              className={cn(
+                aiDescription.includes("\n") && "font-mono text-xs",
+              )}
             />
+            <PromptTemplates onUse={setAiDescription} />
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={handleGenerateDraft}

@@ -33,8 +33,12 @@ export function ConfirmSummary({
   // subtotal, so totalAmount is the whole story: it already carries the
   // markup and the GST on it, and it is what the wallet is debited.
   const systemCharge = quote?.totalAmount ?? 0;
-  const markupAmount = quote?.pricing?.markup ?? 0;
+  // Outlet markup is retired — forced to 0 so the "Includes your markup"
+  // row never renders. Restore the read from quote?.pricing?.markup to
+  // bring it back.
+  const markupAmount = 0;
   const finalTotal = systemCharge;
+  const breakdown = quote?.chargeBreakdown ?? [];
   const codCollectable = quote?.pricing
     ? quote.pricing.codCollectable
     : store.paymentType === "COD"
@@ -94,9 +98,28 @@ export function ConfirmSummary({
 
         {quote && (
           <>
+            {/* Same charge lines the quote card showed at partner selection —
+                confirming should not be the step where the pricing detail
+                disappears. */}
+            {breakdown.length > 0 && (
+              <div className="space-y-1 border-b border-border pb-2 pt-1">
+                <span className="text-muted-foreground">Charge breakdown:</span>
+                {breakdown.map((cb, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between pl-3"
+                  >
+                    <span className="text-muted-foreground">{cb.name}</span>
+                    <span className="font-medium text-foreground tabular-nums">
+                      ₹{fmt(cb.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex justify-between pt-1">
               <span className="text-muted-foreground">Subtotal:</span>
-              <span className="font-medium text-foreground">
+              <span className="font-medium text-foreground tabular-nums">
                 ₹{fmt(systemCharge)}
               </span>
             </div>
