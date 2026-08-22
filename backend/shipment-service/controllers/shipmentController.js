@@ -148,6 +148,11 @@ async function processCancellationRefund(shipment, reason, authToken) {
       shipment.id,
       reason,
       authToken,
+      // The wallet refunds AGAINST the original debit and rejects the call
+      // without it. This was logged above but never passed, so cancellations
+      // completed with refundTransactionId null — cancelled, never refunded.
+      shipment.walletTransactionId,
+      `REFUND_${shipment.id}_CANCEL`,
     );
 
     return {
@@ -1276,6 +1281,8 @@ async function assignPartner(req, res) {
               shipment.id,
               `Partner change refund for order ${shipment.orderId}`,
               authToken,
+              shipment.walletTransactionId,
+              `REFUND_${shipment.id}_PARTNER_${Date.now()}`,
             );
           refundTransactionId = refundResult.refundTransactionId;
         }
@@ -2827,6 +2834,8 @@ async function applyFullShipmentEdit({
             shipment.id,
             `Edit refund for shipment ${shipment.orderId}`,
             authToken,
+            shipment.walletTransactionId,
+            `REFUND_${shipment.id}_EDIT_${Date.now()}`,
           );
         refundTransactionId = refundResult.refundTransactionId;
         refundAmount = previousDebit;
@@ -3339,6 +3348,11 @@ async function cancelShipment(req, res) {
       reason,
     });
 
+    // A failed refund used to be invisible here: the shipment cancelled, the
+    // money stayed debited, and the caller was told "cancelled successfully".
+    // Report the settlement outcome so the operator knows a refund is owed.
+    const refundFailed = refundResult.paymentStatus === "REFUND_FAILED";
+
     res.json(
       APIResponse.success(
         {
@@ -3348,8 +3362,16 @@ async function cancelShipment(req, res) {
               ? parseFloat(updatedShipment.refundAmount)
               : null,
           },
+          refund: {
+            status: refundResult.paymentStatus,
+            amount: refundAmount,
+            transactionId: refundResult.refundTransactionId,
+            settled: !refundFailed,
+          },
         },
-        "Shipment cancelled successfully",
+        refundFailed
+          ? `Shipment cancelled, but the ₹${refundAmount} refund did not go through. It is still owed to the wallet.`
+          : "Shipment cancelled successfully",
       ),
     );
   } catch (error) {
