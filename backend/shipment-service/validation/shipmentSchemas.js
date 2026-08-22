@@ -462,6 +462,19 @@ const shipmentQuoteSchema = Joi.object({
     )
     .max(20)
     .default([]),
+
+  // Outlet markup priced inside the quoted subtotal. Omit to fall back to the
+  // outlet's stored default, then the platform-wide default.
+  markup: Joi.object({
+    type: Joi.string().valid("FLAT", "PERCENTAGE").required(),
+    value: Joi.number()
+      .min(0)
+      .precision(2)
+      .when("type", { is: "PERCENTAGE", then: Joi.number().max(100) })
+      .required(),
+  })
+    .optional()
+    .allow(null),
 });
 
 // Dispute re-rate schema

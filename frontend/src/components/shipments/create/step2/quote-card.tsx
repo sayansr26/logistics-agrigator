@@ -60,14 +60,11 @@ export function QuoteCard({
   const [explainQuote, { isLoading: explaining }] = useExplainQuoteMutation();
   const store = useShipmentForm();
 
-  const markupValue = parseFloat(store.markupValue) || 0;
-  const markupAmount =
-    store.markupType === "PERCENTAGE"
-      ? (quote.totalAmount * markupValue) / 100
-      : store.markupType === "FLAT"
-        ? markupValue
-        : 0;
-  const finalTotal = quote.totalAmount + markupAmount;
+  // Markup is priced by the charges engine as a taxable line INSIDE the
+  // quoted subtotal, so quote.totalAmount already contains it (and the GST on
+  // it). Nothing is added on top here — the card just reports what was quoted.
+  const markupAmount = quote.pricing?.markup ?? 0;
+  const finalTotal = quote.totalAmount;
 
   async function handleExplain(e: MouseEvent) {
     e.stopPropagation();
@@ -135,23 +132,11 @@ export function QuoteCard({
           </div>
         )}
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] text-muted-foreground">
-            System price
-          </span>
+          <span className="text-[10px] text-muted-foreground">Subtotal</span>
           <span className="text-sm font-bold text-foreground">
             ₹{fmt(quote.totalAmount)}
           </span>
         </div>
-        {markupAmount > 0 && (
-          <div className="flex items-baseline justify-between">
-            <span className="text-[10px] text-muted-foreground">
-              + your markup
-            </span>
-            <span className="text-xs font-semibold text-blue-600">
-              +₹{fmt(markupAmount)}
-            </span>
-          </div>
-        )}
         <div className="flex items-baseline justify-between pt-1">
           <span className="text-[10px] text-muted-foreground font-semibold">
             Total
@@ -166,12 +151,14 @@ export function QuoteCard({
               COD collectable
             </span>
             <span className="text-xs font-semibold text-amber-600">
-              ₹{fmt(quote.pricing.codCollectable + markupAmount)}
+              ₹{fmt(quote.pricing.codCollectable)}
             </span>
           </div>
         )}
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          Includes GST + Freight + Handling
+          {markupAmount > 0
+            ? "Includes GST + Freight + Handling + your markup"
+            : "Includes GST + Freight + Handling"}
         </p>
       </div>
 

@@ -10,8 +10,10 @@
  *           fromPincode, toPincode, weight, paymentType, codAmount,
  *           shipmentType, serviceType, vasHash, iat, exp }
  *
- * The outlet markup is deliberately NOT part of the token — it is the outlet's
- * own input, recomputed and cap-checked server-side at creation time.
+ * The outlet markup IS part of the token (charges-engine v3): it is priced as
+ * a taxable line inside totalAmount, so the signed total already contains it
+ * and markupAmount rides along for the OutletEarning ledger. It is still
+ * resolved and cap-checked server-side (markupService) before quoting.
  */
 
 const crypto = require("crypto");
@@ -91,6 +93,12 @@ function signQuote(quote, params, vasSelections = []) {
     shipmentType: params.shipmentType || "B2C",
     serviceType: params.serviceType || "STANDARD",
     vasHash: hashVasSelections(vasSelections),
+    // Outlet markup is priced INSIDE totalAmount by the charges engine, so it
+    // is signed along with it: the booking cannot invent a different margin
+    // than the one the customer was quoted.
+    markupType: params.markupType || null,
+    markupValue: params.markupValue ?? null,
+    markupAmount: Number(params.markupAmount) || 0,
     iat: now,
     exp: now + TOKEN_TTL_SECONDS,
   };

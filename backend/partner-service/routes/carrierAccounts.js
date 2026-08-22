@@ -26,7 +26,10 @@ const {
 // NOTE: partnerManagementLimiter (max 20 / 15min) is applied ONLY to mutations
 // below — NOT router-wide — so GET/list/select reads (which happen on every page
 // load) are not throttled by the strict write limiter.
-router.use(authMiddleware.authenticate);
+// NOTE: attached per-route, not via a pathless router.use(). This router is
+// mounted at the bare "/api/v1" prefix, so a pathless router.use() would run
+// for every /api/v1/* request in the service, including routes mounted after.
+const authenticated = authMiddleware.authenticate;
 
 /**
  * @route GET /api/v1/partners/:partnerId/carrier-accounts/select?weight=&businessType=&orderAmount=&paymentType=&serviceType=
@@ -39,6 +42,7 @@ router.use(authMiddleware.authenticate);
  */
 router.get(
   "/partners/:partnerId/carrier-accounts/select",
+  authenticated,
   validateQuery(selectChannelQuerySchema),
   carrierAccountController.selectAccount,
 );
@@ -50,6 +54,7 @@ router.get(
  */
 router.get(
   "/partners/:partnerId/carrier-accounts",
+  authenticated,
   authMiddleware.requireRole(["superadmin", "admin", "operations"]),
   carrierAccountController.listAccounts,
 );
@@ -57,6 +62,7 @@ router.get(
 // Mutations restricted to admin/operations roles + strict management limiter
 router.post(
   "/partners/:partnerId/carrier-accounts",
+  authenticated,
   authMiddleware.requireRole(["superadmin", "admin", "operations"]),
   partnerManagementLimiter,
   validate(createCarrierAccountSchema, "body"),
@@ -65,6 +71,7 @@ router.post(
 
 router.put(
   "/carrier-accounts/:accountId",
+  authenticated,
   authMiddleware.requireRole(["superadmin", "admin", "operations"]),
   partnerManagementLimiter,
   validate(updateCarrierAccountSchema, "body"),
@@ -73,6 +80,7 @@ router.put(
 
 router.delete(
   "/carrier-accounts/:accountId",
+  authenticated,
   authMiddleware.requireRole(["superadmin", "admin", "operations"]),
   partnerManagementLimiter,
   carrierAccountController.deleteAccount,

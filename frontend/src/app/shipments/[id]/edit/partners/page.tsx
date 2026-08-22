@@ -93,6 +93,14 @@ export default function EditPartnerSelectionPage() {
         isFragile: store.isFragile || undefined,
         outletId: store.outletId || undefined,
         vasSelections: vasSelections.length > 0 ? vasSelections : undefined,
+        // Markup is priced inside the quoted subtotal (see create flow).
+        markup:
+          store.markupType && parseFloat(store.markupValue) > 0
+            ? {
+                type: store.markupType,
+                value: parseFloat(store.markupValue),
+              }
+            : undefined,
       }).unwrap();
       setQuotesLoaded(true);
     } catch {

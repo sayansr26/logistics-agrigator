@@ -120,6 +120,17 @@ const blacklistTokenSchema = Joi.object({
   token: Joi.string().required(),
 });
 
+const resetUserPasswordSchema = Joi.object({
+  password: Joi.string()
+    .min(8)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/)
+    .required()
+    .messages({
+      "string.pattern.base":
+        "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character",
+    }),
+});
+
 /**
  * @swagger
  * /auth/register:
@@ -1116,6 +1127,55 @@ router.post(
   authenticate,
   sharedAuthMiddleware.requirePermission("user", "manage", "all"),
   AuthController.activateUser,
+);
+
+/**
+ * @swagger
+ * /auth/users/{id}/reset-password:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Reset user password
+ *     description: Set a new password for a user and invalidate all their sessions (admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         description: User not found
+ */
+// Reset user password route (admin only)
+router.post(
+  "/users/:id/reset-password",
+  authenticate,
+  sharedAuthMiddleware.requirePermission("user", "manage", "all"),
+  validate(resetUserPasswordSchema),
+  AuthController.resetUserPassword,
 );
 
 /**

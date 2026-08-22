@@ -1585,6 +1585,104 @@ class AuthController {
     }
   }
 
+  // Reset user password (admin only)
+  static async resetUserPassword(req, res) {
+    try {
+      const { id } = req.params;
+      const { password } = req.body;
+
+      // Get existing user
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          status: "error",
+          error: {
+            code: "USER_NOT_FOUND",
+            message: "User not found",
+          },
+        });
+      }
+
+      // Hash and persist the new password
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      await prisma.user.update({
+        where: { id },
+        data: { passwordHash },
+      });
+
+      // Invalidate all existing sessions - the old credentials must not survive
+      const deletedSessions = await prisma.session.deleteMany({
+        where: { userId: id },
+      });
+
+      try {
+        const redisClient = getRedisClient();
+        await redisClient.del(`session:${id}`);
+      } catch (redisError) {
+        logger.warn("Failed to clear Redis session after password reset", {
+          error: redisError.message,
+          userId: id,
+        });
+      }
+
+      // Log audit entry
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "RESET_PASSWORD",
+          resource: "User",
+          resourceId: id,
+          changes: {
+            userId: id,
+            userEmail: existingUser.email,
+            passwordReset: true,
+            deletedSessionsCount: deletedSessions.count,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      });
+
+      const response = APIResponse.success(
+        {
+          userId: id,
+          message: "Password reset successfully",
+        },
+        {
+          service: "auth-service",
+        },
+      );
+
+      res.json(response);
+    } catch (error) {
+      console.error("Reset user password error:", error);
+
+      if (error.code && error.code.startsWith("P")) {
+        const prismaError = errorUtils.handlePrismaError(error);
+        const errorResponse = errorUtils.formatErrorResponse(prismaError);
+        return res.status(prismaError.statusCode || 500).json(errorResponse);
+      }
+
+      res.status(500).json({
+        status: "error",
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to reset password",
+        },
+      });
+    }
+  }
+
   // Delete user (admin only)
   static async deleteUser(req, res) {
     try {

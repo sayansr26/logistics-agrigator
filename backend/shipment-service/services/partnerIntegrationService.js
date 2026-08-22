@@ -213,6 +213,8 @@ class PartnerIntegrationService {
       partnerId: rateParams.partnerId || null,
       sortBy: rateParams.sortBy || "cheapest",
       shipmentType: rateParams.shipmentType || "B2C",
+      // Markup is priced inside the subtotal, so it changes every total
+      markup: rateParams.markup || null,
       // Canonical (sorted) VAS answers — different answers price differently
       vasSelections: Array.isArray(rateParams.vasSelections)
         ? [...rateParams.vasSelections]
@@ -318,6 +320,8 @@ class PartnerIntegrationService {
         sortBy: rateParams.sortBy || "cheapest",
         shipmentType: rateParams.shipmentType || "B2C",
         vasSelections: rateParams.vasSelections || [],
+        // Outlet markup — priced by the engine inside the taxable subtotal
+        markup: rateParams.markup || null,
       };
 
       logger.info("Calling Partner Service for rate calculation", {

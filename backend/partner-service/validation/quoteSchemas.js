@@ -55,6 +55,14 @@ const quoteSchemas = {
       .valid("FORWARD", "REVERSE")
       .default("FORWARD"),
     vasSelections: Joi.array().items(vasSelectionSchema).max(20).default([]),
+    // Outlet markup priced inside the taxable subtotal. Caps are enforced by
+    // the caller (shipment-service) against the outlet's admin-set limits.
+    markup: Joi.object({
+      type: Joi.string().valid("FLAT", "PERCENTAGE").required(),
+      value: Joi.number().min(0).required(),
+    })
+      .allow(null)
+      .default(null),
   }),
 
   eventChargeQuote: Joi.object({

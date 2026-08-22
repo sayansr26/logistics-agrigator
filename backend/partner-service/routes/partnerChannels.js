@@ -27,11 +27,16 @@ const {
   testChannelSchema,
 } = require("../validation/partnerChannelSchemas");
 
-// Apply authentication to all channel routes
-router.use(authMiddleware.authenticate);
-
-// Authorization: Admin + Operations roles only
-router.use(authMiddleware.requireRole(["superadmin", "admin", "operations"]));
+// Authentication + authorization for every route in this router.
+// NOTE: these MUST be attached per-route, not via a pathless router.use().
+// This router is mounted at the bare "/api/v1" prefix, so a pathless
+// router.use() would run for every /api/v1/* request in the service —
+// including routes mounted afterwards (charge-definitions, charge-configs,
+// ...) — and reject them with 403 for any role outside this list.
+const channelGuards = [
+  authMiddleware.authenticate,
+  authMiddleware.requireRole(["superadmin", "admin", "operations"]),
+];
 
 // NOTE: partnerManagementLimiter (max 20 / 15min) is applied ONLY to the
 // mutation routes below — NOT router-wide — so channel GET/list reads (which
@@ -49,6 +54,7 @@ router.use(authMiddleware.requireRole(["superadmin", "admin", "operations"]));
  */
 router.get(
   "/partners/:partnerId/channels/active",
+  ...channelGuards,
   partnerChannelController.getActiveChannel,
 );
 
@@ -59,6 +65,7 @@ router.get(
  */
 router.get(
   "/partners/:partnerId/channels",
+  ...channelGuards,
   partnerChannelController.listChannels,
 );
 
@@ -72,6 +79,7 @@ router.get(
  */
 router.post(
   "/channels/test",
+  ...channelGuards,
   serviceabilityLimiter,
   validate(testChannelSchema, "body"),
   partnerChannelController.testChannel,
@@ -98,6 +106,7 @@ router.post(
  */
 router.post(
   "/partners/:partnerId/channels",
+  ...channelGuards,
   partnerManagementLimiter,
   validate(createChannelSchema, "body"),
   partnerChannelController.createChannels,
@@ -111,6 +120,7 @@ router.post(
  */
 router.put(
   "/channels/:channelId",
+  ...channelGuards,
   partnerManagementLimiter,
   validate(updateChannelSchema, "body"),
   partnerChannelController.updateChannel,
@@ -123,6 +133,7 @@ router.put(
  */
 router.delete(
   "/channels/:channelId",
+  ...channelGuards,
   partnerManagementLimiter,
   partnerChannelController.deleteChannel,
 );

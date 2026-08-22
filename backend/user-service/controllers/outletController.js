@@ -1269,12 +1269,19 @@ class OutletController {
       } catch (authError) {
         logger.error("Failed to reset password in auth service", {
           error: authError.message,
+          status: authError.response?.status,
           response: authError.response?.data,
         });
+        const authStatus = authError.response?.status;
+        const authMessage =
+          authError.response?.data?.error?.message ||
+          authError.response?.data?.message;
         throw new UserServiceError(
-          "Failed to reset password",
+          authMessage || "Failed to reset password",
           "PASSWORD_RESET_FAILED",
-          500,
+          authStatus && authStatus >= 400 && authStatus < 500
+            ? authStatus
+            : 500,
         );
       }
 

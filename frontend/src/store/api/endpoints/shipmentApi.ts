@@ -317,6 +317,8 @@ interface ShipmentQuoteRequest {
   outletId?: string;
   sortBy?: "cheapest" | "highest";
   vasSelections?: VasSelection[];
+  /** Omit to fall back to the outlet default, then the platform default. */
+  markup?: MarkupInput | null;
 }
 
 export interface QuotePricing {
@@ -325,7 +327,10 @@ export interface QuotePricing {
   fuelSurcharge: number;
   discount: number;
   preTaxTotal: number;
-  markup: null;
+  /** Outlet markup priced inside the taxable subtotal (already in grandTotal). */
+  markup: number;
+  /** GST charged on that markup (already in gstAmount / grandTotal). */
+  markupGst?: number;
   gstRate: number;
   gstAmount: number;
   grandTotal: number;

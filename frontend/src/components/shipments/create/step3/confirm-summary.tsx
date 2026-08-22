@@ -29,18 +29,14 @@ export function ConfirmSummary({
   // the outlet's balance, not their own.
   const { balance: walletBalance, isKnown: walletKnown } = useBookingWallet();
 
-  const markupValue = parseFloat(store.markupValue) || 0;
+  // The charges engine prices markup as a taxable line inside the quoted
+  // subtotal, so totalAmount is the whole story: it already carries the
+  // markup and the GST on it, and it is what the wallet is debited.
   const systemCharge = quote?.totalAmount ?? 0;
-  const markupAmount = !quote
-    ? 0
-    : store.markupType === "PERCENTAGE"
-      ? (systemCharge * markupValue) / 100
-      : store.markupType === "FLAT"
-        ? markupValue
-        : 0;
-  const finalTotal = systemCharge + markupAmount;
+  const markupAmount = quote?.pricing?.markup ?? 0;
+  const finalTotal = systemCharge;
   const codCollectable = quote?.pricing
-    ? quote.pricing.codCollectable + markupAmount
+    ? quote.pricing.codCollectable
     : store.paymentType === "COD"
       ? parseFloat(store.codAmount) || 0
       : 0;
@@ -99,16 +95,18 @@ export function ConfirmSummary({
         {quote && (
           <>
             <div className="flex justify-between pt-1">
-              <span className="text-muted-foreground">System Price:</span>
+              <span className="text-muted-foreground">Subtotal:</span>
               <span className="font-medium text-foreground">
                 ₹{fmt(systemCharge)}
               </span>
             </div>
             {markupAmount > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Your Markup:</span>
+                <span className="text-muted-foreground">
+                  Includes your markup:
+                </span>
                 <span className="font-medium text-blue-600">
-                  +₹{fmt(markupAmount)}
+                  ₹{fmt(markupAmount)}
                 </span>
               </div>
             )}

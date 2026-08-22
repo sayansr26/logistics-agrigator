@@ -188,6 +188,10 @@ services:
       - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service}:${PARTNER_SERVICE_PORT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - QUOTE_SIGNING_SECRET=${QUOTE_SIGNING_SECRET}
+      # Platform-wide fallback markup, used when an outlet has no default of
+      # its own. Priced inside the taxable subtotal by the charges engine.
+      - PLATFORM_DEFAULT_MARKUP_TYPE=${PLATFORM_DEFAULT_MARKUP_TYPE:-}
+      - PLATFORM_DEFAULT_MARKUP_VALUE=${PLATFORM_DEFAULT_MARKUP_VALUE:-}
       - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
       - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
       - STAGING_ORIGINS=${STAGING_ORIGINS}

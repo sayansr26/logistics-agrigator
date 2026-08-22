@@ -82,6 +82,8 @@ async function calculateRates(req, res, next) {
       shipmentType: params.shipmentType || "B2C",
       shipmentDirection: params.shipmentDirection || "FORWARD",
       vasSelections: params.vasSelections || [],
+      // Outlet markup — resolved + cap-checked upstream by shipment-service
+      markup: params.markup || null,
     });
 
     const rates = result.rates.map((r) => toWireRate(r, params.serviceType));

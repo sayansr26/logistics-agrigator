@@ -21,6 +21,54 @@ const logger = require("../../shared/lib/logger");
 
 const SUBTOTAL_METHODS = new Set(["RATE_ADJUSTMENT", "DISCOUNT"]);
 
+// Outlet markup is not a partner charge — it is the booking outlet's own
+// margin — so it has no PartnerChargeConfig row. It is injected as a synthetic
+// line just before the tax phase so that GST (subtotalOf: PRE_TAX) prices it
+// like any other charge. Phase 850 keeps it after every freight/VAS/discount
+// line and before phase 900 (GST).
+const MARKUP_PHASE = 850;
+const MARKUP_CODE = "OUTLET_MARKUP";
+const TAX_PHASE = 900;
+
+/**
+ * Build the synthetic markup line from the charges accepted so far.
+ *
+ * FLAT       -> the configured rupee value verbatim
+ * PERCENTAGE -> percent of the PRE-GST subtotal (every line accepted before
+ *               the tax phase), matching where the line sits in the pipeline.
+ *
+ * Returns null when there is no markup to apply.
+ */
+function buildMarkupLine(markup, accepted) {
+  if (!markup || !markup.type) return null;
+  const value = Number(markup.value) || 0;
+  if (value <= 0) return null;
+
+  const preGstSubtotal = computeSubtotal("PRE_TAX", accepted);
+  const amount =
+    markup.type === "FLAT"
+      ? round2(value)
+      : round2((preGstSubtotal * value) / 100);
+
+  if (amount <= 0) return null;
+
+  return {
+    chargeCode: MARKUP_CODE,
+    chargeTypeName: "Outlet Markup",
+    category: "MARKUP",
+    stage: "QUOTE",
+    phase: MARKUP_PHASE,
+    totalCharge: amount,
+    calculation:
+      markup.type === "FLAT"
+        ? `Flat markup ₹${amount.toFixed(2)}`
+        : `${value}% of pre-GST subtotal ₹${round2(preGstSubtotal).toFixed(2)}`,
+    // Taxable: GST is charged on the markup along with the platform charges.
+    flags: { taxable: true },
+    aggregation: null,
+  };
+}
+
 function computeSubtotal(subtotalOf, lines) {
   switch (subtotalOf) {
     case "FUEL_APPLICABLE":
@@ -167,9 +215,24 @@ function run(configs, facts, options = {}) {
   let fuelSurcharge = 0;
   let discountTotal = 0;
 
-  for (const [, phaseCfgs] of [...phases.entries()].sort(
+  let markupAmount = 0;
+  let markupInjected = false;
+
+  // Markup must land before the tax phase reads its subtotal.
+  const injectMarkup = () => {
+    if (markupInjected) return;
+    markupInjected = true;
+    const line = buildMarkupLine(facts.markup, accepted);
+    if (line) {
+      accepted.push(line);
+      markupAmount = line.totalCharge;
+    }
+  };
+
+  for (const [phaseNumber, phaseCfgs] of [...phases.entries()].sort(
     (a, b) => a[0] - b[0],
   )) {
+    if (phaseNumber >= TAX_PHASE) injectMarkup();
     const phaseLines = [];
 
     for (const cfg of phaseCfgs) {
@@ -203,8 +266,11 @@ function run(configs, facts, options = {}) {
 
         if (line) {
           phaseLines.push(line);
-          if (definition.code === "GST") {
-            gstRate = Number(cfg.config?.percent) || 0;
+          // Match on the TAX category, not a literal "GST" code — the seeded
+          // definition is GST_18_PERCENT, so a code check left gstAmount at 0
+          // and preTaxTotal equal to the grand total.
+          if (definition.category === "TAX") {
+            gstRate = Number(cfg.config?.percent) || gstRate;
             gstAmount += line.totalCharge;
           }
           if (definition.code === "FUEL_SURCHARGE") {
@@ -230,6 +296,9 @@ function run(configs, facts, options = {}) {
 
     accepted.push(...aggregate(phaseLines));
   }
+
+  // Partner with no tax-phase config: the loop never crossed TAX_PHASE.
+  injectMarkup();
 
   const totalCharge = round2(
     accepted.reduce((sum, l) => sum + l.totalCharge, 0),
@@ -281,7 +350,10 @@ function run(configs, facts, options = {}) {
       fuelSurcharge: round2(fuelSurcharge),
       discount: round2(discountTotal),
       preTaxTotal,
-      markup: null, // filled by shipment-service at booking (outlet markup)
+      // Outlet markup priced inside the taxable subtotal above, plus the GST
+      // charged on it. Both are already part of grandTotal.
+      markup: round2(markupAmount),
+      markupGst: round2((markupAmount * gstRate) / 100),
       gstRate,
       gstAmount: round2(gstAmount),
       grandTotal: totalCharge,

@@ -65,8 +65,8 @@ export function MarkupSection({
   const preview = useMemo(() => {
     if (!store.markupType || value <= 0) return null;
     return store.markupType === "PERCENTAGE"
-      ? `+${value}% on the system price`
-      : `+₹${value.toFixed(2)} flat on the system price`;
+      ? `+${value}% of the pre-GST subtotal (GST applies on top)`
+      : `+₹${value.toFixed(2)} flat, inside the taxable subtotal`;
   }, [store.markupType, value]);
 
   if (!visible) return null;

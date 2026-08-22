@@ -87,6 +87,9 @@ async function buildQuotes(input, authToken) {
     isFragile = false,
     outletId = null,
     sortBy = "cheapest",
+    // Resolved + cap-checked by the caller via markupService. Priced by
+    // partner-service as a taxable line inside the subtotal.
+    markup = null,
   } = input;
 
   const rateParams = {
@@ -104,6 +107,7 @@ async function buildQuotes(input, authToken) {
     sortBy,
     shipmentType,
     vasSelections,
+    markup,
   };
 
   // Partner quote engine already applies pincode assignment, zone coverage,
@@ -173,6 +177,11 @@ async function buildQuotes(input, authToken) {
             codAmount,
             shipmentType,
             serviceType,
+            // Markup is inside totalAmount now, so its amount has to be
+            // verifiable at booking (it drives the OutletEarning row).
+            markupType: markup?.type || null,
+            markupValue: markup?.value ?? null,
+            markupAmount: quote.pricing?.markup ?? 0,
           },
           vasSelections,
         );

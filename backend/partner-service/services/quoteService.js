@@ -78,6 +78,7 @@ function generateCacheKey(params, configRevision) {
     shipmentType = "B2C",
     shipmentDirection = "FORWARD",
     vasSelections,
+    markup = null,
   } = params;
 
   const dimStr = dimensions
@@ -86,7 +87,8 @@ function generateCacheKey(params, configRevision) {
   const fragile = params.isFragile ? "1" : "0";
   const vasHash = hashVasSelections(vasSelections);
 
-  return `${CACHE_PREFIX}:r${configRevision}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:b${numberOfBoxes}:${partnerId || "all"}:${sortBy}:f${fragile}:${shipmentType}:${shipmentDirection}:v${vasHash}`;
+  const markupKey = markup?.type ? `${markup.type}${markup.value}` : "none";
+  return `${CACHE_PREFIX}:r${configRevision}:${fromPincode}:${toPincode}:${weight}:${paymentType}:${codAmount}:${declaredValue}:${dimStr}:b${numberOfBoxes}:${partnerId || "all"}:${sortBy}:f${fragile}:${shipmentType}:${shipmentDirection}:v${vasHash}:m${markupKey}`;
 }
 
 async function hasPincodeAssignment(partnerId, pincodeCode) {
@@ -438,6 +440,9 @@ async function calculateRates(params) {
     shipmentDirection = "FORWARD",
     serviceType = null,
     vasSelections = [],
+    // Outlet markup, already resolved and cap-checked by the caller
+    // (shipment-service). Priced as a taxable line inside the subtotal.
+    markup = null,
   } = params;
 
   logger.info("Calculating rates (engine v3)", {
@@ -469,6 +474,7 @@ async function calculateRates(params) {
       shipmentType,
       shipmentDirection,
       vasSelections,
+      markup,
     },
     configRevision,
   );
@@ -710,6 +716,10 @@ async function calculateRates(params) {
           answers,
           outletBadge,
         });
+
+        // Markup rides on facts so the pipeline can price it against the
+        // running pre-GST subtotal.
+        facts.markup = markup;
 
         const engineResult = pipeline.run(configs, facts);
 

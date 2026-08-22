@@ -38,11 +38,17 @@ function setDeprecatedPincodeSearchHeaders(_req, res, next) {
   next();
 }
 
-// Apply authentication to all partner pincode routes
-router.use(authMiddleware.authenticate);
-
-// Authorization: Admin roles only
-router.use(authMiddleware.requireRole(["superadmin", "admin"]));
+// Authentication + authorization for every route in this router.
+// NOTE: these MUST be attached per-route, not via a pathless router.use().
+// This router is mounted at the bare "/api/v1" prefix, so a pathless
+// router.use() would run for every /api/v1/* request in the service —
+// including routes mounted afterwards (courier-operations, partner
+// performance, system management, ...) — and reject them with 403 for any
+// role outside this list.
+const adminGuards = [
+  authMiddleware.authenticate,
+  authMiddleware.requireRole(["superadmin", "admin"]),
+];
 
 // ==========================================
 // PARTNER PINCODE ASSIGNMENT ROUTES
@@ -97,6 +103,7 @@ router.use(authMiddleware.requireRole(["superadmin", "admin"]));
  */
 router.post(
   "/:partnerId/pincodes",
+  ...adminGuards,
   validate(assignPartnerPincodeSchema),
   partnerPincodeController.assignPartnerPincode,
 );
@@ -152,6 +159,7 @@ router.post(
  */
 router.get(
   "/:partnerId/pincodes",
+  ...adminGuards,
   validate(listPartnerPincodesSchema),
   partnerPincodeController.getPartnerPincodes,
 );
@@ -185,6 +193,7 @@ router.get(
  */
 router.get(
   "/:partnerId/pincodes/:id",
+  ...adminGuards,
   validate(getPartnerPincodeByIdSchema),
   partnerPincodeController.getPartnerPincodeById,
 );
@@ -237,6 +246,7 @@ router.get(
  */
 router.put(
   "/:partnerId/pincodes/:id",
+  ...adminGuards,
   validate(updatePartnerPincodeSchema),
   partnerPincodeController.updatePartnerPincode,
 );
@@ -270,6 +280,7 @@ router.put(
  */
 router.delete(
   "/:partnerId/pincodes/:id",
+  ...adminGuards,
   validate(deletePartnerPincodeSchema),
   partnerPincodeController.deletePartnerPincode,
 );
@@ -314,6 +325,7 @@ router.delete(
  */
 router.post(
   "/:partnerId/pincodes/import",
+  ...adminGuards,
   validate(importPincodesSchema),
   uploadSingle("file"),
   partnerPincodeController.importPartnerPincodes,
@@ -350,6 +362,7 @@ router.post(
  */
 router.get(
   "/:partnerId/pincodes/export",
+  ...adminGuards,
   validate(exportPincodesSchema),
   partnerPincodeController.exportPartnerPincodes,
 );
@@ -372,7 +385,11 @@ router.get(
  *               type: string
  *               format: binary
  */
-router.get("/pincodes/template", partnerPincodeController.downloadTemplate);
+router.get(
+  "/pincodes/template",
+  ...adminGuards,
+  partnerPincodeController.downloadTemplate,
+);
 
 // ==========================================
 // PINCODE SEARCH ROUTE
@@ -413,6 +430,7 @@ router.get("/pincodes/template", partnerPincodeController.downloadTemplate);
  */
 router.get(
   "/pincodes/search",
+  ...adminGuards,
   setDeprecatedPincodeSearchHeaders,
   validate(searchPincodesSchema),
   partnerPincodeController.searchPincodes,

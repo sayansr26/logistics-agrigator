@@ -21,6 +21,7 @@ const pickupSchedulingService = require("../services/pickupSchedulingService");
 const quoteSigningService = require("../services/quoteSigningService");
 const quoteService = require("../services/quoteService");
 const outletWalletContextService = require("../services/outletWalletContextService");
+const markupService = require("../services/markupService");
 const weightCalc = require("../shared/utils/weightCalc");
 
 /**
@@ -367,6 +368,10 @@ async function createShipment(req, res) {
     // client-editable quoteSnapshot.
     // ==================================================================
     let verifiedTotalAmount = null;
+    // Markup claims from the signed quote (null on pre-v3 tokens issued before
+    // markup moved inside the subtotal).
+    let verifiedMarkupAmount = null;
+    let verifiedMarkupType = null;
     if (hasAssignedPartner) {
       if (!quoteToken) {
         throw new ValidationError(
@@ -389,6 +394,9 @@ async function createShipment(req, res) {
       });
 
       verifiedTotalAmount = claims.totalAmount;
+      verifiedMarkupAmount =
+        claims.markupAmount === undefined ? null : Number(claims.markupAmount);
+      verifiedMarkupType = claims.markupType ?? null;
 
       if (expired) {
         // User idled past the token TTL — re-quote the selected partner
@@ -410,6 +418,11 @@ async function createShipment(req, res) {
             partnerId: claims.partnerId,
             shipmentType: claims.shipmentType,
             vasSelections,
+            // Re-quote with the SAME markup the token was signed with,
+            // otherwise the fresh total can never match the claim.
+            markup: claims.markupType
+              ? { type: claims.markupType, value: Number(claims.markupValue) }
+              : null,
           },
           authToken,
         );
@@ -477,9 +490,11 @@ async function createShipment(req, res) {
 
     // ==================================================================
     // Outlet markup / commission (charges-engine v3):
-    // finalTotal = systemCharge + markupAmount. The markup is the outlet's
-    // own revenue (added to COD collectable for COD shipments); the wallet
-    // debit stays systemCharge.
+    // The markup is priced by the charges engine as a taxable line INSIDE the
+    // quoted subtotal, so systemCharge already contains it (and the GST on
+    // it). totalCost therefore equals systemCharge, and the wallet debit is
+    // the full amount. markupAmount is carried in the signed quote token and
+    // reproduced here only to accrue the outlet's OutletEarning row.
     // ==================================================================
     const requestedMarkup = req.body.markup || null;
     let markupType = null;
@@ -497,15 +512,10 @@ async function createShipment(req, res) {
               )
             : null;
 
-      const effectiveMarkup =
-        requestedMarkup ||
-        (outletContext?.defaultMarkupType &&
-        outletContext?.defaultMarkupValue !== null
-          ? {
-              type: outletContext.defaultMarkupType,
-              value: Number(outletContext.defaultMarkupValue),
-            }
-          : null);
+      const effectiveMarkup = markupService.resolveEffectiveMarkup({
+        requested: requestedMarkup,
+        outletContext,
+      });
 
       if (effectiveMarkup) {
         if (!outletContext) {
@@ -515,43 +525,37 @@ async function createShipment(req, res) {
         }
 
         markupType = effectiveMarkup.type;
-        markupValue = Number(effectiveMarkup.value);
+        markupValue = effectiveMarkup.value;
 
-        if (
-          markupType === "FLAT" &&
-          outletContext.maxMarkupFlat !== null &&
-          markupValue > Number(outletContext.maxMarkupFlat)
-        ) {
-          throw new ValidationError(
-            `Markup exceeds the allowed flat cap of ₹${outletContext.maxMarkupFlat}`,
-          );
-        }
-        if (
-          markupType === "PERCENTAGE" &&
-          outletContext.maxMarkupPercent !== null &&
-          markupValue > Number(outletContext.maxMarkupPercent)
-        ) {
-          throw new ValidationError(
-            `Markup exceeds the allowed percentage cap of ${outletContext.maxMarkupPercent}%`,
-          );
-        }
-
+        // The engine priced it; the token proves the amount. Only fall back to
+        // a local computation when the quote predates markup-in-subtotal
+        // (no markupAmount claim) — percentage then applies to the pre-GST
+        // portion of the system charge.
         markupAmount =
-          markupType === "FLAT"
-            ? Math.round(markupValue * 100) / 100
-            : Math.round(systemCharge * markupValue) / 100;
+          verifiedMarkupAmount !== null
+            ? verifiedMarkupAmount
+            : markupType === "FLAT"
+              ? Math.round(markupValue * 100) / 100
+              : Math.round(systemCharge * markupValue) / 100;
+
+        if (verifiedMarkupType !== null && verifiedMarkupType !== markupType) {
+          throw new ValidationError(
+            `Markup type changed after quoting: quoted ${verifiedMarkupType}, booking has ${markupType}`,
+          );
+        }
       }
     }
 
-    const totalCost = hasAssignedPartner ? systemCharge + markupAmount : 0;
+    // systemCharge already includes markup + GST on markup.
+    const totalCost = hasAssignedPartner ? systemCharge : 0;
 
-    // COD: the courier collects base + markup; cap applies to the SUM
+    // COD: the markup is part of the freight charge now, so the courier
+    // collects only the goods value — it is no longer added on top.
     const codBaseAmount = paymentType === "COD" ? Number(codAmount) || 0 : null;
-    const finalCodAmount =
-      paymentType === "COD" ? codBaseAmount + markupAmount : null;
+    const finalCodAmount = paymentType === "COD" ? codBaseAmount : null;
     if (paymentType === "COD" && finalCodAmount > 100000) {
       throw new ValidationError(
-        `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit after markup`,
+        `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit`,
       );
     }
     const estimatedDelivery = hasAssignedPartner
@@ -2522,6 +2526,8 @@ async function applyFullShipmentEdit({
   }
 
   let verifiedTotalAmount = null;
+  // Markup claims from the signed quote (null on pre-v3 tokens).
+  let verifiedMarkupAmount = null;
   if (attachingPartner) {
     if (!quoteToken) {
       throw new ValidationError(
@@ -2544,6 +2550,8 @@ async function applyFullShipmentEdit({
     });
 
     verifiedTotalAmount = claims.totalAmount;
+    verifiedMarkupAmount =
+      claims.markupAmount === undefined ? null : Number(claims.markupAmount);
 
     if (expired) {
       // Idled past the token TTL — re-quote server-side and demand the same price
@@ -2563,6 +2571,11 @@ async function applyFullShipmentEdit({
           partnerId: claims.partnerId,
           shipmentType: claims.shipmentType,
           vasSelections,
+          // Same markup the token was signed with, or the fresh total can
+          // never match the claim.
+          markup: claims.markupType
+            ? { type: claims.markupType, value: Number(claims.markupValue) }
+            : null,
         },
         req.header("Authorization"),
       );
@@ -2646,43 +2659,37 @@ async function applyFullShipmentEdit({
         );
       }
 
-      markupType = effectiveMarkup.type;
+      markupService.assertWithinCaps(
+        {
+          type: String(effectiveMarkup.type).toUpperCase(),
+          value: Number(effectiveMarkup.value),
+        },
+        outletContext,
+      );
+
+      markupType = String(effectiveMarkup.type).toUpperCase();
       markupValue = Number(effectiveMarkup.value);
 
-      if (
-        markupType === "FLAT" &&
-        outletContext.maxMarkupFlat !== null &&
-        markupValue > Number(outletContext.maxMarkupFlat)
-      ) {
-        throw new ValidationError(
-          `Markup exceeds the allowed flat cap of ₹${outletContext.maxMarkupFlat}`,
-        );
-      }
-      if (
-        markupType === "PERCENTAGE" &&
-        outletContext.maxMarkupPercent !== null &&
-        markupValue > Number(outletContext.maxMarkupPercent)
-      ) {
-        throw new ValidationError(
-          `Markup exceeds the allowed percentage cap of ${outletContext.maxMarkupPercent}%`,
-        );
-      }
-
+      // Markup is priced inside the quoted subtotal, so the amount comes from
+      // the signed quote. Only a re-quote can change it; when the partner is
+      // unchanged the stored amount stands.
       markupAmount =
-        markupType === "FLAT"
-          ? Math.round(markupValue * 100) / 100
-          : Math.round(systemCharge * markupValue) / 100;
+        verifiedMarkupAmount !== null
+          ? verifiedMarkupAmount
+          : toNumber(shipment.markupAmount) || 0;
     }
   }
 
-  const totalCost = hasAssignedPartner ? systemCharge + markupAmount : 0;
+  // systemCharge already includes markup + GST on markup.
+  const totalCost = hasAssignedPartner ? systemCharge : 0;
 
+  // Markup rides inside the freight charge now — the courier collects only
+  // the goods value.
   const codBaseAmount = paymentType === "COD" ? Number(codAmount) || 0 : null;
-  const finalCodAmount =
-    paymentType === "COD" ? codBaseAmount + markupAmount : null;
+  const finalCodAmount = paymentType === "COD" ? codBaseAmount : null;
   if (paymentType === "COD" && finalCodAmount > 100000) {
     throw new ValidationError(
-      `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit after markup`,
+      `COD collectable (₹${finalCodAmount}) exceeds the ₹1,00,000 limit`,
     );
   }
 
@@ -3759,6 +3766,24 @@ async function getShipmentQuotes(req, res) {
       vasSelections = [],
     } = req.body;
 
+    // Markup is priced inside the quoted subtotal, so it has to be resolved
+    // (request -> outlet default -> platform default) and cap-checked BEFORE
+    // quoting, not at booking time.
+    const quoteOutletId = req.body.outletId || null;
+    const outletContext =
+      req.user.role === "outlet"
+        ? await outletWalletContextService.resolveOutletWalletByUserId(userId)
+        : quoteOutletId
+          ? await outletWalletContextService.resolveOutletWalletByOutletId(
+              quoteOutletId,
+            )
+          : null;
+
+    const effectiveMarkup = markupService.resolveEffectiveMarkup({
+      requested: req.body.markup || null,
+      outletContext,
+    });
+
     logger.info("Getting shipment quotes", {
       service: "shipment-service",
       userId,
@@ -3767,6 +3792,7 @@ async function getShipmentQuotes(req, res) {
       weight,
       numberOfBoxes,
       vasCount: vasSelections.length,
+      markupSource: effectiveMarkup?.source || "none",
     });
 
     const { quotes, recommended, params } = await quoteService.buildQuotes(
@@ -3783,8 +3809,9 @@ async function getShipmentQuotes(req, res) {
         vasSelections,
         declaredValue: req.body.declaredValue || req.body.shipmentValue || 0,
         isFragile: req.body.isFragile || false,
-        outletId: req.body.outletId || null,
+        outletId: quoteOutletId,
         sortBy: req.body.sortBy || "cheapest",
+        markup: markupService.toQuoteParam(effectiveMarkup),
       },
       req.header("Authorization"),
     );
