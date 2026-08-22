@@ -18,6 +18,11 @@ const publicPaths = [
   "/api/v1/auth/refresh",
   "/api/v1/geography", // All geographical data endpoints (public)
   "/api/v1/shipments/webhook", // Courier provider webhook callbacks (public)
+  // Customer-facing parcel tracking. The handler returns a sanitised
+  // subset (milestones and route only, no pricing, contacts or partner
+  // data), so it is safe to serve without a session. Rate-limited in the
+  // shipment service by trackingLimiter.
+  "/api/v1/shipments/track",
   // External API credential exchange. NOTE: only this exact path is public -
   // the rest of /api/v1/external/auth (credential CRUD) requires a session JWT.
   "/api/v1/external/auth/token",

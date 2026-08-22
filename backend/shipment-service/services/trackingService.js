@@ -23,15 +23,20 @@ const {
  * Shipment status workflow definitions
  */
 const SHIPMENT_STATUS_FLOW = {
-  CREATED: ["BOOKED", "CANCELLED"],
-  BOOKED: ["PICKED_UP", "CANCELLED"],
-  PICKED_UP: ["IN_TRANSIT", "RTO"],
-  IN_TRANSIT: ["OUT_FOR_DELIVERY", "DELIVERED", "RTO"],
-  OUT_FOR_DELIVERY: ["DELIVERED", "NDR", "RTO"],
+  // HOLD is a reversible parking state, not a stage of the journey: a re-rate
+  // that could not collect parks the shipment here, and settling the balance
+  // must be able to return it to where it was. It was previously absent from
+  // this map entirely, so nothing could leave HOLD and held shipments stuck.
+  CREATED: ["BOOKED", "CANCELLED", "HOLD"],
+  BOOKED: ["PICKED_UP", "CANCELLED", "HOLD"],
+  PICKED_UP: ["IN_TRANSIT", "RTO", "HOLD"],
+  IN_TRANSIT: ["OUT_FOR_DELIVERY", "DELIVERED", "RTO", "HOLD"],
+  OUT_FOR_DELIVERY: ["DELIVERED", "NDR", "RTO", "HOLD"],
   DELIVERED: [], // Terminal state
   CANCELLED: [], // Terminal state
   RTO: ["DELIVERED"], // Return to origin can be delivered
   NDR: ["OUT_FOR_DELIVERY", "RTO"], // Non-delivery report can retry or RTO
+  HOLD: ["CREATED", "BOOKED", "PICKED_UP", "IN_TRANSIT", "CANCELLED"],
 };
 
 /**

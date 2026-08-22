@@ -23,14 +23,20 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 
 export function Wordmark({
   className = "text-[17px]",
+  // "Solution" is white on the landing page's dark canvas. Anywhere that
+  // follows the app theme (the public tracking page) must pass a token colour
+  // instead, or the word disappears on a light background.
+  secondaryClassName = "text-white",
 }: {
   className?: string;
+  secondaryClassName?: string;
 }) {
   return (
     <span
       className={`grotesk font-bold tracking-[-0.02em] text-[#F04E23] ${className}`}
     >
-      SUB<span className="font-semibold text-white"> Solution</span>
+      SUB
+      <span className={`font-semibold ${secondaryClassName}`}> Solution</span>
     </span>
   );
 }

@@ -11,6 +11,7 @@ import { AddressSection } from "@/components/shipments/create/step1/address-sect
 import { DimensionsSection } from "@/components/shipments/create/step1/dimensions-section";
 import { DocumentsSection } from "@/components/shipments/create/step1/documents-section";
 import { VasSection } from "@/components/shipments/create/step1/vas-section";
+import { AwbSection } from "@/components/shipments/create/step1/awb-section";
 // Markup section hidden — keep the import so it can be re-enabled in one step.
 // import { MarkupSection } from "@/components/shipments/create/step1/markup-section";
 import { useShipmentFormStore } from "@/store/shipment-form-store";
@@ -59,6 +60,7 @@ export default function ShipmentDetailsPage() {
             <DimensionsSection />
             <DocumentsSection />
             <VasSection />
+            <AwbSection />
             {/* Markup section hidden — uncomment to re-enable. */}
             {/* <MarkupSection isOutlet={isOutlet} isAdminLike={isAdminLike} /> */}
           </div>

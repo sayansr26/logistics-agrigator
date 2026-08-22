@@ -362,6 +362,35 @@ const createShipmentSchema = Joi.object({
     )
     .max(20)
     .default([]),
+
+  /**
+   * How the AWB / docket number is obtained.
+   *
+   * AUTO   - the courier allocates it when we book (the existing behaviour).
+   * MANUAL - the client already holds pre-printed courier stationery and
+   *          supplies the number themselves; we record it and skip the
+   *          courier booking call so the courier does not allocate a second.
+   */
+  awbMode: Joi.string().valid("AUTO", "MANUAL").default("AUTO"),
+
+  manualAwbNumber: Joi.string()
+    .trim()
+    .pattern(/^[A-Za-z0-9-]{6,30}$/)
+    .when("awbMode", {
+      is: "MANUAL",
+      then: Joi.required().messages({
+        "any.required":
+          "Enter the AWB number printed on your courier stationery",
+      }),
+      otherwise: Joi.forbidden().messages({
+        "any.unknown":
+          "manualAwbNumber is only accepted when awbMode is MANUAL",
+      }),
+    })
+    .messages({
+      "string.pattern.base":
+        "AWB number must be 6-30 characters, letters, digits or hyphens only",
+    }),
 });
 
 // Quote request for staged shipment creation

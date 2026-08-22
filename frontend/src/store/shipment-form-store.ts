@@ -98,6 +98,11 @@ export interface ShipmentFormState {
   // Dynamic VAS answers, keyed by chargeCode
   vasAnswers: VasAnswers;
 
+  // AWB allocation: AUTO lets the courier allocate at booking, MANUAL books
+  // against a number from the client's own pre-printed stationery.
+  awbMode: "AUTO" | "MANUAL";
+  manualAwbNumber: string;
+
   // Outlet markup (applied at booking, on top of the system price)
   markupType: MarkupType | null;
   markupValue: string;
@@ -443,6 +448,8 @@ const DEFAULT_STATE = {
 
   vasAnswers: {} as VasAnswers,
 
+  awbMode: "AUTO" as "AUTO" | "MANUAL",
+  manualAwbNumber: "",
   markupType: null as MarkupType | null,
   markupValue: "",
 

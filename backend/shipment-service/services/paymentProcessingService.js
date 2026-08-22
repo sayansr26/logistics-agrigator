@@ -236,7 +236,15 @@ class PaymentProcessingService {
           "Invalid request to Wallet Service",
       );
     } else if (lastError.response?.status === 409) {
-      throw new ConflictError("Insufficient balance or wallet conflict");
+      // A 409 is NOT necessarily a funds problem — the wallet also returns it
+      // for a duplicate reference_id. Reporting both as "insufficient balance"
+      // sent operators hunting a balance that was never short. Surface the
+      // wallet's own message so the two are distinguishable.
+      throw new ConflictError(
+        lastError.response?.data?.error?.message ||
+          lastError.response?.data?.message ||
+          "Wallet rejected the transaction (insufficient balance or duplicate reference)",
+      );
     }
 
     throw new APIError("Wallet Service unavailable after retries", 503, {
@@ -396,6 +404,7 @@ class PaymentProcessingService {
     shipmentId,
     description,
     authToken,
+    referenceId = null,
   ) {
     logger.info("Debiting wallet for shipment via admin endpoint", {
       userId,
@@ -414,7 +423,11 @@ class PaymentProcessingService {
           userId,
           clientCode,
           amount,
-          reference_id: `SHIPMENT_${shipmentId}`,
+          // Fixed per shipment by default, which makes the booking charge
+          // idempotent on retry. Adjustments (re-rate top-ups) MUST pass their
+          // own reference — reusing this one is rejected 409 as a duplicate,
+          // which surfaced as a bogus "insufficient balance".
+          reference_id: referenceId || `SHIPMENT_${shipmentId}`,
           description: description || `Shipment charge for order ${shipmentId}`,
         },
       },
@@ -452,6 +465,8 @@ class PaymentProcessingService {
     shipmentId,
     description,
     authToken,
+    originalTransactionId = null,
+    referenceId = null,
   ) {
     logger.info("Crediting wallet for refund via admin endpoint", {
       userId,
@@ -470,9 +485,16 @@ class PaymentProcessingService {
           userId,
           clientCode,
           amount,
-          reference_id: `REFUND_${shipmentId}`,
+          reference_id: referenceId || `REFUND_${shipmentId}`,
           description:
             description || `Refund for cancelled shipment ${shipmentId}`,
+          // The external wallet API refunds AGAINST the original debit and
+          // rejects the call outright ("Transaction ID is required for
+          // refunds") without it. Omitting this silently failed every refund
+          // in the system.
+          ...(originalTransactionId
+            ? { transaction_id: Number(originalTransactionId) }
+            : {}),
         },
       },
       authToken,
@@ -509,6 +531,7 @@ class PaymentProcessingService {
     shipmentId,
     description,
     authToken,
+    referenceId = null,
   ) {
     logger.info("Processing shipment payment", {
       userId,
@@ -528,6 +551,7 @@ class PaymentProcessingService {
         shipmentId,
         description,
         authToken,
+        referenceId,
       );
 
       logger.info("Shipment payment processed successfully", {
@@ -542,7 +566,12 @@ class PaymentProcessingService {
         success: true,
         transaction,
         paymentReference: transaction.reference,
-        walletTransactionId: transaction.id,
+        // The external wallet returns the id as either `id` or `transaction_id`
+        // depending on the endpoint. Reading only `id` silently produced a null
+        // walletTransactionId on the shipment, which later broke refunds — they
+        // must quote the originating transaction.
+        walletTransactionId:
+          transaction?.id ?? transaction?.transaction_id ?? null,
       };
     } catch (error) {
       logger.error("Failed to process shipment payment", {
@@ -560,7 +589,15 @@ class PaymentProcessingService {
   /**
    * Process refund for cancelled shipment
    */
-  async processShipmentRefund(userId, amount, shipmentId, reason, authToken) {
+  async processShipmentRefund(
+    userId,
+    amount,
+    shipmentId,
+    reason,
+    authToken,
+    originalTransactionId = null,
+    referenceId = null,
+  ) {
     logger.info("Processing shipment refund", {
       userId,
       amount,
@@ -578,6 +615,8 @@ class PaymentProcessingService {
         shipmentId,
         description,
         authToken,
+        originalTransactionId,
+        referenceId,
       );
 
       logger.info("Shipment refund processed successfully", {
@@ -592,7 +631,8 @@ class PaymentProcessingService {
         success: true,
         transaction,
         refundReference: transaction.reference,
-        refundTransactionId: transaction.id,
+        refundTransactionId:
+          transaction?.id ?? transaction?.transaction_id ?? null,
       };
     } catch (error) {
       logger.error("Failed to process shipment refund", {
@@ -696,6 +736,7 @@ async function processShipmentPayment(
   shipmentId,
   description,
   authToken,
+  referenceId = null,
 ) {
   return paymentProcessingService.processShipmentPayment(
     userId,
@@ -703,6 +744,7 @@ async function processShipmentPayment(
     shipmentId,
     description,
     authToken,
+    referenceId,
   );
 }
 
@@ -715,6 +757,8 @@ async function processShipmentRefund(
   shipmentId,
   reason,
   authToken,
+  originalTransactionId = null,
+  referenceId = null,
 ) {
   return paymentProcessingService.processShipmentRefund(
     userId,
@@ -722,6 +766,8 @@ async function processShipmentRefund(
     shipmentId,
     reason,
     authToken,
+    originalTransactionId,
+    referenceId,
   );
 }
 

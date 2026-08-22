@@ -252,6 +252,11 @@ export interface MarkupInput {
 }
 
 interface CreateShipmentRequest {
+  /** AUTO = courier allocates the AWB at booking; MANUAL = client supplies it. */
+  awbMode?: "AUTO" | "MANUAL";
+  /** Only sent with awbMode "MANUAL" — the number on the client's own label. */
+  manualAwbNumber?: string;
+
   orderId: string;
   shipmentType?: "B2B" | "B2C";
   shipmentDirection?: "FORWARD" | "REVERSE";
@@ -408,6 +413,11 @@ interface RerateShipmentRequest {
  *   `quoteToken`, or the server answers 409 QUOTE_REQUIRED.
  */
 interface UpdateShipmentRequest {
+  /** AUTO = courier allocates the AWB at booking; MANUAL = client supplies it. */
+  awbMode?: "AUTO" | "MANUAL";
+  /** Only sent with awbMode "MANUAL" — the number on the client's own label. */
+  manualAwbNumber?: string;
+
   // Lifecycle patch
   status?: string;
   specialInstructions?: string;

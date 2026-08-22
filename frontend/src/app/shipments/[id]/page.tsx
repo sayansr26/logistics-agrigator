@@ -228,6 +228,15 @@ export default function ShipmentDetailPage() {
   const [retryError, setRetryError] = useState<string | null>(null);
   // Fields the courier's rejection pointed at, and the operator's fixes for
   // them. Populated from error.details.fieldIssues on a failed retry.
+  // Our own customer-facing tracking link. This is the URL to share — it stays
+  // on our domain and shows the fixed milestone ladder rather than the
+  // courier's site. shipment.trackingUrl remains the PARTNER's link, which is
+  // operational detail and shown to admins only.
+  const ownTrackingUrl = shipment?.awbNumber
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/track/${shipment.awbNumber}`
+    : null;
+  const canSeePartnerTracking = isRole("superadmin") || isRole("admin");
+
   const [fieldIssues, setFieldIssues] = useState<BookingFieldIssue[]>([]);
   const [corrections, setCorrections] = useState<Record<string, string>>({});
   const toast = useToast();
@@ -651,9 +660,9 @@ export default function ShipmentDetailPage() {
                 <span className="font-mono font-medium">
                   {shipment.awbNumber || "Pending"}
                 </span>
-                {shipment.trackingUrl && (
+                {ownTrackingUrl && (
                   <a
-                    href={shipment.trackingUrl}
+                    href={ownTrackingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 ml-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
@@ -1449,6 +1458,71 @@ export default function ShipmentDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Tracking links. The customer link is ours; the partner link is
+
+                operational detail, so it is admin-only. */}
+
+            {ownTrackingUrl && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Tracking URL</CardTitle>
+                </CardHeader>
+
+                <CardContent className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Share with customer
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded-md border bg-muted px-2 py-1.5 font-mono text-[11px]">
+                        {ownTrackingUrl}
+                      </code>
+
+                      <Button
+                        variant="outline"
+
+                        size="sm"
+
+                        onClick={() => {
+                          navigator.clipboard?.writeText(ownTrackingUrl);
+
+                          toast.success("Tracking link copied");
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  {canSeePartnerTracking && shipment.trackingUrl && (
+                    <div className="space-y-1 border-t pt-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Partner tracking URL
+                      </p>
+
+                      <a
+                        href={shipment.trackingUrl}
+
+                        target="_blank"
+
+                        rel="noopener noreferrer"
+
+                        className="block truncate font-mono text-[11px] text-blue-600 hover:underline"
+                      >
+                        {shipment.trackingUrl}
+                      </a>
+
+                      <p className="text-[11px] text-muted-foreground">
+                        Courier&apos;s own page. Internal use — do not share
+                        with customers.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Documents */}
             {shipment.documents && shipment.documents.length > 0 && (

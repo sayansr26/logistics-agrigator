@@ -19,6 +19,10 @@ const PUBLIC_ROUTES = [
   "/auth/register",
   "/auth/forgot-password",
   "/auth/reset-password",
+  // Customer-facing parcel tracking. Recipients are not users of the panel and
+  // must never be bounced to a login screen; the page itself only reads the
+  // sanitised public tracking endpoint.
+  "/track",
   "/privacy",
   "/terms",
   "/about",

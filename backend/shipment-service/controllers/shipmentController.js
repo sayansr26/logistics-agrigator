@@ -22,6 +22,11 @@ const {
   diagnoseShipment,
   isDataQualityRejection,
 } = require("../services/bookingFieldDiagnostics");
+const {
+  checkRerateEligibility,
+  buildHoldReason,
+} = require("../services/rerateEligibility");
+const { toPublicTracking } = require("../services/publicTrackingMilestones");
 const quoteSigningService = require("../services/quoteSigningService");
 const quoteService = require("../services/quoteService");
 const outletWalletContextService = require("../services/outletWalletContextService");
@@ -353,6 +358,8 @@ async function createShipment(req, res) {
       quoteSnapshot,
       quoteToken,
       vasSelections = [],
+      awbMode = "AUTO",
+      manualAwbNumber = null,
     } = req.body;
 
     if (
@@ -365,6 +372,23 @@ async function createShipment(req, res) {
     }
 
     const hasAssignedPartner = Boolean(selectedPartnerId && quoteSnapshot);
+
+    // A manually supplied AWB comes from the client's own pre-printed courier
+    // stationery. We record it as the shipment's AWB and skip the courier
+    // booking call entirely — asking the courier to book would allocate a
+    // SECOND number and the parcel would travel under a label we don't know.
+    const usingManualAwb = awbMode === "MANUAL";
+    if (usingManualAwb) {
+      const clash = await prisma.shipment.findFirst({
+        where: { awbNumber: manualAwbNumber },
+        select: { id: true, orderId: true },
+      });
+      if (clash) {
+        throw new ConflictError(
+          `AWB ${manualAwbNumber} is already used by shipment ${clash.orderId}`,
+        );
+      }
+    }
 
     // ==================================================================
     // Quote integrity: the price we debit comes from VERIFIED token
@@ -663,7 +687,14 @@ async function createShipment(req, res) {
           shipmentType,
           shipmentDirection,
           status: "CREATED",
-          bookingStatus: hasAssignedPartner ? "PENDING_BOOKING" : "UNASSIGNED",
+          // A manual AWB is already allocated, so nothing is pending from the
+          // courier as far as numbering goes.
+          bookingStatus: usingManualAwb
+            ? "BOOKED"
+            : hasAssignedPartner
+              ? "PENDING_BOOKING"
+              : "UNASSIGNED",
+          awbNumber: usingManualAwb ? manualAwbNumber : null,
           paymentType,
           paymentStatus: hasAssignedPartner
             ? paymentType === "COD"
@@ -840,9 +871,10 @@ async function createShipment(req, res) {
       userId,
     );
 
-    // Attempt courier booking via partner-service (non-blocking)
+    // Attempt courier booking via partner-service (non-blocking).
+    // Skipped for a manual AWB — see the note where usingManualAwb is set.
     let courierBookingResult = null;
-    if (hasAssignedPartner) {
+    if (hasAssignedPartner && !usingManualAwb) {
       try {
         const authToken = req.headers.authorization?.replace("Bearer ", "");
         const bookingAttempt = await attemptCourierBooking({
@@ -4157,6 +4189,9 @@ async function bulkRerateShipments(req, res) {
     const report = await bulkRerateService.processBulkRerate(rows, reason, {
       userId,
       clientId,
+      // Drives re-rate eligibility — admins may settle a weight dispute in any
+      // non-terminal status, everyone else only in the early window.
+      role: req.user?.role,
       authToken,
       walletAuthToken,
       ip: req.ip,
@@ -4221,6 +4256,13 @@ async function rerateShipment(req, res) {
         value: true,
         fragile: true,
         quoteSnapshot: true,
+        // Both are read when re-pricing below. Leaving vasSelections out made
+        // every re-rate re-quote WITHOUT the customer's value-added services,
+        // silently dropping those lines (and their GST) from the new total —
+        // a heavier parcel could come back cheaper than the original booking.
+        vasSelections: true,
+        codBaseAmount: true,
+        awbNumber: true,
       },
     });
 
@@ -4228,14 +4270,11 @@ async function rerateShipment(req, res) {
       throw new NotFoundError("Shipment not found");
     }
 
-    if (
-      !["CREATED", "BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(
-        shipment.status,
-      )
-    ) {
-      throw new ValidationError(
-        "Shipment can only be re-rated in CREATED, BOOKED, PICKED_UP, or IN_TRANSIT status",
-      );
+    // Partners report weight disputes late — after pickup, in transit, even at
+    // invoice reconciliation — so admins may re-rate in any non-terminal status.
+    const eligibility = checkRerateEligibility(shipment.status, req.user?.role);
+    if (!eligibility.allowed) {
+      throw new ValidationError(eligibility.reason);
     }
 
     const oldCost = parseFloat(shipment.totalCost);
@@ -4323,7 +4362,11 @@ async function rerateShipment(req, res) {
       });
     }
 
-    const difference = newCost - oldCost;
+    // Round to paise. Binary floating point leaves values like
+    // 274.94 - 232.46 = 42.47999999999999, which the wallet API rejects with
+    // "Amount must have at most 2 decimal places" — surfacing as a failed
+    // settlement and a spurious HOLD.
+    const difference = Math.round((newCost - oldCost) * 100) / 100;
 
     // Courier cost & profit margin. Selling charge = newCost (customer-facing).
     // Courier cost precedence: manual courierCharge > rate-engine cost side > unknown(null).
@@ -4349,6 +4392,11 @@ async function rerateShipment(req, res) {
       ? parseFloat(shipment.codAmount)
       : 0;
 
+    // Each adjustment needs its own wallet reference — the shipment-scoped
+    // default is already taken by the original booking charge, and the wallet
+    // API rejects a repeat as a duplicate (409).
+    const settlementRef = `SHIPMENT_${shipment.id}_RERATE_${Date.now()}`;
+
     let refundTxId = null;
     let chargeTxId = null;
     let holdApplied = false;
@@ -4356,42 +4404,61 @@ async function rerateShipment(req, res) {
     let newCodAmount = oldCodAmount;
 
     if (difference !== 0 && shipment.paymentType === "PREPAID") {
-      // PREPAID: refund old amount, charge new amount via wallet
-      try {
-        const refundResult =
-          await paymentProcessingService.processShipmentRefund(
-            walletTarget,
-            oldCost,
-            shipment.id,
-            `Re-rate refund for shipment ${shipment.orderId}: ${reason}`,
-            walletAuthToken,
-          );
-        refundTxId = refundResult.refundTransactionId;
-      } catch (refundErr) {
-        logger.error("Re-rate refund failed", {
-          service: "shipment-service",
-          shipmentId: id,
-          error: refundErr.message,
-        });
-      }
+      // Settle ONLY the difference.
+      //
+      // This used to refund the full old charge and then debit the full new
+      // charge. When the refund failed — which it always did, because the
+      // wallet API rejects a refund with no originating transaction_id — the
+      // failure was logged and the new debit went through anyway, leaving the
+      // customer charged twice for one shipment. Moving the difference alone
+      // removes that failure mode: nothing is refunded on an increase, and a
+      // failed settlement can never double-charge.
+      const delta = Math.abs(difference);
 
-      try {
-        const chargeResult =
-          await paymentProcessingService.processShipmentPayment(
-            walletTarget,
-            newCost,
-            shipment.id,
-            `Re-rate charge for shipment ${shipment.orderId}: ${reason}`,
-            walletAuthToken,
-          );
-        chargeTxId = chargeResult.walletTransactionId;
-      } catch (chargeErr) {
-        logger.warn("Re-rate charge failed - putting shipment on hold", {
-          service: "shipment-service",
-          shipmentId: id,
-          error: chargeErr.message,
-        });
-        holdApplied = true;
+      if (difference > 0) {
+        try {
+          const chargeResult =
+            await paymentProcessingService.processShipmentPayment(
+              walletTarget,
+              delta,
+              shipment.id,
+              `Re-rate top-up for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+              walletAuthToken,
+              settlementRef,
+            );
+          chargeTxId = chargeResult.walletTransactionId;
+        } catch (chargeErr) {
+          logger.warn("Re-rate top-up failed - putting shipment on hold", {
+            service: "shipment-service",
+            shipmentId: id,
+            shortfall: delta,
+            error: chargeErr.message,
+          });
+          holdApplied = true;
+        }
+      } else {
+        try {
+          const refundResult =
+            await paymentProcessingService.processShipmentRefund(
+              walletTarget,
+              delta,
+              shipment.id,
+              `Re-rate partial refund for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+              walletAuthToken,
+              shipment.walletTransactionId,
+              settlementRef,
+            );
+          refundTxId = refundResult.refundTransactionId;
+        } catch (refundErr) {
+          // The customer is owed money. Do NOT hold — the shipment is priced
+          // correctly and moving; flag it so the refund can be retried.
+          logger.error("Re-rate partial refund failed - refund still owed", {
+            service: "shipment-service",
+            shipmentId: id,
+            owed: delta,
+            error: refundErr.message,
+          });
+        }
       }
     } else if (difference !== 0 && shipment.paymentType === "COD") {
       // COD handling — admin chooses how to settle the difference
@@ -4415,51 +4482,72 @@ async function rerateShipment(req, res) {
           difference,
         });
       } else if (effectiveCodAction === "DEDUCT_WALLET") {
-        // Same wallet refund+charge pattern as PREPAID
-        try {
-          const refundResult =
-            await paymentProcessingService.processShipmentRefund(
-              walletTarget,
-              oldCost,
-              shipment.id,
-              `Re-rate refund (COD wallet deduct) for shipment ${shipment.orderId}: ${reason}`,
-              walletAuthToken,
-            );
-          refundTxId = refundResult.refundTransactionId;
-        } catch (refundErr) {
-          logger.error("Re-rate COD wallet refund failed", {
-            service: "shipment-service",
-            shipmentId: id,
-            error: refundErr.message,
-          });
-        }
+        // Difference-only settlement, same rationale as PREPAID above.
+        const delta = Math.abs(difference);
 
-        try {
-          const chargeResult =
-            await paymentProcessingService.processShipmentPayment(
-              walletTarget,
-              newCost,
-              shipment.id,
-              `Re-rate charge (COD wallet deduct) for shipment ${shipment.orderId}: ${reason}`,
-              walletAuthToken,
+        if (difference > 0) {
+          try {
+            const chargeResult =
+              await paymentProcessingService.processShipmentPayment(
+                walletTarget,
+                delta,
+                shipment.id,
+                `Re-rate top-up (COD wallet deduct) for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+                walletAuthToken,
+                settlementRef,
+              );
+            chargeTxId = chargeResult.walletTransactionId;
+          } catch (chargeErr) {
+            logger.warn(
+              "Re-rate COD wallet top-up failed - putting shipment on hold",
+              {
+                service: "shipment-service",
+                shipmentId: id,
+                shortfall: delta,
+                error: chargeErr.message,
+              },
             );
-          chargeTxId = chargeResult.walletTransactionId;
-        } catch (chargeErr) {
-          logger.warn(
-            "Re-rate COD wallet charge failed - putting shipment on hold",
-            {
-              service: "shipment-service",
-              shipmentId: id,
-              error: chargeErr.message,
-            },
-          );
-          holdApplied = true;
+            holdApplied = true;
+          }
+        } else {
+          try {
+            const refundResult =
+              await paymentProcessingService.processShipmentRefund(
+                walletTarget,
+                delta,
+                shipment.id,
+                `Re-rate partial refund (COD wallet deduct) for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+                walletAuthToken,
+                shipment.walletTransactionId,
+                settlementRef,
+              );
+            refundTxId = refundResult.refundTransactionId;
+          } catch (refundErr) {
+            logger.error(
+              "Re-rate COD wallet partial refund failed - refund still owed",
+              {
+                service: "shipment-service",
+                shipmentId: id,
+                owed: delta,
+                error: refundErr.message,
+              },
+            );
+          }
         }
       }
     }
 
     const updateData = {
       disputeStatus: holdApplied ? "HOLD" : "RESOLVED",
+      // The disputed_* fields keep the audit trail of what changed; the live
+      // weight/dimensions are overwritten because a partner's re-weigh IS the
+      // corrected physical measurement — leaving the old figures would keep
+      // showing the wrong weight on the shipment and re-base the next re-rate
+      // on it. The pre-change values remain in shipment_financial_adjustments.
+      weight: newWeight,
+      length: newLength,
+      width: newWidth,
+      height: newHeight,
       disputedWeight: newWeight,
       disputedLength: newLength,
       disputedWidth: newWidth,
@@ -4504,9 +4592,23 @@ async function rerateShipment(req, res) {
       updateData.codAmount = newCodAmount;
     }
 
+    if (!holdApplied && shipment.status === "HOLD") {
+      // A previous re-rate could not collect and parked the shipment. This one
+      // settled, so lift the hold instead of leaving it stuck — without this
+      // the shipment stays blocked even though it is fully paid.
+      updateData.status = shipment.awbNumber ? "BOOKED" : "CREATED";
+      updateData.holdReason = null;
+    }
+
     if (holdApplied) {
       updateData.status = "HOLD";
-      updateData.holdReason = `Insufficient balance after re-rate. New charge: ₹${newCost}, Old charge: ₹${oldCost}. Reason: ${reason}`;
+      updateData.holdReason = buildHoldReason({
+        oldCost,
+        newCost,
+        oldWeight: parseFloat(shipment.weight),
+        newWeight,
+        reason,
+      });
     }
 
     const updatedShipment = await prisma.shipment.update({
@@ -4713,9 +4815,13 @@ async function trackByAwbNumber(req, res) {
     // Use tracking service for AWB tracking
     const trackingData = await trackingService.trackByAwbNumber(awbNumber);
 
+    // Anyone holding an AWB can call this, so reduce the payload to the fixed
+    // milestone ladder. The raw event stream carries internal operational and
+    // financial text (re-rate amounts, hold reasons, courier error strings)
+    // that must not be readable from a public URL.
     res.json(
       APIResponse.success(
-        trackingData,
+        toPublicTracking(trackingData),
         "Shipment tracking retrieved successfully",
       ),
     );

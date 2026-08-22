@@ -20,7 +20,10 @@ const partnerIntegrationService = require("./partnerIntegrationService");
 const paymentProcessingService = require("./paymentProcessingService");
 const shipmentWalletService = require("./shipmentWalletService");
 
-const ALLOWED_STATUSES = ["CREATED", "BOOKED", "PICKED_UP", "IN_TRANSIT"];
+const {
+  checkRerateEligibility,
+  buildHoldReason,
+} = require("./rerateEligibility");
 
 /**
  * Process one row. Returns a report entry; never throws (errors captured per-row).
@@ -42,6 +45,7 @@ async function processRow(row, reason, ctx) {
         userId: true,
         walletUserId: true,
         status: true,
+        walletTransactionId: true,
         partnerId: true,
         totalCost: true,
         codAmount: true,
@@ -58,6 +62,10 @@ async function processRow(row, reason, ctx) {
         serviceType: true,
         value: true,
         fragile: true,
+        // Same omission as the single re-rate: without these the bulk re-quote
+        // drops the shipment's VAS lines and mis-prices COD.
+        vasSelections: true,
+        codBaseAmount: true,
       },
     });
 
@@ -65,8 +73,11 @@ async function processRow(row, reason, ctx) {
       result.error = "Shipment not found for AWB";
       return result;
     }
-    if (!ALLOWED_STATUSES.includes(shipment.status)) {
-      result.error = `Shipment status ${shipment.status} is not re-rateable`;
+    // Same rule as the single re-rate: admins may settle a partner's weight
+    // report whatever status the shipment has reached by the time it lands.
+    const eligibility = checkRerateEligibility(shipment.status, ctx.role);
+    if (!eligibility.allowed) {
+      result.error = eligibility.reason;
       return result;
     }
 
@@ -174,6 +185,10 @@ async function processRow(row, reason, ctx) {
       ? parseFloat(shipment.codAmount)
       : 0;
 
+    // Unique per adjustment — see the single re-rate for why the shipment
+    // default reference cannot be reused.
+    const settlementRef = `SHIPMENT_${shipment.id}_RERATE_${Date.now()}`;
+
     let refundTxId = null;
     let chargeTxId = null;
     let holdApplied = false;
@@ -181,36 +196,49 @@ async function processRow(row, reason, ctx) {
     let newCodAmount = oldCodAmount;
 
     if (difference !== 0 && shipment.paymentType === "PREPAID") {
-      try {
-        const refund = await paymentProcessingService.processShipmentRefund(
-          walletTarget,
-          oldCost,
-          shipment.id,
-          `Bulk re-rate refund for ${shipment.orderId}: ${reason}`,
-          walletAuthToken,
-        );
-        refundTxId = refund.refundTransactionId;
-      } catch (e) {
-        logger.error("Bulk re-rate refund failed", {
-          awbNumber: row.awbNumber,
-          error: e.message,
-        });
-      }
-      try {
-        const charge = await paymentProcessingService.processShipmentPayment(
-          walletTarget,
-          newCost,
-          shipment.id,
-          `Bulk re-rate charge for ${shipment.orderId}: ${reason}`,
-          walletAuthToken,
-        );
-        chargeTxId = charge.walletTransactionId;
-      } catch (e) {
-        holdApplied = true;
-        logger.warn("Bulk re-rate charge failed - hold applied", {
-          awbNumber: row.awbNumber,
-          error: e.message,
-        });
+      // Settle ONLY the difference — refunding the full old charge and then
+      // re-debiting the full new one double-charged the customer whenever the
+      // refund leg failed. See the single re-rate for the full rationale.
+      const delta = Math.abs(difference);
+
+      if (difference > 0) {
+        try {
+          const charge = await paymentProcessingService.processShipmentPayment(
+            walletTarget,
+            delta,
+            shipment.id,
+            `Bulk re-rate top-up for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+            walletAuthToken,
+            settlementRef,
+          );
+          chargeTxId = charge.walletTransactionId;
+        } catch (e) {
+          holdApplied = true;
+          logger.warn("Bulk re-rate top-up failed - hold applied", {
+            awbNumber: row.awbNumber,
+            shortfall: delta,
+            error: e.message,
+          });
+        }
+      } else {
+        try {
+          const refund = await paymentProcessingService.processShipmentRefund(
+            walletTarget,
+            delta,
+            shipment.id,
+            `Bulk re-rate partial refund for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+            walletAuthToken,
+            shipment.walletTransactionId,
+            settlementRef,
+          );
+          refundTxId = refund.refundTransactionId;
+        } catch (e) {
+          logger.error("Bulk re-rate partial refund failed - refund owed", {
+            awbNumber: row.awbNumber,
+            owed: delta,
+            error: e.message,
+          });
+        }
       }
     } else if (difference !== 0 && shipment.paymentType === "COD") {
       // For COD, default to UPDATE_COD (adjust COD amount) unless DEDUCT_WALLET requested
@@ -220,37 +248,50 @@ async function processRow(row, reason, ctx) {
         newCodAmount = Math.max(0, oldCodAmount + difference);
         codAmountUpdated = true;
       } else {
-        // DEDUCT_WALLET
-        try {
-          const refund = await paymentProcessingService.processShipmentRefund(
-            walletTarget,
-            oldCost,
-            shipment.id,
-            `Bulk re-rate refund (COD wallet) for ${shipment.orderId}: ${reason}`,
-            walletAuthToken,
-          );
-          refundTxId = refund.refundTransactionId;
-        } catch (e) {
-          logger.error("Bulk re-rate COD wallet refund failed", {
-            awbNumber: row.awbNumber,
-            error: e.message,
-          });
-        }
-        try {
-          const charge = await paymentProcessingService.processShipmentPayment(
-            walletTarget,
-            newCost,
-            shipment.id,
-            `Bulk re-rate charge (COD wallet) for ${shipment.orderId}: ${reason}`,
-            walletAuthToken,
-          );
-          chargeTxId = charge.walletTransactionId;
-        } catch (e) {
-          holdApplied = true;
-          logger.warn("Bulk re-rate COD wallet charge failed - hold applied", {
-            awbNumber: row.awbNumber,
-            error: e.message,
-          });
+        // DEDUCT_WALLET — difference only, same rationale as PREPAID above.
+        const delta = Math.abs(difference);
+
+        if (difference > 0) {
+          try {
+            const charge =
+              await paymentProcessingService.processShipmentPayment(
+                walletTarget,
+                delta,
+                shipment.id,
+                `Bulk re-rate top-up (COD wallet) for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+                walletAuthToken,
+                settlementRef,
+              );
+            chargeTxId = charge.walletTransactionId;
+          } catch (e) {
+            holdApplied = true;
+            logger.warn(
+              "Bulk re-rate COD wallet top-up failed - hold applied",
+              {
+                awbNumber: row.awbNumber,
+                shortfall: delta,
+                error: e.message,
+              },
+            );
+          }
+        } else {
+          try {
+            const refund = await paymentProcessingService.processShipmentRefund(
+              walletTarget,
+              delta,
+              shipment.id,
+              `Bulk re-rate partial refund (COD wallet) for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+              walletAuthToken,
+              shipment.walletTransactionId,
+              settlementRef,
+            );
+            refundTxId = refund.refundTransactionId;
+          } catch (e) {
+            logger.error(
+              "Bulk re-rate COD wallet partial refund failed - refund owed",
+              { awbNumber: row.awbNumber, owed: delta, error: e.message },
+            );
+          }
         }
       }
     }
@@ -276,7 +317,13 @@ async function processRow(row, reason, ctx) {
     }
     if (holdApplied) {
       updateData.status = "HOLD";
-      updateData.holdReason = `Insufficient balance after bulk re-rate (₹${oldCost} → ₹${newCost}). Reason: ${reason}`;
+      updateData.holdReason = buildHoldReason({
+        oldCost,
+        newCost,
+        oldWeight: parseFloat(shipment.weight),
+        newWeight,
+        reason,
+      });
     }
 
     await prisma.shipment.update({

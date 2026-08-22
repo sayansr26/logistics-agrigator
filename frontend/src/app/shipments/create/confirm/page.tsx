@@ -218,6 +218,10 @@ export default function ConfirmBookPage() {
       vasSelections: vasSelections.length > 0 ? vasSelections : undefined,
       // Outlet markup is retired — the booking never carries one.
       markup: null,
+      awbMode: store.awbMode,
+      ...(store.awbMode === "MANUAL"
+        ? { manualAwbNumber: store.manualAwbNumber.trim() }
+        : {}),
     };
 
     try {

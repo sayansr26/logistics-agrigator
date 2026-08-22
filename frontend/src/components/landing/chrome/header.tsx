@@ -45,6 +45,14 @@ export function Header({ activeIndex, onNavigate, onHome }: HeaderProps) {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* Customer-facing, not a panel route — recipients arriving here are
+              not users and should reach tracking without signing in. */}
+          <Link
+            href="/track"
+            className="px-2.5 py-2 text-[13.5px] font-medium text-white/[.82] transition hover:text-white"
+          >
+            Track
+          </Link>
           <Link
             href="/auth/login"
             className="px-2.5 py-2 text-[13.5px] font-medium text-white/[.82] transition hover:text-white"
