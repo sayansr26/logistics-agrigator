@@ -5833,9 +5833,24 @@ async function refreshFromProvider(req, res) {
     const isCurrentTerminal = TERMINAL_STATUSES.includes(shipment.status);
     const isNewTerminal = TERMINAL_STATUSES.includes(newStatus);
 
+    // HOLD is ours, not the courier's. It parks a shipment whose balance we
+    // could not collect, and the courier knows nothing about it — their feed
+    // will happily report IN_TRANSIT while the money is still owed. Letting a
+    // provider refresh overwrite HOLD silently discards the hold and the debt
+    // goes uncollected, so the provider's view is recorded in providerStatus
+    // and the hold stands until it is settled or lifted deliberately.
+    const isCurrentHold = shipment.status === "HOLD";
+
     if (newStatus && newStatus !== shipment.status) {
       updateData.providerStatus = newStatus;
-      if (!isCurrentTerminal || isNewTerminal) {
+
+      if (isCurrentHold) {
+        logger.warn("Provider status recorded but HOLD retained", {
+          shipmentId: shipment.id,
+          currentStatus: shipment.status,
+          providerStatus: newStatus,
+        });
+      } else if (!isCurrentTerminal || isNewTerminal) {
         updateData.status = newStatus;
       } else {
         logger.warn("Skipping status downgrade from terminal state", {

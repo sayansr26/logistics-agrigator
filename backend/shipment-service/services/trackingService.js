@@ -107,8 +107,18 @@ async function createTrackingEvent(shipmentId, eventData, userId = null) {
       throw new NotFoundError("Shipment not found");
     }
 
+    // HOLD is an internal financial state the courier knows nothing about: their
+    // feed keeps reporting the parcel's real movement while we are still owed
+    // money. Record those events, but never let one lift the hold — only
+    // settling the balance (or an operator) may do that.
+    const holdLockedByProvider =
+      shipment.status === "HOLD" &&
+      (source === EVENT_SOURCES.PARTNER ||
+        source === EVENT_SOURCES.WEBHOOK ||
+        source === EVENT_SOURCES.API);
+
     // Validate status transition if status is changing
-    if (status !== shipment.status) {
+    if (status !== shipment.status && !holdLockedByProvider) {
       if (!isValidStatusTransition(shipment.status, status)) {
         throw new ValidationError(
           `Invalid status transition from ${shipment.status} to ${status}`,
@@ -146,8 +156,9 @@ async function createTrackingEvent(shipmentId, eventData, userId = null) {
         },
       });
 
-      // Update shipment status if it's changing
-      if (status !== shipment.status) {
+      // Update shipment status if it's changing (never out of a HOLD on a
+      // provider-sourced event — see holdLockedByProvider above).
+      if (status !== shipment.status && !holdLockedByProvider) {
         await tx.shipment.update({
           where: { id: shipmentId },
           data: {
