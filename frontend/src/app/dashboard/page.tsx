@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import {
   StatsGrid,
 } from "@/components/shared";
 import {
+  LayoutDashboard,
   Package,
   PackageSearch,
   IndianRupee,
@@ -74,8 +76,18 @@ const RANGE_OPTIONS = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { isRole } = useRole();
+  const { isRole, isSystemAdmin } = useRole();
   const isOutlet = isRole("outlet");
+
+  // Three audiences, deliberately:
+  //   admin / superadmin — the whole picture, platform-wide
+  //   outlet            — its own shipment operations only, no platform
+  //                       financials (wallet totals, other outlets' volumes)
+  //   everyone else     — nothing yet; a role-appropriate dashboard has not
+  //                       been designed, and showing the admin one would leak
+  //                       platform-wide figures to a client/support/sales user.
+  const isAdminView = isSystemAdmin();
+  const canSeeDashboard = isAdminView || isOutlet;
   const [days, setDays] = useState(30);
 
   // Exactly 7 RTK Query hooks total (5 shipment + 2 wallet). Backend already
@@ -119,6 +131,44 @@ export default function DashboardPage() {
     (sum, a) => sum + Math.abs(a.totalDifference),
     0,
   );
+
+  // Roles without a designed dashboard get an honest placeholder rather than
+  // the admin view. Showing platform-wide revenue and wallet totals to a
+  // client, support or sales user would be a data leak, not a rough edge.
+  if (!canSeeDashboard) {
+    return (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageContainer>
+            <PageHeader
+              title="Dashboard"
+              description={`Welcome back, ${user?.name || ""}`}
+            />
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                <LayoutDashboard className="h-10 w-10 text-muted-foreground" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    Your dashboard is on the way
+                  </p>
+                  <p className="max-w-sm text-xs text-muted-foreground">
+                    We haven&apos;t built a view for your role yet. In the
+                    meantime, use the menu to reach shipments, wallet and the
+                    other tools you have access to.
+                  </p>
+                </div>
+                <Link href="/shipments">
+                  <Button variant="outline" size="sm" className="mt-1">
+                    Go to shipments
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </PageContainer>
+        </DashboardLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>
@@ -172,24 +222,27 @@ export default function DashboardPage() {
                 carries no charge field, and we do not call their Invoice
                 Charges API. The tile could only ever read ₹0 "provisional".
                 Restore it once courier cost is genuinely captured. */}
-            <StatsCard
-              title={isOutlet ? "Wallet Balance" : "Total Wallet Balance"}
-              value={formatINR(walletSummary?.wallets.totalBalance)}
-              description={
-                isOutlet
-                  ? "Current available balance"
-                  : (walletSummary?.lowBalance.count ?? 0) > 0
+            {/* Wallet figures are platform financials — admin view only. An
+                outlet's dashboard is its shipment operations; its balance is on
+                the Wallet page. */}
+            {isAdminView && (
+              <StatsCard
+                title="Total Wallet Balance"
+                value={formatINR(walletSummary?.wallets.totalBalance)}
+                description={
+                  (walletSummary?.lowBalance.count ?? 0) > 0
                     ? `${walletSummary?.lowBalance.count} wallet(s) below ₹${walletSummary?.lowBalance.threshold}`
                     : `${formatNumber(walletSummary?.wallets.count)} wallet(s) across the platform`
-              }
-              icon={WalletIcon}
-              iconColor={
-                (walletSummary?.lowBalance.count ?? 0) > 0
-                  ? "text-amber-500"
-                  : "text-primary"
-              }
-              isLoading={walletSummaryLoading}
-            />
+                }
+                icon={WalletIcon}
+                iconColor={
+                  (walletSummary?.lowBalance.count ?? 0) > 0
+                    ? "text-amber-500"
+                    : "text-primary"
+                }
+                isLoading={walletSummaryLoading}
+              />
+            )}
             <StatsCard
               title="On Hold — At Risk"
               value={formatNumber(summary?.exceptions.hold.count)}
@@ -422,8 +475,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Top outlets (admin/client only — meaningless for a single-outlet viewer) */}
-          {!isOutlet && (
+          {/* Top outlets — platform-wide, so admins only. */}
+          {isAdminView && (
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -501,26 +554,27 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Wallet section. The balance now lives in the KPI row above,
-              so the trend gets the full width here. */}
-          <div className="grid grid-cols-1 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top-ups vs Debits</CardTitle>
-                <CardDescription>Daily wallet activity trend</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {walletTrendLoading ? (
-                  <div className="h-[220px] animate-pulse rounded-lg bg-muted" />
-                ) : (
-                  <WalletTrendChart data={walletTrend} />
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          {/* Wallet section — platform financials, admin view only. */}
+          {isAdminView && (
+            <div className="grid grid-cols-1 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top-ups vs Debits</CardTitle>
+                  <CardDescription>Daily wallet activity trend</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {walletTrendLoading ? (
+                    <div className="h-[220px] animate-pulse rounded-lg bg-muted" />
+                  ) : (
+                    <WalletTrendChart data={walletTrend} />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
-          {/* Low-balance outlets (admin/client only) */}
-          {!isOutlet && (
+          {/* Low-balance outlets — platform-wide, so admins only. */}
+          {isAdminView && (
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
