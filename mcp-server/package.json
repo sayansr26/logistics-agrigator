@@ -1,11 +1,11 @@
 {
-  "name": "@logistics/mcp-server",
+  "name": "@subsolution/mcp-server",
   "version": "1.0.0",
   "description": "MCP server for the Logistics Aggregator External Shipment API",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "logistics-mcp": "./src/index.js"
+    "logistics-mcp": "src/index.js"
   },
   "main": "./src/index.js",
   "files": [

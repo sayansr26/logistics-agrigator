@@ -7,7 +7,8 @@ const USER_SERVICE_URL =
 const INTERNAL_SECRET =
   process.env.INTERNAL_SECRET || "internal-service-secret";
 
-const CACHE_PREFIX = "shipment-outlet-wallet";
+// v2: entries now carry the outlet owner's userId
+const CACHE_PREFIX = "shipment-outlet-wallet:v2";
 const CACHE_TTL = 300;
 
 function getRedisSafely() {
@@ -77,6 +78,9 @@ async function fetchOutletWalletContext(url, cacheKey, logContext) {
 
     const result = {
       outletId: data.outletId,
+      // auth-service user that owns this outlet — the principal that owns
+      // every shipment booked for it, whoever performs the booking.
+      userId: data.userId ?? null,
       outletName: data.outletName,
       badge: data.badge,
       phone: data.phone,

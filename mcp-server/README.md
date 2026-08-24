@@ -24,7 +24,7 @@ Add the server to your MCP client's configuration.
   "mcpServers": {
     "logistics": {
       "command": "npx",
-      "args": ["-y", "@logistics/mcp-server"],
+      "args": ["-y", "@subsolution/mcp-server"],
       "env": {
         "LOGISTICS_BASE_URL": "https://ops.subsolution.in",
         "LOGISTICS_CLIENT_ID": "lgk_live_...",
@@ -42,7 +42,7 @@ claude mcp add logistics \
   --env LOGISTICS_BASE_URL=https://ops.subsolution.in \
   --env LOGISTICS_CLIENT_ID=lgk_live_... \
   --env LOGISTICS_CLIENT_SECRET=sk_live_... \
-  -- npx -y @logistics/mcp-server
+  -- npx -y @subsolution/mcp-server
 ```
 
 | Variable                  | Required | Description                                         |

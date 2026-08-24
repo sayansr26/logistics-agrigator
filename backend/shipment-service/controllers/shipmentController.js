@@ -486,6 +486,32 @@ async function createShipment(req, res) {
       requireWalletUserId: paymentType === "PREPAID" && hasAssignedPartner,
     });
 
+    // A shipment booked FOR an outlet is owned by that outlet's user, no
+    // matter who performs the booking — an admin booking on behalf of an
+    // outlet must not end up owning the parcel (the creator stays in the
+    // audit trail). The resolved context also normalizes outletId to the
+    // outlet ENTITY id: outlet sessions carry the outlet USER id instead.
+    const outletContext =
+      req.user.role === "outlet"
+        ? await outletWalletContextService.resolveOutletWalletByUserId(userId)
+        : outletId
+          ? await outletWalletContextService.resolveOutletWalletByOutletId(
+              outletId,
+            )
+          : null;
+
+    const shipmentOutletId = outletContext?.outletId || outletId;
+    let ownerUserId = userId;
+    if (outletId && req.user.role !== "outlet") {
+      if (outletContext?.userId) {
+        ownerUserId = outletContext.userId;
+      } else if (["superadmin", "admin"].includes(req.user.role)) {
+        throw new ValidationError(
+          "Could not resolve the owner of the selected outlet",
+        );
+      }
+    }
+
     logger.info("Creating shipment", {
       service: "shipment-service",
       userId,
@@ -534,18 +560,8 @@ async function createShipment(req, res) {
     let markupType = null;
     let markupValue = null;
     let markupAmount = 0;
-    let outletContext = null;
 
     if (hasAssignedPartner) {
-      outletContext =
-        req.user.role === "outlet"
-          ? await outletWalletContextService.resolveOutletWalletByUserId(userId)
-          : outletId
-            ? await outletWalletContextService.resolveOutletWalletByOutletId(
-                outletId,
-              )
-            : null;
-
       const effectiveMarkup = markupService.resolveEffectiveMarkup({
         requested: requestedMarkup,
         outletContext,
@@ -688,8 +704,8 @@ async function createShipment(req, res) {
         data: {
           orderId,
           clientId,
-          userId,
-          outletId,
+          userId: ownerUserId,
+          outletId: shipmentOutletId,
           shipmentType,
           shipmentDirection,
           status: "CREATED",

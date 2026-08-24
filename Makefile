@@ -53,6 +53,7 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         logs-db logs-redis psql backup db-dump db-dump-uat db-dump-dev \
         db-restore db-restore-prod redis-flush db-init migrate migrate-all db-sync \
         seed import-pincodes classify-cities load-pincodes seed-geo \
+        migrate-shipment-ownership-dry migrate-shipment-ownership \
         dev dev-down dev-logs
 
 help:
@@ -101,6 +102,8 @@ help:
 	@echo "  make classify-cities        Set metro/X-Y-Z class on cities (run after import)"
 	@echo "  make load-pincodes          Load pincode data (partner-service)"
 	@echo "  make seed-geo               Seed geographical data (partner-service)"
+	@echo "  make migrate-shipment-ownership-dry  Preview shipment ownership backfill (no writes)"
+	@echo "  make migrate-shipment-ownership      Re-own outlet bookings to the outlet owner"
 	@echo ""
 	@echo "  Local dev (BUILD MACHINE — full source, builds locally):"
 	@echo "  make dev            Start the dev stack (docker-compose.yml, --profile all-services)"
@@ -462,6 +465,16 @@ load-pincodes:
 
 seed-geo:
 	$(COMPOSE_PROD) exec partner-service node backend/partner-service/prisma/seed-geographical-data.js
+
+# One-time backfill for shipments booked on behalf of an outlet: user_id becomes
+# the outlet owner (so the outlet portal + External API can see them) and
+# outlet_id is normalized to the outlet ENTITY id. Audit-logged per row.
+# ALWAYS dry-run first; add ENV_FILE=.env.uat to target the UAT stack.
+migrate-shipment-ownership-dry:
+	$(COMPOSE_PROD) exec -T shipment-service node backend/shipment-service/scripts/migrate-shipment-ownership.js
+
+migrate-shipment-ownership:
+	$(COMPOSE_PROD) exec -T shipment-service node backend/shipment-service/scripts/migrate-shipment-ownership.js --apply
 
 # ============================================================================
 # Local dev — BUILD MACHINE (full source; builds locally, no registry).

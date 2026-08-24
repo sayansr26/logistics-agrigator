@@ -744,7 +744,7 @@ function McpSection() {
   "mcpServers": {
     "logistics": {
       "command": "npx",
-      "args": ["-y", "@logistics/mcp-server"],
+      "args": ["-y", "@subsolution/mcp-server"],
       "env": {
         "LOGISTICS_BASE_URL": "${API_BASE}",
         "LOGISTICS_CLIENT_ID": "lgk_live_...",
@@ -761,7 +761,7 @@ function McpSection() {
   --env LOGISTICS_BASE_URL=${API_BASE} \\
   --env LOGISTICS_CLIENT_ID=lgk_live_... \\
   --env LOGISTICS_CLIENT_SECRET=sk_live_... \\
-  -- npx -y @logistics/mcp-server`,
+  -- npx -y @subsolution/mcp-server`,
               },
             ]}
           />
