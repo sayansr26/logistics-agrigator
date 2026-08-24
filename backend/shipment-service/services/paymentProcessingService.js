@@ -19,6 +19,17 @@ const {
  * - Audit logging integration
  */
 
+/**
+ * Normalise a wallet transaction id to a string. The external wallet returns
+ * the id as either `id` or `transaction_id` depending on the endpoint, and as
+ * a number — but the shipment columns are VarChar (refund calls convert back
+ * with Number()).
+ */
+function toTransactionIdString(transaction) {
+  const raw = transaction?.id ?? transaction?.transaction_id ?? null;
+  return raw === null || raw === undefined ? null : String(raw);
+}
+
 class PaymentProcessingService {
   constructor() {
     this.walletServiceUrl =
@@ -569,9 +580,10 @@ class PaymentProcessingService {
         // The external wallet returns the id as either `id` or `transaction_id`
         // depending on the endpoint. Reading only `id` silently produced a null
         // walletTransactionId on the shipment, which later broke refunds — they
-        // must quote the originating transaction.
-        walletTransactionId:
-          transaction?.id ?? transaction?.transaction_id ?? null,
+        // must quote the originating transaction. The id also arrives as a
+        // number, but the shipment column is VarChar — store it as a string
+        // (refund calls convert back with Number()).
+        walletTransactionId: toTransactionIdString(transaction),
       };
     } catch (error) {
       logger.error("Failed to process shipment payment", {
@@ -631,8 +643,7 @@ class PaymentProcessingService {
         success: true,
         transaction,
         refundReference: transaction.reference,
-        refundTransactionId:
-          transaction?.id ?? transaction?.transaction_id ?? null,
+        refundTransactionId: toTransactionIdString(transaction),
       };
     } catch (error) {
       logger.error("Failed to process shipment refund", {

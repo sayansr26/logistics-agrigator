@@ -333,6 +333,10 @@ async function createBookingResultAuditLog({
  * Create a new shipment
  */
 async function createShipment(req, res) {
+  // Set between a successful wallet debit and the shipment row being
+  // persisted; the catch refunds it so a failed create never keeps the
+  // customer's money with no shipment to show for it.
+  let pendingDebit = null;
   try {
     const userId = req.user.userId || req.user.id;
     const {
@@ -630,6 +634,12 @@ async function createShipment(req, res) {
 
         walletTransactionId = paymentResult.walletTransactionId;
         paymentReference = paymentResult.paymentReference;
+        pendingDebit = {
+          walletUserId,
+          amount: systemCharge,
+          orderId,
+          walletTransactionId,
+        };
       } catch (paymentError) {
         logger.error("Wallet payment failed", {
           service: "shipment-service",
@@ -842,6 +852,11 @@ async function createShipment(req, res) {
 
       return created;
     });
+
+    // The shipment row now carries walletTransactionId, so cancellation
+    // flows own any future refund — the create-failure compensation no
+    // longer applies.
+    pendingDebit = null;
 
     // Create invoice records for B2B shipments
     if (invoicesInput && invoicesInput.length > 0) {
@@ -1117,6 +1132,42 @@ async function createShipment(req, res) {
       error: error.message,
       stack: error.stack,
     });
+
+    if (pendingDebit) {
+      try {
+        const authToken = req.headers.authorization?.replace("Bearer ", "");
+        await paymentProcessingService.processShipmentRefund(
+          pendingDebit.walletUserId,
+          pendingDebit.amount,
+          pendingDebit.orderId,
+          "Shipment creation failed after wallet debit",
+          authToken,
+          pendingDebit.walletTransactionId,
+          `REFUND_${pendingDebit.orderId}_CREATE_FAIL`,
+        );
+        logger.info("Refunded wallet debit after failed shipment creation", {
+          service: "shipment-service",
+          orderId: pendingDebit.orderId,
+          walletUserId: pendingDebit.walletUserId,
+          amount: pendingDebit.amount,
+          walletTransactionId: pendingDebit.walletTransactionId,
+        });
+      } catch (refundError) {
+        // Surfaced for manual reconciliation — the debit stands with no
+        // shipment row referencing it.
+        logger.error(
+          "Failed to refund wallet debit after failed shipment creation",
+          {
+            service: "shipment-service",
+            orderId: pendingDebit.orderId,
+            walletUserId: pendingDebit.walletUserId,
+            amount: pendingDebit.amount,
+            walletTransactionId: pendingDebit.walletTransactionId,
+            error: refundError.message,
+          },
+        );
+      }
+    }
 
     if (error instanceof ConflictError || error instanceof ValidationError) {
       const errorResponse = APIResponse.error(
@@ -5141,7 +5192,7 @@ async function uploadBulkShipments(req, res, next) {
 
     if (!req.file) {
       throw new ValidationError(
-        'No file uploaded. Attach a CSV or Excel file in the "file" field.',
+        `No file uploaded. Attach a CSV or Excel file in the "file" field.`,
       );
     }
 
@@ -5425,7 +5476,7 @@ async function downloadBulkTemplate(req, res, next) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      'attachment; filename="bulk_shipment_template.csv"',
+      `attachment; filename="bulk_shipment_template.csv"`,
     );
     res.status(200).send(csv);
   } catch (error) {

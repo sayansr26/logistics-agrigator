@@ -293,7 +293,7 @@ class BulkProcessingService {
               authToken,
             );
 
-          paymentTransactionId = paymentResult.transactionId;
+          paymentTransactionId = paymentResult.walletTransactionId;
         } catch (error) {
           logger.error("Payment processing failed for bulk shipment", {
             orderId: validatedData.orderId,
