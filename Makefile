@@ -51,7 +51,9 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         logs-api-gateway logs-auth logs-user logs-shipment logs-partner \
         logs-wallet logs-support logs-platform logs-license logs-frontend \
         logs-db logs-redis psql backup db-dump db-dump-uat db-dump-dev \
-        db-restore db-restore-prod redis-flush db-init migrate migrate-all db-sync \
+        db-restore db-restore-prod db-init migrate migrate-all db-sync \
+        flush-redis flush-redis-uat redis-flush flush-cache flush-cache-uat \
+        reset-ratelimit reset-ratelimit-uat \
         seed import-pincodes classify-cities load-pincodes seed-geo \
         migrate-shipment-ownership-dry migrate-shipment-ownership \
         clean clean-uat clean-keep-data clean-keep-data-uat \
@@ -85,6 +87,18 @@ help:
 	@echo "  make down | down-uat        Stop and remove containers (keeps volumes)"
 	@echo "  make psql                   Open psql shell in the postgres container"
 	@echo "  make backup                 pg_dump each DB to ./backups/<db>-<timestamp>.sql.gz"
+	@echo ""
+	@echo ""
+	@echo "  Redis / rate limiting (add -uat for the UAT stack):"
+	@echo "  make flush-redis            FLUSHALL — wipes the whole keyspace."
+	@echo "                              Logs EVERY user out (sessions live in Redis)."
+	@echo "                              Requires YES=1 to run non-interactively."
+	@echo "  make flush-cache            Drop cached data only — sessions, tokens and"
+	@echo "                              API credentials are KEPT (nobody is logged out)."
+	@echo "  make reset-ratelimit        Clear all rate-limit counters: deletes the Redis"
+	@echo "                              counters and restarts the services that keep"
+	@echo "                              theirs in memory. Use when users are stuck on"
+	@echo "                              429 / RATE_LIMIT_EXCEEDED."
 	@echo ""
 	@echo "  Full dump / restore (Postgres + Redis in ONE bundle):"
 	@echo "  make db-dump                Dump PROD stack  -> ./backups/logistics-dump-<ts>.tar.gz"
@@ -443,6 +457,96 @@ db-restore: ## Restore a dump bundle into the LOCAL dev stack (data-only; roles/
 
 db-restore-prod: RESTORE_COMPOSE = $(COMPOSE_PROD)
 db-restore-prod: db-restore ## Restore a bundle into the PROD/UAT stack (ENV_FILE selects)
+
+# ============================================================================
+# Redis maintenance & rate-limit reset (server; ENV_FILE selects PROD/UAT)
+# ============================================================================
+# The whole stack shares ONE Redis instance (db 0) that holds three different
+# kinds of data:
+#
+#   sessions/auth   session:*  blacklist:*  apitoken:*  apicred:*  perms:*
+#                   Deleting these logs users out / invalidates API tokens.
+#   cache           wallet:* balance:* partner_data:* courier:* distance:*
+#                   tracking:* license:* ... — safe to drop, it is all
+#                   recomputed on the next request.
+#   rate limits     extrl:* (External API) plus the raw counters written by
+#                   the services that use a Redis-backed limiter.
+#
+# flush-redis   nukes everything (sessions included)
+# flush-cache   drops only the cache — nobody is logged out
+# reset-ratelimit clears counters only
+
+# Keys flush-cache must NOT touch (space-separated SCAN patterns).
+CACHE_KEEP_PATTERNS ?= session:* blacklist:* apitoken:* apicred:* perms:* perm:* permissions:*
+# Redis key patterns holding rate-limit counters.
+RATELIMIT_PATTERNS  ?= extrl:* rl:* ratelimit:* rate_limit:*
+# Services whose rate-limit counters live in process memory (express-rate-limit
+# default store) and therefore only clear on restart.
+RATELIMIT_SERVICES  ?= api-gateway partner-service shipment-service auth-service \
+                       user-service support-service platform-service license-service \
+                       wallet-service
+
+flush-redis: ## FLUSHALL on this stack's Redis — WIPES SESSIONS, logs everyone out
+	@if [ "$(YES)" != "1" ]; then \
+	  printf ">>> FLUSHALL on %s Redis — this logs EVERY user out. Continue? [y/N] " "$(ENV_FILE)"; \
+	  read ans; case "$$ans" in [yY]*) ;; *) echo ">>> Aborted."; exit 1;; esac; \
+	fi
+	@before=$$($(COMPOSE_PROD) exec -T redis redis-cli DBSIZE | tr -d '\r'); \
+	echo ">>> keys before: $$before"; \
+	$(COMPOSE_PROD) exec -T redis redis-cli FLUSHALL > /dev/null \
+	  || { echo "!!! FLUSHALL failed (is the stack up?)"; exit 1; }; \
+	after=$$($(COMPOSE_PROD) exec -T redis redis-cli DBSIZE | tr -d '\r'); \
+	echo ">>> keys after : $$after"; \
+	echo ">>> Redis flushed. Users must sign in again."
+
+flush-redis-uat: ENV_FILE = .env.uat
+flush-redis-uat: flush-redis ## FLUSHALL on the UAT stack's Redis
+
+redis-flush: flush-redis ## Alias of `make flush-redis`
+
+flush-cache: ## Drop cached keys only — sessions/tokens are kept (no one is logged out)
+	@echo ">>> Dropping cache keys on $(ENV_FILE) (keeping: $(CACHE_KEEP_PATTERNS))"
+	@$(COMPOSE_PROD) exec -T redis sh -c ' \
+	  set -f; keep="$(CACHE_KEEP_PATTERNS)"; \
+	  redis-cli --scan --count 500 | while IFS= read -r key; do \
+	    skip=0; \
+	    for pat in $$keep; do case "$$key" in $$pat) skip=1;; esac; done; \
+	    [ "$$skip" = "1" ] || printf "%s\n" "$$key"; \
+	  done > /tmp/cache-keys.txt; \
+	  n=$$(wc -l < /tmp/cache-keys.txt | tr -d " "); \
+	  if [ "$$n" -gt 0 ]; then xargs redis-cli DEL < /tmp/cache-keys.txt > /dev/null; fi; \
+	  rm -f /tmp/cache-keys.txt; \
+	  echo "    deleted $$n cache key(s)"' \
+	  || { echo "!!! cache flush failed (is the stack up?)"; exit 1; }
+	@echo ">>> Cache cleared. Sessions and API credentials were not touched."
+
+flush-cache-uat: ENV_FILE = .env.uat
+flush-cache-uat: flush-cache ## Cache-only flush against the UAT stack
+
+# Clears every rate-limit counter so 429 / RATE_LIMIT_EXCEEDED stops immediately:
+#   1. delete the Redis-backed counters
+#   2. restart the services whose counters live in process memory
+# Restart is a rolling `compose restart` — no image pull, no data touched.
+reset-ratelimit: ## Clear all rate-limit counters (Redis keys + in-memory, via restart)
+	@echo ">>> [1/2] deleting Redis rate-limit counters ($(RATELIMIT_PATTERNS))"
+	@$(COMPOSE_PROD) exec -T redis sh -c ' \
+	  set -f; total=0; \
+	  for pat in $(RATELIMIT_PATTERNS); do \
+	    redis-cli --scan --pattern "$$pat" --count 500 > /tmp/rl-keys.txt; \
+	    n=$$(wc -l < /tmp/rl-keys.txt | tr -d " "); \
+	    if [ "$$n" -gt 0 ]; then xargs redis-cli DEL < /tmp/rl-keys.txt > /dev/null; fi; \
+	    total=$$((total + n)); \
+	  done; \
+	  rm -f /tmp/rl-keys.txt; \
+	  echo "    deleted $$total counter key(s)"' \
+	  || echo "    !! could not reach Redis (continuing to the restart)"
+	@echo ">>> [2/2] restarting services with in-memory counters"
+	@$(COMPOSE_PROD) restart $(RATELIMIT_SERVICES)
+	@echo ""
+	@echo ">>> Rate limits reset. Verify with: make ps"
+
+reset-ratelimit-uat: ENV_FILE = .env.uat
+reset-ratelimit-uat: reset-ratelimit ## Reset rate limits on the UAT stack
 
 # ============================================================================
 # Data & DB operations (exec into the running stack; ENV_FILE selects PROD/UAT)

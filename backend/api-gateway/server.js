@@ -19,6 +19,21 @@ const corsConfig = require("./shared/lib/corsConfig");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+/**
+ * Read a positive integer from the environment, falling back to `fallback`.
+ * Lets rate limits be retuned from the env file without a rebuild.
+ */
+const envInt = (name, fallback) => {
+  const raw = Number.parseInt(process.env[name], 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+};
+
+// In production the gateway runs behind a reverse proxy, so req.ip would be
+// the proxy's address and every user on the platform would share one rate
+// limit bucket. Trusting a fixed number of hops makes req.ip the real client
+// while still ignoring any X-Forwarded-For the client itself supplies.
+app.set("trust proxy", envInt("TRUST_PROXY_HOPS", 1));
+
 // Security middleware
 app.use(helmet());
 app.use(cors(corsConfig.getCorsOptions()));
@@ -63,13 +78,19 @@ app.use((req, res, next) => {
   express.urlencoded({ extended: true })(req, res, next);
 });
 
-// Rate limiting - Increased limits for development
+// Rate limiting — per client IP (see `trust proxy` above), tunable via
+// RATE_LIMIT_GATEWAY_MAX in the env file. Health checks and the docs are
+// exempt so monitoring can never eat a user's budget.
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs (increased for dev)
+  windowMs: envInt("RATE_LIMIT_GATEWAY_WINDOW_MS", 15 * 60 * 1000),
+  max: envInt("RATE_LIMIT_GATEWAY_MAX", 5000),
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/openapi.json" ||
+    req.path.startsWith("/api-docs"),
 });
 app.use(limiter);
 
@@ -936,6 +957,9 @@ app.use(
   createProxyMiddleware({
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     changeOrigin: true,
+    // Forward the client IP so downstream limiters key on the caller, not
+    // on this gateway's container IP.
+    xfwd: true,
     pathRewrite: (path) => {
       // Rewrite /api/v1/partners/:partnerId/pincodes to /api/v1/:partnerId/pincodes
       // Rewrite /api/v1/partners/pincodes to /api/v1/pincodes
@@ -998,6 +1022,9 @@ app.use(
   createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL || "http://auth-service:3002",
     changeOrigin: true,
+    // Forward the client IP so downstream limiters key on the caller, not
+    // on this gateway's container IP.
+    xfwd: true,
     pathRewrite: { "^/api/v1/external/auth": "/api/v1/external/auth" },
     parseReqBody: false,
     onError: (err, req, res) => {
@@ -1031,6 +1058,9 @@ Object.keys(services).forEach((service) => {
     createProxyMiddleware({
       target: config.target,
       changeOrigin: true,
+      // Forward the client IP so downstream limiters key on the caller, not
+      // on this gateway's container IP.
+      xfwd: true,
       pathRewrite: config.pathRewrite,
       // Don't parse body in Express for proxy requests
       // This prevents body consumption before proxying
@@ -1090,6 +1120,9 @@ app.use(
   createProxyMiddleware({
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     changeOrigin: true,
+    // Forward the client IP so downstream limiters key on the caller, not
+    // on this gateway's container IP.
+    xfwd: true,
     pathRewrite: (path) => {
       // Keep the full path, no rewriting
       logger.info(`Proxying channel request: ${path}`);
@@ -1126,6 +1159,9 @@ app.use(
   createProxyMiddleware({
     target: process.env.PARTNER_SERVICE_URL || "http://partner-service:3005",
     changeOrigin: true,
+    // Forward the client IP so downstream limiters key on the caller, not
+    // on this gateway's container IP.
+    xfwd: true,
     pathRewrite: (path) => {
       logger.info(`Proxying courier operation request: ${path}`);
       return path;

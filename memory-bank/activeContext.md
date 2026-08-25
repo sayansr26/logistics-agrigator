@@ -4,6 +4,17 @@
 
 ## Current Sprint Focus
 
+### 🚦 Rate limiting fixed + Redis ops targets (August 25, 2026)
+
+Production 429s on pincode/geography lookups had a single root cause: **every rate limiter keyed on `req.ip`, which is the API Gateway's container IP for every downstream request** — so all users on the platform shared one bucket (partner-service's general limiter was effectively 200 requests / 15 min for the _entire_ tenant base).
+
+- `backend/partner-service/middleware/rateLimiter.js` — `generateSecureKey` now prefers the gateway-set `x-user-id` header, then the `x-forwarded-for` client IP (normalised via `ipKeyGenerator`), then `req.ip`. The general limiter gained a `keyGenerator` (it had none). Limits raised and made env-tunable: geo search 150→1200/min, serviceability 100→600/min, rate calc 60→300/min, pincode types 30→300/15min, general 200→3000/15min.
+- `backend/api-gateway/server.js` — `app.set("trust proxy", TRUST_PROXY_HOPS)` (default 1) so `req.ip` is the real client behind the server's reverse proxy; `xfwd: true` on every `createProxyMiddleware` so downstream services see the client IP; global limiter 1000→`RATE_LIMIT_GATEWAY_MAX` (default 5000) and now skips `/health`, `/openapi.json`, `/api-docs*`.
+- All limits are env vars wired through `docker-compose.production.yml` → retune in the env file + `make restart`, **no rebuild**. Documented in `.env.production.example`.
+- New Makefile ops targets (server): `make flush-redis` (FLUSHALL, prompts unless `YES=1`, logs everyone out), `make flush-cache` (cache only — sessions/tokens kept), `make reset-ratelimit` (deletes Redis counters + restarts the services holding in-memory counters). `-uat` variants for each.
+
+Deploy path: `make release-prod` locally → `make deploy` on the server (the code changes need new images; `make reset-ratelimit` alone only clears counters).
+
 ### 🏷️ White-Label Shipping Labels (Completed August 24, 2026)
 
 Production Delhivery labels showed "LOGIMART TECHNOLOGIES LTD B2C" + Delhivery logo as the shipper and `Seller: LOGIMARTTECHLOGIESLTDB2C` — the aggregator account, not the outlet the customer dealt with. Delhivery's packing-slip API cannot be re-branded (checked via the Delhivery MCP docs; only `seller_name`/`seller_add`/`total_amount` are controllable). Two-tier fix:

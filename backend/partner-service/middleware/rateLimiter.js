@@ -1,10 +1,41 @@
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 
-// Helper function for secure IP key generation (IPv6 compatible)
+/**
+ * Read a positive integer from the environment, falling back to `fallback`.
+ * Lets the limits be retuned on the server (env file + restart) without a
+ * rebuild — see RATE_LIMIT_* in .env.production.
+ */
+const envInt = (name, fallback) => {
+  const raw = Number.parseInt(process.env[name], 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+};
+
+/**
+ * Identify the CALLER, not the API Gateway.
+ *
+ * Every request reaches this service through the gateway, so `req.ip` is the
+ * gateway container's IP and is identical for every user on the platform —
+ * without this, one shared bucket rate-limited the whole tenant base (the
+ * pincode/geography lookups hit it first because address forms fire many
+ * requests per page).
+ *
+ * Preference order:
+ *   1. x-user-id      set by the gateway's auth validator for logged-in calls
+ *   2. x-forwarded-for the real client IP (gateway proxies with xfwd: true)
+ *   3. req.ip          direct/internal calls only
+ *
+ * The IP branch goes through ipKeyGenerator so IPv6 addresses are normalized
+ * to a /56 subnet instead of a spoofable per-address key.
+ */
 const generateSecureKey = (req, identifier = "unknown") => {
-  // Use the built-in IP normalization from express-rate-limit
-  const ip = req.ip || req.connection.remoteAddress || "0.0.0.0";
-  return `${ip}:${identifier}`;
+  const userId =
+    req.user?.id || req.user?.userId || req.headers["x-user-id"] || null;
+  if (userId) return `user:${userId}:${identifier}`;
+
+  const forwarded = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = forwarded || req.ip || req.connection?.remoteAddress || "0.0.0.0";
+  return `${ipKeyGenerator(ip)}:${identifier}`;
 };
 
 // Rate limiter for partner creation/updates (admin operations)
@@ -30,7 +61,7 @@ const partnerManagementLimiter = rateLimit({
 // Rate limiter for rate calculation endpoint (high usage)
 const rateCalculationLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // Limit each IP to 60 rate calculations per minute
+  max: envInt("RATE_LIMIT_RATE_CALC_MAX", 300), // per user, per minute
   message: {
     status: "error",
     error: {
@@ -50,7 +81,9 @@ const rateCalculationLimiter = rateLimit({
 // Rate limiter for serviceability checks (high usage)
 const serviceabilityLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // Limit each IP to 100 serviceability checks per minute
+  // Per USER (not per gateway IP). A single rate-card page fans out one
+  // serviceability check per courier, so this is deliberately generous.
+  max: envInt("RATE_LIMIT_SERVICEABILITY_MAX", 600),
   message: {
     status: "error",
     error: {
@@ -70,7 +103,10 @@ const serviceabilityLimiter = rateLimit({
 // General API rate limiter for partner service
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per windowMs (higher than auth service)
+  // Was 200 keyed on req.ip — i.e. 200 requests per 15 min for the ENTIRE
+  // platform, because every request arrives from the gateway's single IP.
+  // Now keyed per user (see generateSecureKey) with a realistic ceiling.
+  max: envInt("RATE_LIMIT_GENERAL_MAX", 3000),
   message: {
     status: "error",
     error: {
@@ -81,12 +117,15 @@ const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => generateSecureKey(req, "general"),
 });
 
 // Rate limiter for geographical data searches (moderate usage)
 const geographicalSearchLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 150, // Limit each IP to 150 geographical searches per minute
+  // Pincode/city/state lookups: address forms type-ahead against these, and
+  // both the pickup and delivery field on every shipment form use them.
+  max: envInt("RATE_LIMIT_GEO_SEARCH_MAX", 1200),
   message: {
     status: "error",
     error: {
@@ -273,7 +312,9 @@ const systemManagementLimiter = rateLimit({
  */
 const pincodeTypeManagementLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each user to 30 requests per windowMs
+  // Covers the read endpoints too (router.use), so it has to survive normal
+  // browsing of the pincode-type screens, not just CRUD.
+  max: envInt("RATE_LIMIT_PINCODE_TYPE_MAX", 300),
   message: {
     status: "error",
     error: {

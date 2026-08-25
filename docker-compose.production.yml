@@ -90,6 +90,12 @@ services:
       - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
       - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
       - STAGING_ORIGINS=${STAGING_ORIGINS}
+      # Rate limiting — tune in the env file, then `make restart` (no rebuild).
+      # TRUST_PROXY_HOPS = reverse proxies in front of the gateway; it decides
+      # which X-Forwarded-For entry becomes req.ip (the rate-limit key).
+      - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}
+      - RATE_LIMIT_GATEWAY_MAX=${RATE_LIMIT_GATEWAY_MAX:-5000}
+      - RATE_LIMIT_GATEWAY_WINDOW_MS=${RATE_LIMIT_GATEWAY_WINDOW_MS:-900000}
     ports:
       - "${API_GATEWAY_HOST_PORT:-3001}:${API_GATEWAY_PORT}"
     volumes:
@@ -256,6 +262,14 @@ services:
       - COURIER_RETRY_ATTEMPTS=${COURIER_RETRY_ATTEMPTS:-3}
       - COURIER_CACHE_TTL=${COURIER_CACHE_TTL:-300}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      # Rate limiting — all per-user (or per-client-IP for anonymous calls).
+      # Pincode/geography lookups are the hot path: address forms type-ahead
+      # against them, so the ceilings are deliberately high.
+      - RATE_LIMIT_GENERAL_MAX=${RATE_LIMIT_GENERAL_MAX:-3000}
+      - RATE_LIMIT_GEO_SEARCH_MAX=${RATE_LIMIT_GEO_SEARCH_MAX:-1200}
+      - RATE_LIMIT_SERVICEABILITY_MAX=${RATE_LIMIT_SERVICEABILITY_MAX:-600}
+      - RATE_LIMIT_RATE_CALC_MAX=${RATE_LIMIT_RATE_CALC_MAX:-300}
+      - RATE_LIMIT_PINCODE_TYPE_MAX=${RATE_LIMIT_PINCODE_TYPE_MAX:-300}
       # AI provider (DeepSeek-compatible) - see shared/lib/aiClient.js
       - AI_DEFAULT_PROVIDER=${AI_DEFAULT_PROVIDER:-DEEPSEEK}
       - AI_API_KEY=${AI_API_KEY:-}
