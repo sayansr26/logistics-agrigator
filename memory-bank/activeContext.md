@@ -1,8 +1,21 @@
 # Active Context - Logistics Aggregator Portal
 
-> Current work focus and priorities | Last Updated: August 22, 2026
+> Current work focus and priorities | Last Updated: August 24, 2026
 
 ## Current Sprint Focus
+
+### 🏷️ White-Label Shipping Labels (Completed August 24, 2026)
+
+Production Delhivery labels showed "LOGIMART TECHNOLOGIES LTD B2C" + Delhivery logo as the shipper and `Seller: LOGIMARTTECHLOGIESLTDB2C` — the aggregator account, not the outlet the customer dealt with. Delhivery's packing-slip API cannot be re-branded (checked via the Delhivery MCP docs; only `seller_name`/`seller_add`/`total_amount` are controllable). Two-tier fix:
+
+1. **Platform-rendered branded label** — `labelBrandingService` (shipper = outlet → client → pickup contact) + `labelPdfRenderer` (PDFKit + bwip-js Code 128/QR). Served by the new `GET /api/v1/shipments/:shipmentId/label` (query `format`, `copies`, validated with `downloadShippingLabelQuerySchema`). Frontend shipment detail now offers **Download Label** (branded) beside **Download Courier Label**.
+2. **Courier label improvements** — every booking path passes `sellerName`/`sellerAddress` to partner-service; `DelhiveryAdapter` sends `seller_name`, `seller_add`, `total_amount`.
+
+New dependency: `bwip-js` in `backend/shipment-service/package.json` → shipment-service image must be **rebuilt** (not just restarted). Not yet Docker-verified (daemon was down locally) — verify with `docker-compose build shipment-service partner-service && docker-compose up -d`, then `curl -o label.pdf -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/v1/shipments/<id>/label`.
+
+### 🐛 Prepaid booking 500 (Fixed August 24, 2026)
+
+`prisma.shipment.create()` failed with `walletTransactionId: Expected String, provided Int` — the external wallet returns numeric ids; `paymentProcessingService` now normalises `walletTransactionId`/`refundTransactionId` via `toTransactionIdString`. Also: `bulkProcessingService` read a non-existent `paymentResult.transactionId` (fixed → `walletTransactionId`), and `createShipment` now refunds a successful wallet debit if the shipment row fails to persist (`pendingDebit`). Prod debit needing manual refund: user `9876543212`, ₹464.92, wallet txn 61, order `26082417520715`.
 
 ### 📊 Operations/Financial Dashboard Rebuild (Completed August 22, 2026)
 

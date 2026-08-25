@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1149,7 +1150,17 @@ function OutletWalletView() {
 // ===========================
 
 function AdminWalletPage() {
-  const [activeTab, setActiveTab] = useState("wallets");
+  // Deep link from a shipment's wallet-transaction list: /wallet?userId=<phone>
+  // lands directly on that holder's filtered transactions.
+  const searchParams = useSearchParams();
+  const linkedUserId = searchParams.get("userId") || "";
+  // ?referenceId=<shipment id> narrows to one shipment's wallet history — the
+  // wallet matches it as a substring of reference_id.
+  const linkedReferenceId = searchParams.get("referenceId") || "";
+
+  const [activeTab, setActiveTab] = useState(
+    linkedUserId || linkedReferenceId ? "transactions" : "wallets",
+  );
 
   // Wallet tab state
   const [walletPage, setWalletPage] = useState(0);
@@ -1165,7 +1176,8 @@ function AdminWalletPage() {
   const [txFilters, setTxFilters] = useState({
     type: "",
     status: "",
-    userId: "",
+    userId: linkedUserId,
+    referenceId: linkedReferenceId,
   });
 
   // Modal state
@@ -1203,6 +1215,7 @@ function AdminWalletPage() {
     ...(txFilters.type && { type: txFilters.type }),
     ...(txFilters.status && { status: txFilters.status }),
     ...(txFilters.userId && { userId: txFilters.userId }),
+    ...(txFilters.referenceId && { referenceId: txFilters.referenceId }),
   });
 
   const [topupWallet, { isLoading: toppingUp }] = useTopupWalletMutation();
@@ -1737,7 +1750,7 @@ function AdminWalletPage() {
                 <CardTitle className="text-sm font-medium">Filters</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">User ID</Label>
                     <Input
@@ -1745,6 +1758,20 @@ function AdminWalletPage() {
                       value={txFilters.userId}
                       onChange={(e) =>
                         setTxFilters({ ...txFilters, userId: e.target.value })
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Shipment / Reference</Label>
+                    <Input
+                      placeholder="Shipment ID or reference"
+                      value={txFilters.referenceId}
+                      onChange={(e) =>
+                        setTxFilters({
+                          ...txFilters,
+                          referenceId: e.target.value,
+                        })
                       }
                       className="h-8 text-sm"
                     />

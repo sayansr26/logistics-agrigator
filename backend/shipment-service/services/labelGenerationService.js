@@ -15,8 +15,27 @@ const {
   NotFoundError,
 } = require("../shared/lib/errors");
 const partnerIntegrationService = require("./partnerIntegrationService");
+const labelBrandingService = require("./labelBrandingService");
+const { renderShippingLabelPdf } = require("./labelPdfRenderer");
 const fs = require("fs").promises;
 const path = require("path");
+
+/**
+ * Public tracking URL for a shipment, e.g. https://app.subsolution.in/track/<awb>.
+ * Set PUBLIC_TRACKING_BASE_URL to override the host (falls back to
+ * PLATFORM_WEBSITE, then the production app domain).
+ */
+function buildPublicTrackingUrl(awbNumber) {
+  if (!awbNumber) return null;
+  const configured =
+    process.env.PUBLIC_TRACKING_BASE_URL ||
+    process.env.PLATFORM_WEBSITE ||
+    "app.subsolution.in";
+  const base = /^https?:\/\//i.test(configured)
+    ? configured
+    : `https://${configured}`;
+  return `${base.replace(/\/+$/, "")}/track/${encodeURIComponent(awbNumber)}`;
+}
 
 class LabelGenerationService {
   constructor() {
@@ -133,6 +152,8 @@ class LabelGenerationService {
         filePath: labelFile.filePath,
       });
 
+      await this.storeLabelDocument(shipment, labelContent, labelFile);
+
       return {
         shipmentId,
         orderId: shipment.orderId,
@@ -143,6 +164,12 @@ class LabelGenerationService {
           fileSize: labelFile.fileSize,
           copies,
           generatedAt: new Date().toISOString(),
+          data: labelFile.buffer.toString("base64"),
+          contentType: "application/pdf",
+        },
+        branding: {
+          source: labelContent.brand.source,
+          brandName: labelContent.brand.brandName,
         },
         shipmentDetails: {
           status: shipment.status,
@@ -158,6 +185,53 @@ class LabelGenerationService {
         stack: error.stack,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Keep the latest platform-rendered label on the shipment's documents.
+   * Courier-fetched labels are stored separately (source PARTNER) so the
+   * two never overwrite each other.
+   */
+  async storeLabelDocument(shipment, labelContent, labelFile) {
+    try {
+      const existing = await prisma.shipmentDocument.findFirst({
+        where: { shipmentId: shipment.id, type: "LABEL", source: "SYSTEM" },
+        select: { id: true },
+      });
+
+      const documentData = {
+        name: `Shipping Label - ${labelContent.brand.brandName} - ${
+          shipment.awbNumber || shipment.orderId
+        }`,
+        data: labelFile.buffer.toString("base64"),
+        format: "pdf",
+        source: "SYSTEM",
+        metadata: {
+          labelFormat: labelFile.format,
+          copies: labelFile.copies,
+          brandSource: labelContent.brand.source,
+          brandName: labelContent.brand.brandName,
+        },
+        fetchedAt: new Date(),
+      };
+
+      if (existing) {
+        await prisma.shipmentDocument.update({
+          where: { id: existing.id },
+          data: documentData,
+        });
+      } else {
+        await prisma.shipmentDocument.create({
+          data: { shipmentId: shipment.id, type: "LABEL", ...documentData },
+        });
+      }
+    } catch (error) {
+      // The caller still gets the PDF; only the stored copy is lost.
+      logger.warn("Failed to store generated label document", {
+        shipmentId: shipment.id,
+        error: error.message,
+      });
     }
   }
 
@@ -476,19 +550,84 @@ class LabelGenerationService {
   }
 
   /**
-   * Create label content data
+   * Build the label content. The shipper block is the outlet / client the
+   * end customer dealt with (white-label), never the aggregator account.
    */
   async createLabelContent(shipment, options) {
     const { format, includeBarcode, includeQRCode, labelType } = options;
 
+    const brand = await labelBrandingService.resolveShipperBranding({
+      outletId: shipment.outletId,
+      clientId: shipment.clientId,
+      pickup: {
+        name: shipment.pickupName,
+        phone: shipment.pickupPhone,
+        line1: shipment.pickupLine1,
+        line2: shipment.pickupLine2,
+        city: shipment.pickupCity,
+        state: shipment.pickupState,
+        pincode: shipment.pickupPincode,
+      },
+    });
+
+    // The parcel returns to the RTO address when one is set, else pickup.
+    const returnAddress =
+      !shipment.rtoSameAsPickup && shipment.rtoLine1
+        ? {
+            name: brand.brandName,
+            phone: shipment.rtoPhone,
+            line1: shipment.rtoLine1,
+            line2: shipment.rtoLine2,
+            city: shipment.rtoCity,
+            state: shipment.rtoState,
+            pincode: shipment.rtoPincode,
+          }
+        : {
+            name: brand.brandName,
+            phone: shipment.pickupPhone,
+            line1: shipment.pickupLine1,
+            line2: shipment.pickupLine2,
+            city: shipment.pickupCity,
+            state: shipment.pickupState,
+            pincode: shipment.pickupPincode,
+          };
+
+    const num = (value) => {
+      if (value === null || value === undefined) return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const dims = [shipment.length, shipment.width, shipment.height]
+      .map(num)
+      .filter((v) => v !== null);
+
     return {
+      brand,
+      courier: {
+        partnerName: shipment.partnerName,
+        serviceType: shipment.serviceType,
+        channelName: shipment.courierChannelName,
+      },
       shipmentInfo: {
         orderId: shipment.orderId,
         awbNumber: shipment.awbNumber,
+        // Our own tracking page, never the courier's. The label is white-
+        // labelled with the outlet/client brand, so sending the recipient to
+        // the courier's site leaks the carrier and drops them out of our
+        // funnel. The courier URL stays on the shipment row for internal use.
+        trackingUrl: buildPublicTrackingUrl(shipment.awbNumber),
+        courierTrackingUrl: shipment.trackingUrl,
+        shipmentType: shipment.shipmentType,
+        fragile: !!shipment.fragile,
         partnerId: shipment.partnerId,
         partnerName: shipment.partnerName,
         serviceType: shipment.serviceType,
         createdAt: shipment.createdAt,
+      },
+      payment: {
+        paymentType: shipment.paymentType,
+        codAmount: num(shipment.codAmount),
+        declaredValue: num(shipment.value),
       },
       pickupAddress: {
         name: shipment.pickupName,
@@ -512,12 +651,17 @@ class LabelGenerationService {
         pincode: shipment.deliveryPincode,
         country: shipment.deliveryCountry,
       },
+      returnAddress,
       packageInfo: {
-        weight: shipment.weight,
-        dimensions: `${shipment.length}x${shipment.width}x${shipment.height} cm`,
-        description: shipment.description,
+        description: shipment.productDescription || shipment.description,
+        hsnCode: shipment.hsnCode,
+        quantity: shipment.numberOfBoxes || 1,
+        weight: num(shipment.weight),
+        chargeableWeight:
+          num(shipment.chargeableWeight) ?? num(shipment.weight),
+        dimensions: dims.length === 3 ? dims.join(" x ") : null,
         paymentType: shipment.paymentType,
-        codAmount: shipment.codAmount,
+        codAmount: num(shipment.codAmount),
       },
       labelOptions: {
         format,
@@ -529,32 +673,34 @@ class LabelGenerationService {
   }
 
   /**
-   * Generate actual label file (stub implementation)
+   * Render the label PDF and persist a copy under generated/labels.
    */
   async generateLabelFile(labelContent, format, copies) {
     try {
-      // Create labels directory if it doesn't exist
       const labelsDir = path.join(process.cwd(), "generated", "labels");
       await fs.mkdir(labelsDir, { recursive: true });
 
-      // Generate filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `label_${labelContent.shipmentInfo.awbNumber}_${timestamp}.pdf`;
+      const reference =
+        labelContent.shipmentInfo.awbNumber ||
+        labelContent.shipmentInfo.orderId;
+      const filename = `label_${reference}_${timestamp}.pdf`;
       const filePath = path.join(labelsDir, filename);
 
-      // Simulate PDF generation (in production, use libraries like PDFKit, jsPDF, etc.)
-      const pdfContent = this.generatePDFContent(labelContent, format, copies);
+      const pdfBuffer = await renderShippingLabelPdf(labelContent, {
+        format,
+        copies,
+      });
 
-      await fs.writeFile(filePath, pdfContent);
-
-      const stats = await fs.stat(filePath);
+      await fs.writeFile(filePath, pdfBuffer);
 
       return {
         filePath,
         filename,
-        fileSize: stats.size,
+        fileSize: pdfBuffer.length,
         format,
         copies,
+        buffer: pdfBuffer,
       };
     } catch (error) {
       logger.error("Generate label file error", {
@@ -664,48 +810,6 @@ class LabelGenerationService {
           .length,
       },
     };
-  }
-
-  /**
-   * Generate PDF content (stub implementation)
-   */
-  generatePDFContent(labelContent, format, copies) {
-    // This is a stub implementation
-    // In production, use proper PDF generation libraries
-    const content = `
-SHIPPING LABEL - ${format.toUpperCase()}
-==============================
-
-Order ID: ${labelContent.shipmentInfo.orderId}
-AWB Number: ${labelContent.shipmentInfo.awbNumber}
-Partner: ${labelContent.shipmentInfo.partnerName}
-Service Type: ${labelContent.shipmentInfo.serviceType}
-
-FROM:
-${labelContent.pickupAddress.name}
-${labelContent.pickupAddress.line1}
-${labelContent.pickupAddress.line2 || ""}
-${labelContent.pickupAddress.city}, ${labelContent.pickupAddress.state} ${labelContent.pickupAddress.pincode}
-Phone: ${labelContent.pickupAddress.phone}
-
-TO:
-${labelContent.deliveryAddress.name}
-${labelContent.deliveryAddress.line1}
-${labelContent.deliveryAddress.line2 || ""}
-${labelContent.deliveryAddress.city}, ${labelContent.deliveryAddress.state} ${labelContent.deliveryAddress.pincode}
-Phone: ${labelContent.deliveryAddress.phone}
-
-PACKAGE:
-Weight: ${labelContent.packageInfo.weight}kg
-Dimensions: ${labelContent.packageInfo.dimensions}
-Payment: ${labelContent.packageInfo.paymentType}
-${labelContent.packageInfo.paymentType === "COD" ? `COD Amount: ₹${labelContent.packageInfo.codAmount}` : ""}
-
-Generated: ${new Date().toISOString()}
-Copies: ${copies}
-    `;
-
-    return Buffer.from(content, "utf8");
   }
 
   /**

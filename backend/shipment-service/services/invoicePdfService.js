@@ -318,6 +318,124 @@ function drawTaxSummary(doc, invoice) {
   row("Total Amount", formatCurrency(invoice.totalAmount), true);
 }
 
+/**
+ * Annexure: every wallet movement this shipment caused. The tax figures above
+ * describe the invoice as issued; this table describes what actually moved in
+ * the wallet, which after re-rates is a longer story (reversal + re-charge per
+ * adjustment). Fed by invoice.walletLedger — omitted entirely when absent, so
+ * an invoice generated without a ledger is unchanged.
+ */
+function drawWalletTransactions(doc, invoice) {
+  const ledger = invoice.walletLedger;
+  const rows = Array.isArray(ledger?.transactions) ? ledger.transactions : [];
+  if (!rows.length) return;
+
+  // Keep the annexure whole rather than orphaning its header at a page break.
+  const estimatedHeight = 60 + rows.length * 16 + 50;
+  if (doc.y + estimatedHeight > doc.page.height - doc.page.margins.bottom) {
+    doc.addPage();
+  }
+
+  doc.moveDown(1);
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor(INK)
+    .text("Wallet Transactions", doc.page.margins.left, doc.y);
+  doc.moveDown(0.2);
+  doc
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor(MUTED)
+    .text(
+      "Money movement recorded against this shipment. Re-rates reverse the previous charge in full before charging the revised amount.",
+      {
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      },
+    );
+  doc.moveDown(0.5);
+
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const colTxn = left;
+  const colDate = left + 55;
+  const colDesc = left + 135;
+  const colAmount = right - 80;
+
+  const headerY = doc.y;
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
+  doc.text("Txn", colTxn, headerY, { width: 50 });
+  doc.text("Date", colDate, headerY, { width: 75 });
+  doc.text("Description", colDesc, headerY, {
+    width: colAmount - colDesc - 10,
+  });
+  doc.text("Amount", colAmount, headerY, { width: 80, align: "right" });
+  doc.moveDown(0.3);
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#cccccc").stroke();
+  doc.moveDown(0.3);
+
+  doc.font("Helvetica").fontSize(8);
+  rows.forEach((row) => {
+    const y = doc.y;
+    const signed =
+      row.kind === "NONE"
+        ? "—"
+        : `${row.kind === "REFUND" ? "+" : "-"}${formatCurrency(row.amount || 0)}`;
+
+    doc
+      .fillColor(MUTED)
+      .text(row.transactionId ? `#${row.transactionId}` : "—", colTxn, y, {
+        width: 50,
+      });
+    doc.text(row.occurredAt ? formatDate(row.occurredAt) : "—", colDate, y, {
+      width: 75,
+    });
+    doc
+      .fillColor(INK)
+      .text(
+        row.reason ? `${row.label} — ${row.reason}` : row.label,
+        colDesc,
+        y,
+        { width: colAmount - colDesc - 10 },
+      );
+    doc
+      .fillColor(row.kind === "NONE" ? MUTED : INK)
+      .text(signed, colAmount, y, { width: 80, align: "right" });
+    doc.moveDown(0.3);
+  });
+
+  doc.moveDown(0.3);
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#cccccc").stroke();
+  doc.moveDown(0.3);
+
+  const totalRow = (label, value, bold = false) => {
+    const y = doc.y;
+    doc
+      .font(bold ? "Helvetica-Bold" : "Helvetica")
+      .fontSize(8)
+      .fillColor(INK);
+    doc.text(label, colDesc, y, {
+      width: colAmount - colDesc - 10,
+      align: "right",
+    });
+    doc.text(value, colAmount, y, { width: 80, align: "right" });
+    doc.moveDown(0.3);
+  };
+
+  totalRow("Total debited", formatCurrency(ledger.summary?.totalDebited || 0));
+  totalRow(
+    "Total refunded",
+    formatCurrency(ledger.summary?.totalRefunded || 0),
+  );
+  totalRow(
+    "Net charged",
+    formatCurrency(ledger.summary?.netCharged || 0),
+    true,
+  );
+
+  doc.fillColor(INK);
+}
+
 function drawFooter(doc) {
   doc.moveDown(2);
   doc
@@ -346,6 +464,7 @@ function buildInvoicePdfBuffer(invoice) {
       drawBilledTo(doc, invoice);
       drawLineItemsTable(doc, invoice);
       drawTaxSummary(doc, invoice);
+      drawWalletTransactions(doc, invoice);
       drawFooter(doc);
 
       doc.end();

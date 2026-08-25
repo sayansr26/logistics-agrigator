@@ -31,6 +31,13 @@ interface GetClientTransactionsParams {
   status?: string;
   userId?: string;
   clientCode?: string;
+  /**
+   * Substring match on the wallet's reference_id. Our references embed the
+   * shipment id (SHIPMENT_<id>, SHIPMENT_<id>_RERATE_<ts>, ..._REVERSAL,
+   * REFUND_<id>), so passing a bare shipment id returns that shipment's
+   * complete wallet history.
+   */
+  referenceId?: string;
 }
 
 interface WalletData {

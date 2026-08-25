@@ -194,48 +194,64 @@ async function processRow(row, reason, ctx) {
     let holdApplied = false;
     let codAmountUpdated = false;
     let newCodAmount = oldCodAmount;
+    // The debit this shipment rests on; re-rate replaces it and it must be
+    // re-persisted so the next reversal has a valid transaction to refund.
+    let newWalletTransactionId = shipment.walletTransactionId;
+    let priorChargeReversed = false;
 
     if (difference !== 0 && shipment.paymentType === "PREPAID") {
-      // Settle ONLY the difference — refunding the full old charge and then
-      // re-debiting the full new one double-charged the customer whenever the
-      // refund leg failed. See the single re-rate for the full rationale.
-      const delta = Math.abs(difference);
+      // Reverse the original charge in full, then debit the new one in full —
+      // same contract as the single re-rate, see shipmentController for the
+      // full rationale. A failed reversal skips the new debit entirely so the
+      // customer can never end up carrying old + new.
+      const priorDebit = shipment.walletTransactionId ? oldCost : 0;
 
-      if (difference > 0) {
+      if (priorDebit > 0) {
+        try {
+          const refund = await paymentProcessingService.processShipmentRefund(
+            walletTarget,
+            priorDebit,
+            shipment.id,
+            `Bulk re-rate reversal of original charge for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+            walletAuthToken,
+            shipment.walletTransactionId,
+            `${settlementRef}_REVERSAL`,
+          );
+          refundTxId = refund.refundTransactionId;
+          priorChargeReversed = true;
+          newWalletTransactionId = null;
+        } catch (e) {
+          // Nothing moved — leave this row untouched for the operator to retry
+          // rather than debiting on top of a charge that still stands.
+          logger.error("Bulk re-rate reversal failed - row skipped", {
+            awbNumber: row.awbNumber,
+            amount: priorDebit,
+            error: e.message,
+          });
+          throw new Error(
+            `Could not reverse the original charge of ₹${priorDebit}: ${e.message}`,
+          );
+        }
+      }
+
+      if (newCost > 0) {
         try {
           const charge = await paymentProcessingService.processShipmentPayment(
             walletTarget,
-            delta,
+            newCost,
             shipment.id,
-            `Bulk re-rate top-up for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+            `Bulk re-rate charge for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
             walletAuthToken,
             settlementRef,
           );
           chargeTxId = charge.walletTransactionId;
+          newWalletTransactionId = charge.walletTransactionId;
         } catch (e) {
           holdApplied = true;
-          logger.warn("Bulk re-rate top-up failed - hold applied", {
+          logger.warn("Bulk re-rate charge failed - hold applied", {
             awbNumber: row.awbNumber,
-            shortfall: delta,
-            error: e.message,
-          });
-        }
-      } else {
-        try {
-          const refund = await paymentProcessingService.processShipmentRefund(
-            walletTarget,
-            delta,
-            shipment.id,
-            `Bulk re-rate partial refund for ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
-            walletAuthToken,
-            shipment.walletTransactionId,
-            settlementRef,
-          );
-          refundTxId = refund.refundTransactionId;
-        } catch (e) {
-          logger.error("Bulk re-rate partial refund failed - refund owed", {
-            awbNumber: row.awbNumber,
-            owed: delta,
+            amount: newCost,
+            reversed: priorChargeReversed,
             error: e.message,
           });
         }
@@ -303,9 +319,11 @@ async function processRow(row, reason, ctx) {
       disputedWidth: newWidth,
       disputedHeight: newHeight,
       disputedCost: newCost,
-      totalCost: holdApplied ? shipment.totalCost : newCost,
+      totalCost:
+        holdApplied && !priorChargeReversed ? shipment.totalCost : newCost,
       chargeableWeight: newChargeableWeight,
       volumetricWeight: newVolWeight,
+      walletTransactionId: newWalletTransactionId,
     };
     if (!holdApplied && newCourierCost !== null) {
       updateData.courierCost = newCourierCost;

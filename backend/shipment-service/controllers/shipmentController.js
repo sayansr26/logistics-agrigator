@@ -17,6 +17,7 @@ const bulkFileParserService = require("../services/bulkFileParserService");
 const bulkRerateService = require("../services/bulkRerateService");
 const ndrService = require("../services/ndrService");
 const labelGenerationService = require("../services/labelGenerationService");
+const labelBrandingService = require("../services/labelBrandingService");
 const pickupSchedulingService = require("../services/pickupSchedulingService");
 const {
   diagnoseShipment,
@@ -30,6 +31,7 @@ const { toPublicTracking } = require("../services/publicTrackingMilestones");
 const quoteSigningService = require("../services/quoteSigningService");
 const quoteService = require("../services/quoteService");
 const invoiceService = require("../services/invoiceService");
+const shipmentLedgerService = require("../services/shipmentLedgerService");
 const outletWalletContextService = require("../services/outletWalletContextService");
 const markupService = require("../services/markupService");
 const weightCalc = require("../shared/utils/weightCalc");
@@ -266,8 +268,26 @@ async function attemptCourierBooking({
   productDescription,
   hsnCode,
   declaredValue,
+  outletId = null,
+  clientId = null,
   authToken,
 }) {
+  // The courier prints `seller_name` / `seller_add` on its own label. Send
+  // the outlet / client the customer dealt with, not the aggregator account
+  // (which is what the courier defaults to).
+  const seller = await labelBrandingService.resolveShipperBranding({
+    outletId,
+    clientId,
+    pickup: {
+      name: pickupAddress?.name,
+      phone: pickupAddress?.phone,
+      line1: pickupAddress?.address,
+      city: pickupAddress?.city,
+      state: pickupAddress?.state,
+      pincode: pickupAddress?.pincode,
+    },
+  });
+
   const courierBookingResult = await partnerIntegrationService.bookWithCourier(
     partnerId,
     {
@@ -283,6 +303,8 @@ async function attemptCourierBooking({
       productDescription: productDescription || "Package",
       hsnCode: hsnCode || undefined,
       declaredValue,
+      sellerName: seller.brandName,
+      sellerAddress: labelBrandingService.formatAddressLine(seller.address),
     },
     authToken,
   );
@@ -949,6 +971,8 @@ async function createShipment(req, res) {
           productDescription: packageDetails.description || "Package",
           hsnCode,
           declaredValue: packageDetails.value || totalCost,
+          outletId: shipmentOutletId,
+          clientId,
           authToken,
         });
 
@@ -1470,6 +1494,8 @@ async function assignPartner(req, res) {
           shipment.productDescription || shipment.description || "Package",
         hsnCode: shipment.hsnCode || undefined,
         declaredValue: shipment.value ? toNumber(shipment.value) : newTotalCost,
+        outletId: shipment.outletId,
+        clientId: shipment.clientId,
         authToken,
       });
 
@@ -1716,6 +1742,8 @@ async function retryCourierBooking(req, res) {
         deliveryCity: true,
         deliveryState: true,
         deliveryPincode: true,
+        outletId: true,
+        clientId: true,
         partnerId: true,
         awbNumber: true,
       },
@@ -1805,6 +1833,24 @@ async function retryCourierBooking(req, res) {
         (shipment.value || shipment.totalCost).toString(),
       ),
     };
+
+    // White-label seller identity for the courier's own label.
+    const seller = await labelBrandingService.resolveShipperBranding({
+      outletId: shipment.outletId,
+      clientId: shipment.clientId,
+      pickup: {
+        name: shipment.pickupName,
+        phone: shipment.pickupPhone,
+        line1: shipment.pickupLine1,
+        city: shipment.pickupCity,
+        state: shipment.pickupState,
+        pincode: shipment.pickupPincode,
+      },
+    });
+    bookingPayload.sellerName = seller.brandName;
+    bookingPayload.sellerAddress = labelBrandingService.formatAddressLine(
+      seller.address,
+    );
 
     const courierBookingResult =
       await partnerIntegrationService.bookWithCourier(
@@ -4489,65 +4535,99 @@ async function rerateShipment(req, res) {
 
     let refundTxId = null;
     let chargeTxId = null;
+    // The debit this shipment currently rests on. Re-rate replaces it, so it
+    // must be re-persisted below — see the reversal comment in the PREPAID
+    // branch for why leaving it stale broke every subsequent refund.
+    let newWalletTransactionId = shipment.walletTransactionId;
+    let priorChargeReversed = false;
     let holdApplied = false;
     let codAmountUpdated = false;
     let newCodAmount = oldCodAmount;
 
     if (difference !== 0 && shipment.paymentType === "PREPAID") {
-      // Settle ONLY the difference.
+      // Reverse the ORIGINAL charge in full, then debit the NEW charge in full.
       //
-      // This used to refund the full old charge and then debit the full new
-      // charge. When the refund failed — which it always did, because the
-      // wallet API rejects a refund with no originating transaction_id — the
-      // failure was logged and the new debit went through anyway, leaving the
-      // customer charged twice for one shipment. Moving the difference alone
-      // removes that failure mode: nothing is refunded on an increase, and a
-      // failed settlement can never double-charge.
-      const delta = Math.abs(difference);
+      // Settling only the difference (the previous behaviour) understated what
+      // actually happened: on an increase the customer saw a second debit
+      // stacked on the first with no reversal between them — old + new — and
+      // the wallet carried no record that the original charge had been undone.
+      //
+      // Refund-then-recharge was tried before and abandoned because the refund
+      // "always failed". The cause was not the pattern: processShipmentRefund
+      // needs the originating debit's transaction id, and this flow captured
+      // the new charge id into chargeTxId but never wrote it back to the
+      // shipment. After the first re-rate the shipment still pointed at the
+      // booking debit, so every later reversal was rejected for referencing a
+      // transaction whose amount no longer matched. newWalletTransactionId
+      // below closes that chain.
+      //
+      // Order matters: a failed reversal aborts before any new debit, so the
+      // double-charge the old code produced can no longer happen.
+      const priorDebit = shipment.walletTransactionId ? oldCost : 0;
 
-      if (difference > 0) {
-        try {
-          const chargeResult =
-            await paymentProcessingService.processShipmentPayment(
-              walletTarget,
-              delta,
-              shipment.id,
-              `Re-rate top-up for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
-              walletAuthToken,
-              settlementRef,
-            );
-          chargeTxId = chargeResult.walletTransactionId;
-        } catch (chargeErr) {
-          logger.warn("Re-rate top-up failed - putting shipment on hold", {
-            service: "shipment-service",
-            shipmentId: id,
-            shortfall: delta,
-            error: chargeErr.message,
-          });
-          holdApplied = true;
+      if (priorDebit > 0) {
+        if (!walletTarget) {
+          // Without a wallet we can neither reverse nor re-charge. Changing the
+          // price here would silently detach it from the money already taken.
+          throw new ValidationError(
+            "Unable to resolve the wallet holding this shipment's payment. Please contact support.",
+          );
         }
-      } else {
         try {
           const refundResult =
             await paymentProcessingService.processShipmentRefund(
               walletTarget,
-              delta,
+              priorDebit,
               shipment.id,
-              `Re-rate partial refund for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+              `Re-rate reversal of original charge for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
               walletAuthToken,
               shipment.walletTransactionId,
-              settlementRef,
+              `${settlementRef}_REVERSAL`,
             );
           refundTxId = refundResult.refundTransactionId;
+          priorChargeReversed = true;
+          newWalletTransactionId = null;
         } catch (refundErr) {
-          // The customer is owed money. Do NOT hold — the shipment is priced
-          // correctly and moving; flag it so the refund can be retried.
-          logger.error("Re-rate partial refund failed - refund still owed", {
+          // Nothing has moved yet. Abort rather than debit the new amount on
+          // top of an original charge that is still standing.
+          logger.error("Re-rate reversal failed - no changes saved", {
             service: "shipment-service",
             shipmentId: id,
-            owed: delta,
+            amount: priorDebit,
             error: refundErr.message,
           });
+          throw new APIError(
+            "Could not reverse the original shipment charge. No changes were saved — please try again.",
+            502,
+            "RERATE_REVERSAL_FAILED",
+          );
+        }
+      }
+
+      if (newCost > 0) {
+        try {
+          const chargeResult =
+            await paymentProcessingService.processShipmentPayment(
+              walletTarget,
+              newCost,
+              shipment.id,
+              `Re-rate charge for shipment ${shipment.orderId} (₹${oldCost} → ₹${newCost}): ${reason}`,
+              walletAuthToken,
+              settlementRef,
+            );
+          chargeTxId = chargeResult.walletTransactionId;
+          newWalletTransactionId = chargeResult.walletTransactionId;
+        } catch (chargeErr) {
+          // The reversal already landed, so the customer is whole. Park the
+          // shipment instead of letting it move unpaid.
+          logger.warn("Re-rate charge failed - putting shipment on hold", {
+            service: "shipment-service",
+            shipmentId: id,
+            amount: newCost,
+            reversed: priorChargeReversed,
+            error: chargeErr.message,
+          });
+          holdApplied = true;
         }
       }
     } else if (difference !== 0 && shipment.paymentType === "COD") {
@@ -4643,9 +4723,17 @@ async function rerateShipment(req, res) {
       disputedWidth: newWidth,
       disputedHeight: newHeight,
       disputedCost: newCost,
-      totalCost: holdApplied ? shipment.totalCost : newCost,
+      // Once the original charge has been reversed it no longer stands, so the
+      // shipment is priced at newCost even on a hold — the HOLD is what stops
+      // it moving while unpaid. Only an untouched wallet keeps the old price.
+      totalCost:
+        holdApplied && !priorChargeReversed ? shipment.totalCost : newCost,
       chargeableWeight: newChargeableWeight,
       volumetricWeight: newVolWeight,
+      // Re-point the shipment at the debit it now rests on. Without this the
+      // next re-rate (and cancellation) would try to refund against a
+      // transaction that has already been reversed.
+      walletTransactionId: newWalletTransactionId,
     };
 
     // Persist courier cost / profit margin when a courier cost was captured
@@ -5628,6 +5716,67 @@ async function generateShippingLabel(req, res) {
 }
 
 /**
+ * Download the platform-rendered (white-label) shipping label as a PDF.
+ *
+ * GET /api/v1/shipments/:shipmentId/label?format=4x6&copies=1
+ */
+async function downloadShippingLabel(req, res) {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { shipmentId } = req.params;
+    const { format = "4x6", copies = 1 } = req.query || {};
+
+    let where = { id: shipmentId };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const shipment = await prisma.shipment.findFirst({
+      where,
+      select: { id: true, orderId: true, awbNumber: true },
+    });
+
+    if (!shipment) throw new NotFoundError("Shipment not found");
+
+    const result = await labelGenerationService.generateShippingLabel(
+      shipment.id,
+      { format, copies: Number(copies) || 1 },
+      userId,
+    );
+
+    const pdf = Buffer.from(result.label.data, "base64");
+    const filename = `label-${shipment.awbNumber || shipment.orderId}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdf.length);
+    return res.status(200).send(pdf);
+  } catch (error) {
+    logger.error("Download shipping label failed", {
+      service: "shipment-service",
+      shipmentId: req.params.shipmentId,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError)
+      return res
+        .status(404)
+        .json(APIResponse.error(error.message, "SHIPMENT_NOT_FOUND"));
+    if (error instanceof ValidationError)
+      return res
+        .status(400)
+        .json(APIResponse.error(error.message, "VALIDATION_ERROR"));
+
+    return res
+      .status(500)
+      .json(
+        APIResponse.error(
+          "Failed to generate shipping label",
+          "LABEL_GENERATION_FAILED",
+        ),
+      );
+  }
+}
+
+/**
  * Generate bulk labels
  */
 async function generateBulkLabels(req, res) {
@@ -6375,6 +6524,55 @@ async function cancelWithProvider(req, res) {
  * Get shipment documents
  * GET /api/v1/shipments/:id/documents
  */
+/**
+ * GET /api/v1/shipments/:id/transactions
+ *
+ * Every wallet movement this shipment caused, in order. Assembled from our own
+ * records rather than the wallet API because the wallet has no shipment
+ * dimension to filter on — it only knows the reference strings we send it
+ * (`SHIPMENT_<id>`, `SHIPMENT_<id>_RERATE_<ts>`), which are echoed back here so
+ * a row can be matched against the wallet ledger by eye.
+ */
+async function getShipmentTransactions(req, res) {
+  try {
+    const { id } = req.params;
+
+    // Scope check first — buildShipmentLedger looks the shipment up by id
+    // alone, so the caller's visibility must be established here.
+    let where = { id };
+    where = authUtils.applyScopeFilter(req, where);
+
+    const visible = await prisma.shipment.findFirst({
+      where,
+      select: { id: true },
+    });
+    if (!visible) throw new NotFoundError("Shipment not found");
+
+    const ledger = await shipmentLedgerService.buildShipmentLedger(visible.id);
+    if (!ledger) throw new NotFoundError("Shipment not found");
+
+    res.json(
+      APIResponse.success(
+        ledger,
+        "Shipment transactions retrieved successfully",
+      ),
+    );
+  } catch (error) {
+    logger.error("Get shipment transactions failed", {
+      service: "shipment-service",
+      shipmentId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof NotFoundError) {
+      return res.status(404).json(APIResponse.error(error.message, 404));
+    }
+    return res
+      .status(500)
+      .json(APIResponse.error("Failed to retrieve shipment transactions", 500));
+  }
+}
+
 async function getShipmentDocuments(req, res) {
   try {
     const { id } = req.params;
@@ -6685,6 +6883,7 @@ module.exports = {
   fetchCourierLabel,
   cancelWithProvider,
   getShipmentDocuments,
+  getShipmentTransactions,
   getShipments,
   getShipmentById,
   updateShipment,
@@ -6715,6 +6914,7 @@ module.exports = {
   getNDRCases,
   takeNDRAction,
   generateShippingLabel,
+  downloadShippingLabel,
   generateBulkLabels,
   createManifest,
   schedulePickup,

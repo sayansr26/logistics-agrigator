@@ -1001,6 +1001,41 @@ export interface DashboardParams {
 // RTK Query API Definition
 // ===========================
 
+/** Label sizes accepted by GET /shipments/:id/label. */
+export type LabelFormat = "4x6" | "6x4" | "A4" | "A4_4";
+
+export interface ShipmentTransaction {
+  kind: "DEBIT" | "REFUND" | "NONE";
+  label: string;
+  amount: number | null;
+  transactionId: string | null;
+  reference: string | null;
+  reason: string | null;
+  adjustmentId?: string;
+  adjustmentType?: string;
+  oldAmount?: number | null;
+  newAmount?: number | null;
+  occurredAt: string | null;
+}
+
+export interface ShipmentTransactionsResponse {
+  status: string;
+  data: {
+    shipmentId: string;
+    orderId: string;
+    paymentType: string;
+    walletUserId: string | null;
+    currentTransactionId: string | null;
+    summary: {
+      totalDebited: number;
+      totalRefunded: number;
+      netCharged: number;
+      currentPrice: number | null;
+    };
+    transactions: ShipmentTransaction[];
+  };
+}
+
 export const shipmentApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     /**
@@ -1174,10 +1209,14 @@ export const shipmentApi = baseApi.injectEndpoints({
     /**
      * Download Label - Download shipping label for a shipment
      */
-    downloadLabel: builder.mutation<Blob, string>({
-      query: (shipmentId) => ({
+    downloadLabel: builder.mutation<
+      Blob,
+      { shipmentId: string; format?: LabelFormat; copies?: number }
+    >({
+      query: ({ shipmentId, format = "4x6", copies = 1 }) => ({
         url: `/api/v1/shipments/${shipmentId}/label`,
         method: "GET",
+        params: { format, copies },
         responseHandler: (response) => response.blob(),
       }),
     }),
@@ -1266,6 +1305,18 @@ export const shipmentApi = baseApi.injectEndpoints({
       string
     >({
       query: (shipmentId) => `/api/v1/shipments/${shipmentId}/documents`,
+      providesTags: (result, error, id) => [{ type: "Shipment", id }],
+    }),
+
+    /**
+     * Every wallet movement caused by this shipment — the booking debit, each
+     * re-rate reversal/re-charge pair, and any cancellation refund.
+     */
+    getShipmentTransactions: builder.query<
+      ShipmentTransactionsResponse,
+      string
+    >({
+      query: (shipmentId) => `/api/v1/shipments/${shipmentId}/transactions`,
       providesTags: (result, error, id) => [{ type: "Shipment", id }],
     }),
 
@@ -1525,6 +1576,7 @@ export const {
   useFetchCourierLabelMutation,
   useCancelWithProviderMutation,
   useGetShipmentDocumentsQuery,
+  useGetShipmentTransactionsQuery,
   // Bulk upload
   useGetBulkJobsQuery,
   useGetBulkJobQuery,

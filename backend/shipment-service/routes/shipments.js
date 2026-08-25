@@ -21,6 +21,7 @@ const {
   fetchCourierLabel,
   cancelWithProvider,
   getShipmentDocuments,
+  getShipmentTransactions,
   getShipments,
   getShipmentById,
   updateShipment,
@@ -51,6 +52,7 @@ const {
   getNDRCases,
   takeNDRAction,
   generateShippingLabel,
+  downloadShippingLabel,
   generateBulkLabels,
   createManifest,
   schedulePickup,
@@ -87,6 +89,7 @@ const {
   createNDRCaseSchema,
   takeNDRActionSchema,
   generateShippingLabelSchema,
+  downloadShippingLabelQuerySchema,
   generateBulkLabelsSchema,
   createManifestSchema,
   schedulePickupSchema,
@@ -251,6 +254,19 @@ router.post(
   authMiddleware.requirePermission("shipment", "delete", "own"),
   validate(cancelWithProviderSchema),
   cancelWithProvider,
+);
+
+/**
+ * GET /api/v1/shipments/:id/transactions
+ * Every wallet movement (debits, reversals, refunds) caused by this shipment
+ */
+router.get(
+  "/:id/transactions",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  getShipmentTransactions,
 );
 
 /**
@@ -1839,6 +1855,20 @@ router.post(
   authMiddleware.requirePermission("shipment", "read", "assigned"),
   validate(generateShippingLabelSchema),
   generateShippingLabel,
+);
+
+/**
+ * GET /api/v1/shipments/:shipmentId/label
+ * Download the white-label (outlet/client branded) shipping label PDF.
+ */
+router.get(
+  "/:shipmentId/label",
+  generalLimiter,
+  authMiddleware.authenticate,
+  authMiddleware.enrichUserContext,
+  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  validate(downloadShippingLabelQuerySchema, "query"),
+  downloadShippingLabel,
 );
 
 /**

@@ -65,6 +65,7 @@ export const API_ENDPOINTS = {
     BULK_RERATE: "/api/v1/shipments/bulk/rerate",
     RERATE: "/api/v1/shipments", // + /:id/rerate
     RERATE_PREVIEW: "/api/v1/shipments", // + /:id/rerate/preview
+    TRANSACTIONS: "/api/v1/shipments", // + /:id/transactions
     LABELS: "/api/v1/shipments/labels",
     PICKUP: "/api/v1/shipments/pickup",
     PICKUP_SCHEDULES: "/api/v1/shipments/pickup/schedules",

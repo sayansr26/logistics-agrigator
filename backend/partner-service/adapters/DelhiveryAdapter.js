@@ -82,7 +82,11 @@ class DelhiveryAdapter extends BaseCourierAdapter {
       derivedPickupLocationName ||
       "";
 
-    const sellerName = this.clientName;
+    // Delhivery prints seller_name / seller_add on the packing slip. Prefer
+    // the white-label seller passed by shipment-service; the Delhivery client
+    // account name is only a fallback.
+    const sellerName =
+      this.sanitizeText(shipmentData.sellerName) || this.clientName;
 
     const shipmentPayload = this.buildShipmentPayload(
       shipmentData,
@@ -205,6 +209,10 @@ class DelhiveryAdapter extends BaseCourierAdapter {
           products_desc: shipmentData.productDescription || "Package",
           hsn_code: shipmentData.hsnCode || "",
           seller_name: sellerName || "",
+          seller_add: this.sanitizeText(shipmentData.sellerAddress) || "",
+          // Declared value drives the price column on the packing slip;
+          // without it Delhivery prints Rs. 0.00.
+          total_amount: Number(shipmentData.declaredValue) || 0,
           pickup_location: pickupLocationName,
         },
       ],
@@ -235,6 +243,17 @@ class DelhiveryAdapter extends BaseCourierAdapter {
    * "suspicious order/consignee", which surfaces as a generic internal error.
    * Applied to every phone in the payload, not just the warehouse.
    */
+  /**
+   * Delhivery rejects `& % # ; \` anywhere in the manifest payload.
+   */
+  sanitizeText(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replace(/[&%#;\\]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   normalizePhone(phone) {
     const digits = String(phone || "").replace(/\D/g, "");
     if (digits.length === 10) return digits;

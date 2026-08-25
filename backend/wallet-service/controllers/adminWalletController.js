@@ -43,9 +43,14 @@ async function getClientTransactions(req, res) {
   try {
     const clientCode =
       req.query.clientCode || process.env.DEFAULT_CLIENT_CODE || "DEFAULT";
-    const { page, size, sortBy, sortDir, type, status, userId } = req.query;
+    const { page, size, sortBy, sortDir, type, status, userId, referenceId } =
+      req.query;
 
-    logger.info("Admin fetching client transactions", { clientCode });
+    logger.info("Admin fetching client transactions", {
+      clientCode,
+      userId,
+      referenceId,
+    });
 
     const externalClient = getExternalWalletClient();
     const data = await externalClient.listClientTransactions(clientCode, {
@@ -56,6 +61,11 @@ async function getClientTransactions(req, res) {
       type,
       status,
       userId,
+      // Substring match on the wallet's reference_id. Every movement we create
+      // embeds the shipment id (SHIPMENT_<id>, SHIPMENT_<id>_RERATE_<ts>,
+      // ..._REVERSAL, REFUND_<id>), so passing a bare shipment id returns that
+      // shipment's complete wallet history.
+      referenceId,
     });
 
     return res.json(APIResponse.success(data));

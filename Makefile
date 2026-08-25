@@ -54,6 +54,9 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         db-restore db-restore-prod redis-flush db-init migrate migrate-all db-sync \
         seed import-pincodes classify-cities load-pincodes seed-geo \
         migrate-shipment-ownership-dry migrate-shipment-ownership \
+        clean clean-uat clean-keep-data clean-keep-data-uat \
+        clean-all clean-all-uat clean-build-cache \
+        redeploy redeploy-uat redeploy-fresh redeploy-fresh-uat \
         dev dev-down dev-logs
 
 help:
@@ -87,9 +90,13 @@ help:
 	@echo "  make db-dump                Dump PROD stack  -> ./backups/logistics-dump-<ts>.tar.gz"
 	@echo "  make db-dump-uat            Dump UAT stack   -> ./backups/logistics-dump-uat-<ts>.tar.gz"
 	@echo "  make db-dump-dev            Dump local dev stack (docker-compose.yml)"
-	@echo "  make db-restore FILE=<f>    Restore a bundle into the LOCAL DEV stack (destructive)"
-	@echo "                              Stops app services, restores, starts them back up."
+	@echo "  make db-restore FILE=<f>    Restore a bundle into the LOCAL DEV stack"
+	@echo "                              Replaces ONLY the databases carried in the bundle."
+	@echo "                              Never touches existing roles/users or their passwords,"
+	@echo "                              and never drops [$(KEEP_DATABASES)]."
+	@echo "                              Stops app services, restores, verifies, restarts them."
 	@echo "                              Omit FILE to auto-pick the newest ./backups/*.tar.gz"
+	@echo "                              KEEP_DATABASES=a,b,c to protect more databases"
 	@echo "  make db-restore-prod FILE=<f>  Restore into the PROD/UAT stack (ENV_FILE selects)"
 	@echo ""
 	@echo "  Data & DB (exec into the running stack; ENV_FILE=.env.uat for UAT):"
@@ -104,6 +111,18 @@ help:
 	@echo "  make seed-geo               Seed geographical data (partner-service)"
 	@echo "  make migrate-shipment-ownership-dry  Preview shipment ownership backfill (no writes)"
 	@echo "  make migrate-shipment-ownership      Re-own outlet bookings to the outlet owner"
+	@echo ""
+	@echo "  Clean / redeploy (scoped to this ENV_FILE's project — never touches"
+	@echo "  the other stacks or unrelated projects; add -uat for the UAT stack):"
+	@echo "  make clean          FULL WIPE: containers + networks + images + VOLUMES."
+	@echo "                      ALL DATA IS DELETED. Dumps to ./backups/ first"
+	@echo "                      unless SKIP_BACKUP=1."
+	@echo "  make redeploy       clean + deploy + db-init — complete rebuild from"
+	@echo "                      scratch: empty volumes, fresh images, seeded schema."
+	@echo "                      ^ this is the pre-release one"
+	@echo "  make clean-keep-data  Same as clean but VOLUMES SURVIVE — use when the"
+	@echo "                      database must stay exactly as it is."
+	@echo "  make clean-build-cache  BUILD MACHINE: drop buildx cache (slow next release)"
 	@echo ""
 	@echo "  Local dev (BUILD MACHINE — full source, builds locally):"
 	@echo "  make dev            Start the dev stack (docker-compose.yml, --profile all-services)"
@@ -309,12 +328,48 @@ db-dump-dev: DUMP_COMPOSE = $(COMPOSE_DEV)
 db-dump-dev: DUMP_LABEL = dev
 db-dump-dev: db-dump ## Full Postgres+Redis dump of the local dev stack
 
-# Restore a bundle. DESTRUCTIVE: pg_dumpall --clean drops and recreates every
-# database in the target, and Redis is replaced wholesale by the snapshot.
+# Restore a bundle into a target stack.
+#
+# NON-DESTRUCTIVE to the target's identity — the restore never touches:
+#   * roles / users        role DDL (DROP|CREATE|ALTER ROLE) is stripped from
+#                          the dump. Roles named by the bundle that are MISSING
+#                          locally are created NOLOGIN (so `ALTER DATABASE ...
+#                          OWNER TO x` resolves); roles that already exist —
+#                          including POSTGRES_USER and its password — are left
+#                          exactly as they are.
+#   * template1/postgres   the bundle's sections for the cluster's own
+#                          maintenance databases (which contain `DROP DATABASE
+#                          template1` / `DROP DATABASE postgres`) are skipped
+#                          entirely. Extend the list with KEEP_DATABASES=...
+#   * \restrict/\unrestrict guards emitted by pg_dump >= 15.14 are stripped so
+#                          an older psql in the target container still works.
+#
+# DESTRUCTIVE to the payload — every database carried IN the bundle is dropped
+# and recreated, and Redis is replaced wholesale by the snapshot. That is the
+# point of a restore; nothing else in the cluster is modified.
+#
 # Usage: make db-restore FILE=backups/logistics-dump-prod-20250101-120000.tar.gz
 #        make db-restore                    (auto-picks the newest bundle)
 #        make db-restore-prod FILE=...      (targets the PROD/UAT stack instead)
-db-restore: ## Restore a dump bundle into the LOCAL dev stack (destructive)
+
+# Stream filter applied to postgres.sql.gz before it reaches psql. PROTECT is
+# the target stack's own POSTGRES_DB. Kept on one line: a backslash-continued
+# line inside single quotes would put a literal backslash into the awk program.
+# Databases the restore must never drop or overwrite: template1 and postgres are
+# the cluster's own maintenance databases (postgres is what the restore session
+# itself connects through). Add more with e.g.
+#   make db-restore KEEP_DATABASES=template1,postgres,logistics_main
+KEEP_DATABASES ?= template1,postgres
+
+# Stream filter applied to postgres.sql.gz before it reaches psql. KEEP is the
+# comma-separated protected list. Kept on one line: a backslash-continued line
+# inside single quotes would put a literal backslash into the awk program.
+RESTORE_FILTER = BEGIN{c=split(KEEP,k,","); for(i=1;i<=c;i++) prot[k[i]]=1} /^\\restrict/{next} /^\\unrestrict/{next} /^-- Database "/{n=$$0; sub(/^-- Database "/,"",n); sub(/" dump$$/,"",n); skip=(n in prot)?1:0} skip{next} /^DROP ROLE /{next} /^CREATE ROLE /{next} /^ALTER ROLE /{next} /^(DROP|CREATE) DATABASE /{d=$$0; sub(/^(DROP|CREATE) DATABASE (IF EXISTS )?/,"",d); sub(/[; ].*$$/,"",d); if(d in prot) next} {print}
+
+# Same protected list, used to enumerate the databases the bundle will replace.
+RESTORE_DBLIST = BEGIN{c=split(KEEP,k,","); for(i=1;i<=c;i++) prot[k[i]]=1} /^-- Database "/{n=$$0; sub(/^-- Database "/,"",n); sub(/" dump$$/,"",n); if(!(n in prot)) print n}
+
+db-restore: ## Restore a dump bundle into the LOCAL dev stack (data-only; roles/users preserved)
 	@file="$(FILE)$(BACKUP)"; \
 	if [ -z "$$file" ]; then \
 	  file=$$(ls -t backups/logistics-dump-*.tar.gz 2>/dev/null | head -1); \
@@ -329,22 +384,37 @@ db-restore: ## Restore a dump bundle into the LOCAL dev stack (destructive)
 	echo ">>> Restoring $$file"; \
 	cat "$$stage/MANIFEST.txt" 2>/dev/null; \
 	echo ""; \
-	echo ">>> [1/4] stopping app services (open connections block DROP DATABASE)"; \
+	echo ">>> [1/6] reading the target stack's own identity"; \
+	pguser=$$($(RESTORE_COMPOSE) exec -T postgres sh -c 'printf %s "$$POSTGRES_USER"' | tr -d '\r'); \
+	pgdb=$$($(RESTORE_COMPOSE) exec -T postgres sh -c 'printf %s "$$POSTGRES_DB"' | tr -d '\r'); \
+	[ -n "$$pguser" ] || { echo "!!! postgres container not reachable (is the stack up?)"; exit 1; }; \
+	echo "    connecting as role '$$pguser' (admin db '$$pgdb')"; \
+	echo "    protected: all existing roles/passwords + databases [$(KEEP_DATABASES)]"; \
+	echo ">>> [2/6] stopping app services (open connections block DROP DATABASE)"; \
 	$(RESTORE_COMPOSE) stop $(BACKEND_SERVICES) frontend > /dev/null 2>&1 || true; \
-	echo ">>> [2/4] restoring Postgres (drops + recreates every database)"; \
+	echo ">>> [3/6] reconciling roles (existing roles + passwords are NOT modified)"; \
+	for r in $$(gunzip -c "$$stage/postgres.sql.gz" | awk '/^CREATE ROLE /{r=$$3; sub(/;$$/,"",r); print r}' | sort -u); do \
+	  if $(RESTORE_COMPOSE) exec -T postgres sh -c "psql -U \"\$$POSTGRES_USER\" -d postgres -tAc \"SELECT 1 FROM pg_roles WHERE rolname='$$r'\"" 2>/dev/null | grep -q 1; then \
+	    echo "    role '$$r' already exists — left untouched"; \
+	  else \
+	    echo "    role '$$r' missing — creating it NOLOGIN (owns restored objects only)"; \
+	    $(RESTORE_COMPOSE) exec -T postgres sh -c "psql -U \"\$$POSTGRES_USER\" -d postgres -q -o /dev/null -c 'CREATE ROLE \"$$r\" NOLOGIN'" \
+	      || echo "    !! could not create role '$$r' — ownership statements may fail"; \
+	  fi; \
+	done; \
+	echo ">>> [4/6] restoring Postgres (drops + recreates only the bundle's databases)"; \
 	$(RESTORE_COMPOSE) exec -T postgres sh -c \
 	  'psql -U "$$POSTGRES_USER" -d postgres -q -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IS NOT NULL AND datname NOT IN ('"'"'postgres'"'"','"'"'template0'"'"','"'"'template1'"'"') AND pid <> pg_backend_pid();"' \
 	  > /dev/null 2>&1 || true; \
 	gunzip -c "$$stage/postgres.sql.gz" \
+	  | awk -v KEEP="$(KEEP_DATABASES)" '$(RESTORE_FILTER)' \
 	  | $(RESTORE_COMPOSE) exec -T postgres sh -c \
 	      'psql -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=0 --quiet -o /dev/null' \
-	  || { echo "!!! Postgres restore FAILED"; exit 1; }; \
-	echo "    (benign: \"role ... already exists\" / \"current user cannot be dropped\")"; \
-	echo ">>> resetting the DB role password to this stack's own POSTGRES_PASSWORD"; \
-	$(RESTORE_COMPOSE) exec -T postgres sh -c \
-	  'psql -U "$$POSTGRES_USER" -d postgres -q -o /dev/null -c "ALTER ROLE \"$$POSTGRES_USER\" WITH LOGIN SUPERUSER PASSWORD '"'"'$$POSTGRES_PASSWORD'"'"';"' \
-	  || echo "  !! could not reset role password — services may fail to authenticate"; \
-	echo ">>> [3/4] restoring Redis (replaces the whole keyspace)"; \
+	  2> "$$stage/psql.err" \
+	  || { echo "!!! Postgres restore FAILED"; sed -n '1,40p' "$$stage/psql.err"; exit 1; }; \
+	errs=$$(grep -c '^ERROR' "$$stage/psql.err" 2>/dev/null || echo 0); \
+	[ "$$errs" = "0" ] || { echo "    $$errs psql ERROR line(s) — first few:"; grep '^ERROR' "$$stage/psql.err" | head -5 | sed 's/^/      /'; }; \
+	echo ">>> [5/6] restoring Redis (replaces the whole keyspace)"; \
 	if [ -f "$$stage/redis.rdb" ]; then \
 	  $(RESTORE_COMPOSE) exec -T redis redis-cli FLUSHALL > /dev/null; \
 	  $(RESTORE_COMPOSE) stop redis; \
@@ -356,10 +426,20 @@ db-restore: ## Restore a dump bundle into the LOCAL dev stack (destructive)
 	else \
 	  echo "  (no redis.rdb in bundle — skipping Redis)"; \
 	fi; \
-	echo ">>> [4/4] starting app services back up"; \
+	echo ">>> [6/6] verifying restored databases, then starting app services"; \
+	missing=0; \
+	for db in $$(gunzip -c "$$stage/postgres.sql.gz" | awk -v PROTECT="$$pgdb" '/^-- Database "/{n=$$0; sub(/^-- Database "/,"",n); sub(/" dump$$/,"",n); if(n!="template1" && n!=PROTECT) print n}'); do \
+	  t=$$($(RESTORE_COMPOSE) exec -T postgres sh -c "psql -U \"\$$POSTGRES_USER\" -d $$db -tAc \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public'\"" 2>/dev/null | tr -d '\r'); \
+	  if [ -n "$$t" ] && [ "$$t" -gt 0 ] 2>/dev/null; then \
+	    echo "    ok   $$db  ($$t tables)"; \
+	  else \
+	    echo "    FAIL $$db  (missing or empty)"; missing=1; \
+	  fi; \
+	done; \
 	$(RESTORE_COMPOSE) start $(BACKEND_SERVICES) frontend > /dev/null 2>&1 || true; \
 	echo ""; \
-	echo ">>> Restore complete."
+	[ "$$missing" = "0" ] || { echo ">>> Restore FINISHED WITH ERRORS — see the FAIL rows above."; exit 1; }; \
+	echo ">>> Restore complete. Roles, passwords and [$(KEEP_DATABASES)] were not modified."
 
 db-restore-prod: RESTORE_COMPOSE = $(COMPOSE_PROD)
 db-restore-prod: db-restore ## Restore a bundle into the PROD/UAT stack (ENV_FILE selects)
@@ -475,6 +555,124 @@ migrate-shipment-ownership-dry:
 
 migrate-shipment-ownership:
 	$(COMPOSE_PROD) exec -T shipment-service node backend/shipment-service/scripts/migrate-shipment-ownership.js --apply
+
+# ============================================================================
+# Clean / redeploy — wipe the stack so `make deploy` rebuilds it from scratch
+# ============================================================================
+# Everything here is scoped to the selected env's COMPOSE_PROJECT_NAME
+# (logistics-prod / logistics-uat / logistics-dev), so cleaning PROD cannot
+# touch the UAT stack, the local dev stack, or any unrelated project on the
+# host. Nothing calls `docker system prune`, which would.
+#
+#   make clean            FULL WIPE. Containers, networks, IMAGES and VOLUMES.
+#                         The databases are deleted — Postgres and Redis come
+#                         back empty on the next deploy. A dump is written to
+#                         ./backups/ first so the data is still recoverable;
+#                         pass SKIP_BACKUP=1 to skip that.
+#
+#   make clean-keep-data  Same, but the volumes SURVIVE. Use this when you only
+#                         want fresh containers and a genuine image re-pull and
+#                         the database must stay exactly as it is.
+#
+#   make redeploy         clean + deploy + db-init — the complete from-scratch
+#                         rebuild: empty volumes, freshly pulled images, schema
+#                         migrated and seeded.
+#
+# -uat variants target the UAT stack. `clean-all` / `redeploy-fresh` are kept
+# as aliases of `clean` / `redeploy`.
+
+# Shared: drop this stack's images so the next deploy genuinely re-pulls.
+define rm_stack_images
+	imgs=$$($(COMPOSE_PROD) config --images 2>/dev/null | sort -u); \
+	if [ -n "$$imgs" ]; then \
+	  echo "$$imgs" | sed 's/^/      /'; \
+	  docker rmi -f $$imgs > /dev/null 2>&1 || true; \
+	else \
+	  echo "      (no images resolved from compose config)"; \
+	fi
+endef
+
+clean: ## FULL WIPE: containers, networks, images AND volumes (DELETES ALL DATA)
+	@echo ">>> Cleaning stack: $(ENV_FILE)  — containers, networks, images AND VOLUMES"
+	@if [ "$(SKIP_BACKUP)" = "1" ]; then \
+	  echo ">>> [1/4] SKIP_BACKUP=1 — no dump taken, the data will be unrecoverable"; \
+	else \
+	  echo ">>> [1/4] dumping data before the wipe (SKIP_BACKUP=1 to skip)"; \
+	  $(MAKE) --no-print-directory db-dump ENV_FILE=$(ENV_FILE) DUMP_LABEL=preclean-$(DUMP_LABEL) \
+	    || echo "    !! dump failed (stack already down?) — continuing with the wipe"; \
+	fi
+	@echo ">>> [2/4] stopping and removing containers, networks AND volumes"
+	-$(COMPOSE_PROD) down --volumes --remove-orphans
+	@echo ">>> [3/4] removing this stack's images (forces a real re-pull on deploy)"
+	@$(rm_stack_images)
+	@echo ">>> [4/4] volumes remaining for this project (should be none):"
+	@proj=$$(grep -E '^COMPOSE_PROJECT_NAME=' $(ENV_FILE) 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'"); \
+	if [ -n "$$proj" ]; then \
+	  left=$$(docker volume ls --filter "label=com.docker.compose.project=$$proj" --format '{{.Name}}' 2>/dev/null); \
+	  if [ -n "$$left" ]; then echo "$$left" | sed 's/^/      /'; else echo "      (none — all removed)"; fi; \
+	else \
+	  echo "      (COMPOSE_PROJECT_NAME not set in $(ENV_FILE))"; \
+	fi
+	@echo ""
+	@echo ">>> Clean complete. THE DATABASES ARE EMPTY."
+	@echo ">>> Rebuild everything with:  make redeploy"
+	@echo ">>> Or restore the dump with: make deploy && make db-restore-prod FILE=backups/<bundle>.tar.gz"
+
+clean-keep-data: ## Remove containers, networks and images but KEEP the volumes
+	@echo ">>> Cleaning stack: $(ENV_FILE)  (volumes/data are NOT touched)"
+	@echo ">>> [1/3] stopping and removing containers + networks"
+	-$(COMPOSE_PROD) down --remove-orphans
+	@echo ">>> [2/3] removing this stack's images (forces a real re-pull on deploy)"
+	@$(rm_stack_images)
+	@echo ">>> [3/3] surviving volumes (data kept):"
+	@proj=$$(grep -E '^COMPOSE_PROJECT_NAME=' $(ENV_FILE) 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'"); \
+	if [ -n "$$proj" ]; then \
+	  docker volume ls --filter "label=com.docker.compose.project=$$proj" --format '      {{.Name}}' 2>/dev/null; \
+	else \
+	  echo "      (COMPOSE_PROJECT_NAME not set in $(ENV_FILE))"; \
+	fi
+	@echo ""
+	@echo ">>> Clean complete. Data is intact. Now run: make deploy"
+
+clean-keep-data-uat: ENV_FILE = .env.uat
+clean-keep-data-uat: clean-keep-data ## Keep-data clean against the UAT stack
+
+clean-uat: ENV_FILE = .env.uat
+clean-uat: clean ## Full wipe of the UAT stack
+
+clean-all: clean ## Alias of `make clean`
+clean-all-uat: clean-uat ## Alias of `make clean-uat`
+
+# Build-machine only: buildx layer cache. Kept out of `clean` because dropping
+# it makes the next `make release-*` a full rebuild of all 10 images.
+clean-build-cache: ## BUILD MACHINE: drop the buildx layer cache (slow next release)
+	docker buildx prune -af
+
+# Full from-scratch rebuild: empty volumes, fresh images, schema + seed data.
+redeploy: ## clean + deploy + db-init — complete from-scratch rebuild
+	@$(MAKE) --no-print-directory clean ENV_FILE=$(ENV_FILE) SKIP_BACKUP=$(SKIP_BACKUP)
+	@echo ""
+	@$(MAKE) --no-print-directory deploy ENV_FILE=$(ENV_FILE)
+	@echo ""
+	@echo ">>> waiting for Postgres to accept connections"
+	@for i in $$(seq 1 60); do \
+	  if $(COMPOSE_PROD) exec -T postgres sh -c 'pg_isready -U "$$POSTGRES_USER"' > /dev/null 2>&1; then \
+	    echo "    postgres ready after $${i}s"; break; \
+	  fi; \
+	  [ "$$i" = "60" ] && { echo "!!! Postgres not ready after 60s — run 'make db-init' manually."; exit 1; }; \
+	  sleep 1; \
+	done
+	@echo ""
+	@$(MAKE) --no-print-directory db-init ENV_FILE=$(ENV_FILE)
+	@echo ""
+	@echo ">>> Redeploy complete — empty databases, schema migrated and seeded."
+	@echo ">>> Check with: make ps"
+
+redeploy-uat: ENV_FILE = .env.uat
+redeploy-uat: redeploy ## Complete from-scratch rebuild of the UAT stack
+
+redeploy-fresh: redeploy ## Alias of `make redeploy`
+redeploy-fresh-uat: redeploy-uat ## Alias of `make redeploy-uat`
 
 # ============================================================================
 # Local dev — BUILD MACHINE (full source; builds locally, no registry).

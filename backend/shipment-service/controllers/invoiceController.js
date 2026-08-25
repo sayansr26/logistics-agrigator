@@ -13,6 +13,7 @@ const logger = require("../shared/lib/logger");
 const { APIError } = require("../shared/lib/errors");
 const invoiceService = require("../services/invoiceService");
 const invoicePdfService = require("../services/invoicePdfService");
+const shipmentLedgerService = require("../services/shipmentLedgerService");
 
 function serializeInvoice(invoice) {
   if (!invoice) return invoice;
@@ -201,13 +202,26 @@ async function downloadInvoicePdf(req, res) {
     const { id } = req.params;
     const invoice = await invoiceService.getInvoiceById(id);
 
+    // The PDF carries a wallet-transaction annexure, and that ledger keeps
+    // moving after the invoice is issued (a re-rate adds a reversal and a
+    // re-charge). Attach the current ledger, and treat a cached PDF that
+    // predates the newest movement as stale so it gets rebuilt.
+    const ledger = invoice.shipmentId
+      ? await shipmentLedgerService.buildShipmentLedger(invoice.shipmentId)
+      : null;
+    invoice.walletLedger = ledger;
+
+    const latestMovement = (ledger?.transactions || [])
+      .map((t) => (t.occurredAt ? new Date(t.occurredAt).getTime() : 0))
+      .reduce((a, b) => Math.max(a, b), 0);
+
     let filePath = invoice.pdfUrl;
     let fileExists = false;
 
     if (filePath) {
       try {
-        await fs.promises.access(filePath);
-        fileExists = true;
+        const stat = await fs.promises.stat(filePath);
+        fileExists = stat.mtimeMs >= latestMovement;
       } catch (_error) {
         fileExists = false;
       }

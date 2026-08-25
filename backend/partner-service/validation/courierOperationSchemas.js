@@ -49,6 +49,10 @@ const bookShipmentSchema = Joi.object({
   productDescription: Joi.string().optional().trim().max(200),
   hsnCode: Joi.string().optional().trim(),
   declaredValue: Joi.number().optional().min(0),
+  // Who the courier prints as the seller on its label — the outlet / client
+  // the customer dealt with, not the aggregator account.
+  sellerName: Joi.string().trim().max(100).optional().allow(null, ""),
+  sellerAddress: Joi.string().trim().max(500).optional().allow(null, ""),
 });
 
 const cancelShipmentSchema = Joi.object({

@@ -1147,6 +1147,14 @@ const takeNDRActionSchema = Joi.object({
     .description("Preferred date for reattempt (if applicable)"),
 });
 
+const downloadShippingLabelQuerySchema = Joi.object({
+  format: Joi.string()
+    .valid("A4", "A4_4", "4x6", "6x4")
+    .default("4x6")
+    .description("Label format/size"),
+  copies: Joi.number().integer().min(1).max(10).default(1),
+});
+
 const generateShippingLabelSchema = Joi.object({
   format: Joi.string()
     .valid("A4", "A4_4", "4x6", "6x4")
@@ -1330,6 +1338,7 @@ module.exports = {
   createNDRCaseSchema,
   takeNDRActionSchema,
   generateShippingLabelSchema,
+  downloadShippingLabelQuerySchema,
   generateBulkLabelsSchema,
   createManifestSchema,
   schedulePickupSchema,

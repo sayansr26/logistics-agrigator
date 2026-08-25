@@ -1,6 +1,6 @@
 # Progress - Logistics Aggregator Portal
 
-> Development status and changelog | Last Updated: August 22, 2026
+> Development status and changelog | Last Updated: August 24, 2026
 
 ## Overall Project Status
 
@@ -14,6 +14,14 @@ Overall Project Progress          [███████████████
 ## What Works ✅
 
 ### Backend Services
+
+#### White-Label Shipping Labels (August 24, 2026) — NEW
+
+- ✅ `services/labelBrandingService.js` — resolves the shipper shown on labels: outlet billing-details (`companyName`/`name`, GSTIN, `companyAddress`) → client billing-details → pickup contact. Redis-cached 5 min.
+- ✅ `services/labelPdfRenderer.js` — PDFKit + `bwip-js` renderer: outlet/client name header (no aggregator/courier account name), Code 128 AWB barcode, order id, PREPAID/COD amount, big destination pincode, consignee, return address, contents/HSN/qty/value, weight/dims, tracking QR. Formats `4x6` (default), `6x4` (rotated), `A4` (one per page), `A4_4` (2x2 grid); `copies` 1–10.
+- ✅ `GET /api/v1/shipments/:shipmentId/label?format=4x6&copies=1` streams the PDF (`application/pdf`) — the endpoint the frontend "Download Label" button was already calling (it previously 404'd; the only route was a POST returning a plaintext stub). Scope-filtered, audit-logged (`GENERATE_LABEL`), stored as `ShipmentDocument` type `LABEL` source `SYSTEM` (courier-fetched labels stay `PARTNER`).
+- ✅ Courier-side: booking now sends `sellerName`/`sellerAddress` (partner-service `bookShipmentSchema`); `DelhiveryAdapter` maps them to `seller_name`/`seller_add` (sanitised — Delhivery rejects `& % # ; \`) and passes `total_amount` from `declaredValue` so the Delhivery packing slip no longer prints ₹0.00. All three booking paths covered (create, assignPartner, retryCourierBooking).
+- ⚠️ Delhivery's own packing slip (`/api/p/packing_slip`) has no branding parameter — its header always shows the Delhivery client account name + logo, and the return address is the registered warehouse's, not `return_*`. Verified via the Delhivery MCP docs. The branded label is the platform-rendered one.
 
 #### External Shipment API (100% Complete) — NEW
 
