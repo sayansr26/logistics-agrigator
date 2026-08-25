@@ -46,14 +46,6 @@ const userIdParamsSchema = Joi.object({
   userId: uuidSchema,
 });
 
-const paymentIdParamsSchema = Joi.object({
-  paymentId: Joi.string().min(1).max(255).required().messages({
-    "string.min": "Payment ID cannot be empty",
-    "string.max": "Payment ID cannot exceed 255 characters",
-    "any.required": "Payment ID is required",
-  }),
-});
-
 // Wallet operation schemas
 const debitWalletSchema = Joi.object({
   amount: amountSchema,
@@ -205,51 +197,6 @@ const adminTransactionsQuerySchema = Joi.object({
   "object.unknown": "Unknown query parameter '{#label}' is not allowed",
 });
 
-// Payment gateway schemas (for future implementation)
-const paymentGatewayInitiateSchema = Joi.object({
-  amount: amountSchema,
-  currency: Joi.string().valid("INR", "USD").default("INR").messages({
-    "any.only": "Currency must be one of: INR, USD",
-  }),
-
-  provider: Joi.string()
-    .valid("razorpay", "payu", "stripe", "cashfree")
-    .required()
-    .messages({
-      "any.only": "Provider must be one of: razorpay, payu, stripe, cashfree",
-      "any.required": "Payment provider is required",
-    }),
-
-  metadata: Joi.object().optional().messages({
-    "object.base": "Metadata must be a valid object",
-  }),
-}).messages({
-  "object.unknown": "Unknown field '{#label}' is not allowed",
-});
-
-const paymentGatewayWebhookSchema = Joi.object({
-  paymentId: Joi.string().min(1).max(255).required().messages({
-    "string.min": "Payment ID cannot be empty",
-    "string.max": "Payment ID cannot exceed 255 characters",
-    "any.required": "Payment ID is required",
-  }),
-
-  status: Joi.string()
-    .valid("COMPLETED", "FAILED", "CANCELLED", "REFUNDED")
-    .required()
-    .messages({
-      "any.only":
-        "Status must be one of: COMPLETED, FAILED, CANCELLED, REFUNDED",
-      "any.required": "Payment status is required",
-    }),
-
-  gatewayData: Joi.object().optional().messages({
-    "object.base": "Gateway data must be a valid object",
-  }),
-}).messages({
-  "object.unknown": "Unknown field '{#label}' is not allowed",
-});
-
 // Client code validation (for multi-tenant support)
 const clientCodeSchema = Joi.string()
   .min(1)
@@ -346,7 +293,6 @@ const adminSyncWalletsSchema = Joi.object({
 module.exports = {
   // Parameter schemas
   userIdParamsSchema,
-  paymentIdParamsSchema,
 
   // Wallet operation schemas
   debitWalletSchema,
@@ -357,10 +303,6 @@ module.exports = {
   transactionHistoryQuerySchema,
   adminWalletsQuerySchema,
   adminTransactionsQuerySchema,
-
-  // Payment gateway schemas
-  paymentGatewayInitiateSchema,
-  paymentGatewayWebhookSchema,
 
   // Common schemas
   uuidSchema,

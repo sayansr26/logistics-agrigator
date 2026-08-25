@@ -25,6 +25,7 @@ enum TransactionType {
   REFUND
   LOAD_BALANCE
   ADJUSTMENT
+  TOP_UP
 
   @@map("transaction_type")
 }
@@ -98,6 +99,7 @@ model Transaction {
   @@map("transactions")
 }
 
+/// @deprecated — superseded by PaymentOrder. Do not write to this table.
 model PaymentGateway {
   id          String        @id @default(uuid()) @db.Uuid
   walletId    String        @db.Uuid
@@ -225,20 +227,20 @@ enum AdjustmentType {
 
 /// Mirror of a delivered COD shipment used for remittance/settlement.
 model CodShipment {
-  id         String  @id @default(uuid()) @db.Uuid
-  shipmentId String  @unique @db.Uuid // source shipment-service id
-  awbNumber  String  @db.VarChar(50)
-  orderId    String  @db.VarChar(100)
-  invoiceNo  String? @db.VarChar(100)
-  userId     String  @db.Uuid // customer who owns the shipment
-  clientCode String  @default("DEFAULT") @db.VarChar(50)
-  partnerId  String? @db.VarChar(50)
+  id          String  @id @default(uuid()) @db.Uuid
+  shipmentId  String  @unique @db.Uuid // source shipment-service id
+  awbNumber   String  @db.VarChar(50)
+  orderId     String  @db.VarChar(100)
+  invoiceNo   String? @db.VarChar(100)
+  userId      String  @db.Uuid // customer who owns the shipment
+  clientCode  String  @default("DEFAULT") @db.VarChar(50)
+  partnerId   String? @db.VarChar(50)
   partnerName String? @db.VarChar(100)
 
-  codAmount       Decimal             @db.Decimal(15, 2) // expected COD
-  collectedAmount Decimal?            @db.Decimal(15, 2) // reported/collected
+  codAmount        Decimal             @db.Decimal(15, 2) // expected COD
+  collectedAmount  Decimal?            @db.Decimal(15, 2) // reported/collected
   collectionStatus CodCollectionStatus @default(PENDING)
-  reconStatus     ReconStatus         @default(UNRECONCILED)
+  reconStatus      ReconStatus         @default(UNRECONCILED)
 
   deliveredAt  DateTime? @db.Timestamptz
   settlementId String?   @db.Uuid // set when included in a settlement
@@ -260,18 +262,18 @@ model CodShipment {
 
 /// A courier-reported COD collection (from API / import / manual).
 model CodCollection {
-  id                 String    @id @default(uuid()) @db.Uuid
-  awbNumber          String    @db.VarChar(50)
-  reportedAmount     Decimal   @db.Decimal(15, 2)
-  collectionDate     DateTime? @db.Timestamptz
-  source             CodSource @default(MANUAL)
-  courierReportId    String?   @db.VarChar(100)
-  matchedCodShipmentId String? @db.Uuid
-  verified           Boolean   @default(false)
-  verifiedBy         String?   @db.Uuid
-  verifiedAt         DateTime? @db.Timestamptz
-  metadata           Json?
-  createdAt          DateTime  @default(now()) @db.Timestamptz
+  id                   String    @id @default(uuid()) @db.Uuid
+  awbNumber            String    @db.VarChar(50)
+  reportedAmount       Decimal   @db.Decimal(15, 2)
+  collectionDate       DateTime? @db.Timestamptz
+  source               CodSource @default(MANUAL)
+  courierReportId      String?   @db.VarChar(100)
+  matchedCodShipmentId String?   @db.Uuid
+  verified             Boolean   @default(false)
+  verifiedBy           String?   @db.Uuid
+  verifiedAt           DateTime? @db.Timestamptz
+  metadata             Json?
+  createdAt            DateTime  @default(now()) @db.Timestamptz
 
   @@index([awbNumber])
   @@index([source])
@@ -303,10 +305,10 @@ model CodReconciliation {
 
 /// A COD settlement to a customer, moving through the approval workflow.
 model Settlement {
-  id          String  @id @default(uuid()) @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
   settlementNo String @unique @db.VarChar(50)
-  userId      String  @db.Uuid
-  clientCode  String  @default("DEFAULT") @db.VarChar(50)
+  userId       String @db.Uuid
+  clientCode   String @default("DEFAULT") @db.VarChar(50)
 
   totalCod         Decimal @default(0) @db.Decimal(15, 2)
   totalAdjustments Decimal @default(0) @db.Decimal(15, 2) // signed sum of adjustments
@@ -331,8 +333,8 @@ model Settlement {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  items       SettlementItem[]
-  adjustments SettlementAdjustment[]
+  items        SettlementItem[]
+  adjustments  SettlementAdjustment[]
   codShipments CodShipment[]
 
   @@index([userId])
@@ -400,4 +402,264 @@ model SettlementRule {
   @@index([partnerId])
   @@index([clientCode])
   @@map("settlement_rules")
+}
+
+// ============================================================
+// PAYMENT GATEWAY / WALLET TOP-UP MODULE (Razorpay)
+// ------------------------------------------------------------
+// Column names follow this file's dominant style: no per-column
+// @map(), so Prisma's default camelCase column names are used.
+// The hand-written migration DDL quotes them accordingly.
+// ============================================================
+
+enum PaymentProviderMode {
+  TEST
+  LIVE
+
+  @@map("payment_provider_mode")
+}
+
+enum PaymentOrderKind {
+  SELF_SERVE // customer/outlet initiated checkout
+  ADMIN_LINK // payment link generated by an admin on a user's behalf
+
+  @@map("payment_order_kind")
+}
+
+enum PaymentOrderStatus {
+  CREATED
+  PENDING
+  PAID
+  CREDITED
+  RECONCILE_PENDING
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+
+  @@map("payment_order_status")
+}
+
+enum ManualTopupStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CREDITED
+  FAILED
+
+  @@map("manual_topup_status")
+}
+
+/// Payment provider (Razorpay, ...) credentials + limits.
+/// Secrets are stored as AES-256-GCM ciphertext; only the *KeyId columns are
+/// plaintext because they are the public checkout key handed to the browser.
+///
+/// NOTE ON UNIQUENESS: `clientId` is always NULL today (platform-level config);
+/// the column exists so per-client provider accounts can be added later.
+/// Postgres treats NULLs as DISTINCT, so `@@unique([provider, clientId])` does
+/// NOT prevent two platform-level rows for the same provider. Real
+/// platform-level uniqueness is enforced by the partial unique index
+/// `payment_provider_configs_provider_platform_uniq`
+/// (ON (provider) WHERE clientId IS NULL) created in the migration.
+model PaymentProviderConfig {
+  id        String              @id @default(uuid()) @db.Uuid
+  clientId  String?             @db.Uuid // always NULL for now; reserved for per-client accounts
+  provider  String              @db.VarChar(50) // "razorpay"
+  isEnabled Boolean             @default(false)
+  mode      PaymentProviderMode @default(TEST)
+
+  // Public checkout key - PLAINTEXT by design
+  testKeyId String? @db.VarChar(255)
+  liveKeyId String? @db.VarChar(255)
+
+  // AES-256-GCM ciphertext - never returned to clients
+  testKeySecretEnc     String? @db.Text
+  testWebhookSecretEnc String? @db.Text
+  liveKeySecretEnc     String? @db.Text
+  liveWebhookSecretEnc String? @db.Text
+
+  currency     String  @default("INR") @db.VarChar(3)
+  minAmount    Decimal @default(100) @db.Decimal(15, 2)
+  maxAmount    Decimal @default(200000) @db.Decimal(15, 2)
+  quickAmounts Json? // e.g. [500, 1000, 2000, 5000]
+
+  paymentLinkExpiryHours Int @default(24)
+
+  lastTestedAt    DateTime? @db.Timestamptz
+  lastTestStatus  String?   @db.VarChar(20) // SUCCESS | FAILED
+  lastTestMessage String?   @db.Text
+
+  metadata  Json?
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([provider, clientId], name: "provider_client_unique")
+  @@index([isEnabled])
+  @@map("payment_provider_configs")
+}
+
+/// A single wallet top-up attempt through a payment provider.
+model PaymentOrder {
+  id       String              @id @default(uuid()) @db.Uuid
+  kind     PaymentOrderKind
+  provider String              @db.VarChar(50)
+  /// SNAPSHOTTED at creation time: flipping the provider config between TEST
+  /// and LIVE later must never strand or mis-route in-flight orders.
+  mode     PaymentProviderMode
+  isTest   Boolean             @default(false) // derived from `mode`; TEST orders never call the external wallet API
+
+  /// EXTERNAL wallet identity (phone number for outlets). Deliberately NOT a
+  /// FK to Wallet - Wallet.userId is @db.Uuid and this is the external system's
+  /// identifier, which is a different namespace.
+  walletUserId  String  @db.VarChar(255)
+  clientCode    String  @default("DEFAULT") @db.VarChar(50)
+  subjectUserId String? @db.Uuid // portal user UUID when known; audit only, no FK
+
+  payerName  String? @db.VarChar(255)
+  payerEmail String? @db.VarChar(255)
+  payerPhone String? @db.VarChar(20)
+
+  amount      Decimal @db.Decimal(15, 2)
+  amountPaise Int
+  currency    String  @default("INR") @db.VarChar(3)
+
+  status PaymentOrderStatus @default(CREATED)
+
+  providerOrderId   String?   @db.VarChar(255)
+  providerLinkId    String?   @db.VarChar(255)
+  providerPaymentId String?   @db.VarChar(255)
+  shortUrl          String?   @db.Text
+  expiresAt         DateTime? @db.Timestamptz
+
+  /// Deterministic idempotency key `RZP_<providerPaymentId>` sent to the
+  /// external wallet API, which 409s on reuse - that 409 is a success signal.
+  externalReferenceId   String?   @db.VarChar(255)
+  externalTransactionId String?   @db.VarChar(255)
+  creditedAt            DateTime? @db.Timestamptz
+
+  reconcileAttempts Int       @default(0)
+  lastReconcileAt   DateTime? @db.Timestamptz
+  nextRetryAt       DateTime? @db.Timestamptz
+  reconcileError    String?   @db.Text
+  needsManualAction Boolean   @default(false)
+
+  refundedAmount Decimal @default(0) @db.Decimal(15, 2)
+
+  notes       String?  @db.Text
+  gatewayData Json?
+  createdBy   String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  webhookEvents PaymentWebhookEvent[]
+
+  @@unique([provider, providerPaymentId], name: "provider_payment_unique")
+  @@index([walletUserId, clientCode])
+  @@index([subjectUserId])
+  @@index([status])
+  @@index([status, nextRetryAt])
+  @@index([providerOrderId])
+  @@index([providerLinkId])
+  @@index([kind, createdAt])
+  @@index([createdBy])
+  @@map("payment_orders")
+}
+
+/// Raw provider webhook envelope. `@@unique([provider, providerEventId])` is
+/// the replay guard: a duplicate delivery collides here and is skipped.
+model PaymentWebhookEvent {
+  id              String  @id @default(uuid()) @db.Uuid
+  provider        String  @db.VarChar(50)
+  providerEventId String  @db.VarChar(255)
+  eventType       String  @db.VarChar(100)
+  paymentOrderId  String? @db.Uuid
+
+  signatureValid  Boolean @default(false)
+  processed       Boolean @default(false)
+  processingError String? @db.Text
+
+  payload     Json
+  headers     Json?
+  receivedAt  DateTime  @default(now()) @db.Timestamptz
+  processedAt DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([paymentOrderId])
+  @@index([eventType])
+  @@index([processed])
+  @@index([receivedAt])
+  @@map("payment_webhook_events")
+}
+
+/// Manual (off-gateway) wallet credit request, under maker-checker.
+/// `reason` and `externalReference` are both mandatory safeguards.
+model ManualTopupRequest {
+  id            String  @id @default(uuid()) @db.Uuid
+  walletUserId  String  @db.VarChar(255)
+  clientCode    String  @default("DEFAULT") @db.VarChar(50)
+  subjectUserId String? @db.Uuid
+
+  amount   Decimal @db.Decimal(15, 2)
+  currency String  @default("INR") @db.VarChar(3)
+
+  reason            String @db.Text
+  externalReference String @db.VarChar(255) // bank UTR / NEFT ref / cheque no
+
+  status ManualTopupStatus @default(PENDING_APPROVAL)
+
+  // Policy snapshot at request time, so later policy edits do not rewrite history
+  thresholdAtRequest Decimal @db.Decimal(15, 2)
+  capAtRequest       Decimal @db.Decimal(15, 2)
+
+  requestedBy   String    @db.Uuid
+  requestedAt   DateTime  @default(now()) @db.Timestamptz
+  reviewedBy    String?   @db.Uuid
+  reviewedAt    DateTime? @db.Timestamptz
+  reviewRemarks String?   @db.Text
+
+  externalReferenceId   String?   @db.VarChar(255) // `MANUAL_<id>` idempotency key
+  externalTransactionId String?   @db.VarChar(255)
+  creditedAt            DateTime? @db.Timestamptz
+  creditError           String?   @db.Text
+
+  ipAddress String?  @db.VarChar(45)
+  userAgent String?  @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([externalReferenceId])
+  @@index([status, requestedAt])
+  @@index([walletUserId, clientCode])
+  @@index([requestedBy])
+  @@index([reviewedBy])
+  @@map("manual_topup_requests")
+}
+
+/// Manual top-up policy. `clientId` is NULL for the platform-level row;
+/// uniqueness of that single platform row is enforced by the partial unique
+/// index `wallet_topup_policies_platform_uniq` in the migration.
+model WalletTopupPolicy {
+  id       String  @id @default(uuid()) @db.Uuid
+  clientId String? @db.Uuid
+
+  manualMaxPerTransaction Decimal  @default(100000) @db.Decimal(15, 2)
+  manualApprovalThreshold Decimal  @default(25000) @db.Decimal(15, 2)
+  manualMaxPerDayPerUser  Decimal? @db.Decimal(15, 2)
+
+  requireReason    Boolean @default(true)
+  requireReference Boolean @default(true)
+
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([clientId])
+  @@map("wallet_topup_policies")
 }

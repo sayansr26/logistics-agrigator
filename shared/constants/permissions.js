@@ -102,6 +102,16 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "shipment:update:all",
     "shipment:delete:all",
     "shipment:list:all",
+    // Wallet: admin previously had NO wallet permissions at all, which meant
+    // admin could not even call the existing POST /api/v1/wallet/admin/topup.
+    // Granted explicitly, one permission at a time.
+    // DO NOT collapse these into "wallet:*:all" - that wildcard would also
+    // grant wallet:approve:all and silently disable the manual-topup
+    // maker-checker (approval must stay superadmin-only).
+    "wallet:read:all",
+    "wallet:list:all",
+    "wallet:manage:all",
+    "wallet:create:own",
     "analytics:*:all",
     "settings:*:all",
   ],
@@ -113,6 +123,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "user:update:parent",
     "shipment:read:parent",
     "wallet:read:parent",
+    "wallet:read:own",
+    "wallet:create:own",
     "analytics:read:parent",
     "settings:read:parent",
     "settings:update:own",
@@ -153,6 +165,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "user:read:own",
     "user:update:own",
     "wallet:read:own",
+    // Lets an outlet initiate its own payment-gateway wallet top-up.
+    "wallet:create:own",
     // Required to price a shipment: partner-service's /calculate and /quote
     // endpoints demand partner:read:own, so without this an outlet cannot
     // fetch rates and therefore cannot book at all.
@@ -182,7 +196,10 @@ const PERMISSION_DESCRIPTIONS = {
   "shipment:update:assigned": "Modify shipments for assigned entities",
 
   "wallet:read:own": "View your wallet balance and transactions",
+  "wallet:create:own": "Initiate a payment-gateway top-up for your own wallet",
   "wallet:manage:parent": "Full wallet management for your client",
+  "wallet:approve:all":
+    "Approve or reject manual wallet credits system-wide (superadmin only)",
 
   "license:create:all": "Generate new licenses",
   "license:update:all": "Modify license terms and activation",

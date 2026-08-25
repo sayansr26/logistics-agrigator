@@ -45,7 +45,17 @@ app.use(generalLimiter);
 app.use(logger.httpLogger);
 
 // Body parsing
-app.use(express.json());
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      // Payment providers sign the exact bytes they sent. JSON.stringify(req.body)
+      // is NOT byte-identical (key order, unicode escaping), so the raw buffer must
+      // be kept for HMAC verification in services/payments/webhookService.js.
+      if (buf && buf.length) req.rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Internal request validation middleware
@@ -127,6 +137,17 @@ app.get("/openapi.json", (req, res) => {
 // otherwise "/wallet/cod" / "/wallet/settlement" are captured by wallet's "/:userId".
 app.use("/api/v1/wallet/cod", require("./routes/cod"));
 app.use("/api/v1/wallet/settlement", require("./routes/settlement"));
+// Payment provider configuration MUST be mounted BEFORE the general wallet
+// router: wallet's "/:userId" route would otherwise swallow
+// "/api/v1/wallet/payment-providers" and treat "payment-providers" as a userId.
+app.use(
+  "/api/v1/wallet/payment-providers",
+  require("./routes/paymentProvider"),
+);
+// Top-up (gateway checkout, admin payment links, manual top-ups, webhook) MUST
+// also be mounted BEFORE the general wallet router: wallet's "/:userId" would
+// otherwise swallow "/api/v1/wallet/topup" and treat "topup" as a userId.
+app.use("/api/v1/wallet/topup", require("./routes/topup"));
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/payout", payoutRoutes);
 const adminLogsRoutes = require("./routes/adminLogs");
@@ -239,6 +260,22 @@ app.get("/health", async (req, res) => {
     };
   }
 
+  // Top-up reconciliation backlog + worker liveness.
+  // NOTE: this deliberately does NOT touch `isHealthy`. A reconciliation
+  // backlog means money is waiting to be credited — that is an ALERTING signal
+  // for operators, not a reason to fail the container health check and have the
+  // orchestrator restart (and thereby stop) the very worker that drains it.
+  try {
+    const reconcileService = require("./services/payments/reconcileService");
+    const reconcileWorker = require("./services/payments/reconcileWorker");
+    healthStatus.reconcile = {
+      ...(await reconcileService.getBacklogCounts()),
+      running: reconcileWorker.isRunning(),
+    };
+  } catch (error) {
+    healthStatus.reconcile = { status: "unavailable", error: error.message };
+  }
+
   // Add memory and CPU usage
   const memUsage = process.memoryUsage();
   healthStatus.system = {
@@ -282,9 +319,9 @@ app.get("/", (req, res) => {
       adminLoadBalance: "/api/v1/wallet/{userId}/load-balance",
       adminAllWallets: "/api/v1/wallet/admin/all-wallets",
       adminAllTransactions: "/api/v1/wallet/admin/transactions",
-      paymentGatewayInitiate: "/api/v1/wallet/payment-gateway/initiate",
-      paymentGatewayWebhook: "/api/v1/wallet/payment-gateway/webhook",
-      paymentGatewayStatus: "/api/v1/wallet/payment-gateway/status/{paymentId}",
+      topup: "/api/v1/wallet/topup",
+      topupWebhook: "/api/v1/wallet/topup/webhook/{provider}",
+      paymentProviders: "/api/v1/wallet/payment-providers",
       detailedHealth: "/api/v1/wallet/health",
     },
     features: [
@@ -350,7 +387,18 @@ async function startServer() {
       try {
         require("./services/settlementScheduler").start();
       } catch (e) {
-        logger.warn("Failed to start settlement scheduler", { error: e.message });
+        logger.warn("Failed to start settlement scheduler", {
+          error: e.message,
+        });
+      }
+
+      // Start the top-up reconcile worker (no-op unless TOPUP_RECONCILE_ENABLED !== "false")
+      try {
+        require("./services/payments/reconcileWorker").start();
+      } catch (e) {
+        logger.warn("Failed to start top-up reconcile worker", {
+          error: e.message,
+        });
       }
     });
   } catch (error) {

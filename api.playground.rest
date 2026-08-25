@@ -3016,35 +3016,11 @@ GET {{baseUrl}}/api/v1/wallet/health
 Authorization: Bearer {{authToken}}
 
 
-### Initiate a payment via a payment gateway provider
-POST {{baseUrl}}/api/v1/wallet/payment-gateway/initiate
-Authorization: Bearer {{authToken}}
-Content-Type: {{contentType}}
-
-{
-  "amount": 2500,
-  "currency": "INR",
-  "provider": "razorpay",
-  "metadata": {
-    "orderId": "ORD_998877"
-  }
-}
-
-
-### Handle payment gateway webhook callback (public, no auth)
-#  (public — no auth required)
-POST {{baseUrl}}/api/v1/wallet/payment-gateway/webhook
-Content-Type: {{contentType}}
-
-{
-  "paymentId": "pay_Nx8sTq3kLm09Ab",
-  "status": "COMPLETED"
-}
-
-
-### Get status of a payment gateway transaction
-GET {{baseUrl}}/api/v1/wallet/payment-gateway/status/{{id}}
-Authorization: Bearer {{authToken}}
+### Payment gateway
+#  The /api/v1/wallet/payment-gateway/* stubs were removed (never implemented,
+#  and the webhook accepted unsigned payloads). Use the top-up endpoints under
+#  /api/v1/wallet/topup/* and provider config under
+#  /api/v1/wallet/payment-providers/* instead.
 
 
 ### Get or create wallet for a user (auto wallet creation)

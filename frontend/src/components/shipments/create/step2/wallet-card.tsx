@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { Wallet, Plus } from "lucide-react";
 import { useBookingWallet } from "@/hooks/useBookingWallet";
+import Link from "next/link";
+import { AddMoneyButton } from "@/components/wallet/add-money-button";
+import { useToast } from "@/components/ui/toast";
 
 interface WalletCardProps {
   /** System charge of the currently-selected quote, if any - drives the sufficiency badge. */
@@ -11,10 +13,19 @@ interface WalletCardProps {
 
 export function WalletCard({ requiredAmount }: WalletCardProps) {
   const { balance, isKnown, bookingForOutlet, outletName } = useBookingWallet();
+  const toast = useToast();
 
   // Don't flash "Insufficient" while the balance is still loading.
   const sufficient =
     !isKnown || requiredAmount == null || balance >= requiredAmount;
+
+  // Prompt for a round figure covering the shortfall (e.g. ₹224.92 short ->
+  // ₹300), never a raw fractional amount - rounds up to the nearest ₹100,
+  // with a ₹100 floor.
+  const suggestedAmount =
+    requiredAmount != null && requiredAmount > balance
+      ? Math.max(100, Math.ceil((requiredAmount - balance) / 100) * 100)
+      : undefined;
 
   return (
     <div className="bg-gradient-to-br from-primary/10 via-card to-card border border-primary/20 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -48,12 +59,27 @@ export function WalletCard({ requiredAmount }: WalletCardProps) {
           </div>
         </div>
       </div>
-      <Link
-        href="/wallet"
-        className="w-full sm:w-auto px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
-      >
-        <Plus className="h-3 w-3" /> Topup Wallet
-      </Link>
+      {bookingForOutlet ? (
+        // An admin booking on an outlet's behalf debits the OUTLET's wallet.
+        // Self-serve checkout cannot fund it: /topup/self/initiate takes the
+        // wallet identity from the JWT and ignores any client-supplied id, so
+        // paying here would silently credit the admin's own wallet instead.
+        // Funding someone else's wallet is the payment-link flow on /wallet.
+        <Link
+          href="/wallet"
+          title={`Fund ${outletName || "this outlet"}'s wallet with a payment link`}
+          className="w-full sm:w-auto px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+        >
+          <Plus className="h-3 w-3" /> Topup Outlet Wallet
+        </Link>
+      ) : (
+        <AddMoneyButton
+          suggestedAmount={suggestedAmount}
+          label="Topup Wallet"
+          className="w-full sm:w-auto h-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
+          onSuccess={() => toast.success("Wallet recharged")}
+        />
+      )}
     </div>
   );
 }

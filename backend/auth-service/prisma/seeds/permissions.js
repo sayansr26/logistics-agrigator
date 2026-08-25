@@ -244,7 +244,7 @@ const permissions = [
   },
 
   // ===========================
-  // WALLET MODULE (15 permissions)
+  // WALLET MODULE (17 permissions)
   // ===========================
   {
     module: PERMISSION_MODULES.WALLET,
@@ -335,6 +335,19 @@ const permissions = [
     action: PERMISSION_ACTIONS.MANAGE,
     scope: PERMISSION_SCOPES.ALL,
     description: "Full wallet management system-wide (admin only)",
+  },
+  {
+    module: PERMISSION_MODULES.WALLET,
+    action: PERMISSION_ACTIONS.CREATE,
+    scope: PERMISSION_SCOPES.OWN,
+    description: "Initiate a payment-gateway top-up for own wallet",
+  },
+  {
+    module: PERMISSION_MODULES.WALLET,
+    action: PERMISSION_ACTIONS.APPROVE,
+    scope: PERMISSION_SCOPES.ALL,
+    description:
+      "Approve or reject manual wallet credits system-wide (superadmin only)",
   },
 
   // ===========================

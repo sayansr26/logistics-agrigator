@@ -18,6 +18,11 @@ const publicPaths = [
   "/api/v1/auth/refresh",
   "/api/v1/geography", // All geographical data endpoints (public)
   "/api/v1/shipments/webhook", // Courier provider webhook callbacks (public)
+  // Payment provider webhook callbacks (Razorpay etc). Authenticity is proven by the
+  // provider's HMAC signature over the raw body, verified in wallet-service. The
+  // exact-or-prefix matcher below whitelists /api/v1/wallet/topup/webhook/<provider>
+  // but NOT the sibling admin routes under /api/v1/wallet/topup/.
+  "/api/v1/wallet/topup/webhook",
   // Customer-facing parcel tracking. The handler returns a sanitised
   // subset (milestones and route only, no pricing, contacts or partner
   // data), so it is safe to serve without a session. Rate-limited in the

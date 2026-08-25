@@ -118,6 +118,21 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     description: "User profile",
   },
   {
+    path: "/wallet/topup/callback",
+    public: true,
+    title: "Payment Result",
+    description: "Razorpay payment-link return page (public receipt)",
+  },
+  {
+    path: "/settings/payments",
+    public: false,
+    roles: ["superadmin", "admin"],
+    permission: "settings:manage:all",
+    redirectTo: "/access-denied",
+    title: "Payment Settings",
+    description: "Payment provider and gateway configuration",
+  },
+  {
     path: "/settings",
     public: false,
     title: "Settings",

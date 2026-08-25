@@ -333,76 +333,6 @@ async function getAllTransactions(req, res) {
 }
 
 /**
- * Initiate payment gateway transaction (FUTURE EXPANSION)
- */
-async function initiatePayment(req, res) {
-  try {
-    const { amount, orderId, returnUrl, userId } = req.body;
-
-    logger.info("Initiating payment gateway transaction", {
-      amount,
-      orderId,
-      userId,
-    });
-
-    const paymentTransaction = await walletService.initiatePaymentGateway({
-      amount,
-      orderId,
-      returnUrl,
-      userId,
-    });
-
-    res.json(
-      APIResponse.success(paymentTransaction, "Payment initiated successfully"),
-    );
-  } catch (error) {
-    logger.error("Error initiating payment:", error);
-    throw error;
-  }
-}
-
-/**
- * Handle payment gateway webhook (FUTURE EXPANSION)
- */
-async function handlePaymentWebhook(req, res) {
-  try {
-    const webhookData = req.body;
-
-    logger.info("Processing payment webhook", { webhookData });
-
-    const result = await walletService.processPaymentWebhook(webhookData);
-
-    res.json(APIResponse.success(result, "Webhook processed successfully"));
-  } catch (error) {
-    logger.error("Error processing webhook:", error);
-    throw error;
-  }
-}
-
-/**
- * Get payment gateway status (FUTURE EXPANSION)
- */
-async function getPaymentStatus(req, res) {
-  try {
-    const { paymentId } = req.params;
-
-    logger.debug("Getting payment status", { paymentId });
-
-    const paymentStatus = await walletService.getPaymentStatus(paymentId);
-
-    res.json(
-      APIResponse.success(
-        paymentStatus,
-        "Payment status retrieved successfully",
-      ),
-    );
-  } catch (error) {
-    logger.error("Error getting payment status:", error);
-    throw error;
-  }
-}
-
-/**
  * Detailed health check with external service monitoring
  */
 async function getDetailedHealth(req, res) {
@@ -466,8 +396,5 @@ module.exports = {
   loadBalance,
   getAllWallets,
   getAllTransactions,
-  initiatePayment,
-  handlePaymentWebhook,
-  getPaymentStatus,
   getDetailedHealth,
 };

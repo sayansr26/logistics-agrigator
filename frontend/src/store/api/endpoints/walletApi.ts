@@ -132,6 +132,18 @@ interface WalletTransactionRequest {
   metadata?: string;
   remarks?: Record<string, unknown>;
   transaction_id?: number; // for refund only
+  reason?: string;
+  external_reference?: string;
+  credit_mode?: "MANUAL" | "GATEWAY";
+}
+
+interface TopupWalletResponse {
+  status?: "COMPLETED" | "PENDING_APPROVAL";
+  requestId?: string;
+  requiresApproval?: boolean;
+  threshold?: number;
+  transaction?: any;
+  balanceAfter?: number;
 }
 
 interface GetWalletParams {
@@ -340,7 +352,10 @@ export const walletApi = baseApi.injectEndpoints({
     /**
      * Topup Wallet - Add funds to a user's wallet
      */
-    topupWallet: builder.mutation<any, WalletTransactionRequest>({
+    topupWallet: builder.mutation<
+      TopupWalletResponse,
+      WalletTransactionRequest
+    >({
       query: (body) => ({
         url: "/api/v1/wallet/admin/topup",
         method: "POST",
@@ -350,6 +365,7 @@ export const walletApi = baseApi.injectEndpoints({
       invalidatesTags: [
         { type: "Wallet", id: "LIST" },
         { type: "Wallet", id: "TRANSACTIONS" },
+        { type: "TopupApproval", id: "LIST" },
       ],
     }),
 
@@ -525,6 +541,7 @@ export type {
   ClientWalletsResponse,
   ClientTransactionsResponse,
   WalletTransactionRequest,
+  TopupWalletResponse,
   GetWalletParams,
   UpdateUserStatusRequest,
   SyncWalletsRequest,

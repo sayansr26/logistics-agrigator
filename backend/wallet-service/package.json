@@ -29,6 +29,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "opossum": "^8.0.0",
+    "razorpay": "^2.9.4",
     "redis": "^4.6.10",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",

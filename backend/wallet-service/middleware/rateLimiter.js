@@ -183,9 +183,54 @@ const transactionLimiter = rateLimit({
   },
 });
 
+// Webhook limiter (for payment provider callbacks)
+// Sized for provider retry storms: Razorpay & friends replay undelivered events
+// aggressively, and every retry arrives from a small pool of provider IPs. The
+// ceiling exists to stop abuse, not to throttle legitimate delivery, so it is
+// deliberately generous and tunable via RATE_LIMIT_WEBHOOK_MAX.
+const WEBHOOK_MAX = parseInt(process.env.RATE_LIMIT_WEBHOOK_MAX || "600", 10);
+
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: WEBHOOK_MAX,
+  message: {
+    status: "error",
+    message: "Too many webhook requests, please try again later",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      retryAfter: "1 minute",
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: createRedisStore(),
+  keyGenerator: (req) => req.ip,
+  handler: (req, res) => {
+    logger.warn("Webhook rate limit exceeded", {
+      ip: req.ip,
+      url: req.url,
+      method: req.method,
+      userAgent: req.get("User-Agent"),
+    });
+
+    res.status(429).json(
+      APIResponse.error(
+        "Too many webhook requests, please try again later",
+        429,
+        {
+          retryAfter: "1 minute",
+          limit: WEBHOOK_MAX,
+          windowMs: 60 * 1000,
+        },
+      ),
+    );
+  },
+});
+
 module.exports = {
   generalLimiter,
   strictLimiter,
   balanceLimiter,
   transactionLimiter,
+  webhookLimiter,
 };

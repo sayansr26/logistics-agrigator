@@ -30,6 +30,7 @@ import {
   ListTree,
   SlidersHorizontal,
   TrendingUp,
+  CreditCard,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useRole } from "@/hooks/useRole";
@@ -140,6 +141,15 @@ const getNavigationSections = () => {
           href: "/geography",
           icon: Map,
           roles: ["superadmin"],
+          disabled: false,
+        },
+        {
+          title: "Payments",
+          href: "/settings/payments",
+          icon: CreditCard,
+          permission: "settings:manage:all",
+          roles: ["superadmin", "admin"],
+          description: "Payment gateway configuration",
           disabled: false,
         },
       ].filter(canSeeMenuItem),

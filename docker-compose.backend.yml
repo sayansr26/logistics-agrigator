@@ -146,6 +146,7 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - USER_SERVICE_URL=http://user-service:3003
       - WALLET_SERVICE_URL=http://wallet-service:3006
+      - DEFAULT_CLIENT_CODE=DEFAULT
       - PARTNER_SERVICE_URL=http://partner-service:3005
       - PARTNER_SERVICE_EXTERNAL_URL=https://calc.websiteduniya.com
     # Port removed for security - accessible only through API Gateway (3001)
@@ -262,6 +263,24 @@ services:
       - RATE_LIMIT_STRICT_MAX=50
       - RATE_LIMIT_BALANCE_MAX=100
       - RATE_LIMIT_TRANSACTION_MAX=30
+      - RATE_LIMIT_WEBHOOK_MAX=600
+      # ------------------------------------------------------------------
+      # Payment Gateway Configuration
+      # NOTE: none of these are credentials. Razorpay (and any other provider)
+      # key id / key secret are entered at runtime in Settings > Payment
+      # Providers and stored AES-256-GCM encrypted in the wallet-service
+      # payment_provider_configs table. PAYMENT_SECRET_ENC_KEY is the key that
+      # protects them at rest - rotating it invalidates stored credentials and
+      # requires re-entering them.
+      # ------------------------------------------------------------------
+      - PAYMENT_SECRET_ENC_KEY=${PAYMENT_SECRET_ENC_KEY}
+      - PAYMENT_PUBLIC_API_URL=${PAYMENT_PUBLIC_API_URL:-http://localhost:3001}
+      - PAYMENT_CALLBACK_URL=${PAYMENT_CALLBACK_URL:-http://localhost:3000/wallet/topup/callback}
+      - PAYMENT_LINK_DEFAULT_EXPIRY_HOURS=24
+      - TOPUP_MAX_OPEN_ORDERS=3
+      - TOPUP_RECONCILE_ENABLED=true
+      - TOPUP_RECONCILE_INTERVAL_SEC=120
+      - TOPUP_RECONCILE_MAX_ATTEMPTS=10
     # Port removed for security - accessible only through API Gateway (3001)
     expose:
       - "3006"

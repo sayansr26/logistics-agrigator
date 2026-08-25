@@ -23,6 +23,11 @@ const PUBLIC_ROUTES = [
   // must never be bounced to a login screen; the page itself only reads the
   // sanitised public tracking endpoint.
   "/track",
+  // Razorpay payment-link return URL. The customer paying an admin-generated
+  // link is usually not a panel user at all, so they must never be bounced to
+  // login after paying. The page is a read-only receipt; the wallet credit
+  // comes from the signed webhook, not from anything in this redirect.
+  "/wallet/topup/callback",
   "/privacy",
   "/terms",
   "/about",
@@ -36,6 +41,7 @@ const ROLE_RESTRICTED_ROUTES: Record<string, string[]> = {
   "/clients": ["superadmin"],
   "/partners": ["superadmin", "admin"],
   "/settings/system": ["superadmin", "admin"],
+  "/settings/payments": ["superadmin", "admin"],
   "/analytics/admin": ["superadmin", "admin"],
   // External API credentials act as an outlet and can move that outlet's money,
   // so only the outlet itself and superadmin may manage them.

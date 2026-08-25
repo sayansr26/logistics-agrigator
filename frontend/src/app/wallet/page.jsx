@@ -49,6 +49,7 @@ import {
   Settings,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   X,
@@ -57,11 +58,13 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CalendarDays,
+  Link2,
+  ShieldCheck,
+  Banknote,
 } from "lucide-react";
 import {
   useGetClientWalletsQuery,
   useGetClientTransactionsQuery,
-  useTopupWalletMutation,
   useDebitWalletMutation,
   useRefundWalletMutation,
   useUpdateWalletUserStatusMutation,
@@ -72,7 +75,23 @@ import {
   useGetMyStatisticsQuery,
 } from "@/store/api/endpoints/walletApi";
 import { useListOutletsQuery } from "@/store/api/endpoints/outletApi";
+import {
+  useGetTopupPolicyQuery,
+  useCreateManualTopupMutation,
+  useCreatePaymentLinkMutation,
+  useGetPendingApprovalsQuery,
+} from "@/store/api/endpoints/paymentApi";
 import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/hooks/useRole";
+import { usePaymentProvider } from "@/hooks/usePaymentProvider";
+import { AddMoneyButton } from "@/components/wallet/add-money-button";
+import { PaymentLinksTab } from "@/components/wallet/payment-links-tab";
+import { TopupApprovalsTab } from "@/components/wallet/topup-approvals-tab";
+import { PaymentStatusChip } from "@/components/wallet/payment-status-chip";
+import { CopyButton } from "@/components/wallet/copy-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/components/ui/toast";
+import { formatINR, extractApiError } from "@/lib/utils";
 
 const formatCurrency = (amount) => {
   if (amount == null) return "₹0.00";
@@ -228,6 +247,45 @@ function generateReferenceId() {
   return `ref_${ts}_${rand}`;
 }
 
+// Canned reasons for a manual (offline) top-up. These get audited, so a
+// Select beats free text; "Other" reveals a free-text input instead. The
+// submitted reason must be >= 10 chars (backend Joi minimum) — the `full`
+// sentence is what actually gets submitted for each canned option.
+const TOPUP_REASONS = [
+  {
+    value: "bank_transfer",
+    label: "Bank transfer received",
+    full: "Bank transfer received — UTR on record",
+  },
+  {
+    value: "cheque",
+    label: "Cheque deposit",
+    full: "Cheque deposit — cheque number on record",
+  },
+  {
+    value: "cash",
+    label: "Cash collection",
+    full: "Cash collection — physical receipt issued",
+  },
+  {
+    value: "correction",
+    label: "Correction or adjustment",
+    full: "Correction or adjustment to wallet balance",
+  },
+  {
+    value: "promotional",
+    label: "Promotional credit",
+    full: "Promotional credit issued to customer",
+  },
+  { value: "other", label: "Other", full: null },
+];
+
+const LINK_EXPIRY_OPTIONS = [
+  { value: "24", label: "24 hours" },
+  { value: "48", label: "48 hours" },
+  { value: "168", label: "7 days" },
+];
+
 // Transaction Modal (Topup / Debit / Refund)
 function TransactionModal({
   open,
@@ -236,6 +294,7 @@ function TransactionModal({
   prefilledUserId,
   onSubmit,
   isLoading,
+  error,
 }) {
   const { data: outletsData } = useListOutletsQuery({ limit: 100 });
   const outlets = outletsData?.data?.outlets || outletsData?.outlets || [];
@@ -258,6 +317,52 @@ function TransactionModal({
     remarks: {},
   });
 
+  // --- Payment-gateway additions (topup only) ---
+  const isTopup = type === "topup";
+  const toast = useToast();
+  const { isAvailable: providerAvailable } = usePaymentProvider();
+  const showLinkOption = isTopup && providerAvailable;
+  const [topupMode, setTopupMode] = useState("manual"); // "manual" | "link"
+  const { data: policy } = useGetTopupPolicyQuery(undefined, {
+    skip: !isTopup,
+  });
+
+  const [reasonPreset, setReasonPreset] = useState("");
+  const [reasonOther, setReasonOther] = useState("");
+  const [externalReference, setExternalReference] = useState("");
+
+  const [linkReason, setLinkReason] = useState("");
+  const [linkExpiryHours, setLinkExpiryHours] = useState("");
+  const [linkResult, setLinkResult] = useState(null);
+
+  const [createManualTopup, { isLoading: submittingManual }] =
+    useCreateManualTopupMutation();
+  const [createPaymentLink, { isLoading: submittingLink }] =
+    useCreatePaymentLinkMutation();
+  const [manualError, setManualError] = useState(null);
+  const [linkError, setLinkError] = useState(null);
+
+  const resolvedReason =
+    reasonPreset === "other"
+      ? reasonOther.trim()
+      : TOPUP_REASONS.find((r) => r.value === reasonPreset)?.full || "";
+
+  const manualCap = policy?.manualMaxPerTransaction;
+  const manualAmountNum = parseFloat(form.amount);
+  const exceedsManualCap =
+    isTopup &&
+    topupMode === "manual" &&
+    manualCap != null &&
+    !Number.isNaN(manualAmountNum) &&
+    manualAmountNum > manualCap;
+
+  const needsApproval =
+    isTopup &&
+    topupMode === "manual" &&
+    policy?.manualApprovalThreshold != null &&
+    !Number.isNaN(manualAmountNum) &&
+    manualAmountNum >= policy.manualApprovalThreshold;
+
   const handleOutletChange = (v) => {
     setSelectedUserId(v);
     setForm({ ...form, userId: v, transaction_id: "", amount: "" });
@@ -274,6 +379,7 @@ function TransactionModal({
     }
   };
 
+  // Debit / Refund submission — unchanged from before the payments work.
   const handleSubmit = (e) => {
     e.preventDefault();
     const payload = {
@@ -293,19 +399,111 @@ function TransactionModal({
     onSubmit(payload);
   };
 
-  const title =
-    type === "topup"
-      ? "Topup Wallet"
-      : type === "debit"
-        ? "Debit Wallet"
-        : "Refund Wallet";
+  // Manual credit submission — bypasses onSubmit/handleTransaction entirely,
+  // since it needs its own response handling (PENDING_APPROVAL messaging).
+  const handleManualSubmit = async (e) => {
+    e.preventDefault();
+    setManualError(null);
+    const amount = parseFloat(form.amount);
+    const payload = {
+      walletUserId: form.userId,
+      amount,
+      currency: "INR",
+      reason: resolvedReason,
+      externalReference: externalReference.trim(),
+    };
+    try {
+      const res = await createManualTopup(payload).unwrap();
+      if (res?.status === "PENDING_APPROVAL") {
+        toast.success("Top-up submitted for superadmin approval.");
+      } else {
+        toast.success(`${formatINR(amount)} credited.`);
+      }
+      onClose();
+    } catch (err) {
+      setManualError(extractApiError(err, "Failed to submit top-up"));
+    }
+  };
 
-  const description =
-    type === "topup"
-      ? "Add funds to the user's wallet"
-      : type === "debit"
-        ? "Deduct funds from the user's wallet"
-        : "Refund a transaction to the user's wallet";
+  // Payment-link submission — modal stays open on success to show the link.
+  const handleLinkSubmit = async (e) => {
+    e.preventDefault();
+    setLinkError(null);
+    const payload = {
+      walletUserId: form.userId,
+      amount: parseFloat(form.amount),
+      currency: "INR",
+      description: linkReason.trim(),
+      ...(linkExpiryHours && { expiryHours: Number(linkExpiryHours) }),
+    };
+    try {
+      const res = await createPaymentLink(payload).unwrap();
+      setLinkResult(res);
+    } catch (err) {
+      setLinkError(extractApiError(err, "Failed to create payment link"));
+    }
+  };
+
+  const title = isTopup
+    ? "Topup Wallet"
+    : type === "debit"
+      ? "Debit Wallet"
+      : "Refund Wallet";
+
+  const description = isTopup
+    ? topupMode === "link"
+      ? "Generate a payment link to share with the outlet"
+      : "Manually credit funds to the outlet's wallet"
+    : type === "debit"
+      ? "Deduct funds from the user's wallet"
+      : "Refund a transaction to the user's wallet";
+
+  const outletField = (
+    <div className="space-y-2">
+      <Label>Outlet *</Label>
+      <Select value={form.userId} onValueChange={handleOutletChange} required>
+        <SelectTrigger>
+          <SelectValue placeholder="Select outlet" />
+        </SelectTrigger>
+        <SelectContent>
+          {outlets.map((outlet) => (
+            <SelectItem key={outlet.id} value={outlet.phone}>
+              {outlet.name} ({outlet.phone})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const modeToggle = isTopup && showLinkOption && (
+    <div className="flex gap-1 rounded-md border bg-muted/40 p-1">
+      <button
+        type="button"
+        onClick={() => setTopupMode("manual")}
+        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+          topupMode === "manual"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Banknote className="h-3.5 w-3.5" />
+        Manual credit
+      </button>
+      <button
+        type="button"
+        onClick={() => setTopupMode("link")}
+        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+          topupMode === "link"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Link2 className="h-3.5 w-3.5" />
+        Send payment link
+      </button>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -314,126 +512,321 @@ function TransactionModal({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Outlet *</Label>
-            <Select
-              value={form.userId}
-              onValueChange={handleOutletChange}
-              required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select outlet" />
-              </SelectTrigger>
-              <SelectContent>
-                {outlets.map((outlet) => (
-                  <SelectItem key={outlet.id} value={outlet.phone}>
-                    {outlet.name} ({outlet.phone})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {type === "refund" && (
-            <div className="space-y-2">
-              <Label>Transaction to Refund *</Label>
-              <Select
-                value={form.transaction_id}
-                onValueChange={handleTransactionSelect}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      selectedUserId
-                        ? "Select transaction"
-                        : "Select outlet first"
-                    }
+
+        {modeToggle}
+
+        {isTopup ? (
+          topupMode === "link" ? (
+            linkResult ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Payment Link</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={linkResult.shortUrl}
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <CopyButton value={linkResult.shortUrl} label="Copy link" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <PaymentStatusChip status="PENDING" />
+                  {linkResult.expiresAt && (
+                    <span className="text-xs text-muted-foreground">
+                      Expires {formatDate(linkResult.expiresAt)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Nothing has been sent to the customer — share this link
+                  yourself.
+                </p>
+                <DialogFooter>
+                  <CopyButton
+                    value={linkResult.shortUrl}
+                    label="Copy link"
+                    size="sm"
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {transactions
-                    .filter((tx) => tx.type === "DEBIT")
-                    .map((tx) => (
-                      <SelectItem key={tx.id} value={String(tx.id)}>
-                        #{tx.id} - {tx.type} - {formatCurrency(tx.amount)} (
-                        {new Date(tx.createdAt).toLocaleDateString()})
+                  <Button type="button" onClick={onClose}>
+                    Done
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <form onSubmit={handleLinkSubmit} className="space-y-4">
+                {outletField}
+                <div className="space-y-2">
+                  <Label>Amount *</Label>
+                  <Input
+                    required
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(e) =>
+                      setForm({ ...form, amount: e.target.value })
+                    }
+                    placeholder="Enter amount"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reason *</Label>
+                  <Input
+                    required
+                    value={linkReason}
+                    onChange={(e) => setLinkReason(e.target.value)}
+                    placeholder="What is this payment for?"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Link expires in</Label>
+                  <Select
+                    value={linkExpiryHours || "default"}
+                    onValueChange={(v) =>
+                      setLinkExpiryHours(v === "default" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Provider default" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Provider default</SelectItem>
+                      {LINK_EXPIRY_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {linkError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{linkError}</AlertDescription>
+                  </Alert>
+                )}
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={onClose}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submittingLink}>
+                    {submittingLink && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Generate Payment Link
+                  </Button>
+                </DialogFooter>
+              </form>
+            )
+          ) : (
+            <form onSubmit={handleManualSubmit} className="space-y-4">
+              {outletField}
+              <div className="space-y-2">
+                <Label>Amount *</Label>
+                <Input
+                  required
+                  type="number"
+                  min="0.01"
+                  max={manualCap || undefined}
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  placeholder={
+                    manualCap
+                      ? `Enter amount (max ${formatINR(manualCap)})`
+                      : "Enter amount"
+                  }
+                />
+                {exceedsManualCap && (
+                  <p className="text-xs font-medium text-destructive">
+                    Exceeds the manual top-up cap of {formatINR(manualCap)}.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Reason *</Label>
+                <Select
+                  value={reasonPreset}
+                  onValueChange={setReasonPreset}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TOPUP_REASONS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label>Amount *</Label>
-            <Input
-              required
-              type="number"
-              min="0.01"
-              max="10000"
-              step="0.01"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="Enter amount (max 10,000)"
-              readOnly={type === "refund" && !!form.transaction_id}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Reference ID *</Label>
-            <div className="flex gap-2">
+                  </SelectContent>
+                </Select>
+                {reasonPreset === "other" && (
+                  <Input
+                    required
+                    minLength={10}
+                    value={reasonOther}
+                    onChange={(e) => setReasonOther(e.target.value)}
+                    placeholder="Describe the reason (min 10 characters)"
+                  />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>External Reference *</Label>
+                <Input
+                  required
+                  minLength={3}
+                  value={externalReference}
+                  onChange={(e) => setExternalReference(e.target.value)}
+                  placeholder="UTR / cheque no. / receipt no."
+                />
+                <p className="text-xs text-muted-foreground">
+                  The bank or receipt reference that proves this money was
+                  received.
+                </p>
+              </div>
+              {needsApproval && !exceedsManualCap && (
+                <Alert variant="warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This credit needs superadmin approval. The wallet will not
+                    be credited until it is approved.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {manualError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{manualError}</AlertDescription>
+                </Alert>
+              )}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submittingManual || exceedsManualCap}
+                >
+                  {submittingManual && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {needsApproval ? "Submit for approval" : "Credit Wallet"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {outletField}
+            {type === "refund" && (
+              <div className="space-y-2">
+                <Label>Transaction to Refund *</Label>
+                <Select
+                  value={form.transaction_id}
+                  onValueChange={handleTransactionSelect}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        selectedUserId
+                          ? "Select transaction"
+                          : "Select outlet first"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {transactions
+                      .filter((tx) => tx.type === "DEBIT")
+                      .map((tx) => (
+                        <SelectItem key={tx.id} value={String(tx.id)}>
+                          #{tx.id} - {tx.type} - {formatCurrency(tx.amount)} (
+                          {new Date(tx.createdAt).toLocaleDateString()})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Amount *</Label>
               <Input
                 required
-                value={form.reference_id}
-                onChange={(e) =>
-                  setForm({ ...form, reference_id: e.target.value })
-                }
-                placeholder="Unique reference ID"
-                className="flex-1"
+                type="number"
+                min="0.01"
+                max="10000"
+                step="0.01"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                placeholder="Enter amount (max 10,000)"
+                readOnly={type === "refund" && !!form.transaction_id}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() =>
-                  setForm({ ...form, reference_id: generateReferenceId() })
-                }
-                title="Generate Reference ID"
-              >
-                <Shuffle className="h-4 w-4" />
-              </Button>
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Input
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              placeholder="Optional description"
+            <div className="space-y-2">
+              <Label>Reference ID *</Label>
+              <div className="flex gap-2">
+                <Input
+                  required
+                  value={form.reference_id}
+                  onChange={(e) =>
+                    setForm({ ...form, reference_id: e.target.value })
+                  }
+                  placeholder="Unique reference ID"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    setForm({ ...form, reference_id: generateReferenceId() })
+                  }
+                  title="Generate Reference ID"
+                >
+                  <Shuffle className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+                placeholder="Optional description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Metadata</Label>
+              <Input
+                value={form.metadata}
+                onChange={(e) => setForm({ ...form, metadata: e.target.value })}
+                placeholder='e.g. {"orderId":"123"} or plain text'
+              />
+            </div>
+            <RemarksBuilder
+              remarks={form.remarks}
+              onChange={(remarks) => setForm({ ...form, remarks })}
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Metadata</Label>
-            <Input
-              value={form.metadata}
-              onChange={(e) => setForm({ ...form, metadata: e.target.value })}
-              placeholder='e.g. {"orderId":"123"} or plain text'
-            />
-          </div>
-          <RemarksBuilder
-            remarks={form.remarks}
-            onChange={(remarks) => setForm({ ...form, remarks })}
-          />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {title}
-            </Button>
-          </DialogFooter>
-        </form>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {title}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -826,14 +1219,17 @@ function OutletWalletView() {
               Balance, transactions & activity overview
             </p>
           </div>
-          {wallet && (
-            <Badge
-              className={`${getStatusColor(wallet.status)} border px-3 py-1 text-xs font-semibold`}
-              variant="outline"
-            >
-              {wallet.status}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            <AddMoneyButton size="sm" />
+            {wallet && (
+              <Badge
+                className={`${getStatusColor(wallet.status)} border px-3 py-1 text-xs font-semibold`}
+                variant="outline"
+              >
+                {wallet.status}
+              </Badge>
+            )}
+          </div>
         </div>
 
         {/* Error State */}
@@ -877,6 +1273,9 @@ function OutletWalletView() {
                     {wallet.currency || "INR"} &middot; Updated{" "}
                     {formatDate(wallet.updatedAt)}
                   </p>
+                  {wallet?.status === "ACTIVE" && (
+                    <AddMoneyButton className="mt-4 w-full" size="lg" />
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground py-4">
@@ -1158,8 +1557,12 @@ function AdminWalletPage() {
   // wallet matches it as a substring of reference_id.
   const linkedReferenceId = searchParams.get("referenceId") || "";
 
+  // ?tab= makes the tabs (including the new Payment Links / Approvals ones)
+  // deep-linkable, e.g. /wallet?tab=approvals.
+  const tabParam = searchParams.get("tab") || "";
   const [activeTab, setActiveTab] = useState(
-    linkedUserId || linkedReferenceId ? "transactions" : "wallets",
+    tabParam ||
+      (linkedUserId || linkedReferenceId ? "transactions" : "wallets"),
   );
 
   // Wallet tab state
@@ -1182,8 +1585,18 @@ function AdminWalletPage() {
 
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, userId: "" });
+  const [modalError, setModalError] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const toast = useToast();
+  const { isRole } = useRole();
+  const { isAvailable: paymentAvailable } = usePaymentProvider();
+  const { data: pendingApprovalsData } = useGetPendingApprovalsQuery(
+    { page: 0, size: 1 },
+    { skip: !isRole("superadmin") },
+  );
+  const pendingApprovalsCount =
+    pendingApprovalsData?.pagination?.total_elements ?? 0;
 
   // RTK Query
   const {
@@ -1218,7 +1631,6 @@ function AdminWalletPage() {
     ...(txFilters.referenceId && { referenceId: txFilters.referenceId }),
   });
 
-  const [topupWallet, { isLoading: toppingUp }] = useTopupWalletMutation();
   const [debitWallet, { isLoading: debiting }] = useDebitWalletMutation();
   const [refundWallet, { isLoading: refunding }] = useRefundWalletMutation();
   const [updateStatus, { isLoading: updatingStatus }] =
@@ -1244,25 +1656,35 @@ function AdminWalletPage() {
   }, [outletsData]);
 
   const openModal = (type, userId = "") => {
+    setModalError(null);
     setModal({ open: true, type, userId });
   };
 
   const closeModal = () => {
     setModal({ open: false, type: null, userId: "" });
+    setModalError(null);
   };
 
+  // Debit/refund only. Top-ups deliberately do NOT route through here: the
+  // TransactionModal submits them via useCreateManualTopupMutation /
+  // useCreatePaymentLinkMutation so it can render its own PENDING_APPROVAL and
+  // payment-link result states. The legacy /wallet/admin/topup mutation is not
+  // wired up on this page any more — it bypasses the manual-credit safeguards
+  // (mandatory reason + external reference, per-transaction cap, superadmin
+  // maker-checker above the threshold), so there must be no path back to it.
   const handleTransaction = async (payload) => {
+    setModalError(null);
     try {
-      if (modal.type === "topup") {
-        await topupWallet(payload).unwrap();
-      } else if (modal.type === "debit") {
+      if (modal.type === "debit") {
         await debitWallet(payload).unwrap();
+        toast.success("Wallet debited successfully.");
       } else if (modal.type === "refund") {
         await refundWallet(payload).unwrap();
+        toast.success("Refund processed successfully.");
       }
       closeModal();
     } catch (err) {
-      console.error("Transaction failed:", err);
+      setModalError(extractApiError(err, "Transaction failed"));
     }
   };
 
@@ -1283,7 +1705,7 @@ function AdminWalletPage() {
   const isTransactionModal =
     modal.type === "topup" || modal.type === "debit" || modal.type === "refund";
   const isStatusModal = modal.type === "status";
-  const transactionLoading = toppingUp || debiting || refunding;
+  const transactionLoading = debiting || refunding;
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -1391,6 +1813,40 @@ function AdminWalletPage() {
             <CreditCard className="inline h-4 w-4 mr-1.5" />
             Transactions
           </button>
+          {paymentAvailable && (
+            <button
+              onClick={() => setActiveTab("payment-links")}
+              className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "payment-links"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Link2 className="inline h-4 w-4 mr-1.5" />
+              Payment Links
+            </button>
+          )}
+          {isRole("superadmin") && (
+            <button
+              onClick={() => setActiveTab("approvals")}
+              className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors inline-flex items-center ${
+                activeTab === "approvals"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ShieldCheck className="inline h-4 w-4 mr-1.5" />
+              Approvals
+              {pendingApprovalsCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1.5 h-5 px-1.5 text-[10px]"
+                >
+                  {pendingApprovalsCount}
+                </Badge>
+              )}
+            </button>
+          )}
         </div>
 
         {/* WALLETS TAB */}
@@ -1987,6 +2443,16 @@ function AdminWalletPage() {
           </>
         )}
 
+        {/* PAYMENT LINKS TAB */}
+        {activeTab === "payment-links" && paymentAvailable && (
+          <PaymentLinksTab outletMap={outletMap} />
+        )}
+
+        {/* APPROVALS TAB */}
+        {activeTab === "approvals" && isRole("superadmin") && (
+          <TopupApprovalsTab outletMap={outletMap} />
+        )}
+
         {/* Transaction Modal */}
         {isTransactionModal && (
           <TransactionModal
@@ -1996,6 +2462,7 @@ function AdminWalletPage() {
             prefilledUserId={modal.userId}
             onSubmit={handleTransaction}
             isLoading={transactionLoading}
+            error={modalError}
           />
         )}
 
@@ -2043,9 +2510,11 @@ export default function WalletPage() {
     );
   }
 
-  if (user.role === "outlet") {
-    return <OutletWalletView />;
-  }
-
-  return <AdminWalletPage />;
+  // Pre-existing routing gap (not introduced by the payments work): this used
+  // to be `role === "outlet" ? Outlet : Admin`, which meant a `client` or
+  // `affiliate` user landed in the ADMIN view with manual credit controls.
+  // Only these roles actually manage other holders' wallets.
+  const ADMIN_WALLET_ROLES = ["superadmin", "admin", "accounts"];
+  const isAdminView = ADMIN_WALLET_ROLES.includes(user?.role);
+  return isAdminView ? <AdminWalletPage /> : <OutletWalletView />;
 }

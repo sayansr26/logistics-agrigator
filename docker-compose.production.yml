@@ -195,6 +195,9 @@ services:
       - USER_SERVICE_URL=http://${USER_SERVICE_CONTAINER_NAME:-logistics-user-service-prod}:${USER_SERVICE_PORT}
       - PARTNER_SERVICE_URL=http://${PARTNER_SERVICE_CONTAINER_NAME:-logistics-partner-service-prod}:${PARTNER_SERVICE_PORT}
       - WALLET_SERVICE_URL=http://${WALLET_SERVICE_CONTAINER_NAME:-logistics-wallet-service-prod}:${WALLET_SERVICE_PORT}
+      # Must match the wallet-service DEFAULT_CLIENT_CODE — the booking-time
+      # wallet lookup sends this clientCode explicitly and a mismatch 404s.
+      - DEFAULT_CLIENT_CODE=${WALLET_DEFAULT_CLIENT_CODE:-DEFAULT}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - QUOTE_SIGNING_SECRET=${QUOTE_SIGNING_SECRET}
       # Platform-wide fallback markup, used when an outlet has no default of
@@ -317,6 +320,24 @@ services:
       - RATE_LIMIT_BALANCE_MAX=${RATE_LIMIT_BALANCE_MAX:-100}
       - RATE_LIMIT_TRANSACTION_MAX=${RATE_LIMIT_TRANSACTION_MAX:-30}
       - INTERNAL_SECRET=${INTERNAL_SECRET}
+      # ------------------------------------------------------------------
+      # Payment Gateway Configuration
+      # NOTE: none of these are credentials. Razorpay (and any other provider)
+      # key id / key secret are entered at runtime in Settings > Payment
+      # Providers and stored AES-256-GCM encrypted in the wallet-service
+      # payment_provider_configs table. PAYMENT_SECRET_ENC_KEY is the key that
+      # protects them at rest - rotating it invalidates stored credentials and
+      # requires re-entering them.
+      # ------------------------------------------------------------------
+      - PAYMENT_SECRET_ENC_KEY=${PAYMENT_SECRET_ENC_KEY}
+      - PAYMENT_PUBLIC_API_URL=${PAYMENT_PUBLIC_API_URL}
+      - PAYMENT_CALLBACK_URL=${PAYMENT_CALLBACK_URL}
+      - PAYMENT_LINK_DEFAULT_EXPIRY_HOURS=${PAYMENT_LINK_DEFAULT_EXPIRY_HOURS:-24}
+      - TOPUP_MAX_OPEN_ORDERS=${TOPUP_MAX_OPEN_ORDERS:-3}
+      - TOPUP_RECONCILE_ENABLED=${TOPUP_RECONCILE_ENABLED:-true}
+      - TOPUP_RECONCILE_INTERVAL_SEC=${TOPUP_RECONCILE_INTERVAL_SEC:-120}
+      - TOPUP_RECONCILE_MAX_ATTEMPTS=${TOPUP_RECONCILE_MAX_ATTEMPTS:-10}
+      - RATE_LIMIT_WEBHOOK_MAX=${RATE_LIMIT_WEBHOOK_MAX:-600}
       - DEVELOPMENT_ORIGINS=${DEVELOPMENT_ORIGINS}
       - PRODUCTION_ORIGINS=${PRODUCTION_ORIGINS}
       - STAGING_ORIGINS=${STAGING_ORIGINS}

@@ -8,9 +8,6 @@ const {
   loadBalance,
   getAllWallets,
   getAllTransactions,
-  initiatePayment,
-  handlePaymentWebhook,
-  getPaymentStatus,
   getDetailedHealth,
 } = require("../controllers/walletController");
 const { authMiddleware } = require("../shared/lib/auth");
@@ -26,15 +23,12 @@ const {
 } = require("../middleware/rateLimiter");
 const {
   userIdParamsSchema,
-  paymentIdParamsSchema,
   debitWalletSchema,
   creditWalletSchema,
   loadBalanceSchema,
   transactionHistoryQuerySchema,
   adminWalletsQuerySchema,
   adminTransactionsQuerySchema,
-  paymentGatewayInitiateSchema,
-  paymentGatewayWebhookSchema,
   adminClientWalletsQuerySchema,
   adminClientTransactionsQuerySchema,
   adminGetWalletQuerySchema,
@@ -285,32 +279,13 @@ router.get(
 router.get("/health", authMiddleware.authenticate, getDetailedHealth);
 
 // -------------------------------------------------------------------------
-// Payment gateway routes (future)
+// Payment gateway routes
 // -------------------------------------------------------------------------
-
-router.post(
-  "/payment-gateway/initiate",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "create", "own"),
-  transactionLimiter,
-  validateBody(paymentGatewayInitiateSchema),
-  initiatePayment,
-);
-
-router.post(
-  "/payment-gateway/webhook",
-  validateBody(paymentGatewayWebhookSchema),
-  handlePaymentWebhook,
-);
-
-router.get(
-  "/payment-gateway/status/:paymentId",
-  authMiddleware.authenticate,
-  authMiddleware.requirePermission("wallet", "read", "own"),
-  balanceLimiter,
-  validateParams(paymentIdParamsSchema),
-  getPaymentStatus,
-);
+// The former /payment-gateway/* stubs were removed: their service functions were
+// never implemented (every call threw TypeError) and the webhook route accepted
+// unsigned, unauthenticated payloads. Replaced by:
+//   /api/v1/wallet/topup/*             - top-up orders + provider webhooks
+//   /api/v1/wallet/payment-providers/* - provider credential configuration
 
 // -------------------------------------------------------------------------
 // User-specific routes (/:userId must be LAST - catches everything)
