@@ -11,6 +11,9 @@ const nextConfig = {
   // layout: .next/standalone/frontend/server.js
   experimental: {
     outputFileTracingRoot: path.join(__dirname, "../"),
+    // Bulk imports (e.g. 18k-row partner pincode files) run well past the
+    // default rewrite-proxy timeout and were dying with "socket hang up".
+    proxyTimeout: 300000,
   },
   eslint: {
     ignoreDuringBuilds: true,

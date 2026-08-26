@@ -502,8 +502,11 @@ async function importPartnerPincodes(req, res) {
           fileSize: req.file.size,
         },
         responseData: {
-          imported: result.imported.length,
-          failed: result.errors.length,
+          total: result.summary.total,
+          imported: result.summary.imported,
+          updated: result.summary.updated,
+          failed: result.summary.failed,
+          errorSummary: result.errorSummary,
           success: true,
         },
       },
@@ -511,8 +514,11 @@ async function importPartnerPincodes(req, res) {
 
     logger.info("Partner pincodes imported successfully", {
       partnerId,
-      imported: result.imported.length,
-      failed: result.errors.length,
+      total: result.summary.total,
+      imported: result.summary.imported,
+      updated: result.summary.updated,
+      failed: result.summary.failed,
+      errorSummary: result.errorSummary,
       userId: req.user?.id,
     });
 

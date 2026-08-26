@@ -7,33 +7,56 @@ import { CheckCircle2, XCircle, Clock, Wallet } from "lucide-react";
 import { CopyButton } from "@/components/wallet/copy-button";
 
 /**
- * Razorpay payment-link return page (`PAYMENT_CALLBACK_URL`).
+ * Wallet top-up return page.
+ *
+ * Serves TWO checkout flows through one receipt:
+ *   - The Razorpay payment-link return (`PAYMENT_CALLBACK_URL`), identified
+ *     by the `razorpay_payment_link_*` params.
+ *   - The CCAvenue (or any other non-seamless / REDIRECT_POST) return, where
+ *     the browser leaves the SPA entirely to form-POST to the gateway and
+ *     the gateway's server-side response lands back here via our server's
+ *     302 with `provider`, `orderId`, `status`, `ref` params.
  *
  * This page is PUBLIC by necessity: an admin generates a payment link and
  * shares it with a customer, who pays from their own device and may have no
- * account on this panel at all. Bouncing them to a login screen after they
- * have just paid would be the worst possible moment to ask for credentials.
+ * account on this panel at all (and, for the redirect flow, the SPA reload
+ * on return may not even have a valid session token any more). Bouncing
+ * them to a login screen after they have just paid would be the worst
+ * possible moment to ask for credentials.
  *
- * It is deliberately a RECEIPT, not a source of truth:
+ * It is deliberately a RECEIPT, not a source of truth, for BOTH flows:
  *   - The query parameters here are attacker-controllable, and the signature
- *     Razorpay appends can only be verified with the key secret, which must
- *     never reach the browser. So nothing on this page is trusted.
- *   - The wallet is credited by the signed `payment_link.paid` webhook hitting
- *     wallet-service, which is the only authority. This page therefore says
- *     the credit is on its way, never that it has happened.
+ *     Razorpay appends (or CCAvenue's encrypted response, verified server-
+ *     side before it ever produces this redirect) can only be verified with
+ *     a secret that must never reach the browser. So nothing on this page is
+ *     trusted.
+ *   - The wallet is credited by the signed `payment_link.paid` webhook (or,
+ *     for CCAvenue, the server-side decrypt-and-credit that happens before
+ *     the 302 here) hitting wallet-service, which is the only authority.
+ *     This page therefore always says the credit is on its way, never that
+ *     it has definitely happened - `status=paid` here means "the gateway
+ *     told us so", not "the wallet balance changed".
  */
 function CallbackContent() {
   const params = useSearchParams();
 
   const status = (
-    params.get("razorpay_payment_link_status") || ""
+    params.get("status") ||
+    params.get("razorpay_payment_link_status") ||
+    ""
   ).toLowerCase();
   const paymentId = params.get("razorpay_payment_id") || "";
   const referenceId = params.get("razorpay_payment_link_reference_id") || "";
   const linkId = params.get("razorpay_payment_link_id") || "";
 
   const paid = status === "paid";
-  const failed = status === "failed" || status === "cancelled";
+  const failed =
+    status === "failed" || status === "cancelled" || status === "aborted";
+  // The REDIRECT_POST flow sends an explicit "pending" / "unknown" status
+  // when the gateway's own response was itself inconclusive. Distinguished
+  // from the generic (blank/unrecognised) fallback below only for copy -
+  // both render the same amber "pending" treatment, never as an error.
+  const pendingKnown = status === "pending" || status === "unknown";
 
   const Icon = paid ? CheckCircle2 : failed ? XCircle : Clock;
   const tone = paid
@@ -52,9 +75,11 @@ function CallbackContent() {
     ? "Thank you. Your payment has gone through and the wallet will be credited automatically within a few minutes. You do not need to pay again."
     : failed
       ? "The payment was not completed, so nothing has been charged. You can reopen the payment link to try again."
-      : "We have not had a final confirmation from the payment gateway yet. If money has left your account, the wallet will still be credited automatically — please do not pay twice.";
+      : pendingKnown
+        ? "We have your payment. Your wallet will be credited automatically within a few minutes."
+        : "We have not had a final confirmation from the payment gateway yet. If money has left your account, the wallet will still be credited automatically — please do not pay twice.";
 
-  const reference = referenceId || paymentId || linkId;
+  const reference = params.get("ref") || referenceId || paymentId || linkId;
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-6">

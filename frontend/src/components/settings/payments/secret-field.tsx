@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { UpdatePaymentProviderRequest } from "@/store/api/endpoints/paymentApi";
 
 /**
  * Write-only secret editor.
@@ -142,26 +141,10 @@ export function SecretField({
   );
 }
 
-/**
- * Builds the credential portion of an update payload from a bag of
- * `SecretFieldState`s, keyed by the exact `UpdatePaymentProviderRequest`
- * field name (e.g. "liveKeySecret").
- *
- * Only fields the operator actually retyped (`editing && value.trim() !== ""`)
- * are emitted. This is load-bearing: a save that only changes `minAmount`
- * must never null out a working live key by round-tripping an empty/masked
- * value back to the server.
- */
-export function buildSecretPayload(
-  secrets: Record<string, SecretFieldState>,
-): Partial<UpdatePaymentProviderRequest> {
-  const payload: Record<string, string> = {};
-
-  for (const [field, state] of Object.entries(secrets)) {
-    if (state.editing && state.value.trim() !== "") {
-      payload[field] = state.value.trim();
-    }
-  }
-
-  return payload as Partial<UpdatePaymentProviderRequest>;
-}
+// NOTE: the old `buildSecretPayload` helper that used to live here has moved
+// to `provider-config-card.tsx` as `buildCredentialsPayload`. It hard-coded
+// the legacy flat `UpdatePaymentProviderRequest` field names (e.g.
+// "liveKeySecret"), which no longer matches the descriptor-driven
+// `{credentials: {test, live}}` payload shape - so it could not stay a
+// generic, provider-agnostic helper in this file. `SecretField` itself is
+// unchanged.

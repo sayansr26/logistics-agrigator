@@ -19,6 +19,27 @@
 const logger = require("../shared/lib/logger");
 const { prisma } = require("../config/database");
 const excelHandler = require("../utils/excelHandler");
+const { randomUUID } = require("crypto");
+
+// Bulk import tuning. Pincode imports routinely carry 15k-20k rows, so every
+// lookup/write is chunked instead of run per row.
+const LOOKUP_CHUNK_SIZE = 2000;
+const WRITE_CHUNK_SIZE = 1000;
+const MAX_DETAIL_ROWS = 200;
+
+/**
+ * Split an array into fixed-size chunks
+ * @param {Array} items
+ * @param {number} size
+ * @returns {Array<Array>}
+ */
+function chunk(items, size) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
 
 /**
  * 1. Get all assigned pincodes for a partner with pagination
@@ -449,6 +470,15 @@ async function searchPincodes(query, limit = 10) {
 
 /**
  * 7. Bulk import pincodes from Excel
+ *
+ * Batched implementation: the previous version ran 3+ queries and one
+ * transaction PER ROW, which took ~59s for an 18k-row file and tripped the
+ * frontend proxy timeout (socket hang up). Everything is now done with
+ * chunked bulk queries.
+ *
+ * Rows whose pincode is already assigned to the partner are NOT errors -
+ * their pincode type values are refreshed and they are reported as "updated".
+ *
  * @param {string} partnerId - Partner ID
  * @param {Buffer} fileBuffer - Excel file buffer
  * @param {string} userId - User ID for audit log
@@ -480,122 +510,155 @@ async function importPartnerPincodes(partnerId, fileBuffer, userId) {
     activePincodeTypes.map((pt) => [pt.name, pt.id]),
   );
 
-  // Import valid rows
+  // ---- 1. Resolve every pincode code in one shot (chunked IN queries) ----
+  const codes = [...new Set(parseResult.valid.map((r) => r.pincodeCode))];
+  const pincodeIdByCode = new Map();
+
+  for (const codeChunk of chunk(codes, LOOKUP_CHUNK_SIZE)) {
+    const found = await prisma.pincode.findMany({
+      where: { code: { in: codeChunk } },
+      select: { id: true, code: true },
+    });
+    found.forEach((p) => pincodeIdByCode.set(p.code, p.id));
+  }
+
+  // ---- 2. Load this partner's existing assignments for those pincodes ----
+  const resolvedPincodeIds = [...pincodeIdByCode.values()];
+  const assignIdByPincodeId = new Map();
+
+  for (const idChunk of chunk(resolvedPincodeIds, LOOKUP_CHUNK_SIZE)) {
+    const existing = await prisma.partnerPincodeAssign.findMany({
+      where: { partnerId, pincodeId: { in: idChunk } },
+      select: { id: true, pincodeId: true },
+    });
+    existing.forEach((a) => assignIdByPincodeId.set(a.pincodeId, a.id));
+  }
+
+  // ---- 3. Build the write plan in memory ----
+  const newAssignRows = [];
+  const typeValueRows = [];
+  const refreshedAssignIds = [];
   const imported = [];
+  const updated = [];
   const errors = [];
 
   for (const row of parseResult.valid) {
-    try {
-      // Find pincode by code
-      const pincode = await excelHandler.validatePincodeExists(row.pincodeCode);
+    const pincodeId = pincodeIdByCode.get(row.pincodeCode);
 
-      if (!pincode) {
-        errors.push({
-          row: row.rowNumber,
-          pincodeCode: row.pincodeCode,
-          error: "Pincode not found in database",
-        });
-        continue;
-      }
-
-      // Check if already assigned
-      const existing = await prisma.partnerPincodeAssign.findUnique({
-        where: {
-          partnerId_pincodeId: {
-            partnerId,
-            pincodeId: pincode.id,
-          },
-        },
-      });
-
-      if (existing) {
-        errors.push({
-          row: row.rowNumber,
-          pincodeCode: row.pincodeCode,
-          error: "Pincode already assigned to this partner",
-        });
-        continue;
-      }
-
-      // Build pincode type values array
-      const pincodeTypeValues = [];
-      for (const [typeName, value] of Object.entries(row.values)) {
-        const typeId = pincodeTypeByName.get(typeName);
-        if (typeId && value !== null && value !== undefined && value !== "") {
-          pincodeTypeValues.push({
-            pincodeTypeId: typeId,
-            value: String(value),
-          });
-        }
-      }
-
-      // Create assignment
-      const assignment = await prisma.$transaction(async (tx) => {
-        const assign = await tx.partnerPincodeAssign.create({
-          data: {
-            partnerId,
-            pincodeId: pincode.id,
-          },
-        });
-
-        if (pincodeTypeValues.length > 0) {
-          await tx.partnerPincodeTypeValue.createMany({
-            data: pincodeTypeValues.map((ptv) => ({
-              partnerPincodeId: assign.id,
-              pincodeTypeId: ptv.pincodeTypeId,
-              value: ptv.value,
-            })),
-          });
-        }
-
-        return assign;
-      });
-
-      imported.push({
-        row: row.rowNumber,
-        pincodeCode: row.pincodeCode,
-        assignmentId: assignment.id,
-      });
-    } catch (err) {
+    if (!pincodeId) {
       errors.push({
         row: row.rowNumber,
         pincodeCode: row.pincodeCode,
-        error: err.message,
+        error: "Pincode not found in database",
       });
+      continue;
+    }
+
+    const existingAssignId = assignIdByPincodeId.get(pincodeId);
+    let assignId = existingAssignId;
+
+    if (existingAssignId) {
+      refreshedAssignIds.push(existingAssignId);
+      updated.push({
+        row: row.rowNumber,
+        pincodeCode: row.pincodeCode,
+        assignmentId: existingAssignId,
+      });
+    } else {
+      assignId = randomUUID();
+      // Guard against the same pincode appearing twice via different codes
+      assignIdByPincodeId.set(pincodeId, assignId);
+      newAssignRows.push({ id: assignId, partnerId, pincodeId });
+      imported.push({
+        row: row.rowNumber,
+        pincodeCode: row.pincodeCode,
+        assignmentId: assignId,
+      });
+    }
+
+    for (const [typeName, value] of Object.entries(row.values)) {
+      const typeId = pincodeTypeByName.get(typeName);
+      if (typeId && value !== null && value !== undefined && value !== "") {
+        typeValueRows.push({
+          partnerPincodeId: assignId,
+          pincodeTypeId: typeId,
+          value: String(value),
+        });
+      }
     }
   }
 
+  // ---- 4. Write in bulk ----
+  for (const rows of chunk(newAssignRows, WRITE_CHUNK_SIZE)) {
+    await prisma.partnerPincodeAssign.createMany({
+      data: rows,
+      skipDuplicates: true,
+    });
+  }
+
+  // Existing assignments: clear old values so the file becomes the source of truth
+  for (const ids of chunk(refreshedAssignIds, WRITE_CHUNK_SIZE)) {
+    await prisma.partnerPincodeTypeValue.deleteMany({
+      where: { partnerPincodeId: { in: ids } },
+    });
+  }
+
+  for (const rows of chunk(typeValueRows, WRITE_CHUNK_SIZE)) {
+    await prisma.partnerPincodeTypeValue.createMany({
+      data: rows,
+      skipDuplicates: true,
+    });
+  }
+
+  const allErrors = [
+    ...parseResult.invalid.map((r) => ({
+      row: r.rowNumber,
+      pincodeCode: r.pincodeCode,
+      error: r.errors.join(", "),
+    })),
+    ...parseResult.duplicates.map((r) => ({
+      row: r.rowNumber,
+      pincodeCode: r.pincodeCode,
+      error: r.errors.join(", "),
+    })),
+    ...errors,
+  ];
+
+  // Reason -> count, so a 2k-row failure is diagnosable from the logs alone
+  const errorSummary = {};
+  allErrors.forEach((e) => {
+    errorSummary[e.error] = (errorSummary[e.error] || 0) + 1;
+  });
+
   logger.info("Partner pincodes imported", {
     partnerId,
+    total: parseResult.totalRows,
     imported: imported.length,
-    errors: errors.length,
+    updated: updated.length,
+    errors: allErrors.length,
+    errorSummary,
     userId,
   });
 
   return {
     partnerId,
     partnerName: partner.name,
-    imported,
-    errors: [
-      ...parseResult.invalid.map((r) => ({
-        row: r.rowNumber,
-        pincodeCode: r.pincodeCode,
-        error: r.errors.join(", "),
-      })),
-      ...parseResult.duplicates.map((r) => ({
-        row: r.rowNumber,
-        pincodeCode: r.pincodeCode,
-        error: r.errors.join(", "),
-      })),
-      ...errors,
-    ],
+    // Detail lists are capped - an 18k-row file would otherwise return a
+    // multi-megabyte JSON body that the browser has to render row by row.
+    imported: imported.slice(0, MAX_DETAIL_ROWS),
+    updated: updated.slice(0, MAX_DETAIL_ROWS),
+    errors: allErrors.slice(0, MAX_DETAIL_ROWS),
+    truncated: {
+      imported: Math.max(0, imported.length - MAX_DETAIL_ROWS),
+      updated: Math.max(0, updated.length - MAX_DETAIL_ROWS),
+      errors: Math.max(0, allErrors.length - MAX_DETAIL_ROWS),
+    },
+    errorSummary,
     summary: {
       total: parseResult.totalRows,
       imported: imported.length,
-      failed:
-        errors.length +
-        parseResult.invalid.length +
-        parseResult.duplicates.length,
+      updated: updated.length,
+      failed: allErrors.length,
     },
   };
 }

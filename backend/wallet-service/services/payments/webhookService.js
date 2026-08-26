@@ -15,7 +15,8 @@
  *       (a) the local guarded `updateMany` CREATED|PENDING|EXPIRED -> PAID
  *           claim, which exactly one concurrent caller can win, and
  *       (b) the external wallet API's uniqueness constraint on
- *           `reference_id` (= `RZP_<providerPaymentId>`), which is our
+ *           `reference_id` (= `<PREFIX>_<providerPaymentId>`, e.g. RZP_ /
+ *           CCAV_), which is our
  *           CROSS-PROCESS idempotency key. Its 409 is a SUCCESS signal.
  *   I3. NEVER credit an amount we did not ask for. The comparison is done in
  *       integer PAISE, never in floats/Decimal.
@@ -131,6 +132,66 @@ async function handleWebhook({ provider, rawBody, parsedBody, headers, ip }) {
     };
   }
 
+  // ---- 1b. Providers whose payload must be DECRYPTED before it can be parsed
+  // Verify-then-parse is the STRONGER ordering: nothing untrusted is ever fed to
+  // a parser, and the mode is known before a single field is read. Step 2 below
+  // only uses the weaker parse-then-verify order because Razorpay's HMAC key
+  // SELECTION depends on the order the event refers to, which is knowable only
+  // by parsing. Providers that do not have that constraint take this branch, so
+  // it is an upgrade, not a compromise.
+  //
+  // CCAvenue inverts the dependency entirely: its payload is AES-encrypted, so
+  // it cannot be parsed AT ALL until a key has been chosen and the envelope
+  // decrypted. `parseWebhookEvent` takes no `config` and therefore cannot
+  // decrypt; without `decrypted` it returns the fully-nulled IGNORED shape
+  // rather than guessing. Decryption with a mode's working key IS the
+  // authentication for such a provider — a payload that decrypts to a
+  // well-formed body could only have been produced by the holder of that key.
+  //
+  // A provider WITHOUT `decryptEnvelope` skips this block entirely and runs
+  // exactly the code it ran before this branch existed.
+  let preVerified = null;
+  let decrypted = null;
+  if (typeof impl.decryptEnvelope === "function") {
+    preVerified = await decryptFirstVerification({
+      impl,
+      provider,
+      rawBody,
+      parsedBody,
+      headers,
+    });
+
+    if (!preVerified.verified) {
+      // Undecryptable: we know NOTHING about this delivery — not its event id,
+      // not its type, not its order. Record the nulled shape for forensics and
+      // reject, exactly as step 4 does for a bad HMAC.
+      await safeRecordRejectedEvent({
+        provider,
+        parsed: undecryptableEvent(),
+        headers,
+        order: null,
+        ip,
+      });
+
+      logger.warn(
+        "Webhook payload could not be decrypted with any mode key — body not processed",
+        {
+          provider,
+          triedModes: preVerified.triedModes,
+          ip,
+        },
+      );
+
+      return {
+        status: 401,
+        code: "INVALID_SIGNATURE",
+        handled: "rejected",
+      };
+    }
+
+    decrypted = preVerified.decrypted;
+  }
+
   // ---- 2. PARSE FIRST, VERIFY SECOND --------------------------------------
   // We cannot verify until we know WHICH SECRET to verify with, and that
   // depends on the mode recorded on the order this event refers to — which we
@@ -138,7 +199,14 @@ async function handleWebhook({ provider, rawBody, parsedBody, headers, ip }) {
   // throws; a malformed body yields outcome IGNORED), so doing it before
   // verification is safe. NOTHING is trusted from the parse result until the
   // signature check in step 3/4 passes.
-  const parsed = impl.parseWebhookEvent({ rawBody, parsedBody, headers });
+  // `decrypted` is null for every provider that does not decrypt, which is the
+  // exact argument shape this call had before the 1b branch existed.
+  const parsed = impl.parseWebhookEvent({
+    rawBody,
+    parsedBody,
+    headers,
+    decrypted,
+  });
 
   let order = null;
   try {
@@ -160,13 +228,22 @@ async function handleWebhook({ provider, rawBody, parsedBody, headers, ip }) {
   //
   // With no local order (orphan / unknown reference) we cannot know the mode,
   // so we try the currently-active mode first, then the other one.
-  const verification = await verifySignature({
-    impl,
-    provider,
-    order,
-    rawBody,
-    headers,
-  });
+  //
+  // If step 1b already established authenticity (and with it the mode), reuse
+  // that result verbatim — re-running verifySignature would be a second,
+  // redundant key resolution and, for an encrypted provider, there is no
+  // detached signature for it to check anyway. `preVerified` is null for every
+  // provider without `decryptEnvelope`, so Razorpay always falls through to the
+  // call below unchanged.
+  const verification =
+    preVerified ||
+    (await verifySignature({
+      impl,
+      provider,
+      order,
+      rawBody,
+      headers,
+    }));
 
   // ---- 4. Signature mismatch: record and reject ---------------------------
   if (!verification.verified) {
@@ -471,7 +548,7 @@ async function creditOrder(order, parsed, options = {}) {
         providerPaymentId: parsed.providerPaymentId || order.providerPaymentId,
         externalReferenceId:
           order.externalReferenceId ||
-          buildExternalReferenceId(parsed.providerPaymentId),
+          buildExternalReferenceId(order.provider, parsed.providerPaymentId),
         creditedAt: new Date(),
         reconcileError: null,
       },
@@ -511,7 +588,7 @@ async function creditOrder(order, parsed, options = {}) {
   // purpose: a real capture must beat our local expiry guess.
   const externalReferenceId =
     order.externalReferenceId ||
-    buildExternalReferenceId(parsed.providerPaymentId);
+    buildExternalReferenceId(order.provider, parsed.providerPaymentId);
 
   const claimed = await prisma.paymentOrder.updateMany({
     where: { id: order.id, status: { in: CLAIMABLE_FOR_CREDIT } },
@@ -580,7 +657,7 @@ async function creditOrder(order, parsed, options = {}) {
         // is credited exactly what they were charged.
         amount: toNumber(current.amount),
         currency: current.currency,
-        reference_id: referenceId, // RZP_<paymentId> — the idempotency key (I2b)
+        reference_id: referenceId, // <PREFIX>_<paymentId> — the idempotency key (I2b)
         description: `Wallet top-up via ${current.provider} (${parsed.providerPaymentId})`,
         metadata: {
           source: source || "WEBHOOK",
@@ -772,7 +849,7 @@ async function finalizeCredited({
  * @returns {Promise<Object>}
  */
 async function adoptOrphanPayment(parsed, { provider, mode, config } = {}) {
-  const notes = extractNotes(parsed.raw);
+  const notes = extractNotes(provider, parsed.raw);
   const walletUserId =
     notes && typeof notes.walletUserId === "string" && notes.walletUserId.trim()
       ? notes.walletUserId.trim()
@@ -1228,6 +1305,140 @@ async function verifySignature({ impl, provider, order, rawBody, headers }) {
 }
 
 /**
+ * Authenticate a delivery whose payload must be DECRYPTED before it can be read.
+ *
+ * The mode fallback and its reasoning are IDENTICAL to `verifySignature`'s
+ * no-order branch, and for the same two reasons: the gateway posts both TEST and
+ * LIVE traffic to ONE webhook URL, and an admin may flip the platform between
+ * modes while a payment is still in flight. So: currently-active mode first,
+ * then the other one. `requireEnabled: false` because a provider disabled AFTER
+ * an order was created must still have its in-flight payments authenticated and
+ * credited — the customer's money is already gone.
+ *
+ * There is no order to take a snapshotted mode from here: the order reference
+ * lives INSIDE the ciphertext, so it is unreachable until after this function
+ * succeeds. The mode it returns is therefore the mode of the key that actually
+ * worked, and it is what `creditOrder`'s mode assertion (b) compares against
+ * `order.mode` — a cross-mode delivery still parks as RECONCILE_PENDING /
+ * MODE_MISMATCH rather than crediting.
+ *
+ * Returns the same shape as `verifySignature`, plus `decrypted`, so the caller
+ * can use either interchangeably.
+ *
+ * @private
+ * @returns {Promise<{verified:boolean, config:Object|null, mode:string|null,
+ *   decrypted:Object|null, triedModes:string[]}>}
+ */
+async function decryptFirstVerification({
+  impl,
+  provider,
+  rawBody,
+  parsedBody,
+  headers,
+}) {
+  let activeMode = null;
+  try {
+    const active = await resolveActiveConfig(provider);
+    activeMode = active && active.mode;
+  } catch (error) {
+    logger.warn(
+      "Could not resolve active provider config for webhook decryption",
+      {
+        provider,
+        error: error.message,
+      },
+    );
+  }
+
+  const modes = activeMode
+    ? [activeMode, activeMode === "LIVE" ? "TEST" : "LIVE"]
+    : ["LIVE", "TEST"];
+
+  const tried = [];
+
+  for (const mode of modes) {
+    tried.push(mode);
+
+    let config;
+    try {
+      config = await resolveConfigForMode(provider, mode, {
+        requireEnabled: false,
+      });
+    } catch (error) {
+      // PROVIDER_NOT_CONFIGURED / PROVIDER_DISABLED for this mode — that mode
+      // simply has no working key to try. Move on.
+      logger.warn("No usable webhook working key for provider mode", {
+        provider,
+        mode,
+        code: error.code,
+      });
+      continue;
+    }
+
+    let outcome;
+    try {
+      outcome = await impl.decryptEnvelope({
+        config,
+        rawBody,
+        parsedBody,
+        headers,
+      });
+    } catch (error) {
+      // A throwing decrypt is indistinguishable from a wrong key. Never let it
+      // escape as a 5xx — that would make the gateway redeliver a payload we
+      // can never read.
+      logger.warn("Webhook envelope decryption threw for provider mode", {
+        provider,
+        mode,
+        error: error.message,
+      });
+      continue;
+    }
+
+    if (outcome && outcome.ok && outcome.fields) {
+      return {
+        verified: true,
+        config,
+        mode,
+        decrypted: outcome,
+        triedModes: tried,
+      };
+    }
+  }
+
+  return {
+    verified: false,
+    config: null,
+    mode: null,
+    decrypted: null,
+    triedModes: tried,
+  };
+}
+
+/**
+ * The fully-nulled event shape used when a payload could not be decrypted at
+ * all. Mirrors what a provider's `parseWebhookEvent` returns with `decrypted`
+ * absent, so `safeRecordRejectedEvent` can persist the rejection without any
+ * field having been guessed from unreadable bytes.
+ * @private
+ */
+function undecryptableEvent() {
+  return {
+    outcome: "IGNORED",
+    eventType: null,
+    providerEventId: null,
+    providerOrderId: null,
+    providerLinkId: null,
+    providerPaymentId: null,
+    amountPaise: null,
+    currency: null,
+    errorCode: null,
+    errorDescription: null,
+    raw: null,
+  };
+}
+
+/**
  * Persist a signature-rejected delivery for forensics. Best-effort only: a
  * failure here must not change the 401 we are about to return.
  * @private
@@ -1331,16 +1542,65 @@ async function writeAudit({ action, resourceId, userId, details }) {
 }
 
 /**
- * The external wallet idempotency key. Deterministic per captured payment —
- * anything time- or random-based here would defeat I2b and double-credit.
+ * The external wallet idempotency key, `<PREFIX>_<providerPaymentId>` (RZP_ for
+ * razorpay, CCAV_ for ccavenue). Deterministic per captured payment — anything
+ * time- or random-based here would defeat I2b and double-credit. The prefix is
+ * per-provider so two gateways minting the same payment id cannot collide.
  * @private
  */
-function buildExternalReferenceId(providerPaymentId) {
-  return providerPaymentId ? `RZP_${providerPaymentId}` : null;
+// `ccavenue_upi_qr` is listed explicitly so that a static-QR order derives the
+// SAME key here that qrCollectionService stamps on the row at mint time
+// (`UPIQR_<utr>`). The sanitising fallback would produce `CCAVENUE_<utr>`, and
+// two paths disagreeing about the reference is exactly how a payment gets
+// credited twice.
+const EXTERNAL_REF_PREFIX = Object.freeze({
+  razorpay: "RZP",
+  ccavenue: "CCAV",
+  ccavenue_upi_qr: "UPIQR",
+});
+
+function buildExternalReferenceId(provider, providerPaymentId) {
+  if (!providerPaymentId) return null;
+  // Normalise the lookup the same way getProvider() does. This is load-bearing:
+  // if the same payment ever resolved a different prefix (e.g. "Razorpay" vs
+  // "razorpay"), the retry would send a DIFFERENT reference_id, the external
+  // wallet would not 409, and the payment would be credited twice.
+  const key = String(provider || "")
+    .trim()
+    .toLowerCase();
+  const prefix =
+    EXTERNAL_REF_PREFIX[key] ||
+    (key || "gw")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8) ||
+    "GW";
+  return `${prefix}_${providerPaymentId}`;
 }
 
-/** Gateway notes live on the payment, link or order entity, in that order. @private */
-function extractNotes(raw) {
+/**
+ * Gateway "notes" (the metadata we stamped on the order/link so an orphan can be
+ * reconstructed) live in a provider-specific place in the envelope, so the
+ * extraction is delegated to the provider module. The Razorpay walker stays here
+ * as `legacyRazorpayNotes` and is used as the fallback if the registry lookup
+ * fails, so orphan adoption can never go dark.
+ * @private
+ */
+function extractNotes(provider, raw) {
+  try {
+    const impl = getProvider(provider);
+    if (typeof impl.extractNotes === "function") return impl.extractNotes(raw);
+  } catch (error) {
+    logger.warn("Notes extractor unavailable, falling back", {
+      provider,
+      error: error.message,
+    });
+  }
+  return legacyRazorpayNotes(raw);
+}
+
+/** Razorpay notes live on the payment, link or order entity, in that order. @private */
+function legacyRazorpayNotes(raw) {
   const payload = raw && typeof raw.payload === "object" ? raw.payload : null;
   if (!payload) return null;
 

@@ -32,6 +32,13 @@ const {
 // Razorpay — implementation lands in a later wave (./razorpayProvider.js).
 registerLazy("razorpay", () => require("./razorpayProvider"));
 
+// CCAvenue — non-seamless (redirect) checkout. Orders only: the provider
+// refuses payment links outright (supports.paymentLinks === false).
+registerLazy("ccavenue", () => require("./ccavenueProvider"));
+// The static-QR collection channel is a SEPARATE provider row from the checkout
+// gateway, so its keys and TEST/LIVE mode can rotate independently.
+registerLazy("ccavenue_upi_qr", () => require("./ccavenueQrProvider"));
+
 // registerLazy("stripe",   () => require("./stripeProvider"));
 // registerLazy("cashfree", () => require("./cashfreeProvider"));
 // registerLazy("payu",     () => require("./payuProvider"));

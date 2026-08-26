@@ -47,14 +47,26 @@ interface ImportResult {
     pincodeCode: string;
     assignmentId: string;
   }>;
+  updated: Array<{
+    row: number;
+    pincodeCode: string;
+    assignmentId: string;
+  }>;
   errors: Array<{
     row: number;
     pincodeCode: string;
     error: string;
   }>;
+  truncated: {
+    imported: number;
+    updated: number;
+    errors: number;
+  };
+  errorSummary: Record<string, number>;
   summary: {
     total: number;
     imported: number;
+    updated: number;
     failed: number;
   };
 }
@@ -264,16 +276,21 @@ export function PincodeImportDialog({
                   <div>
                     <p className="font-medium">Import Complete</p>
                     <p className="text-sm text-muted-foreground">
-                      {importResult.summary.imported} of{" "}
-                      {importResult.summary.total} pincodes imported
-                      successfully
+                      {importResult.summary.imported} newly assigned
+                      {(importResult.summary.updated ?? 0) > 0 &&
+                        `, ${importResult.summary.updated} updated`}
+                      {importResult.summary.failed > 0 &&
+                        `, ${importResult.summary.failed} skipped`}{" "}
+                      out of {importResult.summary.total} rows
                     </p>
                   </div>
                   <Badge
                     variant={
                       importResult.summary.failed === 0
                         ? "default"
-                        : importResult.summary.imported === 0
+                        : importResult.summary.imported +
+                              (importResult.summary.updated ?? 0) ===
+                            0
                           ? "destructive"
                           : "secondary"
                     }
@@ -281,18 +298,49 @@ export function PincodeImportDialog({
                   >
                     {importResult.summary.failed === 0
                       ? "All successful"
-                      : importResult.summary.imported === 0
-                        ? "All failed"
-                        : `${importResult.summary.failed} failed`}
+                      : importResult.summary.imported +
+                            (importResult.summary.updated ?? 0) ===
+                          0
+                        ? "Nothing applied"
+                        : `${importResult.summary.failed} skipped`}
                   </Badge>
                 </div>
+
+                {/* Failure reasons, grouped - the row list below is capped */}
+                {importResult.errorSummary &&
+                  Object.keys(importResult.errorSummary).length > 0 && (
+                    <div className="border rounded-lg">
+                      <div className="p-3 bg-amber-50 border-b">
+                        <p className="text-sm font-medium text-amber-800">
+                          Why rows were skipped
+                        </p>
+                      </div>
+                      <div className="p-3 space-y-1">
+                        {Object.entries(importResult.errorSummary).map(
+                          ([reason, count]) => (
+                            <div
+                              key={reason}
+                              className="flex items-center justify-between text-sm"
+                            >
+                              <span className="text-muted-foreground">
+                                {reason}
+                              </span>
+                              <span className="font-medium">{count} rows</span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Errors */}
                 {importResult.errors.length > 0 && (
                   <div className="border rounded-lg">
                     <div className="p-3 bg-red-50 border-b">
                       <p className="text-sm font-medium text-red-800">
-                        {importResult.errors.length} rows failed to import
+                        {importResult.summary.failed} rows skipped
+                        {(importResult.truncated?.errors ?? 0) > 0 &&
+                          ` (showing first ${importResult.errors.length})`}
                       </p>
                     </div>
                     <ScrollArea className="h-40 p-3">
@@ -327,8 +375,10 @@ export function PincodeImportDialog({
                   <div className="border rounded-lg">
                     <div className="p-3 bg-green-50 border-b">
                       <p className="text-sm font-medium text-green-800">
-                        {importResult.imported.length} pincodes imported
+                        {importResult.summary.imported} pincodes imported
                         successfully
+                        {(importResult.truncated?.imported ?? 0) > 0 &&
+                          ` (showing first ${importResult.imported.length})`}
                       </p>
                     </div>
                     <ScrollArea className="h-32 p-3">

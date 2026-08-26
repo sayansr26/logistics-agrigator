@@ -382,6 +382,227 @@ async function handleWebhook(req, res) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Hosted-gateway return (unauthenticated — the AES envelope + a server-to-server
+// re-confirmation are the authenticity proof)
+// ---------------------------------------------------------------------------
+
+/**
+ * @swagger
+ * /api/v1/wallet/topup/return/{provider}:
+ *   post:
+ *     tags: [Wallet Top-up]
+ *     summary: Hosted payment gateway redirect return
+ *     description: |
+ *       Receives the customer's browser back from a NON-SEAMLESS gateway
+ *       (CCAvenue) after they have paid on the gateway's own page. The gateway
+ *       POSTs an AES-encrypted `encResp` form field here.
+ *
+ *       **Deliberately unauthenticated** — the request is issued by the gateway
+ *       / the customer's browser and carries no JWT. The API Gateway whitelists
+ *       this prefix in `authValidator.js` publicPaths for the same reason.
+ *
+ *       **Always answers 302**, including for a failed, unknown or
+ *       undecryptable payload. A customer who has just handed over money must
+ *       land on the wallet callback page, never on a JSON error body.
+ *
+ *       The credit is re-confirmed server-to-server before any money moves; a
+ *       decrypted envelope alone is never treated as proof of payment.
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [razorpay, ccavenue, stripe, cashfree, payu]
+ *         description: Payment provider slug
+ *     requestBody:
+ *       required: false
+ *       description: |
+ *         `application/x-www-form-urlencoded` with the gateway's `encResp`.
+ *         **Intentionally not validated** — see the note in the route.
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               encResp:
+ *                 type: string
+ *     responses:
+ *       302:
+ *         description: |
+ *           Redirect to
+ *           `/wallet/topup/callback?provider=&orderId=&status=&ref=`.
+ *           `status` is one of `paid`, `failed`, `pending`, `unknown`.
+ *         headers:
+ *           Location:
+ *             schema:
+ *               type: string
+ *       429:
+ *         description: Too many return hits from this IP
+ *   get:
+ *     tags: [Wallet Top-up]
+ *     summary: Hosted payment gateway redirect return (GET variant)
+ *     description: |
+ *       Defensive twin of the POST handler — some gateways issue a GET against
+ *       the `cancel_url`. Identical behaviour; the payload, if any, arrives on
+ *       the query string.
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       302:
+ *         description: Redirect to the wallet callback page
+ */
+async function handleProviderReturn(req, res) {
+  const provider = req.params.provider;
+
+  try {
+    const result = await topupService.handleGatewayReturn({
+      provider,
+      // The exact bytes as delivered — captured by the form-encoded `verify`
+      // hook in server.js. The service falls back to these when the body
+      // parser did not claim the content type.
+      rawBody: req.rawBody,
+      // GET carries the payload on the query string, POST in the body.
+      parsedBody:
+        req.method === "GET"
+          ? { ...(req.query || {}), ...(req.body || {}) }
+          : req.body,
+      headers: req.headers,
+      ip: req.ip,
+    });
+
+    logger.info("Gateway return processed", {
+      provider,
+      orderId: result.orderId,
+      handled: result.handled,
+      credited: result.credited,
+    });
+
+    // ALWAYS a 302. Never a JSON body on this route.
+    return res.redirect(302, result.redirectTo);
+  } catch (error) {
+    // The service is written never to throw for a payment-shaped problem, so
+    // reaching here means something genuinely unexpected broke. Even then the
+    // customer gets the callback page: the money is safe at the gateway and the
+    // webhook / reconcile worker owns the follow-up. An error page here would
+    // read to a paying customer as "my payment vanished".
+    logger.error("Gateway return handling threw — redirecting as pending", {
+      provider,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    const base = (
+      process.env.PAYMENT_RETURN_UI_URL ||
+      process.env.FRONTEND_URL ||
+      ""
+    ).replace(/\/+$/, "");
+
+    return res.redirect(
+      302,
+      `${base}/wallet/topup/callback?provider=${encodeURIComponent(
+        provider || "",
+      )}&orderId=&status=pending&ref=`,
+    );
+  }
+}
+
+/**
+ * @swagger
+ * /api/v1/wallet/topup/qr-webhook/{provider}:
+ *   post:
+ *     tags: [Wallet Top-up]
+ *     summary: Static UPI QR collection webhook receiver
+ *     description: |
+ *       Receives UPI collection notifications for static per-wallet QR codes.
+ *       **Deliberately unauthenticated** — the gateway holds no JWT; the
+ *       payload's own signature/envelope is the authenticity proof, verified
+ *       inside `qrWebhookService`.
+ *
+ *       Answers 200 for everything that was received and recorded, for exactly
+ *       the same money-safety reason as the main webhook: a non-2xx burns the
+ *       gateway's retry on an event the replay guard would then swallow.
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       description: The provider's raw collection envelope. **Intentionally not validated.**
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Collection event received and recorded
+ *       401:
+ *         description: Signature verification failed
+ *       429:
+ *         description: Too many webhook deliveries
+ *       503:
+ *         description: Event could not be persisted — gateway should redeliver
+ */
+async function handleQrWebhook(req, res) {
+  try {
+    // LAZY REQUIRE, same reasoning as `registerLazy` in services/payments/index.js:
+    // `qrWebhookService` lands in this wave alongside this handler, and a
+    // top-level require of a not-yet-present module would take wallet-service
+    // down at boot instead of failing this one route cleanly.
+    const qrWebhookService = require("../services/payments/qrWebhookService");
+
+    const result = await qrWebhookService.handleQrWebhook({
+      provider: req.params.provider,
+      // Raw bytes: whatever signs this envelope signs the bytes, not a
+      // re-serialisation of the parsed object.
+      rawBody: req.rawBody,
+      parsedBody: req.body,
+      headers: req.headers,
+      ip: req.ip,
+    });
+
+    const { status, code, handled, ...rest } = result || {};
+
+    if (status === 401) {
+      logger.warn("QR webhook rejected — invalid signature", {
+        provider: req.params.provider,
+        code,
+        handled,
+      });
+
+      return res
+        .status(401)
+        .json(
+          APIResponse.error(
+            "Invalid signature",
+            "INVALID_SIGNATURE",
+            null,
+            401,
+          ),
+        );
+    }
+
+    // Same mapping as handleWebhook: everything recorded answers 200.
+    return res.status(200).json(
+      APIResponse.success({
+        received: true,
+        handled,
+        ...(code ? { code } : {}),
+        ...rest,
+      }),
+    );
+  } catch (error) {
+    return fail(res, error, "Failed to process the UPI QR collection webhook");
+  }
+}
+
 module.exports = {
   // Self-serve
   initiateSelfTopup,
@@ -402,4 +623,8 @@ module.exports = {
 
   // Webhook
   handleWebhook,
+
+  // Hosted-gateway return + static-QR collection webhook
+  handleProviderReturn,
+  handleQrWebhook,
 };

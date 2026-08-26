@@ -348,6 +348,13 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     description: "View invoice details",
   },
   {
+    path: "/wallet/qr",
+    public: false,
+    permission: "wallet:read:own",
+    title: "My QR Code",
+    description: "Outlet's static UPI QR for wallet top-up",
+  },
+  {
     path: "/wallet",
     public: false,
     permission: "wallet:read:*",

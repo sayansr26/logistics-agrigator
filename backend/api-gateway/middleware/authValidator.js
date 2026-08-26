@@ -23,6 +23,14 @@ const publicPaths = [
   // exact-or-prefix matcher below whitelists /api/v1/wallet/topup/webhook/<provider>
   // but NOT the sibling admin routes under /api/v1/wallet/topup/.
   "/api/v1/wallet/topup/webhook",
+  // Hosted-gateway redirect return. CCAvenue POSTs an AES-encrypted `encResp`
+  // here from the customer's browser, which carries no session cookie or JWT:
+  // the working key that decrypts the payload IS the authentication, and a
+  // customer who has just paid must never be bounced to a login screen.
+  "/api/v1/wallet/topup/return",
+  // Static UPI QR collection notifications. Server-to-server, authenticated by
+  // the provider's signature/encryption over the raw body in wallet-service.
+  "/api/v1/wallet/topup/qr-webhook",
   // Customer-facing parcel tracking. The handler returns a sanitised
   // subset (milestones and route only, no pricing, contacts or partner
   // data), so it is safe to serve without a session. Rate-limited in the

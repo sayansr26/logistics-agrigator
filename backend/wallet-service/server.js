@@ -56,7 +56,18 @@ app.use(
     },
   }),
 );
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      // Same reason as the express.json hook above: a redirect-based gateway
+      // (CCAvenue) posts form-encoded payloads whose authenticity is proven
+      // against the exact bytes received, never against a re-serialisation.
+      if (buf && buf.length) req.rawBody = buf;
+    },
+  }),
+);
 
 // Internal request validation middleware
 // Only allow requests from API Gateway or health checks
@@ -147,6 +158,14 @@ app.use(
 // Top-up (gateway checkout, admin payment links, manual top-ups, webhook) MUST
 // also be mounted BEFORE the general wallet router: wallet's "/:userId" would
 // otherwise swallow "/api/v1/wallet/topup" and treat "topup" as a userId.
+// Static-QR admin/outlet surface (QR registry + collections). Mounted BEFORE
+// the general wallet router for the same reason as the three routers above:
+// wallet's "/:userId" would otherwise swallow "/api/v1/wallet/topup/qr".
+// It is also declared BEFORE routes/topup.js's own "/qr-webhook/:provider"
+// prefix is reached, which is why the webhook deliberately lives under a
+// different segment ("qr-webhook", not "qr") — nothing in this authenticated
+// admin surface can shadow the unauthenticated gateway callback.
+app.use("/api/v1/wallet/topup/qr", require("./routes/qrCollections"));
 app.use("/api/v1/wallet/topup", require("./routes/topup"));
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/payout", payoutRoutes);
@@ -397,6 +416,32 @@ async function startServer() {
         require("./services/payments/reconcileWorker").start();
       } catch (e) {
         logger.warn("Failed to start top-up reconcile worker", {
+          error: e.message,
+        });
+      }
+
+      // Wire the static-QR credit handler into the ingestion seam.
+      // WITHOUT THIS, ingestCollection() records collections and silently never
+      // credits: rows sit at ATTRIBUTED forever. Nothing is lost, but no outlet
+      // gets its money, and the failure is invisible — there is no error to see.
+      try {
+        require("./services/payments/qrCreditService").registerCreditHandler();
+        logger.info("Static-QR credit handler registered");
+      } catch (e) {
+        logger.warn("Failed to register QR credit handler", {
+          error: e.message,
+        });
+      }
+
+      // Close the maker-checker loop: when a superadmin approves or rejects a
+      // QR assignment, move the linked collection. WITHOUT THIS an approved
+      // assignment credits the wallet correctly but the collection is stranded
+      // at ASSIGN_PENDING forever — the money moves, the queue never clears.
+      try {
+        require("./services/payments/qrAssignmentService").registerSettlementHandler();
+        logger.info("QR assignment settlement handler registered");
+      } catch (e) {
+        logger.warn("Failed to register QR settlement handler", {
           error: e.message,
         });
       }

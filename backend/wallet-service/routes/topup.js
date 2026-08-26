@@ -3,8 +3,9 @@
  *
  * ROUTE ORDER IS LOAD-BEARING. Literal segments are declared BEFORE the
  * parameterised ones that would otherwise swallow them:
- *   - `/webhook/:provider` first, so nothing authenticated can shadow the
- *     unauthenticated gateway callback.
+ *   - `/webhook/:provider`, `/return/:provider` and `/qr-webhook/:provider`
+ *     first, so nothing authenticated can shadow the unauthenticated gateway
+ *     callbacks.
  *   - `/manual/pending` before `/manual/:requestId/*`.
  *   - `/self/orders` and every `/admin/*` route before `/orders/:orderId`.
  * Same rule `routes/wallet.js` follows for `/admin/*` ahead of `/:userId`, and
@@ -29,6 +30,8 @@ const {
   listReconcileQueue,
   retryReconcile,
   handleWebhook,
+  handleProviderReturn,
+  handleQrWebhook,
 } = require("../controllers/topupController");
 const {
   createManualTopup,
@@ -47,6 +50,7 @@ const {
   balanceLimiter,
   transactionLimiter,
   webhookLimiter,
+  returnLimiter,
 } = require("../middleware/rateLimiter");
 const {
   providerParamsSchema,
@@ -142,6 +146,77 @@ router.post(
   webhookLimiter,
   validateParams(providerParamsSchema),
   handleWebhook,
+);
+
+/**
+ * @swagger
+ * /api/v1/wallet/topup/return/{provider}:
+ *   post:
+ *     tags: [Wallet Top-up]
+ *     summary: Hosted payment gateway redirect return
+ *     description: See the handler docblock in `controllers/topupController.js`.
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       302:
+ *         description: Redirect to the wallet callback page
+ */
+// NO `authenticate` and NO `requirePermission`: CCAvenue posts the customer's
+// browser back here with no JWT — a bearer-token guard would make this endpoint
+// unreachable by the only client that ever calls it. Authenticity comes from
+// decrypting the envelope with our own working key, and no money moves until a
+// separate server-to-server order-status call has confirmed the capture.
+// NO `validateBody`: `middleware/validate.js` runs Joi with
+// `stripUnknown: true`, which would delete `encResp` outright (it is not in any
+// schema) and mutate the exact bytes the AES decryption depends on. Only the
+// path param is validated.
+router.post(
+  "/return/:provider",
+  returnLimiter,
+  validateParams(providerParamsSchema),
+  handleProviderReturn,
+);
+
+// GET twin — DEFENSIVE. Some gateways issue a GET rather than a POST against
+// the `cancel_url`, and an abandoned payment that 404s would leave the customer
+// stranded on a blank page instead of back in the wallet.
+router.get(
+  "/return/:provider",
+  returnLimiter,
+  validateParams(providerParamsSchema),
+  handleProviderReturn,
+);
+
+/**
+ * @swagger
+ * /api/v1/wallet/topup/qr-webhook/{provider}:
+ *   post:
+ *     tags: [Wallet Top-up]
+ *     summary: Static UPI QR collection webhook receiver
+ *     description: See the handler docblock in `controllers/topupController.js`.
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Collection event received and recorded
+ *       401:
+ *         description: Signature verification failed
+ */
+// NO `authenticate` / `requirePermission` and NO `validateBody`, for exactly
+// the reasons spelled out on `/webhook/:provider` above: the envelope's own
+// signature is the auth, and Joi's `stripUnknown` would gut the provider's
+// nested payload before the service could read (or verify) it.
+router.post(
+  "/qr-webhook/:provider",
+  webhookLimiter,
+  validateParams(providerParamsSchema),
+  handleQrWebhook,
 );
 
 // ---------------------------------------------------------------------------

@@ -9,10 +9,21 @@
  * `resolveConfigForMode()` here, so there is exactly one place to audit when
  * asking "can a secret escape to HTTP?".
  *
+ * CREDENTIAL SHAPE IS DESCRIPTOR-DRIVEN
+ * -------------------------------------
+ * This module no longer names credential columns. `./credentialDescriptors`
+ * declares, per provider, which fields exist, whether each lives in a LEGACY
+ * COLUMN (Razorpay's four, which never move) or in the `testCredentials` /
+ * `liveCredentials` JSONB bag, and which legacy `{keyId, keySecret,
+ * webhookSecret}` slot each field ALIASES onto. `readStoredField` /
+ * `writeStoredField` below are the only code that knows the difference.
+ *
  * SAFE-BY-DEFAULT READS
  * ---------------------
  * `SAFE_SELECT` is an explicit Prisma `select` that lists ONLY non-secret
- * columns; every read path that can reach an HTTP response uses it. This
+ * columns; every read path that can reach an HTTP response uses it. NEVER add
+ * an `*Enc` column — nor `testCredentials` / `liveCredentials`, whose entries
+ * may be `{"enc": ...}` — to it. This
  * mirrors the credential-hiding approach in
  * `backend/partner-service/services/carrierAccountService.js`, where account
  * listings are projected down so API credentials never ride along.
@@ -52,6 +63,10 @@ const {
   maskSecret,
 } = require("../../utils/secretCrypto");
 const { getProvider } = require("./index");
+const {
+  getCredentialDescriptor,
+  describeFieldsForUi,
+} = require("./credentialDescriptors");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,14 +75,19 @@ const { getProvider } = require("./index");
 const DEFAULT_PROVIDER = "razorpay";
 
 /** Providers with a real implementation behind them. */
-const IMPLEMENTED_PROVIDERS = ["razorpay"];
+const IMPLEMENTED_PROVIDERS = ["razorpay", "ccavenue", "ccavenue_upi_qr"];
 
 /** Listed in the admin UI, greyed out. No DB row is created for these. */
 const COMING_SOON_PROVIDERS = ["stripe", "cashfree", "payu"];
 
 const ALL_PROVIDERS = [...IMPLEMENTED_PROVIDERS, ...COMING_SOON_PROVIDERS];
 
-/** Webhook events an operator must subscribe to in the gateway dashboard. */
+/**
+ * @deprecated Razorpay's event list, kept exported for back-compat only.
+ * The RESPONSE path now reads `descriptor.webhookEvents`, because telling a
+ * CCAvenue operator to register `payment.captured` names an event that does not
+ * exist in their dashboard.
+ */
 const WEBHOOK_EVENTS = [
   "payment.captured",
   "payment.failed",
@@ -120,7 +140,97 @@ const SECRET_SELECT = {
   testWebhookSecretEnc: true,
   liveKeySecretEnc: true,
   liveWebhookSecretEnc: true,
+  // The credential bag can hold `{"enc": ...}` entries, so it is as sensitive
+  // as an `*Enc` column and belongs ONLY here — never in SAFE_SELECT.
+  testCredentials: true,
+  liveCredentials: true,
 };
+
+// ---------------------------------------------------------------------------
+// Credential storage layer — THE ONLY CODE THAT KNOWS WHERE A FIELD LIVES
+// ---------------------------------------------------------------------------
+//
+// A descriptor field is backed either by a LEGACY COLUMN (`field.legacyColumns`
+// — Razorpay's four columns, which never move) or by the CREDENTIAL BAG
+// (`testCredentials` / `liveCredentials` JSONB), keyed by `field.name` and
+// shaped `{ "<name>": {"v": plaintext} | {"enc": envelope} }`.
+//
+// Everything above this layer talks in terms of `{plain, enc}` and never names
+// a column.
+
+/** @param {"TEST"|"LIVE"} mode */
+function modeKey(mode) {
+  return mode === "LIVE" ? "live" : "test";
+}
+
+/** @param {"TEST"|"LIVE"} mode */
+function bagColumn(mode) {
+  return mode === "LIVE" ? "liveCredentials" : "testCredentials";
+}
+
+/**
+ * Read one credential field out of a SECRET_SELECT row.
+ *
+ * @param {Object} row
+ * @param {"TEST"|"LIVE"} mode
+ * @param {Object} field CredentialField
+ * @returns {{plain: string|null, enc: string|null}}
+ */
+function readStoredField(row, mode, field) {
+  if (field.legacyColumns) {
+    const entry = field.legacyColumns[modeKey(mode)] || {};
+    return {
+      plain: entry.plain ? (row[entry.plain] ?? null) : null,
+      enc: entry.enc ? (row[entry.enc] ?? null) : null,
+    };
+  }
+
+  const bag = row[bagColumn(mode)];
+  const entry = bag && typeof bag === "object" ? bag[field.name] : null;
+  if (!entry || typeof entry !== "object") {
+    return { plain: null, enc: null };
+  }
+
+  // The `v` / `enc` discriminant makes it structurally impossible to mistake a
+  // plaintext value for ciphertext, so we honour the stored shape, not the
+  // declared storageClass.
+  return {
+    plain: typeof entry.v === "string" ? entry.v : null,
+    enc: typeof entry.enc === "string" ? entry.enc : null,
+  };
+}
+
+/**
+ * Turn a resolved patch into the write it implies.
+ *
+ * @param {Object} field CredentialField
+ * @param {"TEST"|"LIVE"} mode
+ * @param {{write: boolean, value: string|null}} patchResult already storage-ready
+ *   (an AES envelope for an encrypted field, plaintext for a plaintext field)
+ * @returns {{column: Object, bagEntry: [string, Object|null]|null}} a Prisma data
+ *   fragment and/or a bag patch (`[name, null]` means "remove this key")
+ */
+function writeStoredField(field, mode, patchResult) {
+  if (field.legacyColumns) {
+    const entry = field.legacyColumns[modeKey(mode)] || {};
+    const column = field.storageClass === "encrypted" ? entry.enc : entry.plain;
+    return { column: { [column]: patchResult.value }, bagEntry: null };
+  }
+
+  if (patchResult.value === null) {
+    return { column: {}, bagEntry: [field.name, null] };
+  }
+
+  return {
+    column: {},
+    bagEntry: [
+      field.name,
+      field.storageClass === "encrypted"
+        ? { enc: patchResult.value }
+        : { v: patchResult.value },
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // In-process decrypted cache (never leaves this module)
@@ -257,14 +367,36 @@ function conflict(message, code, details = null) {
   return error;
 }
 
-function buildWebhookUrl(provider) {
-  const base = (
+function publicApiBase() {
+  return (
     process.env.PAYMENT_PUBLIC_API_URL ||
     process.env.PUBLIC_API_URL ||
     ""
   ).replace(/\/+$/, "");
+}
 
-  return `${base}/api/v1/wallet/topup/webhook/${provider}`;
+function buildWebhookUrl(provider) {
+  return `${publicApiBase()}/api/v1/wallet/topup/webhook/${provider}`;
+}
+
+/**
+ * Where a REDIRECT_POST gateway posts the browser back to. Null for providers
+ * that settle in a checkout modal and therefore never leave the SPA.
+ */
+function buildReturnUrl(provider) {
+  return `${publicApiBase()}/api/v1/wallet/topup/return/${provider}`;
+}
+
+/**
+ * The descriptor for a provider, or null for a coming-soon provider that has
+ * none yet. Used only where a missing descriptor is a legitimate state.
+ */
+function descriptorOrNull(provider) {
+  try {
+    return getCredentialDescriptor(provider);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -277,7 +409,10 @@ function comingSoonView(provider) {
     keySecretSet: false,
     keySecretMasked: null,
     webhookSecretSet: false,
+    credentials: {},
   };
+
+  const descriptor = descriptorOrNull(provider);
 
   return {
     provider,
@@ -292,7 +427,16 @@ function comingSoonView(provider) {
     quickAmounts: [],
     paymentLinkExpiryHours: null,
     webhookUrl: buildWebhookUrl(provider),
-    webhookEvents: WEBHOOK_EVENTS,
+    // Per-provider, NOT the module constant: a coming-soon gateway must not
+    // tell the operator to register Razorpay's event names.
+    webhookEvents: descriptor ? descriptor.webhookEvents : [],
+    credentialFields: descriptor ? describeFieldsForUi(provider) : [],
+    returnFlow: descriptor ? descriptor.returnFlow : null,
+    usesReturnEndpoint: descriptor ? descriptor.usesReturnEndpoint : false,
+    returnUrl:
+      descriptor && descriptor.usesReturnEndpoint
+        ? buildReturnUrl(provider)
+        : null,
     lastTestedAt: null,
     lastTestStatus: null,
     lastTestMessage: null,
@@ -336,35 +480,94 @@ function describeSecret(envelope) {
  * This is the ONLY function allowed to touch `*Enc` values for display, and it
  * drops them: the returned object contains no ciphertext.
  */
-function toSafeView(row) {
-  const testKey = describeSecret(row.testKeySecretEnc);
-  const testHook = describeSecret(row.testWebhookSecretEnc);
-  const liveKey = describeSecret(row.liveKeySecretEnc);
-  const liveHook = describeSecret(row.liveWebhookSecretEnc);
+/**
+ * Describe ONE credential field for the admin UI.
+ *
+ * `value` is populated ONLY for a revealable plaintext field. An encrypted
+ * field exposes a `masked` display string and never its plaintext, and the
+ * descriptor integrity check makes `revealable + encrypted` impossible anyway —
+ * the condition here is belt and braces.
+ *
+ * @returns {{set: boolean, masked: string|null, value: string|null, unreadable: boolean}}
+ */
+function describeCredentialField(row, mode, field) {
+  const stored = readStoredField(row, mode, field);
 
-  const credentialsUnreadable =
-    testKey.unreadable ||
-    testHook.unreadable ||
-    liveKey.unreadable ||
-    liveHook.unreadable;
+  if (field.storageClass === "encrypted" || stored.enc) {
+    const described = describeSecret(stored.enc);
+    return {
+      set: described.set,
+      masked: described.masked,
+      value: null,
+      unreadable: described.unreadable,
+    };
+  }
+
+  const plain = stored.plain ?? null;
+  return {
+    set: Boolean(plain),
+    masked: plain ? maskSecret(plain) : null,
+    value: field.revealable ? plain : null,
+    unreadable: false,
+  };
+}
+
+/**
+ * Project a DB row (SECRET_SELECT) into the masked admin view for one mode.
+ * Returns both the NEW per-field shape and the map of legacy aliases the old
+ * `{keyId, keySecretSet, ...}` side view is derived from.
+ * @private
+ */
+function buildSideView(row, descriptor, mode) {
+  const credentials = {};
+  /** @type {Record<string, {field: Object, entry: Object}>} */
+  const aliases = {};
+  let unreadable = false;
+
+  for (const field of descriptor.fields) {
+    const entry = describeCredentialField(row, mode, field);
+    credentials[field.name] = entry;
+    if (entry.unreadable) unreadable = true;
+
+    for (const alias of field.aliasesTo || []) {
+      aliases[alias] = { field, entry };
+    }
+  }
+
+  const keyIdAlias = aliases.keyId;
+  const keySecretAlias = aliases.keySecret;
+  const webhookAlias = aliases.webhookSecret;
+
+  return {
+    unreadable,
+    side: {
+      // The legacy shape the current admin card renders, derived from the
+      // aliased fields so CCAvenue's accessCode/workingKey land in the same
+      // slots Razorpay's keyId/keySecret/webhookSecret do.
+      keyId: keyIdAlias ? keyIdAlias.entry.value : null,
+      keySecretSet: keySecretAlias ? keySecretAlias.entry.set : false,
+      keySecretMasked: keySecretAlias ? keySecretAlias.entry.masked : null,
+      webhookSecretSet: webhookAlias ? webhookAlias.entry.set : false,
+      credentials,
+    },
+  };
+}
+
+function toSafeView(row) {
+  const descriptor = getCredentialDescriptor(row.provider);
+
+  const test = buildSideView(row, descriptor, "TEST");
+  const live = buildSideView(row, descriptor, "LIVE");
+
+  const credentialsUnreadable = test.unreadable || live.unreadable;
 
   const view = {
     provider: row.provider,
     clientId: row.clientId ?? null,
     isEnabled: row.isEnabled,
     mode: row.mode,
-    test: {
-      keyId: row.testKeyId ?? null,
-      keySecretSet: testKey.set,
-      keySecretMasked: testKey.masked,
-      webhookSecretSet: testHook.set,
-    },
-    live: {
-      keyId: row.liveKeyId ?? null,
-      keySecretSet: liveKey.set,
-      keySecretMasked: liveKey.masked,
-      webhookSecretSet: liveHook.set,
-    },
+    test: test.side,
+    live: live.side,
     currency: row.currency,
     minAmount: toNumber(row.minAmount),
     maxAmount: toNumber(row.maxAmount),
@@ -373,7 +576,14 @@ function toSafeView(row) {
     // Computed server-side so the admin can copy-paste it straight into the
     // gateway dashboard instead of hand-assembling the public URL.
     webhookUrl: buildWebhookUrl(row.provider),
-    webhookEvents: WEBHOOK_EVENTS,
+    // Per-provider, NOT the module constant.
+    webhookEvents: descriptor.webhookEvents,
+    credentialFields: describeFieldsForUi(row.provider),
+    returnFlow: descriptor.returnFlow,
+    usesReturnEndpoint: descriptor.usesReturnEndpoint,
+    returnUrl: descriptor.usesReturnEndpoint
+      ? buildReturnUrl(row.provider)
+      : null,
     lastTestedAt: row.lastTestedAt ?? null,
     lastTestStatus: row.lastTestStatus ?? null,
     lastTestMessage: row.lastTestMessage ?? null,
@@ -495,7 +705,7 @@ async function getConfigSafe(provider) {
 async function getActiveProviderPublic() {
   const row = await prisma.paymentProviderConfig.findFirst({
     where: { isEnabled: true, clientId: null },
-    select: SECRET_SELECT,
+    select: { provider: true, mode: true },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -503,33 +713,74 @@ async function getActiveProviderPublic() {
     return { enabled: false, provider: null };
   }
 
-  const isLive = row.mode === "LIVE";
-  const keyId = isLive ? row.liveKeyId : row.testKeyId;
-  const keySecretEnc = isLive ? row.liveKeySecretEnc : row.testKeySecretEnc;
-
-  // Enabled but half-configured (e.g. the key id was cleared out of band):
-  // treat as unavailable rather than handing the browser a broken checkout key.
-  if (!keyId || !keySecretEnc) {
+  let config;
+  try {
+    config = await resolveConfigForMode(row.provider, row.mode, {
+      requireEnabled: false,
+    });
+  } catch (error) {
+    // Enabled but half-configured (e.g. a credential was cleared out of band),
+    // or its stored secrets no longer decrypt: treat as unavailable rather than
+    // handing the browser a broken checkout key. HTTP 200 either way — the Add
+    // Money screen hides itself instead of erroring at an end customer.
     logger.warn(
       "Enabled payment provider is missing credentials for its mode",
       {
         provider: row.provider,
         mode: row.mode,
+        code: error.code ?? null,
+        error: error.message,
       },
     );
     return { enabled: false, provider: null };
+  }
+
+  // The provider module may not be registered yet (CCAvenue lands in a later
+  // wave); a missing impl must not break the Add Money screen.
+  let supports = null;
+  try {
+    const impl = getProvider(row.provider);
+    supports = impl.supports ? { ...impl.supports } : null;
+  } catch (error) {
+    logger.warn("Active payment provider implementation is not registered", {
+      provider: row.provider,
+      error: error.message,
+    });
   }
 
   return {
     enabled: true,
     provider: row.provider,
     mode: row.mode,
-    keyId,
-    currency: row.currency,
-    minAmount: toNumber(row.minAmount),
-    maxAmount: toNumber(row.maxAmount),
-    quickAmounts: normalizeQuickAmounts(row.quickAmounts),
+    // The PUBLIC id — Razorpay's key id, CCAvenue's access code. Designed to
+    // reach the browser; it rides in the checkout/redirect payload either way.
+    keyId: config.keyId ?? null,
+    currency: config.currency,
+    minAmount: config.minAmount,
+    maxAmount: config.maxAmount,
+    quickAmounts: config.quickAmounts,
+    // Additive: lets the frontend pick the checkout style and hide payment-link
+    // UI for a provider that does not support it.
+    returnFlow: config.descriptor.returnFlow,
+    supports,
   };
+}
+
+/**
+ * The name of the single enabled platform gateway, or null when none is on.
+ *
+ * `initiateSelfTopup` uses this instead of defaulting to Razorpay, so a
+ * CCAvenue-only deployment stops silently minting Razorpay orders.
+ *
+ * @returns {Promise<string|null>}
+ */
+async function resolveActiveProviderName() {
+  const row = await prisma.paymentProviderConfig.findFirst({
+    where: { clientId: null, isEnabled: true },
+    select: { provider: true },
+  });
+
+  return row ? row.provider : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -583,17 +834,30 @@ async function resolveConfigForMode(
   }
 
   const isLive = mode === "LIVE";
-  const keyId = isLive ? row.liveKeyId : row.testKeyId;
-  const keySecretEnc = isLive ? row.liveKeySecretEnc : row.testKeySecretEnc;
-  const webhookSecretEnc = isLive
-    ? row.liveWebhookSecretEnc
-    : row.testWebhookSecretEnc;
+  const mk = modeKey(mode);
+  const descriptor = getCredentialDescriptor(provider);
 
+  // Canonical `{fieldName: plaintext}` map, built by walking the descriptor —
+  // no column is named here.
+  /** @type {Record<string, string|null>} */
+  const credentials = {};
   const missing = [];
-  if (!keyId) missing.push(isLive ? "liveKeyId" : "testKeyId");
-  if (!keySecretEnc) missing.push(isLive ? "liveKeySecret" : "testKeySecret");
-  if (!webhookSecretEnc) {
-    missing.push(isLive ? "liveWebhookSecret" : "testWebhookSecret");
+
+  for (const field of descriptor.fields) {
+    const stored = readStoredField(row, mode, field);
+
+    let value = null;
+    if (field.storageClass === "encrypted") {
+      if (stored.enc) value = decryptSecret(stored.enc);
+    } else {
+      value = stored.plain ?? null;
+    }
+
+    credentials[field.name] = value ?? null;
+
+    if (field.requiredForEnable && !value) {
+      missing.push(`${mk}.${field.name}`);
+    }
   }
 
   if (missing.length > 0) {
@@ -604,12 +868,25 @@ async function resolveConfigForMode(
     );
   }
 
+  // >>> THE ALIAS PROJECTION — why nothing downstream changed <<<
+  // Each field fans its plaintext out onto the legacy `{keyId, keySecret,
+  // webhookSecret}` keys every consumer already reads. Razorpay's mapping is
+  // the identity; CCAvenue's accessCode fills `keyId` and its workingKey fills
+  // BOTH secret slots, which is exactly right — the same key encrypts the
+  // request and decrypts the response notification.
+  const aliased = {};
+  for (const field of descriptor.fields) {
+    for (const alias of field.aliasesTo || []) {
+      aliased[alias] = credentials[field.name];
+    }
+  }
+
   const resolved = {
     provider: row.provider,
     mode,
-    keyId,
-    keySecret: decryptSecret(keySecretEnc),
-    webhookSecret: decryptSecret(webhookSecretEnc),
+    ...aliased,
+    credentials,
+    descriptor,
     currency: row.currency,
     minAmount: toNumber(row.minAmount),
     maxAmount: toNumber(row.maxAmount),
@@ -679,6 +956,72 @@ function resolvePlainPatch(incoming, stored) {
 }
 
 /**
+ * The legacy flat body keys a descriptor field answers to, derived from its
+ * alias targets: `keySecret` -> `testKeySecret` / `liveKeySecret`.
+ *
+ * For Razorpay (identity aliases) this reproduces the exact six key names the
+ * body has always used. For CCAvenue it lets a caller that still posts
+ * `liveKeySecret` reach `workingKey`.
+ * @private
+ */
+function legacyFlatKeys(field, mk) {
+  return (field.aliasesTo || []).map(
+    (alias) => `${mk}${alias[0].toUpperCase()}${alias.slice(1)}`,
+  );
+}
+
+/**
+ * Read one incoming credential value: the new `credentials.<mode>.<field>`
+ * shape first, falling back to the legacy flat keys for one release.
+ * `undefined` means "not supplied" — i.e. leave the stored value alone.
+ * @private
+ */
+function readIncomingCredential(patch, mk, field) {
+  const supplied = patch.credentials?.[mk]?.[field.name];
+  if (supplied !== undefined) return supplied;
+
+  for (const key of legacyFlatKeys(field, mk)) {
+    if (patch[key] !== undefined) return patch[key];
+  }
+
+  return undefined;
+}
+
+/**
+ * Apply the shared patch semantics to one descriptor field.
+ *
+ * The mask guard runs for PLAINTEXT fields too: a UI that renders `AV••••1234`
+ * for an access code and naively re-posts it must not write the mask into the
+ * DB.
+ * @private
+ */
+function resolveCredentialPatch(field, incoming, stored) {
+  if (isMaskedValue(incoming)) {
+    const current =
+      field.storageClass === "encrypted" ? stored.enc : stored.plain;
+    return { write: false, value: current ?? null, changed: false };
+  }
+
+  return field.storageClass === "encrypted"
+    ? resolveSecretPatch(incoming, stored.enc)
+    : resolvePlainPatch(incoming, stored.plain);
+}
+
+/**
+ * The name a credential change is audited under. Legacy-column fields keep
+ * their historical flat name (`testKeyId`) so existing Razorpay audit rows stay
+ * greppable; bag fields use `<mode>.<fieldName>`.
+ * @private
+ */
+function auditFieldName(field, mk) {
+  if (field.legacyColumns) {
+    const [legacy] = legacyFlatKeys(field, mk);
+    if (legacy) return legacy;
+  }
+  return `${mk}.${field.name}`;
+}
+
+/**
  * Refuse a TEST<->LIVE flip while orders created in the CURRENT mode are still
  * in flight. Confirmed product decision: there is NO force override — the admin
  * must let the in-flight orders settle (or cancel them) first, otherwise a
@@ -725,6 +1068,44 @@ async function assertNoBlockingOrders(provider, currentMode) {
 }
 
 /**
+ * SINGLE ACTIVE GATEWAY.
+ *
+ * Exactly one platform gateway may be enabled at a time. Enabling a provider
+ * therefore disables every other enabled one — but only once their in-flight
+ * orders have settled, for the same reason a TEST<->LIVE flip is blocked: a
+ * webhook for a payment taken on the outgoing gateway would arrive after the
+ * platform stopped considering that gateway active.
+ *
+ * Reuses `assertNoBlockingOrders` so the `details` payload is byte-identical to
+ * the mode-switch guard's and the admin `AlertDialog` renders it unchanged.
+ * There is NO force override.
+ *
+ * @returns {Promise<Array<{id: string, provider: string, mode: string}>>} rows to disable
+ */
+async function collectProvidersToDisable(provider) {
+  const others = await prisma.paymentProviderConfig.findMany({
+    where: { clientId: null, isEnabled: true, provider: { not: provider } },
+    select: { id: true, provider: true, mode: true },
+  });
+
+  for (const other of others) {
+    try {
+      await assertNoBlockingOrders(other.provider, other.mode);
+    } catch (error) {
+      if (error.code !== "PENDING_ORDERS_BLOCK_MODE_SWITCH") throw error;
+
+      throw conflict(
+        `Cannot enable ${provider}: ${other.provider} still has ${error.details.total} order(s) in progress`,
+        "PENDING_ORDERS_BLOCK_PROVIDER_SWITCH",
+        error.details,
+      );
+    }
+  }
+
+  return others;
+}
+
+/**
  * Update a provider's configuration.
  *
  * @param {string} provider
@@ -754,52 +1135,54 @@ async function updateConfig(provider, patch, actor, reqMeta = {}) {
     await assertNoBlockingOrders(provider, current.mode);
   }
 
-  const isLive = nextMode === "LIVE";
+  const nextModeKey = modeKey(nextMode);
+  const descriptor = getCredentialDescriptor(provider);
 
-  // --- credential merge -----------------------------------------------------
-  const testKeyId = resolvePlainPatch(patch.testKeyId, current.testKeyId);
-  const liveKeyId = resolvePlainPatch(patch.liveKeyId, current.liveKeyId);
-  const testKeySecret = resolveSecretPatch(
-    patch.testKeySecret,
-    current.testKeySecretEnc,
-  );
-  const testWebhookSecret = resolveSecretPatch(
-    patch.testWebhookSecret,
-    current.testWebhookSecretEnc,
-  );
-  const liveKeySecret = resolveSecretPatch(
-    patch.liveKeySecret,
-    current.liveKeySecretEnc,
-  );
-  const liveWebhookSecret = resolveSecretPatch(
-    patch.liveWebhookSecret,
-    current.liveWebhookSecretEnc,
-  );
+  // --- credential merge (descriptor-driven) ---------------------------------
+  // One pass over every field x every mode. Reads the new
+  // `credentials.<mode>.<field>` shape, falls back to the legacy flat keys, and
+  // applies the unchanged undefined/mask/clear/replace semantics.
+  /** @type {Array<{field: Object, mode: string, mk: string, stored: Object, result: Object}>} */
+  const credentialPatches = [];
+
+  for (const field of descriptor.fields) {
+    for (const mk of ["test", "live"]) {
+      const mode = mk === "live" ? "LIVE" : "TEST";
+      const stored = readStoredField(current, mode, field);
+      const incoming = readIncomingCredential(patch, mk, field);
+
+      credentialPatches.push({
+        field,
+        mode,
+        mk,
+        stored,
+        result: resolveCredentialPatch(field, incoming, stored),
+      });
+    }
+  }
+
+  /** The value a field WILL hold in `mode` once this patch lands. @private */
+  const effectiveValue = (field, mode) => {
+    const entry = credentialPatches.find(
+      (cp) => cp.field.name === field.name && cp.mode === mode,
+    );
+    return entry ? entry.result.value : null;
+  };
 
   const nextEnabled =
     patch.isEnabled === undefined ? current.isEnabled : patch.isEnabled;
 
   // --- enabling guard -------------------------------------------------------
-  // The credential trio must be complete for the mode that WILL be active,
-  // counting values already stored. Enabling a gateway with a missing webhook
-  // secret would accept unverifiable webhooks — refuse it up front.
+  // Every `requiredForEnable` field must be present for the mode that WILL be
+  // active, counting values already stored. Enabling a gateway with a missing
+  // webhook/working key would accept unverifiable notifications — refuse it up
+  // front.
   if (nextEnabled) {
-    const missing = [];
-    const effectiveKeyId = isLive ? liveKeyId.value : testKeyId.value;
-    const effectiveKeySecret = isLive
-      ? liveKeySecret.value
-      : testKeySecret.value;
-    const effectiveWebhookSecret = isLive
-      ? liveWebhookSecret.value
-      : testWebhookSecret.value;
-
-    if (!effectiveKeyId) missing.push(isLive ? "liveKeyId" : "testKeyId");
-    if (!effectiveKeySecret) {
-      missing.push(isLive ? "liveKeySecret" : "testKeySecret");
-    }
-    if (!effectiveWebhookSecret) {
-      missing.push(isLive ? "liveWebhookSecret" : "testWebhookSecret");
-    }
+    const missing = descriptor.fields
+      .filter(
+        (field) => field.requiredForEnable && !effectiveValue(field, nextMode),
+      )
+      .map((field) => `${nextModeKey}.${field.name}`);
 
     if (missing.length > 0) {
       const error = new ValidationError(
@@ -810,6 +1193,13 @@ async function updateConfig(provider, patch, actor, reqMeta = {}) {
       throw error;
     }
   }
+
+  // --- single-active-gateway guard (BEFORE the transaction) ----------------
+  // The blocking-order counts are reads that must not hold a write transaction
+  // open, and a refusal here must leave the DB untouched.
+  const providersToDisable = nextEnabled
+    ? await collectProvidersToDisable(provider)
+    : [];
 
   // --- build the Prisma payload + the audit trail --------------------------
   const data = { updatedBy: actor?.id ?? null };
@@ -838,40 +1228,51 @@ async function updateConfig(provider, patch, actor, reqMeta = {}) {
     });
   }
 
-  if (testKeyId.write) {
-    data.testKeyId = testKeyId.value;
-    // keyId is the PUBLIC checkout key — plaintext by design, safe to audit.
-    changedFields.push({
-      field: "testKeyId",
-      from: current.testKeyId ?? null,
-      to: testKeyId.value,
-    });
-  }
-  if (liveKeyId.write) {
-    data.liveKeyId = liveKeyId.value;
-    changedFields.push({
-      field: "liveKeyId",
-      from: current.liveKeyId ?? null,
-      to: liveKeyId.value,
-    });
+  // Bag columns are rewritten wholesale, so start from a copy of what is stored
+  // and only touch the keys this patch actually writes.
+  /** @type {Record<string, Object|null>} */
+  const bags = {};
+
+  for (const { field, mode, mk, stored, result } of credentialPatches) {
+    if (!result.write) continue;
+
+    const { column, bagEntry } = writeStoredField(field, mode, result);
+    Object.assign(data, column);
+
+    if (bagEntry) {
+      const col = bagColumn(mode);
+      if (bags[col] === undefined) {
+        const currentBag = current[col];
+        bags[col] =
+          currentBag && typeof currentBag === "object" ? { ...currentBag } : {};
+      }
+      const [name, value] = bagEntry;
+      if (value === null) delete bags[col][name];
+      else bags[col][name] = value;
+    }
+
+    if (field.storageClass === "encrypted") {
+      // NEVER audit the value — only that it changed and whether it was cleared.
+      changedFields.push({
+        field: auditFieldName(field, mk),
+        changed: true,
+        cleared: result.value === null,
+      });
+    } else {
+      // A plaintext credential (Razorpay key id, CCAvenue merchant id / access
+      // code) is public by design — safe to audit with its before/after.
+      changedFields.push({
+        field: auditFieldName(field, mk),
+        from: stored.plain ?? null,
+        to: result.value,
+      });
+    }
   }
 
-  const secretWrites = [
-    ["testKeySecret", "testKeySecretEnc", testKeySecret],
-    ["testWebhookSecret", "testWebhookSecretEnc", testWebhookSecret],
-    ["liveKeySecret", "liveKeySecretEnc", liveKeySecret],
-    ["liveWebhookSecret", "liveWebhookSecretEnc", liveWebhookSecret],
-  ];
-
-  for (const [label, column, patchResult] of secretWrites) {
-    if (!patchResult.write) continue;
-    data[column] = patchResult.value;
-    // NEVER audit the value — only that it changed and whether it was cleared.
-    changedFields.push({
-      field: label,
-      changed: true,
-      cleared: patchResult.value === null,
-    });
+  for (const [col, bag] of Object.entries(bags)) {
+    // An emptied bag is stored as NULL rather than `{}` so "nothing configured"
+    // has exactly one representation.
+    data[col] = Object.keys(bag).length > 0 ? bag : null;
   }
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -880,6 +1281,31 @@ async function updateConfig(provider, patch, actor, reqMeta = {}) {
       data,
       select: SECRET_SELECT,
     });
+
+    // Single active gateway: turn every other enabled platform gateway off, in
+    // the same transaction that turns this one on.
+    for (const other of providersToDisable) {
+      await tx.paymentProviderConfig.update({
+        where: { id: other.id },
+        data: { isEnabled: false, updatedBy: actor?.id ?? null },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: actor?.id ?? null,
+          action: "PAYMENT_PROVIDER_AUTO_DISABLED",
+          resource: "PaymentProviderConfig",
+          resourceId: other.id,
+          details: {
+            provider: other.provider,
+            reason: "SINGLE_ACTIVE_GATEWAY",
+            enabledProvider: provider,
+          },
+          ipAddress: reqMeta.ipAddress ?? null,
+          userAgent: reqMeta.userAgent ?? null,
+        },
+      });
+    }
 
     await tx.auditLog.create({
       data: {
@@ -901,13 +1327,19 @@ async function updateConfig(provider, patch, actor, reqMeta = {}) {
     return row;
   });
 
+  // EVERY touched provider, not just the patched one — an auto-disabled gateway
+  // whose cached view still said `isEnabled: true` would keep being offered.
   await invalidateConfigCache(provider);
+  for (const other of providersToDisable) {
+    await invalidateConfigCache(other.provider);
+  }
 
   logger.info("Payment provider configuration updated", {
     provider,
     mode: updated.mode,
     isEnabled: updated.isEnabled,
     changedFields: changedFields.map((c) => c.field),
+    autoDisabled: providersToDisable.map((p) => p.provider),
     updatedBy: actor?.id,
   });
 
@@ -1127,6 +1559,7 @@ module.exports = {
   listConfigs,
   getConfigSafe,
   getActiveProviderPublic,
+  resolveActiveProviderName,
 
   // Internal credential resolution (plaintext — never return these directly)
   resolveActiveConfig,

@@ -227,10 +227,59 @@ const webhookLimiter = rateLimit({
   },
 });
 
+// Hosted-gateway return limiter (for the CCAvenue-style redirect_url POST)
+// This is CUSTOMER-BROWSER traffic, not provider retry traffic: roughly ONE hit
+// per completed payment, arriving from as many distinct IPs as there are
+// customers. It is therefore deliberately MORE GENEROUS than webhookLimiter —
+// throttling a paying customer's return hop is how a payment stops being
+// visible to the person who just made it. Tunable via RATE_LIMIT_RETURN_MAX.
+// TODO(ccavenue-kit): confirm whether the redirect_url POST is browser- or
+// server-originated; it changes what this key means and whether a 302 is the
+// right response.
+const RETURN_MAX = parseInt(process.env.RATE_LIMIT_RETURN_MAX || "1200", 10);
+
+const returnLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: RETURN_MAX,
+  message: {
+    status: "error",
+    message: "Too many payment return requests, please try again later",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      retryAfter: "1 minute",
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: createRedisStore(),
+  keyGenerator: (req) => req.ip,
+  handler: (req, res) => {
+    logger.warn("Gateway return rate limit exceeded", {
+      ip: req.ip,
+      url: req.url,
+      method: req.method,
+      userAgent: req.get("User-Agent"),
+    });
+
+    res.status(429).json(
+      APIResponse.error(
+        "Too many payment return requests, please try again later",
+        429,
+        {
+          retryAfter: "1 minute",
+          limit: RETURN_MAX,
+          windowMs: 60 * 1000,
+        },
+      ),
+    );
+  },
+});
+
 module.exports = {
   generalLimiter,
   strictLimiter,
   balanceLimiter,
   transactionLimiter,
   webhookLimiter,
+  returnLimiter,
 };

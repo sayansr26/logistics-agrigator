@@ -9,13 +9,20 @@ import {
   useLazyGetPaymentOrderStatusQuery,
   useVerifyPaymentMutation,
 } from "@/store/api/endpoints/paymentApi";
-import type { PaymentOrderStatusResponse } from "@/store/api/endpoints/paymentApi";
-import {
-  loadRazorpayScript,
-  openRazorpayCheckout,
-  type RazorpayFailurePayload,
-  type RazorpaySuccessPayload,
+import type {
+  InitiatePaymentCheckout,
+  InitiatePaymentResponse,
+  PaymentOrderStatusResponse,
+} from "@/store/api/endpoints/paymentApi";
+// `InitiatePaymentCheckout` is a type-only import from paymentApi.ts (owned
+// by another agent this wave) rather than a local redefinition here - a
+// type-only import is read-only and keeps this hook in sync with the real
+// `/self/initiate` response shape instead of drifting from a local copy.
+import type {
+  RazorpayFailurePayload,
+  RazorpaySuccessPayload,
 } from "@/lib/razorpay";
+import { postRedirect } from "@/lib/redirectPost";
 import { usePaymentProvider } from "./usePaymentProvider";
 
 export type TopupPhase =
@@ -23,6 +30,7 @@ export type TopupPhase =
   | "creating"
   | "loading-sdk"
   | "checkout"
+  | "redirecting"
   | "cancelled"
   | "failed"
   | "verifying"
@@ -30,13 +38,13 @@ export type TopupPhase =
   | "credited"
   | "reconciling";
 
-export interface UseRazorpayTopupArgs {
+export interface UseWalletTopupArgs {
   /** Omit for own wallet. */
   targetUserId?: string;
   onCredited?: (amount: number, balanceAfter?: number) => void;
 }
 
-export interface UseRazorpayTopup {
+export interface UseWalletTopup {
   phase: TopupPhase;
   errorMessage: string | null;
   amountPaid: number | null;
@@ -101,16 +109,24 @@ function clearResumeRecord(): void {
   }
 }
 
+/** True for an RTK Query `FetchBaseQueryError`-shaped 401. */
+function isUnauthorizedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return (error as { status?: unknown }).status === 401;
+}
+
 /**
- * Full Razorpay wallet top-up checkout state machine.
+ * Full wallet top-up checkout state machine, covering both:
+ *  - seamless providers (Razorpay) that complete via a JS checkout modal, and
+ *  - non-seamless providers (CCAvenue) that complete via a top-level
+ *    form-POST redirect away from the SPA entirely, with the browser
+ *    returning via a server-side 302 to /wallet/topup/callback.
  *
  * Kept out of the recharge modal component so the flow is testable and
  * reusable across every "Add Money" surface (own wallet, admin-on-behalf-of
  * a target user, etc).
  */
-export function useRazorpayTopup(
-  args: UseRazorpayTopupArgs = {},
-): UseRazorpayTopup {
+export function useWalletTopup(args: UseWalletTopupArgs = {}): UseWalletTopup {
   const { targetUserId, onCredited } = args;
   const { validateAmount } = usePaymentProvider();
 
@@ -152,7 +168,7 @@ export function useRazorpayTopup(
   const [verifyPayment] = useVerifyPaymentMutation();
   const [triggerCheckStatus] = useLazyGetPaymentOrderStatusQuery();
 
-  const { data: pollData } = useGetPaymentOrderStatusQuery(
+  const { data: pollData, error: pollError } = useGetPaymentOrderStatusQuery(
     orderId ?? skipToken,
     {
       skip: phase !== "polling",
@@ -199,8 +215,10 @@ export function useRazorpayTopup(
   );
 
   // Resume-in-progress top-up on mount (survives a page reload / tab close
-  // mid-checkout). Only hydrates when the record is fresh and targets the
-  // same wallet this hook instance is scoped to.
+  // mid-checkout, and - critically for the REDIRECT_POST flow - a full
+  // browser navigation away to a non-seamless gateway and back via the
+  // server's 302 to /wallet/topup/callback). Only hydrates when the record
+  // is fresh and targets the same wallet this hook instance is scoped to.
   useEffect(() => {
     const record = readResumeRecord();
     if (!record) return;
@@ -208,6 +226,10 @@ export function useRazorpayTopup(
       clearResumeRecord();
       return;
     }
+    // A record written just before a REDIRECT_POST navigation may carry no
+    // targetUserId (own-wallet top-ups never set one), which matches the
+    // default `undefined` here - so this still resumes correctly for the
+    // common case of a CCAvenue round trip.
     if (record.targetUserId !== targetUserId) return;
 
     setOrderId(record.orderId);
@@ -247,6 +269,21 @@ export function useRazorpayTopup(
     applyStatusResult(pollData);
   }, [phase, pollData, applyStatusResult]);
 
+  // A 401 while polling means the session token did not survive the round
+  // trip to the gateway and back (e.g. it lives only in memory/Redux, not
+  // persisted storage) - most likely after a REDIRECT_POST return. We
+  // cannot keep polling an authenticated endpoint with no valid token, but
+  // that says nothing about whether the payment itself succeeded, so this
+  // degrades to the "reconciling" copy and NEVER "failed". Any other
+  // polling error is a transient network hiccup that RTK Query's own
+  // pollingInterval will simply retry.
+  useEffect(() => {
+    if (phase !== "polling" || !pollError) return;
+    if (isUnauthorizedError(pollError)) {
+      setPhaseBoth("reconciling");
+    }
+  }, [phase, pollError, setPhaseBoth]);
+
   const checkStatusNow = useCallback(() => {
     if (!orderId) return;
     triggerCheckStatus(orderId)
@@ -275,7 +312,7 @@ export function useRazorpayTopup(
       setBalanceAfter(null);
       setPhaseBoth("creating");
 
-      let initiateResult;
+      let initiateResult: InitiatePaymentResponse;
       try {
         initiateResult = await initiatePayment({
           amount,
@@ -296,6 +333,51 @@ export function useRazorpayTopup(
 
       setOrderId(initiateResult.orderId);
       setIsTest(initiateResult.mode === "TEST");
+
+      const checkout: InitiatePaymentCheckout = initiateResult.checkout;
+
+      // --- Non-seamless (CCAvenue-style) redirect flow ---------------
+      if (checkout.type === "REDIRECT_POST") {
+        if (!checkout.url || !checkout.fields) {
+          // REDIRECT_FIELDS_UNAVAILABLE: a replayed order's form-POST
+          // fields could not be re-derived server-side. There is no modal
+          // to fall back to for this provider, so this is a hard failure -
+          // never silently swap in a MODAL checkout the provider doesn't
+          // support.
+          setPhaseBoth("failed");
+          setErrorMessage(
+            checkout.error ?? "Could not start the payment. Please try again.",
+          );
+          inFlightRef.current = false;
+          return;
+        }
+
+        // BEFORE ANYTHING ELSE: the browser is about to navigate away to
+        // the gateway and unload this SPA entirely. This localStorage
+        // record is the only thread back to this flow when the gateway's
+        // server-side 302 lands on /wallet/topup/callback and the app
+        // remounts from scratch - it stops being a "nice to have resume"
+        // and becomes the sole continuation mechanism.
+        writeResumeRecord({
+          orderId: initiateResult.orderId,
+          amount: initiateResult.amount,
+          targetUserId,
+          ts: Date.now(),
+        });
+
+        setPhaseBoth("redirecting");
+        postRedirect(checkout.url, checkout.fields);
+        // Do NOT clear inFlightRef here - the page is leaving, and there is
+        // no "after" for this call stack to run in.
+        return;
+      }
+
+      // --- Seamless (Razorpay-style) modal flow -----------------------
+      // Dynamically imported so a CCAvenue-only deployment (no MODAL
+      // checkout ever returned) never pulls in the Razorpay loader/wrapper
+      // module or fetches Razorpay's CDN script.
+      const { loadRazorpayScript, openRazorpayCheckout } =
+        await import("@/lib/razorpay");
 
       setPhaseBoth("loading-sdk");
       const sdkLoaded = await loadRazorpayScript();
@@ -448,3 +530,11 @@ export function useRazorpayTopup(
     checkStatusNow,
   };
 }
+
+/**
+ * @deprecated Use `useWalletTopup`. Kept as an alias for one release so any
+ * import of the old Razorpay-specific name keeps working; only
+ * `recharge-modal.tsx` used it, and that has been updated to the new name
+ * directly.
+ */
+export const useRazorpayTopup = useWalletTopup;

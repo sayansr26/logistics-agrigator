@@ -91,6 +91,23 @@ const unknownQueryMessage = {
   "object.unknown": "Unknown query parameter '{#label}' is not allowed",
 };
 
+/**
+ * Every provider the API will accept in a path/param position.
+ * Single source of truth — three separate literal arrays used to drift here,
+ * which meant a new provider 400'd at the router before reaching any service.
+ */
+const PAYMENT_PROVIDERS = [
+  "razorpay",
+  "ccavenue",
+  "ccavenue_upi_qr",
+  "stripe",
+  "cashfree",
+  "payu",
+];
+
+/** Providers with a real implementation that can actually take a payment. */
+const IMPLEMENTED_PAYMENT_PROVIDERS = ["razorpay", "ccavenue"];
+
 // Status enums — must stay in sync with the Prisma enums.
 const PAYMENT_ORDER_STATUSES = [
   "CREATED",
@@ -149,10 +166,10 @@ const endDateSchema = Joi.date()
 
 const providerParamsSchema = Joi.object({
   provider: Joi.string()
-    .valid("razorpay", "stripe", "cashfree", "payu")
+    .valid(...PAYMENT_PROVIDERS)
     .required()
     .messages({
-      "any.only": "Provider must be one of: razorpay, stripe, cashfree, payu",
+      "any.only": `Provider must be one of: ${PAYMENT_PROVIDERS.join(", ")}`,
       "any.required": "Provider is required",
     }),
 }).messages(unknownFieldMessage);
@@ -195,6 +212,38 @@ const updateProviderConfigSchema = Joi.object({
     "any.only": "Mode must be one of: TEST, LIVE",
   }),
 
+  /**
+   * The descriptor-driven write shape: `{test: {<fieldName>: value}, live: {…}}`
+   * where `<fieldName>` is a credential field declared in
+   * `services/payments/credentialDescriptors.js` (razorpay: keyId/keySecret/
+   * webhookSecret; ccavenue: merchantId/accessCode/workingKey).
+   *
+   * `.pattern()` keys are KNOWN keys as far as Joi is concerned, so
+   * `middleware/validate.js`'s `stripUnknown: true` keeps them — only keys that
+   * match neither a declared child nor a pattern are stripped. The field names
+   * are deliberately NOT enumerated here: the descriptor module is the single
+   * source of truth for which names are valid, and it rejects an unknown one in
+   * the service layer.
+   */
+  credentials: Joi.object({
+    test: Joi.object().pattern(
+      Joi.string().max(40),
+      Joi.string().allow("", null).max(512),
+    ),
+    live: Joi.object().pattern(
+      Joi.string().max(40),
+      Joi.string().allow("", null).max(512),
+    ),
+  })
+    .optional()
+    .messages({
+      // NOTE: no `{...}` in this message — Joi parses braces as a template.
+      "object.base": "credentials must be an object with test / live keys",
+    }),
+
+  // LEGACY FLAT KEYS — kept for one release. The service maps each onto the
+  // descriptor field that aliases to it, so an old client posting
+  // `liveKeySecret` still reaches CCAvenue's `workingKey`.
   testKeyId: credentialSchema,
   testKeySecret: credentialSchema,
   testWebhookSecret: credentialSchema,
@@ -308,9 +357,17 @@ const selfTopupInitiateSchema = Joi.object({
 
   currency: currencySchema,
 
-  provider: Joi.string().valid("razorpay").default("razorpay").messages({
-    "any.only": "Provider must be razorpay",
-  }),
+  // NO DEFAULT, deliberately: when the caller omits `provider`,
+  // `topupService.initiateSelfTopup` asks
+  // `providerConfigService.resolveActiveProviderName()` which gateway is
+  // actually enabled. Defaulting to "razorpay" here made a CCAvenue-only
+  // deployment silently mint Razorpay orders.
+  provider: Joi.string()
+    .valid(...IMPLEMENTED_PAYMENT_PROVIDERS)
+    .optional()
+    .messages({
+      "any.only": `Provider must be one of: ${IMPLEMENTED_PAYMENT_PROVIDERS.join(", ")}`,
+    }),
 
   idempotencyKey: Joi.string().max(100).trim().optional().messages({
     "string.max": "Idempotency key cannot exceed 100 characters",
@@ -461,10 +518,10 @@ const topupOrderListQuerySchema = Joi.object({
     }),
 
   provider: Joi.string()
-    .valid("razorpay", "stripe", "cashfree", "payu")
+    .valid(...PAYMENT_PROVIDERS)
     .optional()
     .messages({
-      "any.only": "Provider must be one of: razorpay, stripe, cashfree, payu",
+      "any.only": `Provider must be one of: ${PAYMENT_PROVIDERS.join(", ")}`,
     }),
 
   walletUserId: Joi.string().max(255).trim().optional().messages({
@@ -536,10 +593,10 @@ const reconcileQueueQuerySchema = Joi.object({
     }),
 
   provider: Joi.string()
-    .valid("razorpay", "stripe", "cashfree", "payu")
+    .valid(...PAYMENT_PROVIDERS)
     .optional()
     .messages({
-      "any.only": "Provider must be one of: razorpay, stripe, cashfree, payu",
+      "any.only": `Provider must be one of: ${PAYMENT_PROVIDERS.join(", ")}`,
     }),
 
   walletUserId: Joi.string().max(255).trim().optional().messages({
@@ -581,6 +638,8 @@ module.exports = {
   reconcileQueueQuerySchema,
 
   // Enums (shared with services/controllers)
+  PAYMENT_PROVIDERS,
+  IMPLEMENTED_PAYMENT_PROVIDERS,
   PAYMENT_ORDER_STATUSES,
   MANUAL_TOPUP_STATUSES,
 };

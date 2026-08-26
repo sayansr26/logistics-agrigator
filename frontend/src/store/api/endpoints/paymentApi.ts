@@ -12,7 +12,8 @@ import type { Pagination } from "./walletApi";
 // Shared enums / value types
 // ===========================
 
-type PaymentProviderName = "razorpay" | "stripe" | "cashfree" | "payu";
+type PaymentProviderName =
+  "razorpay" | "stripe" | "cashfree" | "payu" | "ccavenue" | "ccavenue_upi_qr";
 
 type PaymentMode = "TEST" | "LIVE";
 
@@ -36,11 +37,38 @@ type ManualTopupStatus =
 // Provider configuration
 // ===========================
 
+/**
+ * Descriptor for a single provider-specific credential field (e.g. CCAvenue's
+ * merchantId / accessCode / workingKey). Drives dynamic credential forms -
+ * the UI should render one field per descriptor rather than hardcoding
+ * per-provider fields.
+ */
+interface CredentialFieldDescriptor {
+  name: string;
+  label: string;
+  storageClass: "plaintext" | "encrypted";
+  requiredForEnable: boolean;
+  revealable: boolean;
+  placeholder?: string | null;
+  hint?: string | null;
+}
+
+/** Current stored state of a single dynamic credential field. */
+interface CredentialFieldState {
+  set: boolean;
+  masked: string | null;
+  value: string | null;
+  /** True when the field is `revealable` but the value could not be decrypted. */
+  unreadable?: boolean;
+}
+
 interface ProviderCredentialState {
   keyId: string | null;
   keySecretSet: boolean;
   keySecretMasked: string | null;
   webhookSecretSet: boolean;
+  /** Dynamic, provider-specific credential fields keyed by field `name`. */
+  credentials: Record<string, CredentialFieldState>;
 }
 
 interface PaymentProviderConfig {
@@ -64,6 +92,18 @@ interface PaymentProviderConfig {
   updatedBy?: string;
   /** True for providers scaffolded in the UI but not yet wired up server-side. */
   comingSoon?: boolean;
+  /** Provider-specific credential field descriptors, for dynamic forms. */
+  credentialFields: CredentialFieldDescriptor[];
+  /**
+   * How checkout is completed for this provider. Null only for a
+   * `comingSoon` provider that has no credential descriptor registered yet.
+   */
+  returnFlow: "CHECKOUT_MODAL" | "REDIRECT_POST" | null;
+  /** True when the provider posts back to a dedicated return endpoint (e.g. CCAvenue). */
+  usesReturnEndpoint: boolean;
+  returnUrl: string | null;
+  /** Present (true) only when a stored encrypted credential failed to decrypt. */
+  credentialsUnreadable?: boolean;
 }
 
 interface WalletTopupPolicy {
@@ -84,6 +124,14 @@ interface WalletTopupPolicy {
  *   - key present as a value   -> replace the stored secret
  * Never round-trip the masked value the GET endpoint returns back into one
  * of these fields - it is display-only and not a real secret.
+ *
+ * `credentials.test` / `credentials.live` follow the SAME semantics, applied
+ * per-field for dynamic (provider-specific, e.g. CCAvenue) credential fields:
+ *   - key omitted            -> leave that field unchanged
+ *   - key present as "" | null -> explicitly clear that field
+ *   - key present as a value -> replace that field
+ * A value containing a "•" character is treated as unchanged by the server
+ * (mask guard) - never round-trip a masked display value back in here.
  */
 interface UpdatePaymentProviderRequest {
   provider: PaymentProviderName;
@@ -101,6 +149,11 @@ interface UpdatePaymentProviderRequest {
   liveKeyId?: string;
   liveKeySecret?: string;
   liveWebhookSecret?: string;
+  /** Dynamic, provider-specific credential fields (e.g. CCAvenue). See semantics above. */
+  credentials?: {
+    test?: Record<string, string | null>;
+    live?: Record<string, string | null>;
+  };
 }
 
 interface TestConnectionResponse {
@@ -120,6 +173,37 @@ interface ActiveProviderResponse {
   minAmount: number;
   maxAmount: number;
   quickAmounts: number[];
+  /** Only meaningful when `enabled` is true. */
+  returnFlow?: "CHECKOUT_MODAL" | "REDIRECT_POST";
+  /** Null when the provider's implementation module isn't registered server-side. */
+  supports?: {
+    orders: boolean;
+    paymentLinks: boolean;
+    refunds: boolean;
+  } | null;
+}
+
+/**
+ * A single order blocking a provider enable/mode switch because it still
+ * has an open (non-terminal) payment in the mode being vacated.
+ */
+interface BlockingOrderInfo {
+  orderId: string;
+  walletUserId: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+/**
+ * `error.details` shape for both:
+ *   - 409 `PENDING_ORDERS_BLOCK_MODE_SWITCH` (existing TEST->LIVE mode switch guard)
+ *   - 409 `PENDING_ORDERS_BLOCK_PROVIDER_SWITCH` (enabling a provider while
+ *     another provider has open orders)
+ */
+interface PendingOrdersBlockDetails {
+  total: number;
+  blockingOrders: BlockingOrderInfo[];
 }
 
 // ===========================
@@ -131,6 +215,31 @@ interface InitiatePaymentRequest {
   currency?: string;
   idempotencyKey: string;
 }
+
+/**
+ * How the client should complete checkout for this order.
+ *   - MODAL: launch the provider's JS checkout modal with `params` (Razorpay).
+ *   - REDIRECT_POST: submit a hidden form with `fields` via POST to `url`
+ *     (CCAvenue). `url`/`fields` may be null alongside a populated `error`
+ *     if order creation succeeded but the redirect payload could not be built.
+ */
+type InitiatePaymentCheckout =
+  | {
+      type: "MODAL";
+      params: {
+        key: string;
+        order_id: string;
+        /** Integer paise, per the gateway checkout SDK's own contract. */
+        amount: number;
+        currency: string;
+      };
+    }
+  | {
+      type: "REDIRECT_POST";
+      url: string | null;
+      fields: Record<string, string> | null;
+      error?: string;
+    };
 
 interface InitiatePaymentResponse {
   orderId: string;
@@ -147,6 +256,8 @@ interface InitiatePaymentResponse {
     email?: string;
     contact?: string;
   };
+  /** Discriminated on `type` - branch on it to decide modal vs redirect-post. */
+  checkout: InitiatePaymentCheckout;
 }
 
 interface VerifyPaymentRequest {
@@ -673,13 +784,18 @@ export type {
   PaymentLinkUiStatus,
   ManualTopupStatus,
   // Provider configuration
+  CredentialFieldDescriptor,
+  CredentialFieldState,
   ProviderCredentialState,
   PaymentProviderConfig,
   WalletTopupPolicy,
   UpdatePaymentProviderRequest,
   TestConnectionResponse,
   ActiveProviderResponse,
+  BlockingOrderInfo,
+  PendingOrdersBlockDetails,
   // Self-serve top-up (checkout)
+  InitiatePaymentCheckout,
   InitiatePaymentRequest,
   InitiatePaymentResponse,
   VerifyPaymentRequest,

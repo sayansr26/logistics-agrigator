@@ -71,6 +71,83 @@ const {
 
 const RESOURCE = "ManualTopupRequest";
 
+/* ------------------------------------------------------------------ *
+ * The settlement seam (Wave 3.4)
+ * ------------------------------------------------------------------ */
+
+/**
+ * THE SEAM. A request may have been raised by something other than the manual
+ * top-up screen — today, an unattributed static-QR payment assigned by an admin
+ * (`services/payments/qrAssignmentService.js`). That originating module has its
+ * OWN row to move when a superadmin finally approves or rejects, and it must
+ * learn of the outcome the moment it happens.
+ *
+ * A PUSH CALLBACK, NOT A POLL. A poller reading `ManualTopupRequest.status` on
+ * a timer would be a SECOND source of truth for "did this credit happen", and
+ * the two would disagree the instant one lagged. With this seam,
+ * `ManualTopupRequest.status` stays the record and the originator only mirrors
+ * it.
+ *
+ * THE HANDLER CANNOT BREAK A CREDIT. It is invoked at the very END of `approve`
+ * and `reject`, outside every `prisma.$transaction`, and a throw is caught and
+ * logged. By the time it runs the money has already moved; letting a downstream
+ * bookkeeping failure bubble would turn a successful credit into a 500 and
+ * invite an operator to "retry" a credit that already landed.
+ *
+ * Same shape as `qrCollectionService.setCreditHandler`. This module never
+ * requires the QR modules; wiring happens once at server bootstrap.
+ *
+ * @type {null|function(Object): (Promise<any>|any)}
+ */
+let settlementHandler = null;
+
+/**
+ * Register (or clear, with `null`) the settlement handler.
+ *
+ * @param {?function(Object): (Promise<any>|any)} fn invoked as
+ *   `fn({ request, outcome, reviewer })`
+ * @returns {void}
+ */
+function setSettlementHandler(fn) {
+  if (fn !== null && typeof fn !== "function") {
+    throw new TypeError("setSettlementHandler expects a function or null");
+  }
+  settlementHandler = fn;
+}
+
+/** @returns {?Function} the registered handler (diagnostics/tests). */
+function getSettlementHandler() {
+  return settlementHandler;
+}
+
+/**
+ * Fire the settlement handler. NEVER THROWS.
+ *
+ * @private
+ * @param {Object} request the settled row
+ * @param {("CREDITED"|"REJECTED"|"FAILED")} outcome
+ * @param {Object} reviewer
+ * @returns {Promise<void>}
+ */
+async function invokeSettlementHandler(request, outcome, reviewer) {
+  if (typeof settlementHandler !== "function") return;
+
+  try {
+    await settlementHandler({ request, outcome, reviewer });
+  } catch (error) {
+    // The credit is DONE. Log and move on — see the seam JSDoc above.
+    logger.error(
+      "Manual top-up settlement handler failed — the credit stands, downstream state may need reconciliation",
+      {
+        requestId: request?.id ?? null,
+        outcome,
+        error: error.message,
+        stack: error.stack,
+      },
+    );
+  }
+}
+
 /** Statuses that consume a user's daily manual-credit allowance. */
 const DAILY_CAP_STATUSES = ["CREDITED", "PENDING_APPROVAL"];
 
@@ -809,8 +886,14 @@ async function approve({ requestId, reviewer, reviewRemarks, ip, userAgent }) {
   const result = await _creditExternal(approved, reviewer, { ip, userAgent });
 
   if (!result.ok) {
+    // The row is now FAILED. Tell the originator BEFORE throwing, so a QR
+    // collection is flagged `needsManualAction` rather than sitting in the
+    // queue looking healthy while its credit never landed.
+    await invokeSettlementHandler(result.row, "FAILED", reviewer);
     throw creditFailureError(result.row, result.error);
   }
+
+  await invokeSettlementHandler(result.row, "CREDITED", reviewer);
 
   return {
     requestId: result.row.id,
@@ -892,6 +975,8 @@ async function reject({ requestId, reviewer, reviewRemarks, ip, userAgent }) {
     rejectedBy: reviewer.id,
     amount: toNumber(rejected.amount),
   });
+
+  await invokeSettlementHandler(rejected, "REJECTED", reviewer);
 
   return {
     requestId: rejected.id,
@@ -1049,6 +1134,10 @@ module.exports = {
   reject,
   list,
   listPending,
+
+  // The settlement seam — wired once at server bootstrap, never at module load.
+  setSettlementHandler,
+  getSettlementHandler,
 
   // Exported for reuse/tests — not part of the HTTP surface.
   _creditExternal,

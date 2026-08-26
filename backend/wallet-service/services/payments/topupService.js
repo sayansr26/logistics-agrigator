@@ -7,6 +7,8 @@
  *
  *   - `initiateSelfTopup`      a logged-in user funds THEIR OWN wallet
  *   - `verifyClientCallback`   the browser reports "checkout succeeded"
+ *   - `handleGatewayReturn`    a hosted (non-seamless) gateway posts the
+ *                              customer's browser back to us after payment
  *   - `createAdminPaymentLink` an admin raises a link for SOMEONE ELSE
  *   - `listOrders` / `getOrder` / `getOrderWithLiveStatus`
  *   - `refreshFromProvider`    pull the gateway's view of an open order
@@ -63,8 +65,9 @@ const { getProvider } = require("./index");
 const {
   resolveActiveConfig,
   resolveConfigForMode,
+  resolveActiveProviderName,
 } = require("./providerConfigService");
-const { creditOrder } = require("./webhookService");
+const { creditOrder, markOrderFailed } = require("./webhookService");
 const {
   resolveForSelf,
   resolveForAdmin,
@@ -102,6 +105,20 @@ const MAX_RECEIPT_LENGTH = 40;
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+
+/**
+ * Statuses a hosted-gateway return may still move. Everything terminal
+ * (PAID / CREDITED / REFUNDED / FAILED / CANCELLED) is left alone: the return
+ * hop is a *hint* that arrives on the customer's browser, never an authority
+ * that may undo a settled row.
+ */
+const RETURN_PARKABLE_FROM = ["CREATED", "PENDING"];
+
+/** CCAvenue `order_status` values that mean "money captured". */
+const RETURN_SUCCESS_STATUSES = ["success"];
+
+/** CCAvenue `order_status` values that mean "no money moved". */
+const RETURN_FAILURE_STATUSES = ["failure", "aborted", "invalid"];
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -508,7 +525,7 @@ async function findIdempotentOrder(identity, idempotencyKey, amountPaise) {
  * @param {Object} args.user            req.user (the JWT — the ONLY identity source)
  * @param {number} args.amount          rupees
  * @param {string} [args.currency]
- * @param {string} [args.provider="razorpay"]
+ * @param {string} [args.provider] omit to use whichever gateway is enabled
  * @param {string} [args.idempotencyKey]
  * @param {Object} [args.metadata]
  * @param {string} [args.ip]
@@ -523,7 +540,7 @@ async function initiateSelfTopup({
   user,
   amount,
   currency,
-  provider = DEFAULT_PROVIDER,
+  provider: requestedProvider,
   idempotencyKey,
   metadata,
   ip,
@@ -539,6 +556,19 @@ async function initiateSelfTopup({
   const identity = resolveForSelf(user);
 
   // ---- 2. PROVIDER CONFIG (409 when disabled / not configured) -----------
+  // NO "razorpay" DEFAULT. When the caller does not name a provider we ask
+  // which gateway is actually enabled — defaulting to Razorpay made a
+  // CCAvenue-only deployment silently mint Razorpay orders.
+  const provider = requestedProvider || (await resolveActiveProviderName());
+
+  if (!provider) {
+    throw fail(
+      "No payment gateway is enabled. Please try again later.",
+      409,
+      "PROVIDER_DISABLED",
+    );
+  }
+
   const config = await resolveActiveConfig(provider);
 
   // ---- 3. AMOUNT BAND + PAISE (T3) ---------------------------------------
@@ -560,7 +590,9 @@ async function initiateSelfTopup({
       walletUserId: identity.walletUserId,
     });
 
-    return buildInitiateResponse(existing, config, user, { reused: true });
+    return await buildInitiateResponse(existing, config, user, {
+      reused: true,
+    });
   }
 
   // ---- 5. OPEN-ORDER THROTTLE --------------------------------------------
@@ -576,6 +608,13 @@ async function initiateSelfTopup({
     amountPaise,
     currency: currency || config.currency,
     receipt,
+    // REDIRECT_POST gateways only (CCAvenue & friends): where the hosted page
+    // posts the customer's browser back to once they are done. A modal
+    // provider (Razorpay) ignores both. `cancelUrl` is the SAME endpoint on
+    // purpose — an abandoned payment is just a return whose `order_status` is
+    // `Aborted`, and it must be recorded exactly like any other outcome.
+    returnUrl: buildProviderReturnUrl(provider),
+    cancelUrl: buildProviderReturnUrl(provider),
     // LOAD-BEARING (T4): webhookService.adoptOrphanPayment rebuilds a lost
     // local row from exactly these four keys. Never omit them, never rename
     // them without changing extractNotes()/adoptOrphanPayment() in lockstep.
@@ -663,23 +702,106 @@ async function initiateSelfTopup({
     amountPaise,
   });
 
-  return buildInitiateResponse(order, config, user, {
+  return await buildInitiateResponse(order, config, user, {
     reused: false,
     checkoutParams: created.checkoutParams,
+    redirect: created.redirect,
   });
+}
+
+/**
+ * The discriminated `checkout` descriptor a client branches on.
+ *
+ *   REDIRECT_POST -> build a hidden <form method="POST" action=url> out of
+ *                    `fields` and submit it; the customer leaves the SPA.
+ *   MODAL         -> hand `params` to the gateway's browser SDK; the customer
+ *                    never leaves the SPA.
+ *
+ * ON THE IDEMPOTENT-REPLAY PATH there is no freshly-created object to read the
+ * form fields off, so a redirect provider RE-DERIVES them. Skipping that would
+ * mean a double-click on "Pay" returns an order the customer can no longer
+ * resume — the exact failure idempotency exists to prevent.
+ * @private
+ */
+async function buildCheckoutDescriptor(
+  order,
+  config,
+  { checkoutParams, redirect } = {},
+) {
+  if (redirect && redirect.url) {
+    return {
+      type: "REDIRECT_POST",
+      url: redirect.url,
+      fields: redirect.fields || {},
+    };
+  }
+
+  let impl = null;
+  try {
+    impl = getProvider(order.provider);
+  } catch (error) {
+    impl = null;
+  }
+
+  if (isRedirectProvider(impl)) {
+    try {
+      const derived = await deriveRedirect(impl, config, order);
+      if (derived && derived.url) {
+        return {
+          type: "REDIRECT_POST",
+          url: derived.url,
+          fields: derived.fields || {},
+        };
+      }
+    } catch (error) {
+      logger.error("Could not re-derive the hosted-gateway form fields", {
+        orderId: order.id,
+        provider: order.provider,
+        error: error.message,
+      });
+    }
+
+    // Deliberately NOT silently downgraded to MODAL: a redirect provider has
+    // no modal, so reporting one would hand the client an unusable payload.
+    return {
+      type: "REDIRECT_POST",
+      url: null,
+      fields: null,
+      error: "REDIRECT_FIELDS_UNAVAILABLE",
+    };
+  }
+
+  return {
+    type: "MODAL",
+    params: checkoutParams || {
+      key: config.keyId,
+      order_id: order.providerOrderId,
+      amount: order.amountPaise,
+      currency: order.currency,
+    },
+  };
 }
 
 /**
  * Shared response shape for a fresh AND a replayed order, so the client cannot
  * tell the two apart except by the explicit `reused` flag.
+ *
+ * NOTHING IS EVER REMOVED FROM THIS PAYLOAD. `checkoutParams`, `keyId` and
+ * `prefill` are still emitted exactly as before for the Razorpay modal client;
+ * the `checkout` discriminated union is purely additive on top of them.
  * @private
  */
-function buildInitiateResponse(
+async function buildInitiateResponse(
   order,
   config,
   user,
-  { reused, checkoutParams } = {},
+  { reused, checkoutParams, redirect } = {},
 ) {
+  const checkout = await buildCheckoutDescriptor(order, config, {
+    checkoutParams,
+    redirect,
+  });
+
   return {
     orderId: order.id,
     providerOrderId: order.providerOrderId,
@@ -700,6 +822,10 @@ function buildInitiateResponse(
       amount: order.amountPaise,
       currency: order.currency,
     },
+    // ADDITIVE. Every key above is still emitted verbatim, so the existing
+    // Razorpay client keeps working untouched; `checkout` is the discriminated
+    // union a redirect-capable client should branch on instead.
+    checkout,
     prefill: {
       name: order.payerName || user?.name || user?.fullName || null,
       email: order.payerEmail || user?.email || null,
@@ -707,6 +833,214 @@ function buildInitiateResponse(
     },
     order: serializeOrder(order),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Hosted-gateway (REDIRECT_POST) plumbing
+// ---------------------------------------------------------------------------
+
+/**
+ * Public base of THIS API, as the customer's browser and the gateway can reach
+ * it. Mirrors `providerConfigService.publicApiBase()` — a hosted gateway posts
+ * the customer back to an absolute URL, so a relative path is useless here.
+ * @private
+ */
+function publicApiBase() {
+  return (
+    process.env.PAYMENT_PUBLIC_API_URL ||
+    process.env.PUBLIC_API_URL ||
+    ""
+  ).replace(/\/+$/, "");
+}
+
+/**
+ * Where the customer's browser ends up AFTER we have processed the return.
+ * `PAYMENT_RETURN_UI_URL` lets a white-label deployment land the customer on a
+ * different origin than the default `FRONTEND_URL`.
+ * @private
+ */
+function returnUiBase() {
+  return (
+    process.env.PAYMENT_RETURN_UI_URL ||
+    process.env.FRONTEND_URL ||
+    ""
+  ).replace(/\/+$/, "");
+}
+
+/**
+ * The gateway's `redirect_url` / `cancel_url` for a provider — our own
+ * unauthenticated return endpoint. Both point at the same handler: a cancel is
+ * just a return whose `order_status` is `Aborted`.
+ * @private
+ */
+function buildProviderReturnUrl(provider) {
+  return `${publicApiBase()}/api/v1/wallet/topup/return/${provider}`;
+}
+
+/**
+ * Build the browser-facing callback URL.
+ *
+ * EXACTLY FOUR PARAMS, AND NO MORE. This URL is written by us but read (and
+ * potentially re-shared, bookmarked, logged by a proxy, or leaked through a
+ * Referer header) by the customer's browser, so it carries no amount, no
+ * decrypted gateway field beyond the tracking id, and not the gateway's own
+ * order id. `orderId` is OUR uuid; the UI re-fetches the authoritative order
+ * over the authenticated `/orders/:orderId` route, where ownership IS checked.
+ * @private
+ */
+function buildReturnRedirect({ provider, orderId, status, ref }) {
+  const params = new URLSearchParams();
+  params.set("provider", String(provider || ""));
+  params.set("orderId", String(orderId || ""));
+  params.set("status", String(status || "pending"));
+  params.set("ref", ref ? String(ref) : "");
+
+  return `${returnUiBase()}/wallet/topup/callback?${params.toString()}`;
+}
+
+/**
+ * Pull the gateway's encrypted response out of a form-encoded return POST.
+ *
+ * The parsed body is preferred; `req.rawBody` is the fallback for the case
+ * where the body parser did not claim the content type. GET is supported too
+ * (some gateways GET the `cancel_url`), in which case the value arrives on the
+ * query string and the controller passes it in as `parsedBody`.
+ * @private
+ */
+function readEncResp(parsedBody, rawBody) {
+  const body = parsedBody || {};
+  const direct =
+    body.encResp || body.encresp || body.enc_response || body.encRes;
+
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  if (rawBody) {
+    try {
+      const params = new URLSearchParams(
+        Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody),
+      );
+      const fromRaw =
+        params.get("encResp") ||
+        params.get("encresp") ||
+        params.get("enc_response");
+      if (fromRaw && fromRaw.trim()) return fromRaw.trim();
+    } catch (error) {
+      logger.warn("Could not parse the gateway return body", {
+        error: error.message,
+      });
+    }
+  }
+
+  return null;
+}
+
+/** Normalise whatever `decodeReturnPayload` hands back into a fields object. @private */
+function normalizeDecoded(outcome) {
+  if (!outcome || typeof outcome !== "object") return null;
+  if (outcome.ok === false) return null;
+  const fields = outcome.fields || (outcome.ok === undefined ? outcome : null);
+  return fields && typeof fields === "object" && Object.keys(fields).length
+    ? fields
+    : null;
+}
+
+/**
+ * The gateway's external payment reference. CCAvenue calls it `tracking_id`;
+ * some Order Status responses name it `reference_no`. Either one is acceptable,
+ * ONE OF THEM IS MANDATORY before any credit — `buildExternalReferenceId` in
+ * webhookService derives the wallet idempotency key `CCAV_<id>` from it, and a
+ * credit issued without that key would not 409 on a retry, i.e. it would
+ * eventually double-credit.
+ * @private
+ */
+function readTrackingId(source) {
+  if (!source || typeof source !== "object") return null;
+  const candidate =
+    source.providerPaymentId ||
+    source.trackingId ||
+    source.tracking_id ||
+    source.referenceNo ||
+    source.reference_no ||
+    (source.raw && (source.raw.tracking_id || source.raw.reference_no)) ||
+    null;
+  const value =
+    candidate === undefined || candidate === null
+      ? ""
+      : String(candidate).trim();
+  return value ? value : null;
+}
+
+/** `order_status` off a decoded envelope or a fetchOrder projection. @private */
+function readOrderStatus(source) {
+  if (!source || typeof source !== "object") return null;
+  const raw =
+    source.orderStatus ||
+    source.order_status ||
+    source.status ||
+    (source.raw && (source.raw.order_status || source.raw.status)) ||
+    null;
+  return raw ? String(raw).trim() : null;
+}
+
+/** @private */
+function readPaise(source, fallback) {
+  if (source && typeof source === "object") {
+    if (Number.isFinite(source.amountPaise)) return source.amountPaise;
+    const rupees = Number(
+      source.amount !== undefined
+        ? source.amount
+        : source.raw && source.raw.amount,
+    );
+    if (Number.isFinite(rupees)) return Math.round(rupees * 100);
+  }
+  return fallback;
+}
+
+/**
+ * Re-derive the hosted-gateway form POST for an EXISTING order.
+ *
+ * Needed on the idempotent-replay path: a redirect provider has no
+ * `checkoutParams` to hand back, and without the re-derived `encRequest` a
+ * double-click on "Pay" would return an order the customer can no longer
+ * resume. Re-encrypting the same `order_id`/`amount` is deterministic and
+ * costs one AES block, so there is nothing to cache and nothing to race.
+ * @private
+ */
+async function deriveRedirect(impl, config, order) {
+  const args = {
+    config,
+    // Deterministic re-mint: the provider must reuse this id rather than
+    // generating a new one, otherwise the gateway would see a second order.
+    providerOrderId: order.providerOrderId,
+    amountPaise: order.amountPaise,
+    currency: order.currency,
+    receipt: order.providerOrderId,
+    returnUrl: buildProviderReturnUrl(order.provider),
+    cancelUrl: buildProviderReturnUrl(order.provider),
+    notes: {
+      walletUserId: order.walletUserId,
+      clientCode: order.clientCode,
+      subjectUserId: order.subjectUserId,
+      kind: order.kind,
+    },
+  };
+
+  if (typeof impl.buildRedirect === "function") {
+    const built = await impl.buildRedirect(args);
+    return built && built.redirect ? built.redirect : built || null;
+  }
+
+  if (typeof impl.createOrder === "function") {
+    const again = await impl.createOrder(args);
+    return (again && again.redirect) || null;
+  }
+
+  return null;
+}
+
+/** A provider that settles on a hosted page exposes `decodeReturnPayload`. @private */
+function isRedirectProvider(impl) {
+  return Boolean(impl && typeof impl.decodeReturnPayload === "function");
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +1061,8 @@ function buildInitiateResponse(
  * credits. It delegates to `webhookService.creditOrder`, which is the single
  * crediting implementation, and which guards with (a) a `updateMany`
  * CREATED|PENDING|EXPIRED -> PAID claim that exactly ONE concurrent caller can
- * win, and (b) the deterministic external reference `RZP_<paymentId>`, on which
+ * win, and (b) the deterministic external reference `<PREFIX>_<paymentId>`
+ * (RZP_ / CCAV_), on which
  * the external wallet API is unique — so even two processes that both somehow
  * won a claim would collide on that key and the second would get a 409, which
  * `creditOrder` correctly reads as "already landed". Both racers converge on
@@ -931,6 +1266,445 @@ async function verifyClientCallback({
       ? { balanceAfter: result.balanceAfter }
       : {}),
     order: serializeOrder(finalRow),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// handleGatewayReturn — the hosted-gateway (REDIRECT_POST) return hop
+// ---------------------------------------------------------------------------
+
+/**
+ * Process the browser POST a NON-SEAMLESS gateway makes back to us after the
+ * customer has paid on the gateway's own page, and answer with the URL the
+ * browser should be sent to.
+ *
+ * WHY THIS EXISTS AT ALL. CCAvenue is non-seamless: we POST `encRequest` +
+ * `access_code` to their hosted page, the customer pays there, and CCAvenue
+ * POSTs an AES-encrypted `encResp` back to `redirect_url`. That request carries
+ * no JWT, is form-encoded, and is issued by the customer's browser (or by
+ * CCAvenue's servers) — the authenticated `/self/verify` route, which demands a
+ * bearer token, `wallet:create:own` and a Joi-validated JSON body, structurally
+ * cannot receive it.
+ *
+ * NO OWNERSHIP CHECK, ON PURPOSE. The endpoint is unauthenticated by design,
+ * and the order is located ONLY by a gateway-issued `order_id` recovered from
+ * inside the ciphertext — never by anything the caller chose. There is no
+ * identity to compare against, and nothing user-controlled is echoed back to
+ * the browser beyond the tracking id.
+ *
+ * A SUCCESSFUL DECRYPT IS NOT INTEGRITY PROOF. CCAvenue's envelope is AES-CBC
+ * with no MAC, so it is malleable: an attacker who can flip ciphertext bytes
+ * cannot forge a chosen plaintext, but "the payload decrypted" is emphatically
+ * not "the gateway said this". Every credit on this path is therefore
+ * re-confirmed with a server-to-server `fetchOrder`, and the `parsed` object we
+ * hand to `creditOrder` is built from THAT response, never from the redirect
+ * fields.
+ *
+ * WHY THIS CANNOT DOUBLE-CREDIT AGAINST THE WEBHOOK. Four independent guards,
+ * any one of which is sufficient:
+ *   1. Both paths converge on the SINGLE crediting implementation,
+ *      `webhookService.creditOrder`. This module never touches the external
+ *      wallet itself.
+ *   2. `creditOrder` claims the row with a guarded `updateMany`
+ *      (CREATED|PENDING|EXPIRED -> PAID). Exactly one concurrent racer can win
+ *      that claim; the loser sees `count === 0` and stops.
+ *   3. Both paths derive the IDENTICAL deterministic external reference
+ *      `CCAV_<tracking_id>`, on which the external wallet API is unique. Two
+ *      racers that somehow both claimed would collide there, and the second
+ *      gets a 409 — which `creditOrder` correctly reads as "already landed".
+ *   4. The paise-exact amount assertion inside `creditOrder` refuses a
+ *      mismatch outright and parks the order as RECONCILE_PENDING instead.
+ *
+ * NO `PaymentWebhookEvent` ROW IS WRITTEN HERE. This is deliberate and matches
+ * the existing `/self/verify` fast path. The webhook replay guard is keyed on
+ * `(provider, providerEventId)`; if this path inserted a row and then crashed
+ * before crediting, the REAL webhook delivery would be swallowed as a duplicate
+ * and the payment would never credit at all. The return hop is an accelerator,
+ * so it must leave the authoritative path's dedupe state untouched.
+ *
+ * NEVER THROWS FOR A PAYMENT-SHAPED PROBLEM. Every unhappy branch resolves to a
+ * `pending`/`unknown` redirect and leaves the money to the webhook and the
+ * reconcile worker. A customer who has just paid must never see an error page.
+ *
+ * @param {Object} args
+ * @param {string} args.provider   provider slug from the path
+ * @param {Buffer|string} [args.rawBody]    exact bytes, captured in server.js
+ * @param {Object} [args.parsedBody]        form-encoded body (or query on GET)
+ * @param {Object} [args.headers]
+ * @param {string} [args.ip]
+ * @returns {Promise<{redirectTo: string, orderId: string|null,
+ *   credited: boolean, handled: string}>}
+ */
+async function handleGatewayReturn({
+  provider,
+  rawBody,
+  parsedBody,
+  headers,
+  ip,
+} = {}) {
+  // ---- 1. Is this even a hosted-gateway provider? -------------------------
+  let impl = null;
+  try {
+    impl = getProvider(provider);
+  } catch (error) {
+    logger.warn("Gateway return for an unsupported provider", {
+      provider,
+      error: error.message,
+    });
+  }
+
+  if (!isRedirectProvider(impl)) {
+    await writeAudit({
+      action: "TOPUP_RETURN_UNSUPPORTED",
+      resourceId: null,
+      userId: null,
+      ip,
+      details: { provider: provider || null },
+    });
+
+    return {
+      redirectTo: buildReturnRedirect({
+        provider,
+        orderId: null,
+        status: "unknown",
+        ref: null,
+      }),
+      orderId: null,
+      credited: false,
+      handled: "unsupported_provider",
+    };
+  }
+
+  const encResp = readEncResp(parsedBody, rawBody);
+
+  // ---- 2. DISCOVER THE MODE BY DECRYPTION ---------------------------------
+  // Identical reasoning to the webhook's `decryptFirstVerification`: the
+  // gateway posts BOTH test and live traffic at the SAME return URL, and an
+  // admin may flip the platform between modes while a payment is in flight.
+  // The order reference lives inside the ciphertext, so there is no snapshotted
+  // mode to consult until after a key has worked. Active mode first, then the
+  // other. `requireEnabled: false` — a provider disabled AFTER the order was
+  // created must still be able to settle its in-flight payments.
+  let activeMode = null;
+  try {
+    const active = await resolveActiveConfig(provider);
+    activeMode = (active && active.mode) || null;
+  } catch (error) {
+    logger.warn("Could not resolve the active config for a gateway return", {
+      provider,
+      error: error.message,
+    });
+  }
+
+  const modes = activeMode
+    ? [activeMode, activeMode === "LIVE" ? "TEST" : "LIVE"]
+    : ["LIVE", "TEST"];
+
+  let config = null;
+  let verifiedMode = null;
+  let fields = null;
+
+  if (encResp) {
+    for (const mode of modes) {
+      let candidate;
+      try {
+        candidate = await resolveConfigForMode(provider, mode, {
+          requireEnabled: false,
+        });
+      } catch (error) {
+        // That mode simply has no usable working key. Move on.
+        logger.warn("No usable working key for a gateway return mode", {
+          provider,
+          mode,
+          code: error.code,
+        });
+        continue;
+      }
+
+      let decoded;
+      try {
+        decoded = await impl.decodeReturnPayload({
+          config: candidate,
+          encResp,
+        });
+      } catch (error) {
+        // A throwing decrypt is indistinguishable from a wrong key.
+        logger.warn("Gateway return decryption threw for a mode", {
+          provider,
+          mode,
+          error: error.message,
+        });
+        continue;
+      }
+
+      const normalized = normalizeDecoded(decoded);
+      if (normalized) {
+        config = candidate;
+        verifiedMode = mode;
+        fields = normalized;
+        break;
+      }
+    }
+  }
+
+  if (!fields) {
+    // NOTHING decrypted. NO STATE CHANGE — an unreadable payload is not
+    // evidence of anything, and moving the row on it would let anyone who can
+    // reach this URL disturb a live payment.
+    await writeAudit({
+      action: "TOPUP_RETURN_UNDECRYPTABLE",
+      resourceId: null,
+      userId: null,
+      ip,
+      details: {
+        provider,
+        triedModes: modes,
+        hadEncResp: Boolean(encResp),
+      },
+    });
+
+    logger.warn("Gateway return could not be decrypted in any mode", {
+      provider,
+      triedModes: modes,
+      hadEncResp: Boolean(encResp),
+    });
+
+    return {
+      redirectTo: buildReturnRedirect({
+        provider,
+        orderId: null,
+        status: "unknown",
+        ref: null,
+      }),
+      orderId: null,
+      credited: false,
+      handled: "undecryptable",
+    };
+  }
+
+  const returnedOrderId = fields.order_id || fields.orderId || null;
+  const returnedStatus = readOrderStatus(fields);
+  const returnedTrackingId = readTrackingId(fields);
+
+  // ---- 3. Locate the order ------------------------------------------------
+  const order = returnedOrderId
+    ? await prisma.paymentOrder.findFirst({
+        where: { provider, providerOrderId: String(returnedOrderId) },
+      })
+    : null;
+
+  if (!order) {
+    // The webhook's `adoptOrphanPayment` is the recovery path — it can rebuild
+    // the row from the gateway `notes`. This path deliberately does not, since
+    // it would have to invent a wallet identity from a browser-delivered
+    // payload.
+    await writeAudit({
+      action: "TOPUP_RETURN_ORPHAN",
+      resourceId: null,
+      userId: null,
+      ip,
+      details: {
+        provider,
+        mode: verifiedMode,
+        providerOrderId: returnedOrderId || null,
+        orderStatus: returnedStatus,
+      },
+    });
+
+    logger.warn("Gateway return references an unknown order", {
+      provider,
+      providerOrderId: returnedOrderId,
+    });
+
+    return {
+      redirectTo: buildReturnRedirect({
+        provider,
+        orderId: null,
+        status: "pending",
+        ref: returnedTrackingId,
+      }),
+      orderId: null,
+      credited: false,
+      handled: "orphan",
+    };
+  }
+
+  // ---- 4. NO OWNERSHIP CHECK (see the docblock) ---------------------------
+
+  // ---- 5. RE-CONFIRM SERVER-TO-SERVER -------------------------------------
+  // NEVER CREDIT ON `encResp` ALONE. If this call fails we credit nothing and
+  // let the webhook / reconcile worker finish the job — the money is already
+  // sitting at the gateway, so waiting costs nothing and guessing costs
+  // everything.
+  let fetched = null;
+  try {
+    fetched = await impl.fetchOrder({
+      config,
+      providerOrderId: order.providerOrderId,
+    });
+  } catch (error) {
+    logger.error("Gateway order status re-confirmation failed on return", {
+      orderId: order.id,
+      provider,
+      error: error.message,
+    });
+  }
+
+  if (!fetched) {
+    await writeAudit({
+      action: "TOPUP_RETURN_UNCONFIRMED",
+      resourceId: order.id,
+      userId: order.subjectUserId,
+      ip,
+      details: {
+        provider,
+        mode: verifiedMode,
+        providerOrderId: order.providerOrderId,
+        returnedStatus,
+      },
+    });
+
+    return {
+      redirectTo: buildReturnRedirect({
+        provider,
+        orderId: order.id,
+        status: "pending",
+        ref: returnedTrackingId,
+      }),
+      orderId: order.id,
+      credited: false,
+      handled: "unconfirmed",
+    };
+  }
+
+  const confirmedStatus = readOrderStatus(fetched) || returnedStatus;
+  const normalizedStatus = String(confirmedStatus || "").toLowerCase();
+  const trackingId = readTrackingId(fetched) || returnedTrackingId;
+
+  let credited = false;
+  let handled = "ignored";
+
+  if (RETURN_SUCCESS_STATUSES.includes(normalizedStatus)) {
+    if (!trackingId) {
+      // HARD RULE: no tracking_id / reference_no, no credit. The external
+      // wallet's idempotency key is `CCAV_<tracking_id>`; crediting without one
+      // would send a reference the retry path cannot reproduce, the external
+      // API would not 409, and the payment would eventually land twice.
+      const parked = await prisma.paymentOrder.updateMany({
+        where: { id: order.id, status: { in: RETURN_PARKABLE_FROM } },
+        data: {
+          status: "RECONCILE_PENDING",
+          reconcileError: "CCAV_NO_TRACKING_ID",
+        },
+      });
+
+      handled = "parked_no_tracking_id";
+
+      await writeAudit({
+        action: "TOPUP_RETURN_NO_TRACKING_ID",
+        resourceId: order.id,
+        userId: order.subjectUserId,
+        ip,
+        details: {
+          provider,
+          mode: verifiedMode,
+          providerOrderId: order.providerOrderId,
+          orderStatus: confirmedStatus,
+          parked: parked.count > 0,
+        },
+      });
+
+      logger.error(
+        "Gateway return reported success with NO tracking id — parked for reconcile",
+        { orderId: order.id, provider, mode: verifiedMode },
+      );
+    } else {
+      // `parsed` is built from the SERVER-TO-SERVER response, not from the
+      // redirect fields (see the docblock).
+      const parsed = {
+        providerPaymentId: trackingId,
+        providerOrderId: order.providerOrderId,
+        amountPaise: readPaise(fetched, order.amountPaise),
+        currency: fetched.currency || order.currency,
+        capturedAt: fetched.capturedAt || new Date().toISOString(),
+        outcome: "PAID",
+        raw: fetched.raw || fetched,
+      };
+
+      const result = await creditOrder(order, parsed, {
+        source: "GATEWAY_RETURN",
+        verifiedMode,
+        config,
+      });
+
+      credited = Boolean(result && result.credited);
+      handled = (result && result.handled) || "credited";
+    }
+  } else if (RETURN_FAILURE_STATUSES.includes(normalizedStatus)) {
+    const parsed = {
+      providerPaymentId: trackingId,
+      providerOrderId: order.providerOrderId,
+      errorCode: confirmedStatus || null,
+      errorDescription:
+        fetched.failureMessage ||
+        (fetched.raw && fetched.raw.failure_message) ||
+        (fields && fields.failure_message) ||
+        null,
+      outcome: "FAILED",
+      raw: fetched.raw || fetched,
+    };
+
+    const result = await markOrderFailed(order, parsed, {
+      source: "GATEWAY_RETURN",
+    });
+    handled = (result && result.handled) || "failed";
+  } else {
+    // Anything else (a gateway status we do not model, or an empty one): NO
+    // STATE CHANGE. The webhook is the authority and will settle it.
+    handled = "ignored";
+    logger.info("Gateway return carried an unmodelled order status", {
+      orderId: order.id,
+      provider,
+      orderStatus: confirmedStatus,
+    });
+  }
+
+  // ---- 7. Audit -----------------------------------------------------------
+  await writeAudit({
+    action: "TOPUP_RETURN_RECEIVED",
+    resourceId: order.id,
+    userId: order.subjectUserId,
+    ip,
+    details: {
+      provider,
+      mode: verifiedMode,
+      orderStatus: confirmedStatus,
+      trackingId,
+      handled,
+      credited,
+    },
+  });
+
+  // ---- 8. Where the browser goes -----------------------------------------
+  let uiStatus = "pending";
+  if (credited || RETURN_SUCCESS_STATUSES.includes(normalizedStatus)) {
+    // A success that is confirmed but not yet credited (RECONCILE_PENDING) is
+    // still money the customer HAS paid — it must never read as an error.
+    uiStatus = handled === "parked_no_tracking_id" ? "pending" : "paid";
+  } else if (RETURN_FAILURE_STATUSES.includes(normalizedStatus)) {
+    uiStatus = "failed";
+  }
+
+  return {
+    redirectTo: buildReturnRedirect({
+      provider,
+      orderId: order.id,
+      status: uiStatus,
+      ref: trackingId,
+    }),
+    orderId: order.id,
+    credited,
+    handled,
   };
 }
 
@@ -1432,7 +2206,7 @@ async function pollProvider(order, source) {
       };
 
       // Same single crediting implementation, same guarded claim, same
-      // deterministic RZP_<paymentId> reference as the webhook — so this
+      // deterministic <PREFIX>_<paymentId> (RZP_ / CCAV_) reference as the webhook — so this
       // racing a webhook converges on exactly one credit.
       const result = await creditOrder(order, parsed, {
         source,
@@ -1613,6 +2387,7 @@ module.exports = {
   // HTTP surface
   initiateSelfTopup,
   verifyClientCallback,
+  handleGatewayReturn,
   createAdminPaymentLink,
   listOrders,
   getOrder,

@@ -87,8 +87,11 @@ import { usePaymentProvider } from "@/hooks/usePaymentProvider";
 import { AddMoneyButton } from "@/components/wallet/add-money-button";
 import { PaymentLinksTab } from "@/components/wallet/payment-links-tab";
 import { TopupApprovalsTab } from "@/components/wallet/topup-approvals-tab";
+import { QrCollectionsTab } from "@/components/wallet/qr-collections-tab";
+import { QrUnattributedTab } from "@/components/wallet/qr-unattributed-tab";
 import { PaymentStatusChip } from "@/components/wallet/payment-status-chip";
 import { CopyButton } from "@/components/wallet/copy-button";
+import { useGetUnattributedQrCollectionsQuery } from "@/store/api/endpoints/qrCollectionApi";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/toast";
 import { formatINR, extractApiError } from "@/lib/utils";
@@ -1598,6 +1601,17 @@ function AdminWalletPage() {
   const pendingApprovalsCount =
     pendingApprovalsData?.pagination?.total_elements ?? 0;
 
+  // QR tabs are shown to admins only; the unattributed count is fetched
+  // regardless of which tab is active so the badge is visible without
+  // opening the tab (that's the whole point of the queue).
+  const isAdminRole = isRole("superadmin") || isRole("admin");
+  const { data: unattributedQrData } = useGetUnattributedQrCollectionsQuery(
+    { page: 0, size: 1 },
+    { skip: !isAdminRole },
+  );
+  const unattributedQrCount =
+    unattributedQrData?.pagination?.total_elements ?? 0;
+
   // RTK Query
   const {
     data: walletsData,
@@ -1843,6 +1857,40 @@ function AdminWalletPage() {
                   className="ml-1.5 h-5 px-1.5 text-[10px]"
                 >
                   {pendingApprovalsCount}
+                </Badge>
+              )}
+            </button>
+          )}
+          {isAdminRole && (
+            <button
+              onClick={() => setActiveTab("qr-collections")}
+              className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "qr-collections"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <QrCode className="inline h-4 w-4 mr-1.5" />
+              QR Collections
+            </button>
+          )}
+          {isAdminRole && (
+            <button
+              onClick={() => setActiveTab("qr-unattributed")}
+              className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors inline-flex items-center ${
+                activeTab === "qr-unattributed"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <HelpCircle className="inline h-4 w-4 mr-1.5" />
+              Unattributed
+              {unattributedQrCount > 0 && (
+                <Badge
+                  variant="default"
+                  className="ml-1.5 h-5 bg-amber-500 px-1.5 text-[10px] text-white hover:bg-amber-600"
+                >
+                  {unattributedQrCount}
                 </Badge>
               )}
             </button>
@@ -2451,6 +2499,16 @@ function AdminWalletPage() {
         {/* APPROVALS TAB */}
         {activeTab === "approvals" && isRole("superadmin") && (
           <TopupApprovalsTab outletMap={outletMap} />
+        )}
+
+        {/* QR COLLECTIONS TAB */}
+        {activeTab === "qr-collections" && isAdminRole && (
+          <QrCollectionsTab outletMap={outletMap} />
+        )}
+
+        {/* QR UNATTRIBUTED TAB */}
+        {activeTab === "qr-unattributed" && isAdminRole && (
+          <QrUnattributedTab outletMap={outletMap} />
         )}
 
         {/* Transaction Modal */}

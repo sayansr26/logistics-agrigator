@@ -35,7 +35,9 @@ export default function PaymentSettingsPage() {
 
   const isLoading = providersLoading || policyLoading;
   const error = providersError || policyError;
-  const razorpay = providers?.find((p) => p.provider === "razorpay");
+  // `comingSoon` providers (stripe/cashfree/payu) are scaffolded server-side
+  // but have no working implementation yet - deliberately not rendered here.
+  const configuredProviders = (providers ?? []).filter((p) => !p.comingSoon);
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>
@@ -48,7 +50,7 @@ export default function PaymentSettingsPage() {
         <PageContainer>
           <PageHeader
             title="Payment Providers"
-            description="Configure the payment gateway used for wallet top-ups."
+            description="Configure the payment gateways used for wallet top-ups."
           />
 
           {isLoading ? (
@@ -84,17 +86,26 @@ export default function PaymentSettingsPage() {
                 </Button>
               </CardContent>
             </Card>
-          ) : !razorpay ? (
+          ) : configuredProviders.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
                 <AlertCircle className="h-10 w-10 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Razorpay is not configured on the server yet.
+                  No payment provider is configured on the server yet.
                 </p>
               </CardContent>
             </Card>
           ) : (
-            <ProviderConfigCard config={razorpay} policy={policy} />
+            <div className="space-y-6">
+              {configuredProviders.map((provider) => (
+                <ProviderConfigCard
+                  key={provider.provider}
+                  config={provider}
+                  policy={policy}
+                  allProviders={configuredProviders}
+                />
+              ))}
+            </div>
           )}
         </PageContainer>
       </PermissionGuard>

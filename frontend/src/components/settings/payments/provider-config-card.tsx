@@ -3,12 +3,14 @@
 import { useEffect, useId, useState } from "react";
 import {
   CreditCard,
+  QrCode,
   Loader2,
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,10 +45,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/toast";
 import { CopyButton } from "@/components/wallet/copy-button";
-import { cn, extractApiError, formatINR } from "@/lib/utils";
+import {
+  cn,
+  extractApiError,
+  extractApiErrorCode,
+  formatINR,
+} from "@/lib/utils";
 import {
   SecretField,
-  buildSecretPayload,
+  EMPTY_SECRET_STATE,
   type SecretFieldState,
 } from "./secret-field";
 import {
@@ -55,8 +62,10 @@ import {
   useUpdateTopupPolicyMutation,
   type PaymentProviderConfig,
   type ProviderCredentialState,
+  type PaymentProviderName,
   type PaymentMode,
   type TestConnectionResponse,
+  type UpdatePaymentProviderRequest,
   type WalletTopupPolicy,
 } from "@/store/api/endpoints/paymentApi";
 
@@ -64,13 +73,25 @@ import {
 // Local types
 // ============================================
 
-type SecretField =
-  | "testKeyId"
-  | "testKeySecret"
-  | "testWebhookSecret"
-  | "liveKeyId"
-  | "liveKeySecret"
-  | "liveWebhookSecret";
+/**
+ * `CredentialFieldDescriptor` / the per-field entry shape inside
+ * `ProviderCredentialState.credentials` aren't exported by name from
+ * paymentApi.ts (only the interfaces that embed them are), so they're derived
+ * here via indexed access on the exported types rather than imported directly.
+ */
+type CredentialFieldDescriptor =
+  PaymentProviderConfig["credentialFields"][number];
+type CredentialFieldEntry = ProviderCredentialState["credentials"][string];
+
+/**
+ * `credentialsUnreadable` is emitted by the backend only when a stored secret
+ * failed to decrypt (e.g. after an encryption-key rotation) - it's absent
+ * otherwise, so it isn't in the base `PaymentProviderConfig` interface. Widened
+ * locally rather than editing the shared type file.
+ */
+type ProviderConfigView = PaymentProviderConfig & {
+  credentialsUnreadable?: boolean;
+};
 
 interface ProviderFormState {
   isEnabled: boolean;
@@ -103,6 +124,96 @@ interface ModeBlockers {
 interface ProviderConfigCardProps {
   config: PaymentProviderConfig;
   policy?: WalletTopupPolicy;
+  /** Every configured (non coming-soon) provider - used to warn before an
+   * enable swap ("only one gateway may be active") and to name the other
+   * provider(s) that will be auto-disabled. */
+  allProviders: PaymentProviderConfig[];
+}
+
+// ============================================
+// Provider display metadata
+// ============================================
+
+const PROVIDER_LABELS: Partial<Record<PaymentProviderName, string>> = {
+  razorpay: "Razorpay",
+  ccavenue: "CCAvenue",
+  ccavenue_upi_qr: "CCAvenue UPI QR",
+  stripe: "Stripe",
+  cashfree: "Cashfree",
+  payu: "PayU",
+};
+
+const PROVIDER_ICONS: Partial<Record<PaymentProviderName, LucideIcon>> = {
+  ccavenue_upi_qr: QrCode,
+};
+
+function providerLabel(provider: PaymentProviderName): string {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
+function providerIcon(provider: PaymentProviderName): LucideIcon {
+  return PROVIDER_ICONS[provider] ?? CreditCard;
+}
+
+/**
+ * Descriptor fallback for the (currently unreachable on this page, since
+ * coming-soon providers are filtered out before rendering) case of a provider
+ * with no `credentialFields` from the server - keeps the credentials section
+ * from silently rendering empty instead of the classic 3-field shape.
+ */
+const LEGACY_CREDENTIAL_FIELDS: CredentialFieldDescriptor[] = [
+  {
+    name: "keyId",
+    label: "Key ID",
+    storageClass: "plaintext",
+    requiredForEnable: true,
+    revealable: true,
+    placeholder: "rzp_test_XXXXXXXXXXXX",
+  },
+  {
+    name: "keySecret",
+    label: "Key Secret",
+    storageClass: "encrypted",
+    requiredForEnable: true,
+    revealable: false,
+  },
+  {
+    name: "webhookSecret",
+    label: "Webhook Secret",
+    storageClass: "encrypted",
+    requiredForEnable: false,
+    revealable: false,
+    hint: "Paste the signing secret shown when you register the webhook below.",
+  },
+];
+
+/**
+ * Resolves one field's stored state, preferring the descriptor-driven
+ * `cred.credentials[name]` bag and falling back to the legacy flat
+ * `keyId`/`keySecretSet`/`webhookSecretSet` properties only when the bag has
+ * nothing for that name (defensive - in practice every implemented provider's
+ * fields are mirrored into the bag server-side).
+ */
+function resolveCredentialEntry(
+  cred: ProviderCredentialState,
+  name: string,
+): CredentialFieldEntry | undefined {
+  const fromBag = cred.credentials?.[name];
+  if (fromBag) return fromBag;
+  if (name === "keyId") {
+    return { set: !!cred.keyId, masked: cred.keyId, value: null };
+  }
+  if (name === "keySecret") {
+    return {
+      set: cred.keySecretSet,
+      masked: cred.keySecretMasked,
+      value: null,
+    };
+  }
+  if (name === "webhookSecret") {
+    return { set: cred.webhookSecretSet, masked: null, value: null };
+  }
+  return undefined;
 }
 
 // ============================================
@@ -134,18 +245,6 @@ function derivePolicyForm(policy?: WalletTopupPolicy): PolicyFormState {
   };
 }
 
-function initSecrets(): Record<SecretField, SecretFieldState> {
-  const empty: SecretFieldState = { editing: false, value: "" };
-  return {
-    testKeyId: { ...empty },
-    testKeySecret: { ...empty },
-    testWebhookSecret: { ...empty },
-    liveKeyId: { ...empty },
-    liveKeySecret: { ...empty },
-    liveWebhookSecret: { ...empty },
-  };
-}
-
 function parseQuickAmounts(text: string): number[] {
   return text
     .split(",")
@@ -166,10 +265,6 @@ function formatDateTime(iso?: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function apiErrorMessage(err: any, fallback: string): string {
-  return extractApiError(err, fallback);
 }
 
 function validateProviderForm(
@@ -210,58 +305,107 @@ function validateProviderForm(
   return errors;
 }
 
+/**
+ * Whether one required credential field is satisfied - either already stored
+ * server-side, or currently being retyped with a non-empty value.
+ */
+function fieldSatisfied(
+  field: CredentialFieldDescriptor,
+  cred: ProviderCredentialState,
+  draft: SecretFieldState | undefined,
+): boolean {
+  const entry = resolveCredentialEntry(cred, field.name);
+  if (entry?.set) return true;
+  return !!(draft?.editing && draft.value.trim() !== "");
+}
+
+function requiredFieldsSatisfied(
+  fields: CredentialFieldDescriptor[],
+  cred: ProviderCredentialState,
+  drafts: Record<string, SecretFieldState>,
+  modeKey: "test" | "live",
+): boolean {
+  return fields
+    .filter((f) => f.requiredForEnable)
+    .every((f) => fieldSatisfied(f, cred, drafts[`${modeKey}.${f.name}`]));
+}
+
+/**
+ * Builds `{credentials: {test, live}}` from the descriptor-keyed draft map
+ * (keys are `${"test"|"live"}.${field.name}`). Only fields the operator
+ * actually retyped (`editing && value.trim() !== ""`) are emitted - load
+ * bearing: a save that only changes `minAmount` must never null out a working
+ * live credential by round-tripping an empty/masked value back to the server.
+ */
+function buildCredentialsPayload(
+  drafts: Record<string, SecretFieldState>,
+): Pick<UpdatePaymentProviderRequest, "credentials"> {
+  const test: Record<string, string> = {};
+  const live: Record<string, string> = {};
+
+  for (const [key, state] of Object.entries(drafts)) {
+    if (!state.editing || state.value.trim() === "") continue;
+    const dot = key.indexOf(".");
+    if (dot < 0) continue;
+    const mode = key.slice(0, dot);
+    const fieldName = key.slice(dot + 1);
+    if (!fieldName) continue;
+    if (mode === "live") live[fieldName] = state.value.trim();
+    else if (mode === "test") test[fieldName] = state.value.trim();
+  }
+
+  const credentials: NonNullable<UpdatePaymentProviderRequest["credentials"]> =
+    {};
+  if (Object.keys(test).length > 0) credentials.test = test;
+  if (Object.keys(live).length > 0) credentials.live = live;
+
+  return Object.keys(credentials).length > 0 ? { credentials } : {};
+}
+
 // ============================================
 // Credentials panel (test or live)
 // ============================================
 
 function CredentialsPanel({
   title,
+  mode,
+  fields,
   cred,
-  keyIdState,
-  onKeyIdChange,
-  keySecretState,
-  onKeySecretChange,
-  webhookSecretState,
-  onWebhookSecretChange,
+  drafts,
+  onChange,
 }: {
   title: string;
+  mode: "test" | "live";
+  fields: CredentialFieldDescriptor[];
   cred: ProviderCredentialState;
-  keyIdState: SecretFieldState;
-  onKeyIdChange: (next: SecretFieldState) => void;
-  keySecretState: SecretFieldState;
-  onKeySecretChange: (next: SecretFieldState) => void;
-  webhookSecretState: SecretFieldState;
-  onWebhookSecretChange: (next: SecretFieldState) => void;
+  drafts: Record<string, SecretFieldState>;
+  onChange: (key: string, next: SecretFieldState) => void;
 }) {
   return (
     <div className="space-y-4 rounded-lg border p-4">
       <h4 className="text-sm font-semibold text-muted-foreground">{title}</h4>
-      <SecretField
-        label="Key ID"
-        isSet={!!cred.keyId}
-        maskedValue={cred.keyId}
-        revealable
-        required
-        state={keyIdState}
-        onChange={onKeyIdChange}
-        placeholder="rzp_test_XXXXXXXXXXXX"
-      />
-      <SecretField
-        label="Key Secret"
-        isSet={cred.keySecretSet}
-        maskedValue={cred.keySecretMasked}
-        required
-        state={keySecretState}
-        onChange={onKeySecretChange}
-      />
-      <SecretField
-        label="Webhook Secret"
-        isSet={cred.webhookSecretSet}
-        maskedValue={null}
-        state={webhookSecretState}
-        onChange={onWebhookSecretChange}
-        hint="Paste the signing secret shown when you register the webhook below."
-      />
+      {fields.map((field) => {
+        const key = `${mode}.${field.name}`;
+        const entry = resolveCredentialEntry(cred, field.name);
+        const hint = entry?.unreadable
+          ? "Could not be decrypted (the encryption key may have rotated) - re-enter to fix."
+          : (field.hint ?? undefined);
+
+        return (
+          <SecretField
+            key={field.name}
+            label={field.label}
+            isSet={!!entry?.set}
+            maskedValue={entry?.masked ?? null}
+            revealable={field.revealable}
+            required={field.requiredForEnable}
+            state={drafts[key] ?? EMPTY_SECRET_STATE}
+            onChange={(next) => onChange(key, next)}
+            placeholder={field.placeholder ?? undefined}
+            hint={hint}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -273,6 +417,7 @@ function CredentialsPanel({
 export function ProviderConfigCard({
   config,
   policy,
+  allProviders,
 }: ProviderConfigCardProps) {
   const toast = useToast();
   const baseId = useId();
@@ -284,15 +429,24 @@ export function ProviderConfigCard({
   const [testProvider, { isLoading: isTesting }] =
     useTestPaymentProviderMutation();
 
+  const label = providerLabel(config.provider);
+  const Icon = providerIcon(config.provider);
+  const credentialFields =
+    config.credentialFields.length > 0
+      ? config.credentialFields
+      : LEGACY_CREDENTIAL_FIELDS;
+  const credentialsUnreadable =
+    (config as ProviderConfigView).credentialsUnreadable === true;
+
   const [form, setForm] = useState<ProviderFormState>(() => deriveForm(config));
   const [policyForm, setPolicyForm] = useState<PolicyFormState>(() =>
     derivePolicyForm(policy),
   );
-  const [secrets, setSecrets] =
-    useState<Record<SecretField, SecretFieldState>>(initSecrets());
+  const [drafts, setDrafts] = useState<Record<string, SecretFieldState>>({});
 
   const [dirty, setDirty] = useState(false);
   const [pendingMode, setPendingMode] = useState<PaymentMode | null>(null);
+  const [pendingEnable, setPendingEnable] = useState(false);
   const [modeBlockers, setModeBlockers] = useState<ModeBlockers | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -334,9 +488,9 @@ export function ProviderConfigCard({
     setPolicyForm((p) => ({ ...p, ...patch }));
   };
 
-  const updateSecret = (field: SecretField, next: SecretFieldState) => {
+  const updateDraft = (key: string, next: SecretFieldState) => {
     markChanged();
-    setSecrets((s) => ({ ...s, [field]: next }));
+    setDrafts((d) => ({ ...d, [key]: next }));
   };
 
   const handleModeClick = (target: PaymentMode) => {
@@ -348,19 +502,32 @@ export function ProviderConfigCard({
     }
   };
 
-  const liveKeyIdPresent =
-    !!config.live.keyId ||
-    (secrets.liveKeyId.editing && secrets.liveKeyId.value.trim() !== "");
-  const liveKeySecretPresent =
-    config.live.keySecretSet ||
-    (secrets.liveKeySecret.editing &&
-      secrets.liveKeySecret.value.trim() !== "");
-  const liveWebhookSecretPresent =
-    config.live.webhookSecretSet ||
-    (secrets.liveWebhookSecret.editing &&
-      secrets.liveWebhookSecret.value.trim() !== "");
-  const hasLiveCredentials =
-    liveKeyIdPresent && liveKeySecretPresent && liveWebhookSecretPresent;
+  // Only one platform gateway may be enabled at a time (server-enforced) -
+  // enabling this one while another is enabled will auto-disable it.
+  const otherEnabled = allProviders.filter(
+    (p) => p.provider !== config.provider && p.isEnabled,
+  );
+  const otherEnabledLabels = otherEnabled.map((p) => providerLabel(p.provider));
+
+  const handleEnabledChange = (checked: boolean) => {
+    if (checked && otherEnabled.length > 0) {
+      setPendingEnable(true);
+      return;
+    }
+    updateForm({ isEnabled: checked });
+  };
+
+  const confirmEnable = () => {
+    setPendingEnable(false);
+    updateForm({ isEnabled: true });
+  };
+
+  const hasLiveCredentials = requiredFieldsSatisfied(
+    credentialFields,
+    config.live,
+    drafts,
+    "live",
+  );
 
   const confirmGoLive = () => {
     setPendingMode(null);
@@ -370,7 +537,7 @@ export function ProviderConfigCard({
   const handleReset = () => {
     setForm(deriveForm(config));
     setPolicyForm(derivePolicyForm(policy));
-    setSecrets(initSecrets());
+    setDrafts({});
     setDirty(false);
     setFormErrors([]);
     setError(null);
@@ -397,20 +564,41 @@ export function ProviderConfigCard({
         maxAmount: Number(form.maxAmount),
         quickAmounts: parseQuickAmounts(form.quickAmountsText),
         paymentLinkExpiryHours: Number(form.paymentLinkExpiryHours),
-        ...buildSecretPayload(secrets),
+        ...buildCredentialsPayload(drafts),
       }).unwrap();
-    } catch (err: any) {
-      if (err?.data?.error?.code === "PENDING_ORDERS_BLOCK_MODE_SWITCH") {
-        const details = err?.data?.error?.details || {};
+    } catch (err: unknown) {
+      const code = extractApiErrorCode(err);
+      if (code === "PENDING_ORDERS_BLOCK_MODE_SWITCH") {
+        const details =
+          (err as { data?: { error?: { details?: Record<string, unknown> } } })
+            ?.data?.error?.details || {};
+        const blockingOrders =
+          (details.blockingOrders as BlockingOrder[]) || [];
         setModeBlockers({
-          orders: details.blockingOrders || [],
-          total: details.total ?? (details.blockingOrders || []).length,
+          orders: blockingOrders,
+          total: (details.total as number) ?? blockingOrders.length,
         });
         setError(
           "Cannot switch to LIVE mode while TEST-mode payments are still open.",
         );
+      } else if (code === "PENDING_ORDERS_BLOCK_PROVIDER_SWITCH") {
+        const details =
+          (err as { data?: { error?: { details?: Record<string, unknown> } } })
+            ?.data?.error?.details || {};
+        const blockingOrders =
+          (details.blockingOrders as BlockingOrder[]) || [];
+        setModeBlockers({
+          orders: blockingOrders,
+          total: (details.total as number) ?? blockingOrders.length,
+        });
+        setError(
+          extractApiError(
+            err,
+            `Cannot enable ${label} while another gateway still has open orders.`,
+          ),
+        );
       } else {
-        setError(apiErrorMessage(err, "Failed to save payment settings"));
+        setError(extractApiError(err, "Failed to save payment settings"));
       }
       return;
     }
@@ -420,9 +608,9 @@ export function ProviderConfigCard({
         manualMaxPerTransaction: Number(policyForm.manualMaxPerTransaction),
         manualApprovalThreshold: Number(policyForm.manualApprovalThreshold),
       }).unwrap();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(
-        apiErrorMessage(
+        extractApiError(
           err,
           "Payment provider saved, but the top-up policy failed to save",
         ),
@@ -431,13 +619,13 @@ export function ProviderConfigCard({
     }
 
     toast.success("Payment settings saved");
-    setSecrets(initSecrets());
+    setDrafts({});
     setTestResult(null);
     setTestError(null);
     setDirty(false);
   };
 
-  // Deliberately never sends the in-flight `secrets` state here - a test
+  // Deliberately never sends the in-flight `drafts` state here - a test
   // endpoint that could accept typed-but-unsaved credentials would turn it
   // into a secret-echo vector. It only ever exercises what is already
   // persisted server-side, which is also why it's disabled below while any
@@ -447,13 +635,13 @@ export function ProviderConfigCard({
     try {
       const res = await testProvider(config.provider).unwrap();
       setTestResult(res);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResult(null);
-      setTestError(apiErrorMessage(err, "Connection test failed"));
+      setTestError(extractApiError(err, "Connection test failed"));
     }
   };
 
-  const hasUnsavedSecretEdits = Object.values(secrets).some((s) => s.editing);
+  const hasUnsavedSecretEdits = Object.values(drafts).some((s) => s.editing);
   const capNum = Number(policyForm.manualMaxPerTransaction);
   const thresholdNum = Number(policyForm.manualApprovalThreshold);
   const thresholdAboveCap =
@@ -465,6 +653,18 @@ export function ProviderConfigCard({
       ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
       : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300";
 
+  const primaryMode: "test" | "live" = form.mode === "TEST" ? "test" : "live";
+  const secondaryMode: "test" | "live" =
+    primaryMode === "test" ? "live" : "test";
+  const credByMode: Record<"test" | "live", ProviderCredentialState> = {
+    test: config.test,
+    live: config.live,
+  };
+  const panelTitle: Record<"test" | "live", string> = {
+    test: "Test credentials",
+    live: "Live credentials",
+  };
+
   return (
     <Card>
       <CardContent className="space-y-6 pt-6">
@@ -472,10 +672,10 @@ export function ProviderConfigCard({
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <CreditCard className="h-6 w-6 text-muted-foreground" />
+              <Icon className="h-6 w-6 text-muted-foreground" />
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold">Razorpay</h2>
+                  <h2 className="text-lg font-semibold">{label}</h2>
                   <Badge variant="outline" className={modeBadgeClass}>
                     {config.mode}
                   </Badge>
@@ -496,9 +696,7 @@ export function ProviderConfigCard({
               <Switch
                 id={`${baseId}-enabled`}
                 checked={form.isEnabled}
-                onCheckedChange={(checked) =>
-                  updateForm({ isEnabled: checked })
-                }
+                onCheckedChange={handleEnabledChange}
               />
             </div>
           </div>
@@ -511,7 +709,42 @@ export function ProviderConfigCard({
               </AlertDescription>
             </Alert>
           )}
+
+          {credentialsUnreadable && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Some stored credentials for {label} could not be decrypted (the
+                encryption key may have rotated). Re-enter the affected fields
+                below to restore this gateway.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
+
+        <AlertDialog
+          open={pendingEnable}
+          onOpenChange={(open) => !open && setPendingEnable(false)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Enable {label}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Only one payment gateway may be active at a time. Enabling{" "}
+                {label} will disable {otherEnabledLabels.join(" and ")} once you
+                save.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setPendingEnable(false)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={confirmEnable}>
+                Yes, enable {label}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Separator />
 
@@ -551,8 +784,8 @@ export function ProviderConfigCard({
               <AlertDescription className="space-y-2">
                 <p>
                   {modeBlockers.total} payment
-                  {modeBlockers.total === 1 ? "" : "s"} are still open in TEST
-                  mode. They must settle or expire before switching.
+                  {modeBlockers.total === 1 ? "" : "s"} are still open. They
+                  must settle or expire before switching.
                 </p>
                 {modeBlockers.orders.length > 0 && (
                   <div className="overflow-x-auto rounded-md border">
@@ -601,12 +834,15 @@ export function ProviderConfigCard({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Switch Razorpay to LIVE mode?</AlertDialogTitle>
+              <AlertDialogTitle>Switch {label} to LIVE mode?</AlertDialogTitle>
               <AlertDialogDescription>
                 Real money will be charged to customers&apos; cards from the
-                moment you save. Verify the live key ID and webhook secret are
-                correct and that the webhook URL is registered in the Razorpay
-                dashboard.
+                moment you save. Verify your live credentials are correct and
+                that the{" "}
+                {config.usesReturnEndpoint
+                  ? "redirect and webhook URLs are"
+                  : "webhook URL is"}{" "}
+                registered in the {label} dashboard.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {!hasLiveCredentials && (
@@ -634,88 +870,36 @@ export function ProviderConfigCard({
         {/* 3. Credentials */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold">Credentials</h3>
-          {form.mode === "TEST" ? (
-            <>
-              <CredentialsPanel
-                title="Test credentials"
-                cred={config.test}
-                keyIdState={secrets.testKeyId}
-                onKeyIdChange={(n) => updateSecret("testKeyId", n)}
-                keySecretState={secrets.testKeySecret}
-                onKeySecretChange={(n) => updateSecret("testKeySecret", n)}
-                webhookSecretState={secrets.testWebhookSecret}
-                onWebhookSecretChange={(n) =>
-                  updateSecret("testWebhookSecret", n)
-                }
-              />
-              <Accordion type="single" collapsible>
-                <AccordionItem value="live-credentials">
-                  <AccordionTrigger className="text-sm font-semibold">
-                    Live credentials
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <CredentialsPanel
-                      title="Live credentials"
-                      cred={config.live}
-                      keyIdState={secrets.liveKeyId}
-                      onKeyIdChange={(n) => updateSecret("liveKeyId", n)}
-                      keySecretState={secrets.liveKeySecret}
-                      onKeySecretChange={(n) =>
-                        updateSecret("liveKeySecret", n)
-                      }
-                      webhookSecretState={secrets.liveWebhookSecret}
-                      onWebhookSecretChange={(n) =>
-                        updateSecret("liveWebhookSecret", n)
-                      }
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </>
-          ) : (
-            <>
-              <CredentialsPanel
-                title="Live credentials"
-                cred={config.live}
-                keyIdState={secrets.liveKeyId}
-                onKeyIdChange={(n) => updateSecret("liveKeyId", n)}
-                keySecretState={secrets.liveKeySecret}
-                onKeySecretChange={(n) => updateSecret("liveKeySecret", n)}
-                webhookSecretState={secrets.liveWebhookSecret}
-                onWebhookSecretChange={(n) =>
-                  updateSecret("liveWebhookSecret", n)
-                }
-              />
-              <Accordion type="single" collapsible>
-                <AccordionItem value="test-credentials">
-                  <AccordionTrigger className="text-sm font-semibold">
-                    Test credentials
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <CredentialsPanel
-                      title="Test credentials"
-                      cred={config.test}
-                      keyIdState={secrets.testKeyId}
-                      onKeyIdChange={(n) => updateSecret("testKeyId", n)}
-                      keySecretState={secrets.testKeySecret}
-                      onKeySecretChange={(n) =>
-                        updateSecret("testKeySecret", n)
-                      }
-                      webhookSecretState={secrets.testWebhookSecret}
-                      onWebhookSecretChange={(n) =>
-                        updateSecret("testWebhookSecret", n)
-                      }
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </>
-          )}
+          <CredentialsPanel
+            title={panelTitle[primaryMode]}
+            mode={primaryMode}
+            fields={credentialFields}
+            cred={credByMode[primaryMode]}
+            drafts={drafts}
+            onChange={updateDraft}
+          />
+          <Accordion type="single" collapsible>
+            <AccordionItem value={`${secondaryMode}-credentials`}>
+              <AccordionTrigger className="text-sm font-semibold">
+                {panelTitle[secondaryMode]}
+              </AccordionTrigger>
+              <AccordionContent>
+                <CredentialsPanel
+                  title={panelTitle[secondaryMode]}
+                  mode={secondaryMode}
+                  fields={credentialFields}
+                  cred={credByMode[secondaryMode]}
+                  drafts={drafts}
+                  onChange={updateDraft}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
 
         <Separator />
 
-        {/* 4. Webhook */}
+        {/* 4. Webhook / redirect */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Webhook</h3>
           <div className="flex items-center gap-2">
@@ -742,9 +926,33 @@ export function ProviderConfigCard({
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            Register this URL in Razorpay Dashboard → Settings → Webhooks,
-            subscribe to these events, and paste the signing secret above.
+            Register this URL in the {label} dashboard, subscribe to these
+            events, and paste the signing secret above.
           </p>
+
+          {config.usesReturnEndpoint && config.returnUrl && (
+            <div className="space-y-1.5 pt-2">
+              <Label>Redirect / cancel URL</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={config.returnUrl}
+                  className="font-mono text-xs"
+                />
+                <CopyButton
+                  value={config.returnUrl}
+                  label="Copy redirect URL"
+                  size="icon"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This is a SEPARATE URL from the webhook URL above - register it
+                as the Cancel/Redirect URL in the {label} dashboard. Registering
+                the webhook URL in its place is a silent failure: the browser
+                will never be returned to checkout.
+              </p>
+            </div>
+          )}
         </div>
 
         <Separator />

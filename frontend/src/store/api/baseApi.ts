@@ -255,6 +255,8 @@ export const baseApi = createApi({
     "PaymentGateway",
     "PaymentLink",
     "TopupApproval",
+    "OutletQr",
+    "QrCollection",
     "Zone",
     "Geo",
     "Geographical",

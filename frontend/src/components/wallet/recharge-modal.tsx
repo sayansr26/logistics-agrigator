@@ -14,10 +14,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CopyButton } from "@/components/wallet/copy-button";
 import { usePaymentProvider } from "@/hooks/usePaymentProvider";
-import { useRazorpayTopup, type TopupPhase } from "@/hooks/useRazorpayTopup";
+import { useWalletTopup, type TopupPhase } from "@/hooks/useWalletTopup";
 import { useGetMyWalletInfoQuery } from "@/store/api/endpoints/walletApi";
+import type { PaymentProviderName } from "@/store/api/endpoints/paymentApi";
 import { readWalletBalance } from "@/hooks/useBookingWallet";
 import { formatINR } from "@/lib/utils";
+
+/** Friendly label for the "Taking you to <provider>…" redirect copy. */
+const PROVIDER_LABELS: Partial<Record<PaymentProviderName, string>> = {
+  razorpay: "Razorpay",
+  ccavenue: "CCAvenue",
+  ccavenue_upi_qr: "CCAvenue",
+  cashfree: "Cashfree",
+  payu: "PayU",
+  stripe: "Stripe",
+};
+
+function formatProviderName(provider: PaymentProviderName | null): string {
+  if (!provider) return "the payment gateway";
+  return PROVIDER_LABELS[provider] ?? "the payment gateway";
+}
 
 /**
  * Self-serve recharge only — it always tops up the SIGNED-IN user's wallet.
@@ -47,6 +63,7 @@ const NON_DISMISSABLE_PHASES: TopupPhase[] = [
   "creating",
   "loading-sdk",
   "checkout",
+  "redirecting",
   "verifying",
 ];
 
@@ -59,8 +76,14 @@ export function RechargeModal({
   const [amount, setAmount] = useState("");
   const [touched, setTouched] = useState(false);
 
-  const { isTestMode, quickAmounts, minAmount, maxAmount, validateAmount } =
-    usePaymentProvider();
+  const {
+    isTestMode,
+    quickAmounts,
+    minAmount,
+    maxAmount,
+    validateAmount,
+    provider,
+  } = usePaymentProvider();
 
   const {
     phase,
@@ -74,14 +97,14 @@ export function RechargeModal({
     retry,
     reset,
     checkStatusNow,
-  } = useRazorpayTopup({});
+  } = useWalletTopup({});
 
   const { data: myWalletInfo } = useGetMyWalletInfoQuery();
   const balance = readWalletBalance(myWalletInfo);
 
   // Prefill from suggestedAmount whenever the modal opens; clear local
   // (component-owned) state whenever it closes. All payment-flow state
-  // lives in useRazorpayTopup and is left alone here - it manages its own
+  // lives in useWalletTopup and is left alone here - it manages its own
   // lifecycle (including surviving a close during `polling`).
   useEffect(() => {
     if (open) {
@@ -145,6 +168,7 @@ export function RechargeModal({
           orderId,
           elapsedSeconds,
           errorMessage,
+          providerLabel: formatProviderName(provider),
         })}
 
         {renderFooter({
@@ -181,6 +205,7 @@ interface RenderBodyArgs {
   orderId: string | null;
   elapsedSeconds: number;
   errorMessage: string | null;
+  providerLabel: string;
 }
 
 function renderBody(args: RenderBodyArgs): ReactNode {
@@ -202,6 +227,7 @@ function renderBody(args: RenderBodyArgs): ReactNode {
     orderId,
     elapsedSeconds,
     errorMessage,
+    providerLabel,
   } = args;
 
   if (phase === "idle" || phase === "cancelled") {
@@ -292,6 +318,20 @@ function renderBody(args: RenderBodyArgs): ReactNode {
         <p className="text-xs text-muted-foreground">
           It&apos;s safe to leave this tab open — closing it will not affect
           your payment.
+        </p>
+      </div>
+    );
+  }
+
+  if (phase === "redirecting") {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm">
+          Taking you to {providerLabel} to complete the payment…
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Do not close this window.
         </p>
       </div>
     );
@@ -455,6 +495,7 @@ function renderFooter(args: RenderFooterArgs): ReactNode {
     );
   }
 
-  // creating / loading-sdk / checkout / verifying / polling - no footer.
+  // creating / loading-sdk / checkout / redirecting / verifying / polling -
+  // no footer.
   return null;
 }

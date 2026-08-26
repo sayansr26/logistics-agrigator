@@ -55,14 +55,28 @@ export interface ImportResult {
     pincodeCode: string;
     assignmentId: string;
   }>;
+  updated: Array<{
+    row: number;
+    pincodeCode: string;
+    assignmentId: string;
+  }>;
   errors: Array<{
     row: number;
     pincodeCode: string;
     error: string;
   }>;
+  // Detail lists above are capped by the API; these are the hidden remainders
+  truncated: {
+    imported: number;
+    updated: number;
+    errors: number;
+  };
+  // Failure reason -> number of rows
+  errorSummary: Record<string, number>;
   summary: {
     total: number;
     imported: number;
+    updated: number;
     failed: number;
   };
 }

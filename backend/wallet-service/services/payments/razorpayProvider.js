@@ -932,6 +932,29 @@ function ignoredEvent(eventType, headers, providerPaymentId) {
   };
 }
 
+/**
+ * Gateway "notes" from a Razorpay webhook envelope: they live on the payment,
+ * payment_link or order entity, in that order. Used by the webhook service's
+ * orphan-adoption path to reconstruct a lost order. Non-contract extra export.
+ *
+ * @param {Object} raw - the parsed webhook body
+ * @returns {Object|null}
+ */
+function extractNotes(raw) {
+  const payload = raw && typeof raw.payload === "object" ? raw.payload : null;
+  if (!payload) return null;
+
+  const entities = ["payment", "payment_link", "order"];
+  for (const name of entities) {
+    const node = payload[name];
+    const entity = node && typeof node === "object" ? node.entity : null;
+    if (entity && entity.notes && typeof entity.notes === "object") {
+      return entity.notes;
+    }
+  }
+  return null;
+}
+
 function entityOf(node) {
   if (!node || typeof node !== "object") return null;
   const entity = node.entity;
@@ -1062,6 +1085,10 @@ module.exports = {
 
   // Cache busting for the config service (call on credential/mode change).
   resetInstanceCache,
+
+  // Envelope-specific notes extraction for the webhook service's orphan
+  // adoption path (non-contract extra export).
+  extractNotes,
 
   // Exported for the webhook service + tests.
   OUTCOME,

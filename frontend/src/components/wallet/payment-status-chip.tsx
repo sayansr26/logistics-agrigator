@@ -16,6 +16,17 @@ const STATUS_STYLES: Record<string, string> = {
     "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
   RECONCILE_PENDING:
     "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
+  // Static-QR collection ledger statuses (qrCollectionApi.ts QrCollectionStatus).
+  UNATTRIBUTED:
+    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
+  CREDIT_PENDING:
+    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
+  ASSIGN_PENDING:
+    "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900",
+  ATTRIBUTED:
+    "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900",
+  IGNORED:
+    "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700",
   // Emerald - money has landed / request approved.
   PAID: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900",
   CREDITED:
@@ -35,6 +46,10 @@ const STATUS_STYLES: Record<string, string> = {
     "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900",
   REJECTED:
     "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900",
+  // Indigo - a channel/source label rather than a lifecycle state (static UPI
+  // QR collection source, as opposed to a Razorpay/CCAvenue payment link).
+  UPI_QR:
+    "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-900",
 };
 
 const DEFAULT_STYLE =
