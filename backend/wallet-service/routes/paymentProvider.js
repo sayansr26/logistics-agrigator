@@ -146,6 +146,13 @@ router.put(
  *       When no gateway is enabled (or the enabled one is half-configured) this
  *       returns HTTP 200 with `{ enabled: false, provider: null }` rather than
  *       an error, so the UI simply hides Add Money.
+ *
+ *       `staticQr` reports the CCAvenue static UPI QR collection channel, which
+ *       is configured as its OWN provider row and is independent of the checkout
+ *       gateway above - it is never returned as `provider`, because it cannot
+ *       create a checkout order. The UI hides every QR surface (the admin QR
+ *       Collections / Unattributed queues and the outlet "My QR" page) when
+ *       `staticQr.enabled` is false.
  *     security:
  *       - BearerAuth: []
  *     responses:
@@ -166,6 +173,10 @@ router.put(
  *                 minAmount: 100
  *                 maxAmount: 200000
  *                 quickAmounts: [500, 1000, 2000, 5000]
+ *                 staticQr:
+ *                   enabled: true
+ *                   provider: ccavenue_upi_qr
+ *                   mode: TEST
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  *       403:

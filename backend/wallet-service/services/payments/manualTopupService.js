@@ -440,12 +440,17 @@ async function _creditExternal(row, actor, reqMeta = {}) {
   let alreadyCredited = false;
 
   try {
+    // Structured context goes in `remarks` (the remote types it as
+    // Map<String,Object> and echoes it back as `remarksAsMap`); `metadata` is
+    // typed String there, so it carries the short human label. Sending an
+    // object as `metadata` makes the remote answer 400 "Invalid JSON format".
     external = await client.topup(row.clientCode, row.walletUserId, {
       amount: Number(row.amount),
       currency: row.currency,
       reference_id: row.externalReferenceId,
       description: `Manual top-up: ${row.reason}`,
-      metadata: {
+      metadata: `MANUAL:${row.externalReference}`,
+      remarks: {
         source: "MANUAL",
         requestId: row.id,
         externalReference: row.externalReference,

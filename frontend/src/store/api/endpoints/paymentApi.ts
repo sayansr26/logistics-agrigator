@@ -181,6 +181,17 @@ interface ActiveProviderResponse {
     paymentLinks: boolean;
     refunds: boolean;
   } | null;
+  /**
+   * The static UPI QR collection channel, configured as its own provider row
+   * and reported independently of the checkout gateway above (it can never be
+   * `provider` - it mints no orders). Gate every QR surface on
+   * `staticQr.enabled`; absent on an older backend, which reads as OFF.
+   */
+  staticQr?: {
+    enabled: boolean;
+    provider: PaymentProviderName | null;
+    mode: PaymentMode | null;
+  } | null;
 }
 
 /**

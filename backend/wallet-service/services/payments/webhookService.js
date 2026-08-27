@@ -659,7 +659,11 @@ async function creditOrder(order, parsed, options = {}) {
         currency: current.currency,
         reference_id: referenceId, // <PREFIX>_<paymentId> — the idempotency key (I2b)
         description: `Wallet top-up via ${current.provider} (${parsed.providerPaymentId})`,
-        metadata: {
+        // `remarks` is the remote's Map<String,Object>; `metadata` is its
+        // String. An object in `metadata` comes back as 400 "Invalid JSON
+        // format" — see externalWalletClient._normalizeTransactionBody.
+        metadata: `${current.provider}:${parsed.providerPaymentId}`,
+        remarks: {
           source: source || "WEBHOOK",
           provider: current.provider,
           mode: current.mode,

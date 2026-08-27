@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,8 @@ import {
   Link2,
   ShieldCheck,
   Banknote,
+  QrCode,
+  HelpCircle,
 } from "lucide-react";
 import {
   useGetClientWalletsQuery,
@@ -1551,6 +1553,9 @@ function OutletWalletView() {
 // Admin Wallet Page (existing)
 // ===========================
 
+/** Tabs that only exist while the static UPI QR channel is enabled. */
+const QR_TAB_IDS = ["qr-collections", "qr-unattributed"];
+
 function AdminWalletPage() {
   // Deep link from a shipment's wallet-transaction list: /wallet?userId=<phone>
   // lands directly on that holder's filtered transactions.
@@ -1593,7 +1598,11 @@ function AdminWalletPage() {
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const toast = useToast();
   const { isRole } = useRole();
-  const { isAvailable: paymentAvailable } = usePaymentProvider();
+  const {
+    isAvailable: paymentAvailable,
+    isStaticQrAvailable,
+    isLoading: paymentProviderLoading,
+  } = usePaymentProvider();
   const { data: pendingApprovalsData } = useGetPendingApprovalsQuery(
     { page: 0, size: 1 },
     { skip: !isRole("superadmin") },
@@ -1601,13 +1610,27 @@ function AdminWalletPage() {
   const pendingApprovalsCount =
     pendingApprovalsData?.pagination?.total_elements ?? 0;
 
-  // QR tabs are shown to admins only; the unattributed count is fetched
-  // regardless of which tab is active so the badge is visible without
+  // QR tabs are shown to admins only, and only while the CCAvenue static UPI
+  // QR channel is switched on — with the channel off nothing can ever land in
+  // these queues, so the tabs would be dead ends. The unattributed count is
+  // fetched regardless of which tab is active so the badge is visible without
   // opening the tab (that's the whole point of the queue).
   const isAdminRole = isRole("superadmin") || isRole("admin");
+  const showQrTabs = isAdminRole && isStaticQrAvailable;
+
+  // ?tab=qr-collections is a live deep link (and a bookmark) that must not land
+  // on a blank page once the QR channel is switched off. Wait for the provider
+  // query to resolve first — isStaticQrAvailable is false while loading, and
+  // bouncing on that would break the link even when QR is on.
+  useEffect(() => {
+    if (paymentProviderLoading) return;
+    if (!showQrTabs && QR_TAB_IDS.includes(activeTab)) {
+      setActiveTab("wallets");
+    }
+  }, [paymentProviderLoading, showQrTabs, activeTab]);
   const { data: unattributedQrData } = useGetUnattributedQrCollectionsQuery(
     { page: 0, size: 1 },
-    { skip: !isAdminRole },
+    { skip: !showQrTabs },
   );
   const unattributedQrCount =
     unattributedQrData?.pagination?.total_elements ?? 0;
@@ -1861,7 +1884,7 @@ function AdminWalletPage() {
               )}
             </button>
           )}
-          {isAdminRole && (
+          {showQrTabs && (
             <button
               onClick={() => setActiveTab("qr-collections")}
               className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
@@ -1874,7 +1897,7 @@ function AdminWalletPage() {
               QR Collections
             </button>
           )}
-          {isAdminRole && (
+          {showQrTabs && (
             <button
               onClick={() => setActiveTab("qr-unattributed")}
               className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors inline-flex items-center ${
@@ -2502,12 +2525,12 @@ function AdminWalletPage() {
         )}
 
         {/* QR COLLECTIONS TAB */}
-        {activeTab === "qr-collections" && isAdminRole && (
+        {activeTab === "qr-collections" && showQrTabs && (
           <QrCollectionsTab outletMap={outletMap} />
         )}
 
         {/* QR UNATTRIBUTED TAB */}
-        {activeTab === "qr-unattributed" && isAdminRole && (
+        {activeTab === "qr-unattributed" && showQrTabs && (
           <QrUnattributedTab outletMap={outletMap} />
         )}
 

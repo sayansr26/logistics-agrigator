@@ -569,6 +569,75 @@ class ExternalWalletClient {
   }
 
   /**
+   * Coerce a transaction body to the shapes the external API's
+   * `TransactionRequest` DTO actually declares.
+   *
+   * THIS IS NOT COSMETIC. The remote is a Spring service and its DTO is:
+   *
+   *     private String            metadata;   // @Size(max = 1000)
+   *     private Map<String,Object> remarks;
+   *
+   * Handing Jackson an OBJECT for `metadata` (or a STRING for `remarks`)
+   * raises HttpMessageNotReadableException, which the remote reports as
+   * HTTP 400 `BAD_REQUEST` / "Invalid JSON format — Request body contains
+   * malformed JSON". The JSON is perfectly well-formed; only the TYPE is
+   * wrong, so the message sends every reader hunting a serialization bug that
+   * does not exist. Normalizing here — the one place every top-up / debit /
+   * refund passes through — keeps that trap from being re-set by the next
+   * caller that reaches for a structured `metadata`.
+   *
+   * Other DTO constraints callers must respect (rejected as VALIDATION_ERROR,
+   * which at least says which field): amount 0.01–10000.00 with <= 2 decimals,
+   * reference_id 1–100 chars matching ^[a-zA-Z0-9_-]+$, description <= 500.
+   *
+   * @private
+   * @param {Object} body
+   * @returns {Object} a new body, safe to serialize
+   */
+  _normalizeTransactionBody(body) {
+    if (!body || typeof body !== "object") return body;
+
+    const normalized = { ...body };
+
+    const { metadata } = normalized;
+    if (typeof metadata === "object" && metadata !== null) {
+      normalized.metadata = JSON.stringify(metadata);
+    } else if (metadata !== undefined && metadata !== null) {
+      normalized.metadata = String(metadata);
+    }
+
+    // @Size(max = 1000). Truncating JSON leaves a string that no longer parses,
+    // so an over-long value is dropped rather than mangled — losing an
+    // annotation is survivable, failing the credit is not.
+    if (
+      typeof normalized.metadata === "string" &&
+      normalized.metadata.length > 1000
+    ) {
+      logger.warn(
+        "Dropping external wallet metadata: exceeds the remote 1000-char limit",
+        {
+          length: normalized.metadata.length,
+          referenceId: normalized.reference_id,
+        },
+      );
+      normalized.metadata = undefined;
+    }
+
+    // Map<String,Object> — a bare string would fail to deserialize exactly like
+    // an object metadata does.
+    const { remarks } = normalized;
+    if (
+      remarks !== undefined &&
+      remarks !== null &&
+      (typeof remarks !== "object" || Array.isArray(remarks))
+    ) {
+      normalized.remarks = { note: String(remarks) };
+    }
+
+    return normalized;
+  }
+
+  /**
    * Top up a user's wallet
    * @param {string} clientCode - Client code
    * @param {string} userId - User ID
@@ -586,7 +655,7 @@ class ExternalWalletClient {
       const response = await this.makeRequest({
         method: "POST",
         url: `wallets/client/${clientCode}/user/${userId}/topup`,
-        data: body,
+        data: this._normalizeTransactionBody(body),
       });
 
       return response;
@@ -614,7 +683,7 @@ class ExternalWalletClient {
       const response = await this.makeRequest({
         method: "POST",
         url: `wallets/client/${clientCode}/user/${userId}/debit`,
-        data: body,
+        data: this._normalizeTransactionBody(body),
       });
 
       return response;
@@ -646,7 +715,7 @@ class ExternalWalletClient {
       const response = await this.makeRequest({
         method: "POST",
         url: `wallets/client/${clientCode}/user/${userId}/refund`,
-        data: body,
+        data: this._normalizeTransactionBody(body),
       });
 
       return response;

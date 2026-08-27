@@ -80,6 +80,16 @@ const IMPLEMENTED_PROVIDERS = ["razorpay", "ccavenue", "ccavenue_upi_qr"];
 /** Listed in the admin UI, greyed out. No DB row is created for these. */
 const COMING_SOON_PROVIDERS = ["stripe", "cashfree", "payu"];
 
+/**
+ * Collection-only channels: they never mint a checkout order, so they must
+ * never be picked as "the active gateway" for Add Money. Their row exists only
+ * to hold the static-QR credentials and the on/off switch for the QR feature.
+ */
+const COLLECTION_ONLY_PROVIDERS = ["ccavenue_upi_qr"];
+
+/** The static UPI QR collection channel (one provider today). */
+const STATIC_QR_PROVIDER = "ccavenue_upi_qr";
+
 const ALL_PROVIDERS = [...IMPLEMENTED_PROVIDERS, ...COMING_SOON_PROVIDERS];
 
 /**
@@ -694,6 +704,42 @@ async function getConfigSafe(provider) {
 }
 
 /**
+ * Whether the static UPI QR collection channel is switched on and usable.
+ *
+ * Enabled-but-half-configured (a credential cleared out of band, or secrets
+ * that no longer decrypt) counts as OFF, exactly like the checkout gateway -
+ * a QR queue is useless when nothing can arrive in it.
+ *
+ * @returns {Promise<{enabled: boolean, provider: string|null, mode: string|null}>}
+ */
+async function getStaticQrStatus() {
+  const off = { enabled: false, provider: null, mode: null };
+
+  const row = await prisma.paymentProviderConfig.findFirst({
+    where: { isEnabled: true, clientId: null, provider: STATIC_QR_PROVIDER },
+    select: { provider: true, mode: true },
+  });
+
+  if (!row) return off;
+
+  try {
+    await resolveConfigForMode(row.provider, row.mode, {
+      requireEnabled: false,
+    });
+  } catch (error) {
+    logger.warn("Static QR channel is enabled but missing credentials", {
+      provider: row.provider,
+      mode: row.mode,
+      code: error.code ?? null,
+      error: error.message,
+    });
+    return off;
+  }
+
+  return { enabled: true, provider: row.provider, mode: row.mode };
+}
+
+/**
  * Customer-facing, NON-SECRET view used by the Add Money screen.
  *
  * Returns `{ enabled: false, provider: null }` with HTTP 200 (never an error)
@@ -703,14 +749,25 @@ async function getConfigSafe(provider) {
  * @returns {Promise<Object>}
  */
 async function getActiveProviderPublic() {
+  // Collection-only channels (static UPI QR) are excluded: they cannot create
+  // a checkout order, so enabling one must not hijack the Add Money screen.
   const row = await prisma.paymentProviderConfig.findFirst({
-    where: { isEnabled: true, clientId: null },
+    where: {
+      isEnabled: true,
+      clientId: null,
+      provider: { notIn: COLLECTION_ONLY_PROVIDERS },
+    },
     select: { provider: true, mode: true },
     orderBy: { updatedAt: "desc" },
   });
 
+  // Reported alongside the checkout gateway (and independently of it) so every
+  // role can hide the QR surfaces - the admin QR queues and the outlet's own
+  // "My QR" page - when the static-QR channel is switched off.
+  const staticQr = await getStaticQrStatus();
+
   if (!row) {
-    return { enabled: false, provider: null };
+    return { enabled: false, provider: null, staticQr };
   }
 
   let config;
@@ -752,6 +809,7 @@ async function getActiveProviderPublic() {
     enabled: true,
     provider: row.provider,
     mode: row.mode,
+    staticQr,
     // The PUBLIC id — Razorpay's key id, CCAvenue's access code. Designed to
     // reach the browser; it rides in the checkout/redirect payload either way.
     keyId: config.keyId ?? null,
@@ -775,8 +833,14 @@ async function getActiveProviderPublic() {
  * @returns {Promise<string|null>}
  */
 async function resolveActiveProviderName() {
+  // Same exclusion as getActiveProviderPublic: a collection-only channel
+  // (static UPI QR) can never be the gateway a self top-up is minted against.
   const row = await prisma.paymentProviderConfig.findFirst({
-    where: { clientId: null, isEnabled: true },
+    where: {
+      clientId: null,
+      isEnabled: true,
+      provider: { notIn: COLLECTION_ONLY_PROVIDERS },
+    },
     select: { provider: true },
   });
 
@@ -1552,6 +1616,8 @@ module.exports = {
   DEFAULT_PROVIDER,
   IMPLEMENTED_PROVIDERS,
   COMING_SOON_PROVIDERS,
+  COLLECTION_ONLY_PROVIDERS,
+  STATIC_QR_PROVIDER,
   WEBHOOK_EVENTS,
 
   // Rows / reads
@@ -1559,6 +1625,7 @@ module.exports = {
   listConfigs,
   getConfigSafe,
   getActiveProviderPublic,
+  getStaticQrStatus,
   resolveActiveProviderName,
 
   // Internal credential resolution (plaintext — never return these directly)

@@ -36,6 +36,7 @@ import {
   useGetMyOutletQrQuery,
   useGetMyQrCollectionsQuery,
 } from "@/store/api/endpoints/qrCollectionApi";
+import { usePaymentProvider } from "@/hooks/usePaymentProvider";
 
 const PAGE_SIZE = 20;
 
@@ -51,12 +52,20 @@ const formatDate = (dateStr?: string | null) => {
 };
 
 export default function OutletQrPage() {
+  // The whole page hangs off the CCAvenue static UPI QR channel. With it off
+  // there is no QR to print and nothing can be credited, so the page says so
+  // instead of showing "no QR provisioned" — which reads as a provisioning
+  // request the account manager cannot fulfil while the channel is disabled.
+  const { isStaticQrAvailable, isLoading: providerLoading } =
+    usePaymentProvider();
+  const qrChannelOff = !providerLoading && !isStaticQrAvailable;
+
   const {
     data: qr,
     isLoading: qrLoading,
     error: qrError,
     refetch: refetchQr,
-  } = useGetMyOutletQrQuery();
+  } = useGetMyOutletQrQuery(undefined, { skip: !isStaticQrAvailable });
 
   // The endpoint 404s when the outlet has no QR provisioned yet - that's an
   // expected empty state, not a failure, so it gets its own branch below
@@ -70,11 +79,41 @@ export default function OutletQrPage() {
     data: creditsData,
     isLoading: creditsLoading,
     error: creditsError,
-  } = useGetMyQrCollectionsQuery({ page, size: PAGE_SIZE });
+  } = useGetMyQrCollectionsQuery(
+    { page, size: PAGE_SIZE },
+    { skip: !isStaticQrAvailable },
+  );
   const credits = creditsData?.data ?? [];
   const pagination = creditsData?.pagination;
 
   const handlePrint = () => window.print();
+
+  if (qrChannelOff) {
+    return (
+      <DashboardLayout
+        customBreadcrumbs={[
+          { title: "Dashboard", href: "/dashboard" },
+          { title: "Wallet & Billing", href: "/wallet" },
+          { title: "My QR Code" },
+        ]}
+      >
+        <div className="max-w-2xl mx-auto space-y-6 p-6">
+          <Card>
+            <CardContent className="text-center py-12">
+              <QrCode className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium">
+                UPI QR top-up is not available
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The QR collection channel is currently switched off. Use the
+                wallet top-up options on the Wallet page instead.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout

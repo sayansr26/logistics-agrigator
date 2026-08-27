@@ -20,6 +20,13 @@ const DEFAULT_QUICK_AMOUNTS = [500, 1000, 2000, 5000];
 export interface ActiveProvider {
   /** enabled && provider !== null && keyId non-empty. The single gate every "Add Money" surface should consult. */
   isAvailable: boolean;
+  /**
+   * The CCAvenue static UPI QR channel is switched on and fully configured.
+   * Independent of `isAvailable` (it is its own provider row), and the single
+   * gate every QR surface should consult - the admin QR Collections /
+   * Unattributed queues and the outlet's "My QR" page.
+   */
+  isStaticQrAvailable: boolean;
   isLoading: boolean;
   provider: PaymentProviderName | null;
   keyId: string;
@@ -60,6 +67,11 @@ export function usePaymentProvider(): ActiveProvider {
       data?.enabled && provider !== null && keyId.length > 0,
     );
 
+    // Server-driven only: an older backend omits `staticQr`, which reads as
+    // OFF and hides the QR surfaces rather than showing queues that can never
+    // fill.
+    const isStaticQrAvailable = Boolean(data?.staticQr?.enabled);
+
     function validateAmount(amount: number): string | null {
       if (!Number.isFinite(amount)) {
         return "Enter a valid amount";
@@ -83,6 +95,7 @@ export function usePaymentProvider(): ActiveProvider {
 
     return {
       isAvailable,
+      isStaticQrAvailable,
       isLoading,
       provider,
       keyId,
