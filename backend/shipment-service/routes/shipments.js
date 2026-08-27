@@ -633,7 +633,11 @@ router.put(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "update", "parent"),
+  // "own", not "parent": an outlet holds shipment:update:own and server-side
+  // scope matching is EXACT, so "parent" locked outlets out of editing their
+  // own shipments. updateShipment runs authUtils.applyScopeFilter over the
+  // lookup and 404s on a miss, so an outlet still cannot touch anyone else's.
+  authMiddleware.requirePermission("shipment", "update", "own"),
   validate(updateShipmentSchema),
   updateShipment,
 );

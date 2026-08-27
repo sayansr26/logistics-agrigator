@@ -13,6 +13,19 @@ import {
 } from "@/store/api/endpoints/paymentApi";
 import { ProviderConfigCard } from "@/components/settings/payments/provider-config-card";
 
+/**
+ * TODO: re-enable CCAvenue once the integration is signed off.
+ *
+ * UI-ONLY suppression. The server still configures, exposes and can transact
+ * with these providers - this hides their cards on the settings page so nobody
+ * configures them by accident in the meantime. To restore, empty this set (or
+ * delete it and the matching .filter below); no server change is needed.
+ *
+ * Note the wallet top-up surfaces choose providers independently of this page,
+ * so hiding a provider here does NOT stop a customer being routed to it.
+ */
+const HIDDEN_PROVIDERS = new Set(["ccavenue", "ccavenue_upi_qr"]);
+
 const customBreadcrumbs = [
   { title: "Dashboard", href: "/dashboard" },
   { title: "Settings", href: "/settings" },
@@ -37,7 +50,9 @@ export default function PaymentSettingsPage() {
   const error = providersError || policyError;
   // `comingSoon` providers (stripe/cashfree/payu) are scaffolded server-side
   // but have no working implementation yet - deliberately not rendered here.
-  const configuredProviders = (providers ?? []).filter((p) => !p.comingSoon);
+  const configuredProviders = (providers ?? [])
+    .filter((p) => !p.comingSoon)
+    .filter((p) => !HIDDEN_PROVIDERS.has(p.provider));
 
   return (
     <DashboardLayout customBreadcrumbs={customBreadcrumbs}>

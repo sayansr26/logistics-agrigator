@@ -43,13 +43,18 @@ router.post(
   issueAdjustmentNote,
 );
 
+// Read scope is "own", not "assigned": an outlet holds shipment:read:own and
+// scope matching is EXACT (see shared/constants/permissions.matchesPermission —
+// there is no own < assigned < parent hierarchy on the server). The controller
+// scopes every read to the caller's outlet/client, so "own" is the honest
+// requirement here rather than the thing keeping tenants apart.
 // GET /api/v1/invoices
 router.get(
   "/",
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(listInvoicesSchema),
   listInvoices,
 );
@@ -60,7 +65,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(getInvoicePdfSchema),
   downloadInvoicePdf,
 );
@@ -71,7 +76,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(getInvoiceByIdSchema),
   getInvoiceById,
 );

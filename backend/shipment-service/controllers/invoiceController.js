@@ -14,6 +14,7 @@ const { APIError } = require("../shared/lib/errors");
 const invoiceService = require("../services/invoiceService");
 const invoicePdfService = require("../services/invoicePdfService");
 const shipmentLedgerService = require("../services/shipmentLedgerService");
+const outletWalletContextService = require("../services/outletWalletContextService");
 
 function serializeInvoice(invoice) {
   if (!invoice) return invoice;
@@ -64,6 +65,48 @@ function errorToResponse(res, error, fallbackMessage) {
 }
 
 /**
+ * Resolve the billing scope a caller may read invoices for.
+ *
+ * These endpoints previously took `outletId`/`clientId` straight from the query
+ * string and applied no caller scoping at all — the ONLY thing preventing one
+ * tenant reading another's invoices was the route demanding a high permission
+ * scope. Lowering that scope so outlets can see their own invoices therefore
+ * has to come WITH real scoping, not instead of it.
+ *
+ * Returns `null` for platform roles (no restriction), or a Prisma-ready filter
+ * for everyone else.
+ */
+async function resolveInvoiceScope(req) {
+  const role = req.user?.role;
+  if (role === "superadmin" || role === "admin") return null;
+
+  const userId = req.user?.userId || req.user?.id;
+
+  if (role === "outlet") {
+    // An outlet session carries the outlet USER id; Invoice.outletId is the
+    // outlet ENTITY id, so it has to be resolved before it can be compared.
+    const context =
+      await outletWalletContextService.resolveOutletWalletByUserId(userId);
+    if (!context?.outletId) return { outletId: "__none__" };
+    return { outletId: context.outletId };
+  }
+
+  if (req.user?.clientId) return { clientId: req.user.clientId };
+
+  // Unknown role with no resolvable tenant: match nothing rather than
+  // everything. Failing closed here is the whole point.
+  return { outletId: "__none__" };
+}
+
+/** True when `invoice` falls inside `scope` (null scope = unrestricted). */
+function invoiceInScope(invoice, scope) {
+  if (!scope) return true;
+  if (scope.outletId) return invoice?.outletId === scope.outletId;
+  if (scope.clientId) return invoice?.clientId === scope.clientId;
+  return false;
+}
+
+/**
  * POST /api/v1/invoices/shipments/:shipmentId/issue
  */
 async function issueTaxInvoice(req, res) {
@@ -98,6 +141,16 @@ async function getInvoiceById(req, res) {
   try {
     const { id } = req.params;
     const invoice = await invoiceService.getInvoiceById(id);
+
+    // 404 rather than 403: a caller outside the scope should not be able to
+    // probe which invoice ids exist.
+    const scope = await resolveInvoiceScope(req);
+    if (!invoiceInScope(invoice, scope)) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Invoice not found", "NOT_FOUND", null, 404));
+    }
+
     res
       .status(200)
       .json(
@@ -128,10 +181,15 @@ async function listInvoices(req, res) {
       limit,
     } = req.query;
 
+    // A caller-supplied outletId/clientId is only honoured for platform roles.
+    // For everyone else the resolved scope overrides it outright, so passing
+    // someone else's id in the query cannot widen what you can read.
+    const scope = await resolveInvoiceScope(req);
+
     const result = await invoiceService.listInvoices({
       shipmentId,
-      outletId,
-      clientId,
+      outletId: scope ? scope.outletId : outletId,
+      clientId: scope ? scope.clientId : clientId,
       dateFrom,
       dateTo,
       status,
@@ -201,6 +259,16 @@ async function downloadInvoicePdf(req, res) {
   try {
     const { id } = req.params;
     const invoice = await invoiceService.getInvoiceById(id);
+
+    // Same scope gate as getInvoiceById — the PDF is the invoice, and it also
+    // embeds a wallet-transaction annexure, so it must not be reachable by id
+    // alone.
+    const scope = await resolveInvoiceScope(req);
+    if (!invoiceInScope(invoice, scope)) {
+      return res
+        .status(404)
+        .json(APIResponse.error("Invoice not found", "NOT_FOUND", null, 404));
+    }
 
     // The PDF carries a wallet-transaction annexure, and that ledger keeps
     // moving after the invoice is issued (a re-rate adds a reversal and a
