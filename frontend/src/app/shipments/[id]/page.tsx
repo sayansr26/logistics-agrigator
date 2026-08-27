@@ -20,6 +20,13 @@ import {
   useDownloadInvoicePdfMutation,
 } from "@/store/api/endpoints/invoiceApi";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -243,6 +250,43 @@ export default function ShipmentDetailPage() {
     resolvedAddresses.find((a) => a.id === shipment?.pickupAddressId)?.label ||
     resolvedAddresses.find((a) => a.id === shipment?.pickupAddressId)?.name ||
     "";
+
+  // The courier rejects a booking on the shipment DATA, and the fields it
+  // flags are the same ones the booking form collects from a saved address.
+  // Retyping them by hand is how the bad values got there, so offer the same
+  // saved-address dropdown here and fill the whole side at once — picking a
+  // pickup address sets its contact name and phone too, not just line 1.
+  const ADDRESS_FIELD_SIDES: Record<string, "pickup" | "delivery"> = {
+    pickupLine1: "pickup",
+    deliveryLine1: "delivery",
+  };
+
+  const formatAddressLine = (a: OutletAddress) =>
+    [a.addressLine1, a.addressLine2, a.landmark ? `Near ${a.landmark}` : ""]
+      .filter(Boolean)
+      .join(", ");
+
+  const applySavedAddress = (
+    side: "pickup" | "delivery",
+    addressId: string,
+  ) => {
+    const addr = resolvedAddresses.find((a) => a.id === addressId);
+    if (!addr) return;
+    setCorrections((prev) => {
+      const next = { ...prev };
+      // Every correction is Joi-validated as min(1)/max(255) server-side, so
+      // only send fields the saved address actually fills — an empty one would
+      // fail the whole retry rather than just being ignored.
+      const put = (key: string, value?: string | null) => {
+        const trimmed = (value ?? "").trim();
+        if (trimmed) next[key] = trimmed.slice(0, 255);
+      };
+      put(`${side}Line1`, formatAddressLine(addr));
+      put(`${side}Name`, addr.name);
+      put(`${side}Phone`, addr.phone);
+      return next;
+    });
+  };
 
   const [retryOpen, setRetryOpen] = useState(false);
   const [retryPickupLocation, setRetryPickupLocation] = useState("");
@@ -2180,6 +2224,29 @@ export default function ShipmentDetailPage() {
                     <Label htmlFor={`fix-${fi.field}`} className="text-xs">
                       {fi.label}
                     </Label>
+                    {ADDRESS_FIELD_SIDES[fi.field] &&
+                      resolvedAddresses.length > 0 && (
+                        <Select
+                          onValueChange={(v) =>
+                            applySavedAddress(ADDRESS_FIELD_SIDES[fi.field], v)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Use a saved address…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {resolvedAddresses.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.label}
+                                {a.addressType
+                                  ? ` (${a.addressType.toLowerCase()})`
+                                  : ""}{" "}
+                                · {a.city} {a.pincode}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     <Input
                       id={`fix-${fi.field}`}
                       value={corrections[fi.field] ?? ""}

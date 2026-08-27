@@ -195,7 +195,7 @@ router.post(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  authMiddleware.requirePermission("shipment", "update", "own"),
   validate(assignPartnerSchema),
   assignPartner,
 );
@@ -204,12 +204,17 @@ router.post(
  * POST /api/v1/shipments/:id/retry-booking
  * Retry courier booking for an existing shipment (e.g., after fixing Delhivery pickup location config).
  */
+// Booking actions an outlet performs on ITS OWN shipment. Scope matching is
+// exact server-side, so "assigned" blocked the outlet role (which holds
+// shipment:update:own) from retrying a push on a parcel it owns. Each handler
+// runs authUtils.applyScopeFilter over the lookup and 404s on a miss, so
+// lowering the flag does not widen which shipments are reachable.
 router.post(
   "/:id/retry-booking",
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  authMiddleware.requirePermission("shipment", "update", "own"),
   validate(retryBookingSchema),
   retryCourierBooking,
 );
@@ -223,7 +228,7 @@ router.post(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "update", "assigned"),
+  authMiddleware.requirePermission("shipment", "update", "own"),
   validate(refreshFromProviderSchema),
   refreshFromProvider,
 );
@@ -237,7 +242,7 @@ router.post(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(fetchCourierLabelSchema),
   fetchCourierLabel,
 );
@@ -265,7 +270,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   getShipmentTransactions,
 );
 
@@ -278,7 +283,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   getShipmentDocuments,
 );
 
@@ -571,7 +576,12 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  // "own", not "assigned". Server-side scope matching is EXACT (no
+  // own < assigned < parent hierarchy), and an outlet holds shipment:read:own —
+  // so `assigned` let an outlet LIST its shipments (GET / is read:own) but not
+  // open one. Every handler lowered here runs authUtils.applyScopeFilter and
+  // 404s on a miss, so the row-level isolation is unchanged.
+  authMiddleware.requirePermission("shipment", "read", "own"),
   getShipmentById,
 );
 
@@ -771,7 +781,7 @@ router.get(
   trackingLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   getShipmentTracking,
 );
 
@@ -1856,7 +1866,7 @@ router.post(
   "/:shipmentId/label",
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(generateShippingLabelSchema),
   generateShippingLabel,
 );
@@ -1870,7 +1880,7 @@ router.get(
   generalLimiter,
   authMiddleware.authenticate,
   authMiddleware.enrichUserContext,
-  authMiddleware.requirePermission("shipment", "read", "assigned"),
+  authMiddleware.requirePermission("shipment", "read", "own"),
   validate(downloadShippingLabelQuerySchema, "query"),
   downloadShippingLabel,
 );

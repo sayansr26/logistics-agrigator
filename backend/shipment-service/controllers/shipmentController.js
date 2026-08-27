@@ -3525,6 +3525,19 @@ async function getShipmentTracking(req, res) {
     const userId = req.user?.userId;
     const { id } = req.params;
 
+    // Scope gate BEFORE reading the tracking history. This handler fetched by
+    // id alone, so without this an outlet could read any shipment's movements
+    // just by knowing its id. applyScopeFilter pins an outlet to its own
+    // userId and leaves platform roles unrestricted.
+    const scopedWhere = authUtils.applyScopeFilter(req, { id });
+    const visible = await prisma.shipment.findFirst({
+      where: scopedWhere,
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new NotFoundError("Shipment not found");
+    }
+
     // Use tracking service to get comprehensive tracking data
     const shipment = await trackingService.getTrackingEvents(id, true);
 
