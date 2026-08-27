@@ -1,10 +1,52 @@
 # Charges Base Engine — AI Config Drafting: Root Cause & Change Plan
 
-> Status: investigation complete, implementation not started
+> Status: SUPERSEDED IN PART — implemented 2026-08-27, and the headline
+> diagnosis below was disproved while implementing it. See the CORRECTIONS
+> block immediately after this header, and `docs/CHARGES_FIX_PROGRESS.md`.
 > Scope: partner-service Charges Engine v3, AI config drafting path
 > Trigger: base charges for a multi-channel partner either failed to create, or
 > were created with wrong numbers.
-> Last updated: 2026-08-26
+> Last updated: 2026-08-27
+
+---
+
+## 0. CORRECTIONS (added 2026-08-27, after checking the stored data)
+
+This document's central claim — that the AI misread the rate card — is **not
+supported by the `AiChargeSuggestion` rows**. Four corrections:
+
+1. **§4 is wrong. The model's output was correct.** Suggestion `02246f0f-…`
+   produced exactly `1/26/130, 1/32/160, 1/38/180, 1/46/220` against the right
+   milestone UUIDs, with accurate warnings. It failed to _write_, with the
+   stored error:
+   `{"applyErrors": ["definition B2C_BASIC_FREIGHT: Charge definition code already exists: B2C_BASIC_FREIGHT"]}`
+   The earlier `0.5 / 26 / 26` config was a faithful encoding: the 2026-08-25
+   prompt genuinely said "Billing Unit: 0.5 Kg" and "Rate: ₹26 per 0.5 Kg", with
+   no minimum freight anywhere. The prompt-trap theory (contaminated few-shot,
+   the Rs-26 collision) is not evidenced.
+
+2. **§5 undercounts the write-path defects, and misses the worst one.** Beyond
+   the create-only path and the missing `channelId`, a suggestion that fails to
+   apply becomes terminal `APPROVED` and **can never be retried** — which is why
+   there are 15 suggestions and 8 `REJECTED` ones. Also, `createDefinition`
+   erroring on an existing code directly contradicts `validateDraft:95-99`,
+   which tells the model to reuse.
+
+3. **§8.1 is wrong, and the truth is worse.** A milestone no-match does _not_
+   drop the partner. `distanceZoneService.js:588-600` falls back to the
+   highest-`maxKm` milestone, so a 50.5 km shipment was billed the 1401-3200 km
+   rate — a silent **overcharge**. Item 0.2 (raise D's `maxKm`) was therefore
+   unnecessary and has been dropped; the fix is to floor the distance before
+   matching. The dry-run sample in §10 also miscomputes the second example:
+   `ceil(8/0.5) x 32` is **512**, not 416.
+
+4. **§8.2 resolves to the worse branch.** The catalog holds only 3 definitions —
+   all AI-created, all `isSystem: false`. The 36-definition seed has never run in
+   prod, so `BASE_FREIGHT` was never in the `existingDefinitions` list the model
+   was shown. It did not ignore an instruction; the code did not exist.
+
+Also note **item 7 was already done** before this work started: `results.errors`
+has always rendered at `charge-configs/page.tsx:317-328`.
 
 ---
 

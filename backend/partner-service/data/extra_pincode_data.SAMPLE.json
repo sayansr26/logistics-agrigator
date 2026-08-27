@@ -1,0 +1,47 @@
+[
+  {
+    "pincode": "110099",
+    "area": "Delhi GPO Annexe",
+    "district": "New Delhi",
+    "state": "Delhi",
+    "lat": 28.6139,
+    "lng": 77.209,
+    "type": "S.O"
+  },
+  {
+    "pincode": "396006",
+    "area": "Vapi Industrial Estate",
+    "district": "Valsad",
+    "state": "Gujarat",
+    "lat": 20.3893,
+    "lng": 72.9106,
+    "type": "S.O"
+  },
+  {
+    "pincode": "495005",
+    "area": "Seepat Road",
+    "district": "Bilaspur",
+    "state": "Chhattisgarh",
+    "lat": 22.0797,
+    "lng": 82.1409,
+    "type": "B.O"
+  },
+  {
+    "pincode": "625217",
+    "area": "Alanganallur",
+    "district": "Madurai",
+    "state": "Tamil Nadu",
+    "lat": 10.0833,
+    "lng": 78.0167,
+    "type": "B.O"
+  },
+  {
+    "pincode": "673325",
+    "area": "Kuttiady South",
+    "district": "Kozhikode",
+    "state": "Kerala",
+    "lat": 11.6167,
+    "lng": 75.7833,
+    "type": "B.O"
+  }
+]

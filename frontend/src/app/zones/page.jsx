@@ -63,6 +63,9 @@ import {
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+// Generic despite living under wallet/: handles the non-secure-context
+// clipboard fallback and the copied-state toast.
+import { CopyButton } from "@/components/wallet/copy-button";
 import {
   useGetZonesQuery,
   useDeleteZoneMutation,
@@ -313,7 +316,9 @@ export default function ZonesPage() {
 
         {/* Zones Table */}
         <Card>
-          <CardContent className="p-0">
+          {/* overflow-x-auto keeps a narrow viewport scrolling the table
+              rather than forcing the whole page wide. */}
+          <CardContent className="overflow-x-auto p-0">
             {zones.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Globe className="h-16 w-16 mx-auto mb-4 opacity-50" />
@@ -338,9 +343,11 @@ export default function ZonesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Zone Name</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Zone Name
+                    </TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead className="max-w-[18rem]">Description</TableHead>
                     <TableHead>Milestones</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -351,7 +358,7 @@ export default function ZonesPage() {
                     <TableRow key={zone.id}>
                       <TableCell>
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
                             {zone.zoneType === "DISTANCE" ? (
                               <Route className="h-5 w-5 text-blue-600" />
                             ) : (
@@ -365,9 +372,16 @@ export default function ZonesPage() {
                             >
                               {zone.name}
                             </Link>
-                            <p className="text-xs text-muted-foreground">
-                              ID: {zone.id.slice(0, 8)}...
-                            </p>
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {zone.id}
+                              </span>
+                              <CopyButton
+                                value={zone.id}
+                                label="Copy zone ID"
+                                className="h-6 w-6 shrink-0"
+                              />
+                            </div>
                           </div>
                         </div>
                       </TableCell>
@@ -383,13 +397,20 @@ export default function ZonesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="max-w-xs truncate text-sm text-muted-foreground">
+                        {/* Block-level box, not a span: max-width/overflow do
+                            not apply to inline elements, so the old `truncate`
+                            was inert and `nowrap` stretched the column to the
+                            full description. */}
+                        <div
+                          className="max-w-[18rem] truncate text-sm text-muted-foreground"
+                          title={zone.description || undefined}
+                        >
                           {zone.description || "No description"}
-                        </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {zone.zoneType === "DISTANCE" && zone.milestones ? (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex max-w-[12rem] flex-wrap gap-1">
                             {zone.milestones.slice(0, 2).map((m) => (
                               <Badge
                                 key={m.id}

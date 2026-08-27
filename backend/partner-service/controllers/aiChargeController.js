@@ -24,10 +24,11 @@ function getReqContext(req) {
 
 async function draftFromText(req, res, next) {
   try {
-    const { description, partnerId } = req.body;
+    const { description, partnerId, channelId } = req.body;
     const result = await configBrainService.draftFromText({
       description,
       partnerId: partnerId || null,
+      channelId: channelId || null,
       userId: req.user?.userId || null,
     });
 

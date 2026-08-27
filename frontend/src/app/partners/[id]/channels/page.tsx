@@ -35,13 +35,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Plus,
   Trash2,
@@ -53,7 +55,6 @@ import {
   Key,
   Truck,
   Network,
-  MoreVertical,
   Shield,
   GitBranch,
 } from "lucide-react";
@@ -380,7 +381,7 @@ function AggregatorConfigFields({
   );
 }
 
-function ChannelCard({
+function CredentialAccountRow({
   channel,
   canEdit,
   canDelete,
@@ -427,117 +428,109 @@ function ChannelCard({
           ? !!(config.loginId && config.customerCode)
           : !!channel.apiKey;
 
+  const volumetricLabel = `Volumetric weight = (L × B × H / ${
+    channel.volumetricDivisor ?? DEFAULT_VOLUMETRIC_DIVISOR
+  }) × ${channel.volumetricFactor ?? DEFAULT_VOLUMETRIC_FACTOR}`;
+
   return (
-    <Card className="group relative">
-      <CardContent className="p-5">
-        {/* Row 1: Name + Actions */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-base">{channel.channelName}</h3>
-              {channel.isPrimary && (
-                <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">
-                  Primary
-                </Badge>
-              )}
-              {hasVolumetricOverride && (
-                <Badge
-                  variant="outline"
-                  className="border-purple-200 text-purple-700 bg-purple-50 text-[10px] px-1.5 py-0"
-                  title={`Volumetric weight = (L × B × H / ${
-                    channel.volumetricDivisor ?? DEFAULT_VOLUMETRIC_DIVISOR
-                  }) × ${channel.volumetricFactor ?? DEFAULT_VOLUMETRIC_FACTOR}`}
-                >
-                  Custom volumetric
-                </Badge>
-              )}
-            </div>
-            <Badge
-              variant="outline"
-              className={`text-[11px] px-2 py-0.5 ${
-                aggregatorType === "DELHIVERY"
-                  ? "border-blue-200 text-blue-700 bg-blue-50"
-                  : aggregatorType === "BLUEDART"
-                    ? "border-indigo-200 text-indigo-700 bg-indigo-50"
-                    : "border-gray-200 text-gray-600"
-              }`}
-            >
-              <Truck className="h-3 w-3 mr-1" />
-              {aggregatorType}
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{channel.channelName}</span>
+          {channel.isPrimary && (
+            <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">
+              Primary
             </Badge>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {channel.isActive ? (
-              <Badge
-                variant="outline"
-                className="border-green-200 text-green-700 bg-green-50 text-[11px] px-2 py-0.5"
-              >
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Active
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-[11px] px-2 py-0.5">
-                <XCircle className="h-3 w-3 mr-1" />
-                Inactive
-              </Badge>
-            )}
-            {(canEdit || canDelete) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36">
-                  {canEdit && (
-                    <DropdownMenuItem onClick={() => onEdit(channel)}>
-                      <Pencil className="h-3.5 w-3.5 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                  )}
-                  {canDelete && (
-                    <DropdownMenuItem
-                      onClick={() => channel.id && onDelete(channel.id)}
-                      className="text-red-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          )}
         </div>
-
-        {/* Row 2: Credentials */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant="outline"
+          className={
+            aggregatorType === "DELHIVERY"
+              ? "border-blue-200 text-blue-700 bg-blue-50"
+              : aggregatorType === "BLUEDART"
+                ? "border-indigo-200 text-indigo-700 bg-indigo-50"
+                : "border-gray-200 text-gray-600"
+          }
+        >
+          <Truck className="h-3 w-3 mr-1" />
+          {aggregatorType}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-sm">
+        <span className="flex items-center gap-1.5">
           <Key
             className={`h-3.5 w-3.5 shrink-0 ${isCredentialSet ? "text-green-500" : "text-orange-400"}`}
           />
-          <span className="truncate">{credentialStatus}</span>
-        </div>
-
-        {/* Row 3: Meta */}
-        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Network className="h-3 w-3" />
-            Priority {channel.priority}
+          {credentialStatus}
+        </span>
+      </TableCell>
+      <TableCell className="text-sm" title={volumetricLabel}>
+        {hasVolumetricOverride ? (
+          <span className="text-purple-700 dark:text-purple-400">
+            {channel.volumetricDivisor ?? DEFAULT_VOLUMETRIC_DIVISOR} /{" "}
+            {channel.volumetricFactor ?? DEFAULT_VOLUMETRIC_FACTOR}
           </span>
-          {channel.webhookSecret && (
-            <span className="flex items-center gap-1">
-              <Shield className="h-3 w-3" />
-              Webhook set
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        ) : (
+          <span className="text-muted-foreground">Default</span>
+        )}
+      </TableCell>
+      <TableCell className="text-sm">{channel.priority}</TableCell>
+      <TableCell className="text-sm">
+        {channel.webhookSecret ? (
+          <span className="flex items-center gap-1.5">
+            <Shield className="h-3.5 w-3.5 text-green-500" />
+            Set
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {channel.isActive ? (
+          <Badge
+            variant="outline"
+            className="border-green-200 text-green-700 bg-green-50"
+          >
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Active
+          </Badge>
+        ) : (
+          <Badge variant="secondary">
+            <XCircle className="h-3 w-3 mr-1" />
+            Inactive
+          </Badge>
+        )}
+      </TableCell>
+      {(canEdit || canDelete) && (
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-1">
+            {canEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => onEdit(channel)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-red-600"
+                onClick={() => channel.id && onDelete(channel.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      )}
+    </TableRow>
   );
 }
 
@@ -935,20 +928,42 @@ export default function ManageChannelsPage() {
               </div>
             )}
 
-            {/* Channel Grid */}
+            {/* Credential accounts table — same shape as Routing Channels */}
             {channels.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {channels.map((channel, index) => (
-                  <ChannelCard
-                    key={channel.id ?? index}
-                    channel={channel}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    onEdit={openEditDialog}
-                    onDelete={(id) => setDeletingChannelId(id)}
-                  />
-                ))}
-              </div>
+              <Card>
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account</TableHead>
+                        <TableHead>Aggregator</TableHead>
+                        <TableHead>Credentials</TableHead>
+                        <TableHead>Volumetric</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Webhook</TableHead>
+                        <TableHead>Status</TableHead>
+                        {(canEdit || canDelete) && (
+                          <TableHead className="w-20 text-right">
+                            Actions
+                          </TableHead>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {channels.map((channel, index) => (
+                        <CredentialAccountRow
+                          key={channel.id ?? index}
+                          channel={channel}
+                          canEdit={canEdit}
+                          canDelete={canDelete}
+                          onEdit={openEditDialog}
+                          onDelete={(id) => setDeletingChannelId(id)}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             ) : (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">

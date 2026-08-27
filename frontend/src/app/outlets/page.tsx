@@ -29,6 +29,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  extractPincodeGeo,
+  PINCODE_SUGGEST_MIN,
+  PINCODE_LENGTH,
+} from "@/lib/pincode";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
@@ -257,12 +262,12 @@ export default function OutletsPage() {
   const { data: pincodeDetailsData } = useGetPincodeDetailsQuery(
     pincodeSearch,
     {
-      skip: !pincodeSearch || pincodeSearch.length !== 6,
+      skip: !pincodeSearch || pincodeSearch.length !== PINCODE_LENGTH,
     },
   );
   const { data: pincodesSearchData } = useSearchPincodesQuery(
     { code: pincodeSearch },
-    { skip: !pincodeSearch || pincodeSearch.length < 3 },
+    { skip: !pincodeSearch || pincodeSearch.length < PINCODE_SUGGEST_MIN },
   );
 
   // RTK Query - Update outlet mutation
@@ -337,33 +342,25 @@ export default function OutletsPage() {
     }
   }, [selectedAddress, showEditAddressDialog]);
 
-  // Auto-fill city and state when pincode details are loaded
+  // Auto-fill city and state when a pincode resolves.
+  // extractPincodeGeo handles both response shapes this endpoint has shipped;
+  // reading only the older one made every lookup a silent no-op.
   useEffect(() => {
-    if (pincodeDetailsData?.data) {
-      const { pincode: pincodeInfo, hierarchy } = pincodeDetailsData.data;
-      // Get state name from hierarchy
-      const stateName = hierarchy?.state?.name || "";
-      // Get city name from hierarchy or pincode district
-      const cityName =
-        hierarchy?.city?.name ||
-        pincodeInfo?.district ||
-        pincodeInfo?.areaName ||
-        "";
+    if (!pincodeDetailsData?.data) return;
 
-      if (stateName || cityName) {
-        setAddressFormData((prev) => ({
-          ...prev,
-          state: stateName || prev.state,
-          city: cityName || prev.city,
-        }));
-        // Set state ID for city filtering
-        const stateId = hierarchy?.state?.id || pincodeInfo?.stateId;
-        if (stateId) {
-          setSelectedStateId(stateId);
-        }
-      }
-      setShowPincodeSuggestions(false);
+    const { city, state, stateId } = extractPincodeGeo(pincodeDetailsData.data);
+
+    if (state || city) {
+      // A resolved pincode is authoritative — changing it always moves
+      // city/state with it.
+      setAddressFormData((prev) => ({
+        ...prev,
+        state: state || prev.state,
+        city: city || prev.city,
+      }));
+      if (stateId) setSelectedStateId(stateId);
     }
+    setShowPincodeSuggestions(false);
   }, [pincodeDetailsData]);
 
   // Handle form input change

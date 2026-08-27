@@ -7,7 +7,20 @@ import { useSelector } from "react-redux";
 import { DashboardLayout } from "@/components/layout/dashboard-layout.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  extractPincodeGeo,
+  PINCODE_SUGGEST_MIN,
+  PINCODE_LENGTH,
+} from "@/lib/pincode";
 import {
   Dialog,
   DialogContent,
@@ -131,39 +144,37 @@ function AddressesPageContent() {
   );
   const { data: pincodeDetailsData } = useGetPincodeDetailsQuery(
     pincodeSearch,
-    { skip: !pincodeSearch || pincodeSearch.length !== 6 },
+    { skip: !pincodeSearch || pincodeSearch.length !== PINCODE_LENGTH },
   );
   const { data: pincodesSearchData } = useSearchPincodesQuery(
     { code: pincodeSearch },
-    { skip: !pincodeSearch || pincodeSearch.length < 3 },
+    { skip: !pincodeSearch || pincodeSearch.length < PINCODE_SUGGEST_MIN },
   );
 
   const states = statesData?.data || [];
   const cities = citiesData?.data || [];
   const pincodeSuggestions = pincodesSearchData?.data || [];
 
-  // Auto-fill city/state when 6-digit pincode resolves
+  // Auto-fill city/state when a 6-digit pincode resolves.
+  // Parsing goes through extractPincodeGeo because the endpoint has shipped in
+  // two response shapes; reading only the older one made every lookup a silent
+  // no-op, which looked like the API was never being called.
   useEffect(() => {
-    if (pincodeDetailsData?.data) {
-      const { pincode: pincodeInfo, hierarchy } = pincodeDetailsData.data;
-      const stateName = hierarchy?.state?.name || "";
-      const cityName =
-        hierarchy?.city?.name ||
-        pincodeInfo?.district ||
-        pincodeInfo?.areaName ||
-        "";
+    if (!pincodeDetailsData?.data) return;
 
-      if (stateName || cityName) {
-        setFormData((prev) => ({
-          ...prev,
-          state: stateName || prev.state,
-          city: cityName || prev.city,
-        }));
-        const stateId = hierarchy?.state?.id || pincodeInfo?.stateId;
-        if (stateId) setSelectedStateId(stateId);
-      }
-      setShowPincodeSuggestions(false);
+    const { city, state, stateId } = extractPincodeGeo(pincodeDetailsData.data);
+
+    if (state || city) {
+      // A resolved pincode is authoritative: overwrite whatever is there, so
+      // correcting the pincode always corrects city/state with it.
+      setFormData((prev) => ({
+        ...prev,
+        state: state || prev.state,
+        city: city || prev.city,
+      }));
+      if (stateId) setSelectedStateId(stateId);
     }
+    setShowPincodeSuggestions(false);
   }, [pincodeDetailsData]);
 
   // --- Admin hooks ---
@@ -278,6 +289,10 @@ function AddressesPageContent() {
       isDefaultPickup: address.isDefaultPickup,
       isDefaultReturn: address.isDefaultReturn,
     });
+    // Seed the lookup so the dialog opens with city/state resolvable and a
+    // later edit of the pincode re-resolves cleanly. Without this the edit
+    // dialog never queried at all.
+    setPincodeSearch(address.pincode || "");
     setShowEditDialog(true);
   };
 
@@ -442,81 +457,105 @@ function AddressesPageContent() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {addresses.map((address: OutletAddress) => (
-              <Card key={address.id} className="relative">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Home className="h-4 w-4" />
-                        {address.label}
-                      </CardTitle>
-                      <div className="flex gap-1">
-                        {getAddressTypeBadge(address.addressType)}
-                        {address.isDefaultPickup && (
-                          <Badge variant="outline" className="text-xs">
-                            <Package className="h-3 w-3 mr-1" />
-                            Default Pickup
-                          </Badge>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Address</TableHead>
+                    <TableHead>City / State</TableHead>
+                    <TableHead>Pincode</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {addresses.map((address: OutletAddress) => (
+                    <TableRow key={address.id}>
+                      <TableCell>
+                        <span className="flex items-center gap-2 font-medium">
+                          <Home className="h-3.5 w-3.5 text-muted-foreground" />
+                          {address.label}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {getAddressTypeBadge(address.addressType)}
+                          {address.isDefaultPickup && (
+                            <Badge variant="outline" className="text-xs">
+                              <Package className="h-3 w-3 mr-1" />
+                              Default Pickup
+                            </Badge>
+                          )}
+                          {address.isDefaultReturn && (
+                            <Badge variant="outline" className="text-xs">
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Default Return
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="font-medium">{address.name}</div>
+                        {address.email && (
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {address.email}
+                          </div>
                         )}
-                        {address.isDefaultReturn && (
-                          <Badge variant="outline" className="text-xs">
-                            <RotateCcw className="h-3 w-3 mr-1" />
-                            Default Return
-                          </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm max-w-xs">
+                        <div className="text-muted-foreground">
+                          {address.addressLine1}
+                          {address.addressLine2 && `, ${address.addressLine2}`}
+                        </div>
+                        {address.landmark && (
+                          <div className="text-xs text-muted-foreground">
+                            Near: {address.landmark}
+                          </div>
                         )}
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditClick(address)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteClick(address)}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <p className="font-medium">{address.name}</p>
-                  <p className="text-muted-foreground">
-                    {address.addressLine1}
-                    {address.addressLine2 && `, ${address.addressLine2}`}
-                  </p>
-                  {address.landmark && (
-                    <p className="text-muted-foreground">
-                      Near: {address.landmark}
-                    </p>
-                  )}
-                  <p className="text-muted-foreground">
-                    {address.city}, {address.state} - {address.pincode}
-                  </p>
-                  <div className="flex flex-col gap-1 pt-2 border-t">
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" />
-                      {address.phone}
-                    </span>
-                    {address.email && (
-                      <span className="flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {address.email}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {address.city}, {address.state}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {address.pincode}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <span className="flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {address.phone}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleEditClick(address)}
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-red-500 hover:text-red-600"
+                            onClick={() => handleDeleteClick(address)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
       </div>
 

@@ -17,6 +17,8 @@ const {
   findMatrixProblems,
 } = require("../chargeConfigShared");
 const prompts = require("./prompts/chargeConfigPrompts");
+const { encodeRateCards } = require("./rateCard/encoder");
+const { replayExamples, describeFailures } = require("./rateCard/replay");
 const {
   chargeDefinitions: definitionSchemas,
 } = require("../../validation/chargeDefinitionSchemas");
@@ -27,6 +29,50 @@ async function getExistingDefinitionCodes() {
     orderBy: { code: "asc" },
   });
   return definitions.map((d) => d.code);
+}
+
+/**
+ * The catalog as "CODE — Name (category, method)" lines.
+ *
+ * A bare list of codes tells the model a code exists but not what it DOES, so
+ * it cannot recognise which entry is the base-freight one and reaches for a new
+ * definition instead of reusing it.
+ */
+async function getExistingDefinitionSummaries() {
+  const definitions = await prisma.chargeDefinition.findMany({
+    select: { code: true, name: true, category: true, computation: true },
+    orderBy: [{ category: "asc" }, { code: "asc" }],
+  });
+
+  return definitions.map((d) => ({
+    code: d.code,
+    name: d.name,
+    category: d.category,
+    method: d.computation?.method || null,
+  }));
+}
+
+/**
+ * The partner's service channels (weight-slab shipping products) — the things
+ * PartnerChargeConfig.channelId points at. Names only in the prompt; ids are
+ * resolved in code so the model can never invent one.
+ */
+async function getChannelContext(partnerId) {
+  if (!partnerId) return null;
+
+  return prisma.partnerServiceChannel.findMany({
+    where: { partnerId, isActive: true },
+    select: {
+      id: true,
+      channelName: true,
+      accountRef: true,
+      serviceType: true,
+      businessType: true,
+      minWeight: true,
+      maxWeight: true,
+    },
+    orderBy: { priority: "asc" },
+  });
 }
 
 /**
@@ -56,6 +102,69 @@ async function getZoneContext(partnerId) {
       .filter((z) => z.zoneType === "GEOLOGICAL")
       .map(({ id, name }) => ({ id, name })),
   };
+}
+
+/**
+ * The partner's existing BASE-category configs, so the encoder attaches a rate
+ * card to the definition their base freight already lives on instead of
+ * reaching for a new one.
+ */
+async function getExistingBaseConfigs(partnerId) {
+  if (!partnerId) return [];
+
+  const configs = await prisma.partnerChargeConfig.findMany({
+    where: { partnerId, chargeDefinition: { category: "BASE" } },
+    select: {
+      channelId: true,
+      chargeDefinition: { select: { code: true } },
+    },
+  });
+
+  return configs.map((c) => ({
+    channelId: c.channelId,
+    chargeDefinitionCode: c.chargeDefinition.code,
+  }));
+}
+
+/**
+ * Turn the model's plain rate cards into real MATRIX configs, then replay the
+ * admin's own worked examples through the engine against what we encoded.
+ *
+ * Returns v2-shaped config entries, so approveSuggestion applies v2 and v3
+ * drafts through one identical code path.
+ */
+function encodeAndReplayRateCards(json, partnerContext, definitionsByCode) {
+  const { configs, encoded, problems, warnings } = encodeRateCards(
+    json?.rateCards,
+    partnerContext,
+  );
+
+  const replay = [];
+  for (const item of encoded) {
+    const definition = definitionsByCode.get(item.chargeDefinitionCode);
+    if (!definition) continue;
+
+    const outcome = replayExamples({
+      definition,
+      config: { config: item.config, conditions: null },
+      milestones: item.milestones,
+      examples: item.examples,
+    });
+
+    replay.push({
+      rateCardIndex: item.index,
+      chargeDefinitionCode: item.chargeDefinitionCode,
+      channelId: item.channelId,
+      ...outcome,
+    });
+
+    // A card that cannot reproduce its own worked examples is a problem, not a
+    // warning — but it does not block approval yet, until we know the
+    // false-positive rate.
+    problems.push(...describeFailures(outcome.results, item.label));
+  }
+
+  return { configs, replay, problems, warnings };
 }
 
 /**
@@ -171,14 +280,38 @@ async function storeSuggestion({
 /**
  * Natural language → draft definitions/configs (stored PENDING).
  */
-async function draftFromText({ description, partnerId, userId }) {
+async function draftFromText({ description, partnerId, channelId, userId }) {
   if (!description || description.trim().length < 10) {
     throw new ValidationError("Please describe the charge in more detail");
   }
 
-  const [existingDefinitions, zoneContext] = await Promise.all([
-    getExistingDefinitionCodes(),
+  // Fail fast, before the model call: a channel that does not belong to this
+  // partner should cost a round trip to Postgres, not 90 seconds of streaming.
+  if (channelId) {
+    if (!partnerId) {
+      throw new ValidationError("A channel can only be chosen with a partner");
+    }
+    const channel = await prisma.partnerServiceChannel.findFirst({
+      where: { id: channelId, partnerId },
+      select: { id: true },
+    });
+    if (!channel) {
+      throw new ValidationError(
+        `PartnerServiceChannel ${channelId} not found for partner ${partnerId}`,
+      );
+    }
+  }
+
+  const [
+    existingDefinitions,
+    zoneContext,
+    channelContext,
+    existingBaseConfigs,
+  ] = await Promise.all([
+    getExistingDefinitionSummaries(),
     getZoneContext(partnerId),
+    getChannelContext(partnerId),
+    getExistingBaseConfigs(partnerId),
   ]);
   // Config drafting generates long JSON — allow for slow token streaming
   const { json, model } = await aiClient.completeJson(
@@ -186,20 +319,55 @@ async function draftFromText({ description, partnerId, userId }) {
       description,
       existingDefinitions,
       partnerId,
+      channelId,
+      channelContext,
       zoneContext,
     }),
     { maxTokens: 4000, timeoutMs: 90000 },
   );
 
-  const validation = await validateDraft(json);
+  // Encode the plain rate cards in code, then merge the results into
+  // `configs` so everything downstream sees one uniform shape. A stored v2 row
+  // has no `rateCards` and simply flows through unchanged.
+  const definitionRows = await prisma.chargeDefinition.findMany();
+  const encodedRateCards = encodeAndReplayRateCards(
+    json,
+    {
+      partnerId,
+      distanceZones: zoneContext?.distanceZones || [],
+      channels: channelContext || [],
+      definitions: definitionRows,
+      existingBaseConfigs,
+      selectedChannelId: channelId || null,
+    },
+    new Map(definitionRows.map((d) => [d.code, d])),
+  );
+
+  const draft = {
+    ...json,
+    configs: [...(json.configs || []), ...encodedRateCards.configs],
+    replay: encodedRateCards.replay,
+    encoderWarnings: encodedRateCards.warnings,
+  };
+
+  const validation = [
+    ...encodedRateCards.problems,
+    // validateDraft is a genuine independent second opinion on the encoder: it
+    // hits the DB via findDanglingRefs, while the encoder only ever saw a
+    // context object.
+    ...(await validateDraft(draft)),
+  ];
+
   const record = await storeSuggestion({
     kind: "CONFIG_FROM_NL",
     inputContext: {
       description,
       partnerId: partnerId || null,
+      // Read back by aiSuggestionService.approveSuggestion to scope the write.
+      channelId: channelId || null,
       promptVersion: prompts.PROMPT_VERSION,
     },
-    suggestion: json,
+    suggestion: draft,
     validation,
     modelUsed: model,
     createdById: userId,
@@ -207,8 +375,10 @@ async function draftFromText({ description, partnerId, userId }) {
 
   logger.info("AI config draft created", {
     suggestionId: record.id,
-    definitions: json.definitions?.length || 0,
-    configs: json.configs?.length || 0,
+    definitions: draft.definitions?.length || 0,
+    rateCards: json.rateCards?.length || 0,
+    configs: draft.configs.length,
+    replayFailures: encodedRateCards.replay.reduce((n, r) => n + r.failed, 0),
     validationProblems: validation.length,
   });
 
@@ -263,4 +433,12 @@ async function importLegacy({ legacyExport, userId }) {
   return { suggestion: record, validationProblems: validation };
 }
 
-module.exports = { draftFromText, importLegacy, validateDraft };
+module.exports = {
+  draftFromText,
+  importLegacy,
+  validateDraft,
+  getChannelContext,
+  getExistingBaseConfigs,
+  encodeAndReplayRateCards,
+  getExistingDefinitionSummaries,
+};

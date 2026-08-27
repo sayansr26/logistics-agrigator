@@ -18,6 +18,7 @@ const {
   findMatrixProblems,
   findMatrixCoverageGaps,
   recordVersion,
+  ensureVersionSnapshot,
   bumpConfigRevision,
   createAuditLog,
 } = require("./chargeConfigShared");
@@ -204,6 +205,14 @@ async function updateConfig(id, updateData, reqContext = {}) {
     },
   });
   if (!existing) throw new NotFoundError("PartnerChargeConfig", id);
+
+  // Backfill a snapshot of the CURRENT version before we mutate it, so the
+  // overwritten rows are always recoverable. recordVersion() below tags the
+  // POST-change state with version+1; without this, a row created outside this
+  // service (seed, raw SQL, restored dump) would have no "before" snapshot.
+  await ensureVersionSnapshot("PARTNER_CONFIG", existing, {
+    changedById: reqContext.userId || null,
+  });
 
   // partnerId / chargeDefinitionId are immutable; channelId may change
   if (updateData.channelId) {

@@ -10,7 +10,11 @@ const aiCharges = {
   draftFromText: {
     body: Joi.object({
       description: Joi.string().min(10).max(4000).required(),
+      // Partner ids are CUIDs, not uuids — hence the loose string.
       partnerId: Joi.string().max(40).allow(null),
+      // PartnerServiceChannel id (the weight-slab shipping product), NOT a
+      // PartnerChannelConfig credential id. Null/absent means partner-wide.
+      channelId: uuid.allow(null),
     }),
   },
 

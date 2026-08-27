@@ -7,7 +7,7 @@
  * output is never trusted or applied directly.
  */
 
-const PROMPT_VERSION = "v2";
+const PROMPT_VERSION = "v3";
 
 const CONTRACT = `
 You draft configuration for a deterministic shipping charges engine. You NEVER compute prices yourself — you produce config JSON the engine executes.
@@ -88,10 +88,68 @@ function renderZoneContext(zoneContext) {
   return lines.join("\n");
 }
 
+/**
+ * Render the partner's service channels by NAME ONLY.
+ *
+ * Deliberately no ids: the channel is resolved in code from the admin's
+ * explicit pick, so the model never has an id it could invent or mismatch.
+ * Both near-identical names are listed side by side on purpose — that is
+ * exactly the pair a loose match would confuse.
+ */
+function renderChannelContext(channelContext, channelId) {
+  const channels = channelContext || [];
+  if (channels.length === 0) return "";
+
+  const selected = channels.find((c) => c.id === channelId) || null;
+  const lines = ["\n\n## SERVICE CHANNELS"];
+
+  for (const channel of channels) {
+    const max = channel.maxWeight ?? "\u221e";
+    lines.push(
+      `- "${channel.channelName}" (account ${channel.accountRef}, ${channel.businessType}, ${channel.serviceType}, ${channel.minWeight}-${max} kg)`,
+    );
+  }
+
+  if (selected) {
+    lines.push(
+      ``,
+      `The admin scoped this request to the channel "${selected.channelName}". It is applied in code — do NOT put a channel id anywhere in your output. Rates that clearly belong to a different weight band than ${selected.minWeight}-${selected.maxWeight ?? "\u221e"} kg belong to another channel: say so in "warnings" rather than inventing rows for them.`,
+    );
+  } else {
+    lines.push(
+      ``,
+      `No channel was selected, so this config applies partner-wide. Do NOT invent a channel id, and do NOT create a new definition to represent a channel — if the admin names a channel, say so in "warnings".`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Existing catalog entries as "CODE — Name (category, method)".
+ *
+ * Accepts either the summary objects or a plain code list, so the legacy-import
+ * prompt can keep passing codes.
+ */
+function renderExistingDefinitions(existingDefinitions) {
+  const entries = existingDefinitions || [];
+  if (entries.length === 0) return "(none yet)";
+  if (typeof entries[0] === "string") return entries.join(", ");
+
+  return entries
+    .map(
+      (d) =>
+        `\n- ${d.code} — ${d.name} (${d.category}${d.method ? `, ${d.method}` : ""})`,
+    )
+    .join("");
+}
+
 function draftFromTextMessages({
   description,
   existingDefinitions,
   partnerId,
+  channelId,
+  channelContext,
   zoneContext,
 }) {
   return [
@@ -102,11 +160,49 @@ function draftFromTextMessages({
 The admin will describe a charge in natural language. Respond with JSON:
 {
   "understanding": "one-sentence restatement of what the admin wants",
+  "rateCards": [ RateCard, ... ],             // BASE FREIGHT ONLY — see below. [] if the request is not about base freight.
   "definitions": [ ChargeDefinition, ... ],   // ONLY definitions that do not already exist (see existing codes); [] if reusing existing ones
   "configs": [ { "chargeDefinitionCode": "...", "partnerId": ${JSON.stringify(partnerId || null)}, "config": {...}, "conditions": null|{...} } ],
   "warnings": [ "anything ambiguous or assumed" ]
 }
-Existing definition codes (reuse instead of duplicating): ${existingDefinitions.join(", ")}${renderZoneContext(zoneContext)}`,
+
+## RateCard — use this for base freight, ALWAYS
+Anything priced as (distance band x weight) base freight MUST go in "rateCards"
+and MUST NOT appear in "definitions" or "configs". Transcribe the admin's card;
+code does the rest.
+{
+  "chargeName": "B2C Basic Freight",
+  "channel": "Delhivery 5Kg Surface" | null,   // copy a name EXACTLY from SERVICE CHANNELS, else null
+  "zoneName": "Delhivery B2C" | null,          // only needed if several DISTANCE zones exist
+  "billingUnitKg": 1,                          // the card's "Billing Unit" / "chargeable weight rounded up to". Copy as written.
+  "bands": [
+    { "zone": "A", "fromKm": 0, "toKm": 50, "ratePerUnit": 26, "minFreight": 130 }
+  ],
+  "examples": [ { "distanceKm": 30, "weightKg": 3, "expectedFreight": 130 } ],
+  "notes": [ "anything in the card with no field here" ]
+}
+- "ratePerUnit" is the card's "Rate": the amount charged per ONE billing unit.
+- "minFreight" is the card's "Minimum Freight" / "Min Charge". Use null if the
+  card does not state one. NEVER repeat the rate here.
+- "toKm": null for an open-ended top band ("Above 1400 Km").
+- "weightKg" in examples is the CHARGEABLE weight.
+- Copy EVERY worked example the admin wrote, verbatim. Your examples are
+  replayed through the pricing engine; if they do not reproduce, the card is
+  rejected.
+- You will not see any UUID and must not produce one. Zones, milestones and
+  channels are resolved from the names below, in code.
+- Base freight already has a definition. Never create one for it, and never
+  create a new definition to represent a channel, a zone or a variant.
+- Anything the card mentions that has no field here — volumetric divisor, TAT,
+  RTO policy — goes in "notes". Never invent a config for it.
+
+## The advanced "configs" contract below is for everything else
+Non-freight charges (VAS, COD, fuel, GST, discounts) and weight matrices for
+partners with GEOLOGICAL zones. Only there do you write MATRIX/zoneMilestoneId
+JSON by hand.
+If a definition code below already exists, emit "definitions": [] and just reference the code from configs[].chargeDefinitionCode. Re-emitting an existing definition is not an error, but it will be ignored — never duplicate a charge under a new code to express a variant, a channel, or a zone.
+
+Existing definitions (reuse instead of duplicating): ${renderExistingDefinitions(existingDefinitions)}${renderChannelContext(channelContext, channelId)}${renderZoneContext(zoneContext)}`,
     },
     { role: "user", content: description },
   ];
@@ -179,6 +275,8 @@ function anomalyMessages({ configs, sampleQuotes }) {
 module.exports = {
   PROMPT_VERSION,
   draftFromTextMessages,
+  renderChannelContext,
+  renderExistingDefinitions,
   importLegacyMessages,
   explainQuoteMessages,
   codRiskMessages,

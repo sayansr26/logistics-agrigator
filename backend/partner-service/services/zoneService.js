@@ -217,17 +217,14 @@ class ZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
       if (!zoneData || Object.keys(zoneData).length === 0) {
         throw new Error("Update data is required");
       }
 
-      // Verify zone exists and belongs to partner
+      // partnerId is optional: platform roles (admin/superadmin/operations)
+      // update zones across partners, so scope the lookup only when supplied.
       const existingZone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where: partnerId ? { id: zoneId, partnerId } : { id: zoneId },
       });
 
       if (!existingZone) {
@@ -818,17 +815,15 @@ class ZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
       if (!geographical || typeof geographical !== "object") {
         throw new Error("Geographical data is required");
       }
 
       // Verify zone exists and belongs to partner
+      // partnerId is optional: platform roles edit geography across partners,
+      // so scope the lookup only when one is supplied.
       const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId },
+        where: partnerId ? { id: zoneId, partnerId } : { id: zoneId },
       });
 
       if (!zone) {

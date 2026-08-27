@@ -74,6 +74,7 @@ import {
   useGetPartnersQuery,
   type Partner,
 } from "@/store/api/endpoints/partnersApi";
+import { useListServiceChannelsQuery } from "@/store/api/endpoints/serviceChannelApi";
 import {
   useGetChargeConfigsQuery,
   useGetChargeDefinitionsQuery,
@@ -301,18 +302,64 @@ function SuggestionCard({
 
           {results && (
             <div className="space-y-1 text-sm">
-              {results.configs.length > 0 && (
+              {(() => {
+                const created = results.configs.filter(
+                  (c) => c.action === "CREATED",
+                );
+                const updated = results.configs.filter(
+                  (c) => c.action === "UPDATED",
+                );
+                return (
+                  <>
+                    {created.length > 0 && (
+                      <p className="text-green-700 dark:text-green-400">
+                        Created {created.length} config
+                        {created.length === 1 ? "" : "s"}:{" "}
+                        {created.map((c) => c.code).join(", ")}
+                      </p>
+                    )}
+                    {/* An update replaces live pricing — say so explicitly. */}
+                    {updated.length > 0 && (
+                      <p className="text-amber-700 dark:text-amber-400">
+                        Replaced {updated.length} existing config
+                        {updated.length === 1 ? "" : "s"}:{" "}
+                        {updated
+                          .map(
+                            (c) =>
+                              `${c.code} (v${c.previousVersion} → v${c.version})`,
+                          )
+                          .join(", ")}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+              {results.definitions.filter((d) => d.action === "CREATED")
+                .length > 0 && (
                 <p className="text-green-700 dark:text-green-400">
-                  Applied {results.configs.length} config
-                  {results.configs.length === 1 ? "" : "s"}:{" "}
-                  {results.configs.map((c) => c.code).join(", ")}
+                  Created{" "}
+                  {
+                    results.definitions.filter((d) => d.action === "CREATED")
+                      .length
+                  }{" "}
+                  definition
+                  {results.definitions.filter((d) => d.action === "CREATED")
+                    .length === 1
+                    ? ""
+                    : "s"}
                 </p>
               )}
-              {results.definitions.length > 0 && (
-                <p className="text-green-700 dark:text-green-400">
-                  Created {results.definitions.length} definition
-                  {results.definitions.length === 1 ? "" : "s"}
-                </p>
+              {results.warnings?.length > 0 && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <ul className="list-disc space-y-1 pl-4">
+                      {results.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
               )}
               {results.errors.length > 0 && (
                 <Alert variant="destructive">
@@ -365,6 +412,12 @@ function AnomalyFindingsList({ findings }: { findings: AnomalyFinding[] }) {
 // MAIN PAGE
 // ============================================
 
+/**
+ * Radix <Select> cannot hold value="", so partner-wide gets an explicit
+ * sentinel that is mapped back to `undefined` at the request boundary.
+ */
+const ALL_CHANNELS = "__ALL__";
+
 export default function ChargeConfigsPage() {
   const searchParams = useSearchParams();
   // Deep link from the partners list/detail actions: /charge-configs?partnerId=…
@@ -388,6 +441,22 @@ export default function ChargeConfigsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partners.length, partnerIdFromUrl]);
+
+  // Channel scope for AI drafting. "" means partner-wide; Radix <Select> cannot
+  // hold an empty value, so the sentinel below stands in for it in the UI.
+  const [selectedChannelId, setSelectedChannelId] = useState<string>("");
+  const { data: channelsData, isLoading: channelsLoading } =
+    useListServiceChannelsQuery(selectedPartnerId, {
+      skip: !selectedPartnerId,
+    });
+  const channels = channelsData?.data?.accounts || [];
+
+  // Reset the channel whenever the partner changes — a stale channel from
+  // partner A submitted for partner B is rejected by the backend FK check and
+  // fails the whole draft.
+  useEffect(() => {
+    setSelectedChannelId("");
+  }, [selectedPartnerId]);
 
   const {
     data: configsData,
@@ -540,6 +609,7 @@ export default function ChargeConfigsPage() {
       const res = await draftFromText({
         description: aiDescription,
         partnerId: selectedPartnerId || undefined,
+        channelId: selectedChannelId || undefined,
       }).unwrap();
       setDraft(res.data.suggestion);
       setDraftValidationProblems(res.data.validationProblems || []);
@@ -662,6 +732,42 @@ export default function ChargeConfigsPage() {
             {partnersLoading && (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             )}
+
+            <Label className="shrink-0 text-sm font-medium sm:ml-4">
+              Channel
+            </Label>
+            <Select
+              value={selectedChannelId || ALL_CHANNELS}
+              onValueChange={(v) =>
+                setSelectedChannelId(v === ALL_CHANNELS ? "" : v)
+              }
+              disabled={!selectedPartnerId || channelsLoading}
+            >
+              <SelectTrigger className="w-full sm:w-80">
+                <SelectValue placeholder="All channels (partner-wide)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CHANNELS}>
+                  All channels (partner-wide)
+                </SelectItem>
+                {channels.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.channelName} · {c.minWeight}-{c.maxWeight ?? "\u221e"} kg
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {channelsLoading && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </CardContent>
+          <CardContent className="pb-6 pt-0">
+            <p className="text-xs text-muted-foreground">
+              A channel-scoped charge overrides the partner-wide one for that
+              channel. Keep at least one partner-wide card as a fallback — a
+              shipment matching no channel has no base freight, and the partner
+              is then dropped from the quote entirely.
+            </p>
           </CardContent>
         </Card>
 

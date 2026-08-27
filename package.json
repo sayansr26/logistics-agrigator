@@ -83,6 +83,8 @@
     "import:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/scripts/import-pincode-data.js",
     "load:pincodes": "docker-compose exec partner-service node scripts/load-pincode-data.js",
     "load:pincodes:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/scripts/load-pincode-data.js",
+    "seed:charges": "docker-compose exec partner-service node prisma/seeds/chargeDefinitions.seed.js",
+    "seed:charges:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/prisma/seeds/chargeDefinitions.seed.js",
     "seed:geo": "docker-compose exec partner-service node prisma/seed-geographical-data.js",
     "seed:geo:prod": "docker-compose -f docker-compose.production.yml --env-file .env.production exec partner-service node backend/partner-service/prisma/seed-geographical-data.js",
     "ratelimit:reset": "./scripts/reset-rate-limits.sh",

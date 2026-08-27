@@ -12,6 +12,7 @@
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
     "seed:geo": "node prisma/seed-geographical-data.js",
+    "seed:charges": "node prisma/seeds/chargeDefinitions.seed.js",
     "load:pincodes": "node scripts/load-pincode-data.js",
     "fetch:india-post": "node scripts/fetch-india-post.js",
     "build:pincodes": "node scripts/build-merged-pincodes.js",

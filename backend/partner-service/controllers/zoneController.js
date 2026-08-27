@@ -32,6 +32,38 @@ const distanceZoneService = require("../services/distanceZoneService");
 const DISTANCE_ZONE_ROLES = ["superadmin", "admin", "operations"];
 
 /**
+ * Resolve the partner scope for a request.
+ *
+ * Partner users are scoped to their own partnerId; platform roles carry no
+ * partnerId and operate across every partner, so for them a null scope is
+ * correct rather than a failure.
+ *
+ * Returns `allowed: false` only for a partner-less user who is also not a
+ * platform role — an AUTHORIZATION failure (403), never 401. A 401 tells the
+ * client its token is bad, which makes the web app refresh, fail again, and
+ * sign the user out; that is what made a scope bug here look like a logout.
+ */
+function resolvePartnerScope(req) {
+  const partnerId = req.user?.partnerId || null;
+  const isPlatformRole = DISTANCE_ZONE_ROLES.includes(req.user?.role);
+  return {
+    partnerId,
+    isPlatformRole,
+    allowed: Boolean(partnerId) || isPlatformRole,
+  };
+}
+
+const forbiddenScope = (res) =>
+  res
+    .status(403)
+    .json(
+      APIResponse.error(
+        "Forbidden: this account is not scoped to a partner",
+        "FORBIDDEN",
+      ),
+    );
+
+/**
  * 1. Create new zone (unified endpoint for both GEOLOGICAL and DISTANCE)
  * @route POST /api/v1/zones
  * @access Authenticated
@@ -148,14 +180,7 @@ async function createZone(req, res) {
         userId: req.user?.id,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required for GEOLOGICAL zones",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     // Create geological zone with service (handles transactions and audit logging)
@@ -238,14 +263,7 @@ async function listZones(req, res) {
         role: userRole,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const filters = {
@@ -308,27 +326,15 @@ async function listZones(req, res) {
 async function getZone(req, res) {
   try {
     // Extract partnerId from authenticated user
-    const partnerId = req.user?.partnerId;
-    const userRole = req.user?.role;
+    const { partnerId, allowed } = resolvePartnerScope(req);
 
-    // Allow admin/superadmin/operations to view any zone without partnerId
-    if (
-      !partnerId &&
-      !["superadmin", "admin", "operations"].includes(userRole)
-    ) {
-      logger.warn("Partner ID missing from request", {
+    if (!allowed) {
+      logger.warn("Partner scope missing from request", {
         userId: req.user?.id,
-        userRole,
+        userRole: req.user?.role,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -347,7 +353,7 @@ async function getZone(req, res) {
 
     logger.info("Getting zone basic details", {
       partnerId,
-      userRole,
+      userRole: req.user?.role,
       zoneId: id,
       userId: req.user?.id,
     });
@@ -394,27 +400,15 @@ async function getZone(req, res) {
 async function getZoneComplete(req, res) {
   try {
     // Extract partnerId from authenticated user
-    const partnerId = req.user?.partnerId;
-    const userRole = req.user?.role;
+    const { partnerId, allowed } = resolvePartnerScope(req);
 
-    // Allow admin/superadmin/operations to view any zone without partnerId
-    if (
-      !partnerId &&
-      !["superadmin", "admin", "operations"].includes(userRole)
-    ) {
-      logger.warn("Partner ID missing from request", {
+    if (!allowed) {
+      logger.warn("Partner scope missing from request", {
         userId: req.user?.id,
-        userRole,
+        userRole: req.user?.role,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -486,22 +480,16 @@ async function getZoneComplete(req, res) {
  */
 async function updateZone(req, res) {
   try {
-    // Extract partnerId from authenticated user
-    const partnerId = req.user?.partnerId;
+    // Platform roles operate across partners and carry no partnerId.
+    const { partnerId, allowed } = resolvePartnerScope(req);
 
-    if (!partnerId) {
-      logger.warn("Partner ID missing from request", {
+    if (!allowed) {
+      logger.warn("Partner scope missing from request", {
         userId: req.user?.id,
+        userRole: req.user?.role,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -694,14 +682,7 @@ async function getZoneGeography(req, res) {
         userRole,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -776,22 +757,16 @@ async function getZoneGeography(req, res) {
  */
 async function updateZoneGeography(req, res) {
   try {
-    // Extract partnerId from authenticated user
-    const partnerId = req.user?.partnerId;
+    // Platform roles operate across partners and carry no partnerId.
+    const { partnerId, allowed } = resolvePartnerScope(req);
 
-    if (!partnerId) {
-      logger.warn("Partner ID missing from request", {
+    if (!allowed) {
+      logger.warn("Partner scope missing from request", {
         userId: req.user?.id,
+        userRole: req.user?.role,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -983,21 +958,17 @@ async function getMilestones(req, res) {
  */
 async function updateMilestones(req, res) {
   try {
-    const partnerId = req.user?.partnerId;
+    // Milestones on DISTANCE zones are edited by platform roles, who carry no
+    // partnerId. Requiring one here is what made "edit a zone" fail.
+    const { partnerId, allowed } = resolvePartnerScope(req);
 
-    if (!partnerId) {
-      logger.warn("Partner ID missing from request", {
+    if (!allowed) {
+      logger.warn("Partner scope missing from request", {
         userId: req.user?.id,
+        userRole: req.user?.role,
         ip: req.ip,
       });
-      return res
-        .status(401)
-        .json(
-          APIResponse.error(
-            "Unauthorized: Partner ID required",
-            "UNAUTHORIZED",
-          ),
-        );
+      return forbiddenScope(res);
     }
 
     const { id } = req.params;
@@ -1155,16 +1126,19 @@ async function matchZone(req, res) {
     const partnerId = bodyPartnerId || req.user?.partnerId;
 
     if (!partnerId) {
-      logger.warn("Partner ID missing from request", {
+      // partnerId is an input to the match, not the caller's scope: a platform
+      // user must name the partner. A bad request, not a failed login.
+      logger.warn("Partner ID missing from match request", {
         userId: req.user?.id,
+        userRole: req.user?.role,
         ip: req.ip,
       });
       return res
-        .status(401)
+        .status(400)
         .json(
           APIResponse.error(
-            "Partner ID required (either from auth or request body)",
-            "UNAUTHORIZED",
+            "partnerId is required (from your account or in the request body)",
+            "VALIDATION_ERROR",
           ),
         );
     }

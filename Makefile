@@ -55,7 +55,9 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         flush-redis flush-redis-uat redis-flush flush-cache flush-cache-uat \
         reset-ratelimit reset-ratelimit-uat \
         seed import-pincodes classify-cities load-pincodes seed-geo \
+        seed-charge-definitions \
         migrate-shipment-ownership-dry migrate-shipment-ownership \
+        migrate-charge-configs-dry migrate-charge-configs \
         clean clean-uat clean-keep-data clean-keep-data-uat \
         clean-all clean-all-uat clean-build-cache \
         redeploy redeploy-uat redeploy-fresh redeploy-fresh-uat \
@@ -650,6 +652,15 @@ load-pincodes:
 seed-geo:
 	$(COMPOSE_PROD) exec partner-service node backend/partner-service/prisma/seed-geographical-data.js
 
+# Seed the 36-definition charge catalog (BASE_FREIGHT, GST, FUEL_SURCHARGE,
+# COD_CHARGE, ODA, DOCKET_AWB, ...). Idempotent upsert per code, so it is safe
+# to re-run. This has never run in prod: the catalog there holds only the three
+# AI-created definitions, which is why BASE_FREIGHT was missing from the list
+# the drafting model is shown. Definitions with no PartnerChargeConfig are
+# inert, so seeding cannot change any existing price.
+seed-charge-definitions:
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/prisma/seeds/chargeDefinitions.seed.js
+
 # One-time backfill for shipments booked on behalf of an outlet: user_id becomes
 # the outlet owner (so the outlet portal + External API can see them) and
 # outlet_id is normalized to the outlet ENTITY id. Audit-logged per row.
@@ -659,6 +670,21 @@ migrate-shipment-ownership-dry:
 
 migrate-shipment-ownership:
 	$(COMPOSE_PROD) exec -T shipment-service node backend/shipment-service/scripts/migrate-shipment-ownership.js --apply
+
+# Audit per-partner charge configs: joins each config back to the AI suggestion
+# that produced it, re-reads the admin's stored rate-card text, and replays its
+# worked examples through the real pricing engine. Reports MISPRICED / OK /
+# UNVERIFIED. Exit code 1 if anything is mispriced, so it can gate a deploy.
+# The dry run is read-only; --apply only ever rewrites rows whose provenance is
+# an exact content match to exactly one suggestion (HIGH confidence) — anything
+# less is reported and left for the Charge Configs UI, where the write is
+# validated, versioned, audited and cache-invalidated.
+# ALWAYS dry-run first. PARTNER=<id> to scope it; ENV_FILE=.env.uat for UAT.
+migrate-charge-configs-dry:
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/scripts/migrate-charge-configs.js $(if $(PARTNER),--partner=$(PARTNER),)
+
+migrate-charge-configs:
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/scripts/migrate-charge-configs.js --apply $(if $(PARTNER),--partner=$(PARTNER),)
 
 # ============================================================================
 # Clean / redeploy — wipe the stack so `make deploy` rebuilds it from scratch

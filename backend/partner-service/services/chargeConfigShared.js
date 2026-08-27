@@ -298,6 +298,41 @@ async function recordVersion(
 }
 
 /**
+ * Make sure a snapshot exists for a row's CURRENT version BEFORE it is mutated.
+ *
+ * recordVersion() snapshots a row AFTER the change, tagged with the NEW version
+ * number — self-consistent, but it means "what did we just overwrite?" is only
+ * answerable if a snapshot already exists for version N-1. That is not true for
+ * any row written outside these services (seed, raw SQL, a restored dump), so
+ * call this immediately before an update to backfill the pre-change state.
+ *
+ * Like recordVersion, this must never block the write it protects.
+ */
+async function ensureVersionSnapshot(
+  entityType,
+  entity,
+  { changeSource = "BACKFILL", changedById = null } = {},
+) {
+  if (!entity?.id || typeof entity.version !== "number") return;
+
+  try {
+    const existing = await prisma.chargeConfigVersion.findFirst({
+      where: { entityType, entityId: entity.id, version: entity.version },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    await recordVersion(entityType, entity.id, entity.version, entity, {
+      changeSource,
+      changedById,
+    });
+  } catch (error) {
+    // Versioning must never block the write itself
+    logger.error("Failed to ensure charge config version snapshot:", error);
+  }
+}
+
+/**
  * Bump the global config revision. Quote-cache keys embed this value, so every
  * catalog/config change invalidates cached quotes without explicit deletes.
  */
@@ -358,6 +393,7 @@ module.exports = {
   findMatrixProblems,
   findMatrixCoverageGaps,
   recordVersion,
+  ensureVersionSnapshot,
   bumpConfigRevision,
   getConfigRevision,
   createAuditLog,

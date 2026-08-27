@@ -362,4 +362,10 @@ function run(configs, facts, options = {}) {
   };
 }
 
-module.exports = { run, computeSubtotal };
+module.exports = {
+  run,
+  computeSubtotal,
+  // Supported single-line seam for replay / what-if callers: one definition +
+  // one config + facts, with condition gating and skip reasons intact.
+  computeLine,
+};

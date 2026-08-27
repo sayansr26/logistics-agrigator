@@ -11,6 +11,7 @@ const { ValidationError, NotFoundError } = require("../shared/lib/errors");
 const logger = require("../shared/lib/logger");
 const {
   recordVersion,
+  ensureVersionSnapshot,
   bumpConfigRevision,
   createAuditLog,
 } = require("./chargeConfigShared");
@@ -135,6 +136,11 @@ async function getDefinitionById(id) {
 async function updateDefinition(id, updateData, reqContext = {}) {
   const existing = await prisma.chargeDefinition.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError("ChargeDefinition", id);
+
+  // Snapshot the pre-change state — see ensureVersionSnapshot's docblock.
+  await ensureVersionSnapshot("DEFINITION", existing, {
+    changedById: reqContext.userId || null,
+  });
 
   if (updateData.computation) assertComputationShape(updateData.computation);
   if (updateData.code && updateData.code !== existing.code) {

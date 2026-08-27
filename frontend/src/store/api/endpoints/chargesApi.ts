@@ -329,7 +329,12 @@ export interface AiSuggestion {
   status: AiSuggestionStatus;
   inputContext?: Record<string, unknown>;
   suggestion: AiSuggestionPayload;
-  validation?: { applyErrors?: string[] } | null;
+  validation?: {
+    problems?: string[];
+    applyErrors?: string[];
+    applyWarnings?: string[];
+    appliedAt?: string;
+  } | null;
   modelUsed?: string;
   createdById?: string;
   reviewedById?: string | null;
@@ -340,6 +345,12 @@ export interface AiSuggestion {
 export interface DraftChargeConfigFromTextRequest {
   description: string;
   partnerId?: string;
+  /**
+   * PartnerServiceChannel id (the weight-slab shipping product), NOT a
+   * credential-channel id. Omitted means the config applies partner-wide.
+   * Chosen at draft time so it is part of the stored inputContext.
+   */
+  channelId?: string;
 }
 
 export interface DraftChargeConfigFromTextResponse {
@@ -351,8 +362,21 @@ export interface DraftChargeConfigFromTextResponse {
 }
 
 export interface ApplySuggestionResult {
-  definitions: Array<{ id: string; code: string }>;
-  configs: Array<{ id: string; code: string }>;
+  definitions: Array<{
+    id: string;
+    code: string;
+    action: "CREATED" | "REUSED";
+  }>;
+  configs: Array<{
+    id: string;
+    code: string;
+    channelId: string | null;
+    /** UPDATED means live pricing was replaced — surface it, never hide it. */
+    action: "CREATED" | "UPDATED";
+    version: number;
+    previousVersion: number | null;
+  }>;
+  warnings: string[];
   errors: string[];
 }
 

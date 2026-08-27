@@ -19,6 +19,10 @@ const { prisma } = require("../config/database");
 const logger = require("../shared/lib/logger");
 const { getRedisClient } = require("../config/redis");
 const geographicalDistanceService = require("./geographicalDistanceService");
+const {
+  matchMilestoneAcrossZones,
+  toMatchKm,
+} = require("./chargeEngine/milestoneMatch");
 
 // Import zoneService for cache invalidation (avoid circular dependency by requiring at runtime)
 let _zoneService = null;
@@ -334,10 +338,6 @@ class DistanceZoneService {
         throw new Error("Zone ID is required");
       }
 
-      if (!partnerId) {
-        throw new Error("Partner ID is required");
-      }
-
       if (
         !milestones ||
         !Array.isArray(milestones) ||
@@ -350,8 +350,12 @@ class DistanceZoneService {
       this._validateMilestones(milestones);
 
       // Verify zone exists, belongs to partner, and is DISTANCE type
+      // partnerId is optional: DISTANCE zones are managed by platform roles,
+      // who carry no partnerId, so scope the lookup only when supplied.
       const zone = await prisma.zone.findFirst({
-        where: { id: zoneId, partnerId, zoneType: "DISTANCE" },
+        where: partnerId
+          ? { id: zoneId, partnerId, zoneType: "DISTANCE" }
+          : { id: zoneId, zoneType: "DISTANCE" },
         include: { milestones: true },
       });
 
@@ -521,7 +525,10 @@ class DistanceZoneService {
       }
 
       // Try cache first
-      const cacheKey = `${this.cachePrefix}:match:${partnerId}:${Math.round(distanceKm * 100)}`;
+      // Key on the floored km, matching how milestones are actually
+      // resolved — keying on hundredths made 100 distinct keys per km
+      // that could only ever resolve to the same milestone.
+      const cacheKey = `${this.cachePrefix}:match:${partnerId}:${toMatchKm(distanceKm)}`;
       const redis = getRedisClient();
 
       if (redis) {
@@ -531,7 +538,12 @@ class DistanceZoneService {
             partnerId,
             distanceKm,
           });
-          return JSON.parse(cached);
+          // The cache is keyed on the FLOORED km, so the cached payload carries
+          // whichever exact distance populated it first. The milestone is the
+          // same for the whole km, but distanceKm is itself a condition fact
+          // (contextBuilder -> facts.distanceKm), so restate the caller's real
+          // distance rather than replaying a neighbour's.
+          return { ...JSON.parse(cached), distanceKm };
         }
       }
 
@@ -559,42 +571,26 @@ class DistanceZoneService {
         };
       }
 
-      // Find matching milestone — exact range first, then fall back to
-      // the highest milestone so that distances beyond the configured max
-      // are still serviceable (charged at the highest milestone rate).
-      let matchedZone = null;
-      let matchedMilestone = null;
+      // Find the matching milestone. Delegated to chargeEngine/milestoneMatch
+      // so production pricing and the rate-card replay harness can never drift.
+      // It floors the distance before comparing (Int bounds vs fractional road
+      // distance used to leave gaps that fell through to the top rate) and
+      // falls back to the highest milestone so distances beyond the configured
+      // maximum stay serviceable.
+      const {
+        zone: matchedZone,
+        milestone: matchedMilestone,
+        usedFallback,
+      } = matchMilestoneAcrossZones(distanceKm, zones);
 
-      // Also track the highest milestone across all zones as fallback
-      let fallbackZone = null;
-      let fallbackMilestone = null;
-
-      for (const zone of zones) {
-        for (const milestone of zone.milestones) {
-          if (distanceKm >= milestone.minKm && distanceKm <= milestone.maxKm) {
-            matchedZone = zone;
-            matchedMilestone = milestone;
-            break;
-          }
-          if (!fallbackMilestone || milestone.maxKm > fallbackMilestone.maxKm) {
-            fallbackZone = zone;
-            fallbackMilestone = milestone;
-          }
-        }
-        if (matchedMilestone) break;
-      }
-
-      // If no exact match, use the highest milestone as fallback
-      if (!matchedMilestone && fallbackMilestone) {
-        matchedZone = fallbackZone;
-        matchedMilestone = fallbackMilestone;
+      if (usedFallback && matchedMilestone) {
         logger.info(
           "Distance exceeds configured milestones, using highest milestone rate",
           {
             partnerId,
             distanceKm,
-            fallbackSuffix: fallbackMilestone.suffix,
-            fallbackMaxKm: fallbackMilestone.maxKm,
+            fallbackSuffix: matchedMilestone.suffix,
+            fallbackMaxKm: matchedMilestone.maxKm,
           },
         );
       }
@@ -618,11 +614,13 @@ class DistanceZoneService {
               rangeLabel: `${matchedMilestone.minKm}-${matchedMilestone.maxKm} km`,
             },
             zoneSuffix: matchedMilestone.suffix,
+            usedFallback,
           }
         : {
             matched: false,
             distanceKm,
             partnerId,
+            usedFallback: false,
             message: "No distance zones configured for this partner",
           };
 
