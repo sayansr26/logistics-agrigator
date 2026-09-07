@@ -7,7 +7,7 @@
  * output is never trusted or applied directly.
  */
 
-const PROMPT_VERSION = "v3";
+const PROMPT_VERSION = "v4";
 
 const CONTRACT = `
 You draft configuration for a deterministic shipping charges engine. You NEVER compute prices yourself — you produce config JSON the engine executes.
@@ -160,11 +160,38 @@ function draftFromTextMessages({
 The admin will describe a charge in natural language. Respond with JSON:
 {
   "understanding": "one-sentence restatement of what the admin wants",
-  "rateCards": [ RateCard, ... ],             // BASE FREIGHT ONLY — see below. [] if the request is not about base freight.
-  "definitions": [ ChargeDefinition, ... ],   // ONLY definitions that do not already exist (see existing codes); [] if reusing existing ones
-  "configs": [ { "chargeDefinitionCode": "...", "partnerId": ${JSON.stringify(partnerId || null)}, "config": {...}, "conditions": null|{...} } ],
+  "actions": [ Action, ... ],        // everything you want DONE — see ACTIONS below
+  "unsupported": [ { "request": "...", "reason": "..." } ],  // asks you could NOT turn into an action
   "warnings": [ "anything ambiguous or assumed" ]
 }
+
+## ACTIONS — the only things that actually happen
+Each entry has a "type". Emit as many as the request needs, in the order they
+should run. Nothing outside this list has any effect.
+
+1. { "type": "rate_card", "rateCard": RateCard }
+   Base freight priced by (distance band x weight). See RateCard below.
+
+2. { "type": "create_definition", "definition": ChargeDefinition }
+   A charge type that is NOT already in the catalog. Check the existing list
+   first — if the code is there, reuse it with upsert_config instead. Use this
+   when the admin asks for a charge the catalog does not have yet, including
+   "create it if it does not exist".
+
+3. { "type": "upsert_config", "chargeDefinitionCode": "...",
+      "channel": "&lt;exact channel name&gt;" | null,
+      "config": {...}, "conditions": null|{...} }
+   The per-partner VALUES for a charge type, in that method's config shape (see
+   the computation methods above). You may reference a definition created by an
+   earlier create_definition action in this same response.
+
+## When you cannot turn an ask into an action
+Put it in "unsupported" with a plain reason. NEVER silently drop it, and never
+approximate it with a different action. These are read by a human, so name the
+actual request. Things this path genuinely cannot do:
+  - create or edit zones, milestones, service channels, or pincode types
+  - edit or delete an existing charge definition (it is shared by every partner)
+  - anything outside charge definitions and their per-partner configs
 
 ## RateCard — use this for base freight, ALWAYS
 Anything priced as (distance band x weight) base freight MUST go in "rateCards"
@@ -196,10 +223,11 @@ code does the rest.
 - Anything the card mentions that has no field here — volumetric divisor, TAT,
   RTO policy — goes in "notes". Never invent a config for it.
 
-## The advanced "configs" contract below is for everything else
-Non-freight charges (VAS, COD, fuel, GST, discounts) and weight matrices for
-partners with GEOLOGICAL zones. Only there do you write MATRIX/zoneMilestoneId
-JSON by hand.
+## Choosing between rate_card and upsert_config
+Base freight priced by distance band x weight ALWAYS goes in a rate_card — never
+hand-write its MATRIX JSON. Everything else (VAS, COD, fuel, GST, discounts) and
+weight matrices for partners with GEOLOGICAL zones go through upsert_config using
+the computation-method config shapes above.
 If a definition code below already exists, emit "definitions": [] and just reference the code from configs[].chargeDefinitionCode. Re-emitting an existing definition is not an error, but it will be ignored — never duplicate a charge under a new code to express a variant, a channel, or a zone.
 
 Existing definitions (reuse instead of duplicating): ${renderExistingDefinitions(existingDefinitions)}${renderChannelContext(channelContext, channelId)}${renderZoneContext(zoneContext)}`,

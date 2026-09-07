@@ -165,26 +165,26 @@ Flags: taxable true, fuelApplicable false. Active.`,
     id: "base-freight",
     label: "Base freight",
     category: "BASE",
-    meta: "QUOTE · phase 100 · MATRIX / MILESTONE",
-    when: "The partner's tariff table. One config holding every lane.",
+    meta: "QUOTE · phase 100 · rate card",
+    when: "The partner's tariff table. One rate card covering every distance band.",
     pitfall:
-      "perKg is the SLAB SIZE in kg, not a per-kilo rate. Swapping them is wrong by orders of magnitude and still quotes cleanly. A missing row makes the partner unquotable on that lane.",
-    prompt: `Set up base freight for this partner using the existing BASE_FREIGHT definition —
-do not create a new definition.
+      "Give the rate and the minimum freight separately, and include a worked example per band. The examples are replayed through the real pricing engine — if they do not reproduce, the card is rejected before it can misprice anything.",
+    prompt: `Set up base freight for this partner.
 
-This partner's zone is a DISTANCE zone, so use mode "MILESTONE" with one row per
-milestone, keyed by the zoneMilestoneId values in the zone context. Use only the
-UUIDs listed there — never a placeholder. Put every milestone in ONE config; any
-milestone left out makes this partner unquotable on that lane.
+Billing unit: 1 kg. (This is the slab the weight is rounded up to, not a rate.)
 
-The tariff is slab-based: 26 rupees per 0.5 kg slab with a 26 rupee floor. Since
-"perKg" is the slab size in kg and not a per-kilo rate, each row is
-"perKg": 0.5, "charge": 26, "minCharge": 26.
+Zone A: 0 to 50 km — rate 26 per kg, minimum freight 130
+Zone B: 51 to 500 km — rate 32 per kg, minimum freight 160
+Zone C: 501 to 1400 km — rate 38 per kg, minimum freight 180
+Zone D: above 1400 km — rate 46 per kg, minimum freight 220
 
-Do not attach any conditions to base freight.
+Freight = MAX(zone minimum, CEILING(chargeable weight / billing unit) x zone rate)
 
-(For a GEOLOGICAL zone instead: use mode "ZONE_PAIR", rows keyed by fromZoneId and
-toZoneId, covering every ordered pair including same-zone lanes like A to A.)`,
+Worked examples:
+30 km, 3 kg -> 130
+350 km, 8 kg -> 256
+900 km, 4 kg -> 180
+1800 km, 10 kg -> 460`,
   },
   {
     id: "oda",

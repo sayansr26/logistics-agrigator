@@ -180,14 +180,12 @@ function checkSuffix(band, milestone, milestones, problems, at) {
  * misprice silently. An unmatched channel is an error the admin resolves.
  */
 function resolveChannel(
-  rateCard,
+  named,
   channels,
   selectedChannelId,
   problems,
   warnings,
 ) {
-  const named = rateCard?.channel;
-
   if (selectedChannelId) {
     const selected = channels.find((c) => c.id === selectedChannelId) || null;
     if (!selected) {
@@ -269,6 +267,30 @@ function resolveChannel(
 // ---------------------------------------------------------------------------
 
 /**
+ * The base-freight definition to create when the catalog has NONE.
+ *
+ * Deliberately identical in code/shape to prisma/seeds/chargeDefinitions.seed.js
+ * so that running the seed later upserts onto this same row rather than leaving
+ * a near-duplicate beside it. `isSystem` is left off on purpose: the seed sets
+ * it true, so seeding reconciles a bootstrapped row into the system catalog.
+ */
+const BOOTSTRAP_BASE_DEFINITION = {
+  code: "BASE_FREIGHT",
+  name: "Base Freight",
+  category: "BASE",
+  applyStage: "QUOTE",
+  phase: 100,
+  description:
+    "Core freight charge. MATRIX config: mode MILESTONE (distance slabs via zoneMilestoneId rows) or ZONE_PAIR (fromZoneId/toZoneId rows). Each row: perKg (slab size, kg), charge (per slab), minCharge.",
+  computation: {
+    method: "MATRIX",
+    basis: "CHARGEABLE_WEIGHT",
+  },
+  aggregation: { group: "BASE", strategy: "HIGHEST" },
+  flags: { taxable: true, fuelApplicable: true, aiAssisted: true },
+};
+
+/**
  * Resolve which catalog definition this card attaches to.
  *
  * The encoder NEVER mints one. That is what makes inventing a per-channel
@@ -308,8 +330,18 @@ function resolveDefinition(rateCard, partnerContext, problems) {
   if (!chosen && baseDefinitions.length === 1) chosen = baseDefinitions[0];
 
   if (!chosen) {
+    // Bootstrap, but ONLY on a catalog with no base charge at all. With zero
+    // BASE definitions there is nothing to duplicate, so the anti-duplicate
+    // guarantee still holds — the moment one exists we are reuse-only again
+    // and an unmatched card is a problem, exactly as before.
+    if (baseDefinitions.length === 0) {
+      return { definition: BOOTSTRAP_BASE_DEFINITION, create: true };
+    }
+
     problems.push(
-      "no base-freight charge definition to attach this rate card to — seed the charge catalog or create one first",
+      `"${rateCard?.chargeName || "this rate card"}" does not match any of the base charge definitions in the catalog (${baseDefinitions
+        .map((d) => d.code)
+        .join(", ")}) — name the charge exactly as it appears there`,
     );
     return null;
   }
@@ -321,7 +353,7 @@ function resolveDefinition(rateCard, partnerContext, problems) {
     return null;
   }
 
-  return chosen;
+  return { definition: chosen, create: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +403,9 @@ function encodeRateCard(rateCard, partnerContext = {}) {
   const empty = {
     config: null,
     chargeDefinitionCode: null,
+    // Set only when the catalog had no base charge and one must be created
+    // alongside this config. Null means "reuse what is already there".
+    definitionToCreate: null,
     channelId: null,
     milestones: [],
     bindings: [],
@@ -384,9 +419,17 @@ function encodeRateCard(rateCard, partnerContext = {}) {
     return empty;
   }
 
-  const definition = resolveDefinition(rateCard, partnerContext, problems);
+  const resolved = resolveDefinition(rateCard, partnerContext, problems);
+  const definition = resolved?.definition || null;
+  const definitionToCreate = resolved?.create ? resolved.definition : null;
+
+  if (definitionToCreate) {
+    warnings.push(
+      `no base charge existed in the catalog, so "${definitionToCreate.code}" will be created alongside this rate card`,
+    );
+  }
   const channelId = resolveChannel(
-    rateCard,
+    rateCard?.channel,
     partnerContext.channels || [],
     partnerContext.selectedChannelId,
     problems,
@@ -417,6 +460,7 @@ function encodeRateCard(rateCard, partnerContext = {}) {
     return {
       ...empty,
       chargeDefinitionCode: definition?.code || null,
+      definitionToCreate,
       channelId,
     };
   }
@@ -487,6 +531,7 @@ function encodeRateCard(rateCard, partnerContext = {}) {
     return {
       ...empty,
       chargeDefinitionCode: definition?.code || null,
+      definitionToCreate,
       channelId,
       milestones,
     };
@@ -495,6 +540,7 @@ function encodeRateCard(rateCard, partnerContext = {}) {
   return {
     config: { mode: "MILESTONE", rows },
     chargeDefinitionCode: definition.code,
+    definitionToCreate,
     channelId,
     milestones,
     bindings,
@@ -513,6 +559,9 @@ function encodeRateCards(rateCards, partnerContext = {}) {
   const problems = [];
   const warnings = [];
   const encoded = [];
+  // Keyed by code so several rate cards on an empty catalog ask for the base
+  // definition once, not once each.
+  const definitionsToCreate = new Map();
 
   (rateCards || []).forEach((rateCard, index) => {
     const label = `rate card ${index + 1}`;
@@ -522,6 +571,13 @@ function encodeRateCards(rateCards, partnerContext = {}) {
     warnings.push(...result.warnings.map((w) => `${label}: ${w}`));
 
     if (!result.config) return;
+
+    if (result.definitionToCreate) {
+      definitionsToCreate.set(
+        result.definitionToCreate.code,
+        result.definitionToCreate,
+      );
+    }
 
     configs.push({
       chargeDefinitionCode: result.chargeDefinitionCode,
@@ -536,7 +592,21 @@ function encodeRateCards(rateCards, partnerContext = {}) {
     encoded.push({ label, index, ...result });
   });
 
-  return { configs, encoded, problems, warnings };
+  return {
+    configs,
+    definitions: [...definitionsToCreate.values()],
+    encoded,
+    problems,
+    warnings,
+  };
 }
 
-module.exports = { encodeRateCard, encodeRateCards, EDGE_TOLERANCE_KM };
+module.exports = {
+  // Shared with the action compiler so channel matching (and its deliberate
+  // refusal to guess between near-identical names) has one implementation.
+  resolveChannel,
+  encodeRateCard,
+  encodeRateCards,
+  EDGE_TOLERANCE_KM,
+  BOOTSTRAP_BASE_DEFINITION,
+};

@@ -18,6 +18,7 @@ const {
 } = require("../chargeConfigShared");
 const prompts = require("./prompts/chargeConfigPrompts");
 const { encodeRateCards } = require("./rateCard/encoder");
+const { compileActions } = require("./actions/compile");
 const { replayExamples, describeFailures } = require("./rateCard/replay");
 const {
   chargeDefinitions: definitionSchemas,
@@ -127,6 +128,50 @@ async function getExistingBaseConfigs(partnerId) {
 }
 
 /**
+ * Everything the admin asked for that the system did not act on.
+ *
+ * The prompt tells the model to file anything it cannot express into
+ * `rateCard.notes` ("volumetric divisor, TAT, RTO policy"), and to name a
+ * channel it cannot bind in `warnings`. Both were then written to JSONB and read
+ * by nobody — so an instruction the system silently dropped looked exactly like
+ * an instruction it had ignored. Collect them into one first-class list the UI
+ * can put in front of the admin.
+ *
+ * Advisory only: this never blocks approval, it just stops the drop being silent.
+ */
+function collectUnsupported(json) {
+  const items = [];
+
+  (json?.rateCards || []).forEach((card, index) => {
+    for (const note of card?.notes || []) {
+      if (!note) continue;
+      items.push({
+        source: `rate card ${index + 1}`,
+        request: String(note),
+        reason: "no field in the charge contract covers this",
+      });
+    }
+  });
+
+  // Forward-compatible with the v4 action contract, where the model reports its
+  // own refusals explicitly rather than us inferring them from notes.
+  for (const entry of json?.unsupported || []) {
+    if (!entry) continue;
+    items.push(
+      typeof entry === "string"
+        ? { source: "prompt", request: entry, reason: "not supported" }
+        : {
+            source: entry.source || "prompt",
+            request: String(entry.request ?? ""),
+            reason: entry.reason || "not supported",
+          },
+    );
+  }
+
+  return items.filter((i) => i.request);
+}
+
+/**
  * Turn the model's plain rate cards into real MATRIX configs, then replay the
  * admin's own worked examples through the engine against what we encoded.
  *
@@ -134,14 +179,22 @@ async function getExistingBaseConfigs(partnerId) {
  * drafts through one identical code path.
  */
 function encodeAndReplayRateCards(json, partnerContext, definitionsByCode) {
-  const { configs, encoded, problems, warnings } = encodeRateCards(
-    json?.rateCards,
-    partnerContext,
-  );
+  const {
+    configs,
+    definitions: definitionsToCreate,
+    encoded,
+    problems,
+    warnings,
+  } = encodeRateCards(json?.rateCards, partnerContext);
 
   const replay = [];
   for (const item of encoded) {
-    const definition = definitionsByCode.get(item.chargeDefinitionCode);
+    // A bootstrapped definition does not exist in the catalog yet, so fall back
+    // to the spec the encoder wants created — otherwise the very first base
+    // charge would be the one config that never gets its examples replayed.
+    const definition =
+      definitionsByCode.get(item.chargeDefinitionCode) ||
+      item.definitionToCreate;
     if (!definition) continue;
 
     const outcome = replayExamples({
@@ -164,7 +217,13 @@ function encodeAndReplayRateCards(json, partnerContext, definitionsByCode) {
     problems.push(...describeFailures(outcome.results, item.label));
   }
 
-  return { configs, replay, problems, warnings };
+  return {
+    configs,
+    definitions: definitionsToCreate,
+    replay,
+    problems,
+    warnings,
+  };
 }
 
 /**
@@ -326,31 +385,60 @@ async function draftFromText({ description, partnerId, channelId, userId }) {
     { maxTokens: 4000, timeoutMs: 90000 },
   );
 
-  // Encode the plain rate cards in code, then merge the results into
-  // `configs` so everything downstream sees one uniform shape. A stored v2 row
-  // has no `rateCards` and simply flows through unchanged.
   const definitionRows = await prisma.chargeDefinition.findMany();
+  const partnerContext = {
+    partnerId,
+    distanceZones: zoneContext?.distanceZones || [],
+    channels: channelContext || [],
+    definitions: definitionRows,
+    existingBaseConfigs,
+    selectedChannelId: channelId || null,
+  };
+
+  // v4: compile the model's action list down to the same {definitions, configs}
+  // the approval path has always applied. Rate cards are handed straight back to
+  // the encoder so they keep their guardrails and replay verification. A stored
+  // v2/v3 row has no `actions` and compiles to nothing, flowing through as before.
+  const compiled = compileActions(json.actions, partnerContext);
+
+  // Encode the plain rate cards in code, then merge the results into `configs`
+  // so everything downstream sees one uniform shape.
   const encodedRateCards = encodeAndReplayRateCards(
-    json,
-    {
-      partnerId,
-      distanceZones: zoneContext?.distanceZones || [],
-      channels: channelContext || [],
-      definitions: definitionRows,
-      existingBaseConfigs,
-      selectedChannelId: channelId || null,
-    },
+    { ...json, rateCards: [...(json.rateCards || []), ...compiled.rateCards] },
+    partnerContext,
     new Map(definitionRows.map((d) => [d.code, d])),
   );
 
+  // Merge the encoder's definitions in by code. The model is told not to emit
+  // base-freight definitions, so in practice this only carries a bootstrap on
+  // an empty catalog — but dedupe anyway rather than trust that.
+  const draftDefinitions = [
+    ...(json.definitions || []),
+    ...compiled.definitions,
+  ];
+  for (const def of encodedRateCards.definitions || []) {
+    if (!draftDefinitions.some((d) => d?.code === def.code)) {
+      draftDefinitions.push(def);
+    }
+  }
+
   const draft = {
     ...json,
-    configs: [...(json.configs || []), ...encodedRateCards.configs],
+    definitions: draftDefinitions,
+    configs: [
+      ...(json.configs || []),
+      ...compiled.configs,
+      ...encodedRateCards.configs,
+    ],
     replay: encodedRateCards.replay,
-    encoderWarnings: encodedRateCards.warnings,
+    encoderWarnings: [...compiled.warnings, ...encodedRateCards.warnings],
+    // The compiler's refusals are first-class: an action the system will not
+    // carry out is reported, never silently skipped.
+    unsupported: [...collectUnsupported(json), ...compiled.unsupported],
   };
 
   const validation = [
+    ...compiled.problems,
     ...encodedRateCards.problems,
     // validateDraft is a genuine independent second opinion on the encoder: it
     // hits the DB via findDanglingRefs, while the encoder only ever saw a
@@ -377,8 +465,10 @@ async function draftFromText({ description, partnerId, channelId, userId }) {
     suggestionId: record.id,
     definitions: draft.definitions?.length || 0,
     rateCards: json.rateCards?.length || 0,
+    actions: json.actions?.length || 0,
     configs: draft.configs.length,
     replayFailures: encodedRateCards.replay.reduce((n, r) => n + r.failed, 0),
+    unsupported: draft.unsupported.length,
     validationProblems: validation.length,
   });
 
@@ -440,5 +530,6 @@ module.exports = {
   getChannelContext,
   getExistingBaseConfigs,
   encodeAndReplayRateCards,
+  collectUnsupported,
   getExistingDefinitionSummaries,
 };

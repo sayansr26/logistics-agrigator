@@ -225,7 +225,7 @@ async function main() {
   });
 
   let header = null;
-  let idx = {};
+  const idx = {};
   let rows = 0;
   let withCoords = 0;
   let skipped = 0;

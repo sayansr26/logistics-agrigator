@@ -320,10 +320,68 @@ describe("definition resolution", () => {
     expect(r.chargeDefinitionCode).toBe("BASE_FREIGHT");
   });
 
-  test("no base definition is a problem, and never offers to create one", () => {
+  // Bootstrap: an empty catalog has nothing to duplicate, so the encoder is
+  // allowed to ask for BASE_FREIGHT to be created alongside the config.
+  test("an empty catalog bootstraps BASE_FREIGHT instead of failing", () => {
     const r = encodeRateCard(CARD, ctx({ definitions: [DEFINITIONS[1]] }));
+
+    expect(r.problems).toEqual([]);
+    expect(r.config).not.toBeNull();
+    expect(r.chargeDefinitionCode).toBe("BASE_FREIGHT");
+    expect(r.definitionToCreate).toMatchObject({
+      code: "BASE_FREIGHT",
+      category: "BASE",
+      applyStage: "QUOTE",
+      phase: 100,
+      computation: { method: "MATRIX", basis: "CHARGEABLE_WEIGHT" },
+    });
+    expect(r.warnings.join(" ")).toMatch(/will be created alongside/);
+  });
+
+  test("the bootstrapped definition carries no isSystem flag", () => {
+    // The seed sets isSystem: true, so leaving it off means a later seed run
+    // upserts onto this row rather than leaving a near-duplicate beside it.
+    const r = encodeRateCard(CARD, ctx({ definitions: [DEFINITIONS[1]] }));
+    expect(r.definitionToCreate).not.toHaveProperty("isSystem");
+  });
+
+  test("reuse-only returns the moment ONE base definition exists", () => {
+    const r = encodeRateCard(card({ chargeName: "Totally Unrelated" }), ctx());
+    // A single BASE definition is still picked by the sole-candidate rule.
+    expect(r.chargeDefinitionCode).toBe("B2C_BASIC_FREIGHT");
+    expect(r.definitionToCreate).toBeNull();
+  });
+
+  test("two base definitions and no name match is a problem, not a bootstrap", () => {
+    const twoBase = [
+      ...DEFINITIONS,
+      {
+        code: "B2B_FREIGHT",
+        name: "B2B Freight",
+        category: "BASE",
+        computation: { method: "MATRIX" },
+      },
+    ];
+    const r = encodeRateCard(
+      card({ chargeName: "Totally Unrelated" }),
+      ctx({ definitions: twoBase }),
+    );
     expect(r.config).toBeNull();
-    expect(r.problems.join(" ")).toMatch(/seed the charge catalog/);
+    expect(r.definitionToCreate).toBeNull();
+    expect(r.problems.join(" ")).toMatch(
+      /does not match any of the base charge definitions/,
+    );
+  });
+
+  test("encodeRateCards surfaces the bootstrap once for several cards", () => {
+    const r = encodeRateCards(
+      [CARD, card({ channel: null })],
+      ctx({
+        definitions: [DEFINITIONS[1]],
+      }),
+    );
+    expect(r.definitions).toHaveLength(1);
+    expect(r.definitions[0].code).toBe("BASE_FREIGHT");
   });
 
   test("a non-MATRIX definition cannot hold a rate card", () => {

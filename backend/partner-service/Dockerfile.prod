@@ -24,8 +24,21 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 # Copy production entrypoint script for automated migrations
 COPY --chown=nodejs:nodejs scripts/production-entrypoint.sh /app/production-entrypoint.sh
 RUN chmod +x /app/production-entrypoint.sh
-RUN mkdir -p /app/logs/partner-service && chown -R nodejs:nodejs /app/logs
-RUN chown -R nodejs:nodejs /app
+# Two log paths, because shared/lib/logger.js resolves its directory from
+# __dirname (`path.resolve(__dirname, "../..")`) and the build makes a
+# second copy of shared/ inside the service dir. Loaded from /app/shared it
+# wants /app/logs/<svc>; loaded from the service-local copy it wants
+# /app/backend/<svc>/logs/<svc>. Pre-create both, owned by nodejs, so the
+# non-recursive chown below cannot turn logging into an EACCES fallback.
+RUN mkdir -p /app/logs/partner-service /app/backend/partner-service/logs/partner-service \
+    && chown -R nodejs:nodejs /app/logs /app/backend/partner-service/logs
+# Own the /app DIRECTORY only — not its contents. `chown -R` here rewrote
+# metadata on every file, forcing Docker's copy-up to write a full duplicate
+# of node_modules, the Prisma engines and the source into a new layer, which
+# roughly doubled every backend image. Owning the directory is enough: the
+# app only needs to READ its code (root-owned files are world-readable) and
+# to CREATE subdirectories at runtime, which requires write on /app itself.
+RUN chown nodejs:nodejs /app
 
 USER nodejs
 WORKDIR /app

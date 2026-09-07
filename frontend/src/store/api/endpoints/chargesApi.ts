@@ -315,12 +315,68 @@ export interface AiSuggestedConfig {
   conditions?: unknown;
 }
 
+/** One band of a rate card, in the admin's own vocabulary (no UUIDs). */
+export interface AiRateCardBand {
+  zone?: string | null;
+  fromKm?: number | null;
+  toKm?: number | null;
+  ratePerUnit?: number | null;
+  minFreight?: number | null;
+}
+
+export interface AiRateCard {
+  chargeName?: string | null;
+  channel?: string | null;
+  zoneName?: string | null;
+  billingUnitKg?: number | null;
+  bands?: AiRateCardBand[];
+  examples?: Array<{
+    distanceKm?: number;
+    weightKg?: number;
+    expectedFreight?: number;
+  }>;
+  /** Anything the model could not express — surfaced via `unsupported`. */
+  notes?: string[];
+}
+
+/** One worked example replayed through the real pricing engine. */
+export interface AiReplayResult {
+  rateCardIndex: number;
+  chargeDefinitionCode?: string | null;
+  passed: number;
+  failed: number;
+  allPassed: boolean;
+  results: Array<{
+    distanceKm: number;
+    weightKg: number;
+    expectedFreight: number;
+    actualFreight: number | null;
+    milestone?: { suffix?: string } | null;
+    pass: boolean;
+    reason?: string | null;
+    calculation?: string | null;
+  }>;
+}
+
+/** Something the admin asked for that the system did not act on. */
+export interface AiUnsupportedItem {
+  source: string;
+  request: string;
+  reason: string;
+}
+
 export interface AiSuggestionPayload {
   understanding?: string;
   definitions?: unknown[];
   configs?: AiSuggestedConfig[];
   warnings?: string[];
   findings?: AnomalyFinding[];
+  /** Present from prompt v3 on — the parsed rate cards the encoder consumed. */
+  rateCards?: AiRateCard[];
+  /** Deterministic-encoder notices (e.g. a bootstrapped definition). */
+  encoderWarnings?: string[];
+  replay?: AiReplayResult[];
+  unsupported?: AiUnsupportedItem[];
 }
 
 export interface AiSuggestion {

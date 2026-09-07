@@ -232,6 +232,113 @@ function SuggestionCard({
             <p className="text-sm">{payload.understanding}</p>
           )}
 
+          {/* Anything the prompt asked for that the system did not act on.
+              Deliberately ABOVE the config preview: this is the answer to "why
+              did it ignore my instruction?", and it used to be invisible. */}
+          {payload.unsupported && payload.unsupported.length > 0 && (
+            <Alert className="border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <p className="mb-1 font-semibold">
+                  Not applied from your prompt
+                </p>
+                <ul className="list-disc space-y-1 pl-4">
+                  {payload.unsupported.map((u, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{u.request}</span>
+                      <span className="text-amber-800 dark:text-amber-300">
+                        {" "}
+                        — {u.reason}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs">
+                  These are read as instructions but have no field in the charge
+                  contract. Configure them separately, or rephrase and re-draft.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* What the model understood, before code turned it into UUIDs. */}
+          {payload.rateCards && payload.rateCards.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                Rate card read from your prompt
+              </p>
+              {payload.rateCards.map((rc, idx) => (
+                <div key={idx} className="rounded-md bg-muted p-2 text-xs">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {rc.chargeName || "Base freight"}
+                    </span>
+                    {rc.channel ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {rc.channel}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">
+                        partner-wide
+                      </Badge>
+                    )}
+                    <span className="text-muted-foreground">
+                      billing unit {rc.billingUnitKg ?? 1} kg
+                    </span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {(rc.bands || []).map((b, i) => (
+                      <li key={i} className="text-muted-foreground">
+                        {b.zone ? `${b.zone}: ` : ""}
+                        {b.fromKm}-{b.toKm ?? "\u221e"} km · ₹{b.ratePerUnit}
+                        {b.minFreight ? ` · min ₹${b.minFreight}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Worked examples re-priced through the real engine. */}
+          {payload.replay && payload.replay.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                Your examples, re-priced by the engine
+              </p>
+              {payload.replay.map((r, idx) => (
+                <div key={idx} className="rounded-md bg-muted p-2 text-xs">
+                  {r.results.length === 0 ? (
+                    <p className="text-muted-foreground">
+                      No worked examples in the prompt — nothing to verify.
+                      Include a few and they get checked automatically.
+                    </p>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {r.results.map((x, i) => (
+                        <li
+                          key={i}
+                          className={
+                            x.pass
+                              ? "text-green-700 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
+                          }
+                        >
+                          {x.distanceKm}km / {x.weightKg}kg — expected ₹
+                          {x.expectedFreight}, engine gives{" "}
+                          {x.actualFreight === null
+                            ? `nothing (${x.reason})`
+                            : `₹${x.actualFreight}`}{" "}
+                          {x.pass ? "✓" : "✗"}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {payload.configs && payload.configs.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground">
@@ -272,6 +379,19 @@ function SuggestionCard({
               </p>
               <AnomalyFindingsList findings={payload.findings} />
             </div>
+          )}
+
+          {payload.encoderWarnings && payload.encoderWarnings.length > 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <ul className="list-disc space-y-1 pl-4">
+                  {payload.encoderWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           {payload.warnings && payload.warnings.length > 0 && (

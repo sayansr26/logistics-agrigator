@@ -1,111 +1,85 @@
-# Charges Base Engine fix — progress
+# AI charge drafting — progress
 
 Plan: `~/.claude/plans/plan-for-this-changes-purring-turtle.md`
 Branch: `dev/v6`
 
 Status key: [x] done [~] in progress [ ] not started
 
-## Stage 1 — Write path (the actual fix)
+## Stage 1 — Make the invisible visible ✅ code complete
 
-- [x] **1.1** `ensureVersionSnapshot` in `services/chargeConfigShared.js`
-  - [x] wired into `partnerChargeConfigService.updateConfig`
-  - [x] wired into `chargeDefinitionService.updateDefinition`
-- [x] **1.5** `services/chargeEngine/milestoneMatch.js` (new shared matcher)
-  - [x] `distanceZoneService` consumes it; floor, global-max fallback pass
-  - [x] `usedFallback` surfaced on both result branches
-  - [x] cache key floored + real `distanceKm` restated on cache hit
-- [x] **1.2** `approveSuggestion` rewrite
-  - [x] `APPROVABLE_STATUSES` — retry a stuck `APPROVED` (defect E)
-  - [x] `applyDefinition` — reuse instead of error (defect A)
-  - [x] `applyConfig` — upsert on `{partnerId, chargeDefinitionId, channelId}` (defects B, C)
-  - [x] `preflight` — resolve every id before the first write
-  - [x] validation merged, not clobbered (defect D)
-  - [x] result shape carries `action` / `version` / `previousVersion` / `warnings`
-- [x] **1.3** `channelId` contract: Joi -> controller -> `configBrainService` -> prompt
-  - [x] fail-fast channel/partner check before the model call
-  - [x] `renderChannelContext` + `renderExistingDefinitions` in the prompt
-- [x] **1.4** Frontend: channel `<Select>`, created-vs-replaced rendering, widened types
-- [x] **1.6** `make seed-charge-definitions` + `yarn seed:charges`
+- [x] `configBrainService.collectUnsupported()` — lifts `rateCard.notes` and any
+      v4-style explicit refusals into one `draft.unsupported` list, and logs the count
+- [x] `tests/unsupportedCollection.test.js` (8 tests)
+- [x] Frontend types widened — `AiRateCard`, `AiReplayResult`, `AiUnsupportedItem`,
+      and `rateCards` / `encoderWarnings` / `replay` / `unsupported` on `AiSuggestionPayload`
+      (the payload type previously had no `rateCards` key at all)
+- [x] Draft UI now renders, in this order:
+      **"Not applied from your prompt"** (amber, above the config preview) ·
+      the rate card as read from the prompt · worked examples re-priced by the engine ·
+      encoder warnings — **none of these were displayed before**
+- [x] Rewrote the "Base freight" prompt template, which still taught the v2 contract
+      ("use mode MILESTONE ... keyed by the zoneMilestoneId values") and therefore
+      contradicted the v3 rule that base freight must go in `rateCards`. Clicking it
+      produced a config that bypassed both the encoder and the replay check.
 
-## Stage 2 — Replay + encoder (defence in depth)
+## Stage 2 — Per-method config validation ✅ module done, ⛔ enforcement gated
 
-- [x] export `computeLine` from `services/chargeEngine/pipeline.js`
-- [x] `services/ai/rateCard/replay.js`
-- [x] `services/ai/rateCard/encoder.js`
-- [x] prompt `v3` rate-card contract + `configBrainService` encode/replay wiring
-- [x] `tests/milestoneMatch.test.js` (31 tests)
-- [x] `tests/rateCardReplay.test.js` (10 tests)
-- [x] `tests/rateCardEncoder.test.js` (33 tests, incl. encoder+replay end to end)
+- [x] `services/chargeConfigMethods.js` — `validateConfigForMethod(computation, config)`
+      covering all 9 methods, each mirroring its calculator so a config that validates
+      cannot price to `null` for a configuration reason
+- [x] `tests/chargeConfigMethods.test.js` (41 tests) — every valid case asserts both
+      "validates" **and** "actually prices" via the real `calculators.compute`
+- [x] Wired into `validateAllConfigs()` — **report only**
+- [x] `scripts/validate-charge-configs.js` + `yarn validate:charges` (dev),
+      `yarn validate:charges:prod`, and `make validate-charge-configs` — following the
+      existing script/Makefile pattern rather than a raw `docker exec node -e` one-liner
+- [ ] **GATED:** wiring into `assertConfigRefs` (the throwing path). Run the sweep and
+      review what it flags before enforcing on writes.
 
-## Stage 3 — Offline audit/migration script
+## Stage 3 — Action layer ✅ code complete
 
-- [x] `scripts/migrate-charge-configs.js` (run against the prod import: 1 mispriced, 2 unverified)
-- [x] Makefile targets `migrate-charge-configs{,-dry}` + `.PHONY`
+- [x] Prompt **v4**: `actions[]` + `unsupported[]` + a capability manifest naming the
+      three action types and, explicitly, what to do when an ask fits none of them
+      ("NEVER silently drop it")
+- [x] `services/ai/actions/compile.js` — compiles actions down to the same
+      `{definitions, configs}` the approval path already applies, so
+      **`approveSuggestion` needed no rewrite** and its preflight/idempotence survive
+- [x] `create_definition` + `upsert_config` in one draft: "create the charge if it is
+      missing, then price it" now works end to end
+- [x] `upsert_config` validated per computation method (Stage 2) — so all 9 methods are
+      reachable from a prompt _and_ guarded, closing the lopsidedness
+- [x] Refusals carry a next step ("zones are managed in Zone Management, not here")
+- [x] Reuses the encoder's channel matching, including its refusal to guess between
+      near-identical names — one implementation, not two
+- [x] `tests/actionCompile.test.js` (20), `tests/draftBackwardCompat.test.js` (7)
 
-## Follow-ups not yet done
+### Deliberately unchanged
 
-- [x] Correct `docs/CHARGES_BASE_ENGINE_AI_CHANGES.md` — CORRECTIONS block added as §0
-- [x] End-to-end approve check run against the live stack — results below
-- [x] Seed run in **dev**: 36 created, 39 total. Root scripts `yarn seed:charges` / `seed:charges:prod` added — the root package.json exposes each partner-service script as a docker-compose exec pair, and I had only added it to the workspace package.json at first.
-- [ ] **You decide:** run `yarn seed:charges:prod` (or `make seed-charge-definitions`) against production
-- [ ] **Unproven:** the v3 `rateCards` prompt has never been exercised against the real model — the encoder/replay are unit-tested, but no live deepseek call has produced a `rateCards` payload yet
+`aiSuggestionService.approveSuggestion` — actions compile to its existing input shape.
+No tool/function calling, no RAG. Definitions stay create-only.
 
-## Verified locally
+---
 
-- `yarn test` in partner-service: **104 passed** (4 suites; 71 new + 33 pre-existing engine).
-- ESLint: 0 errors on every file touched (remaining warnings are pre-existing).
-- `tsc --noEmit` (frontend): only pre-existing errors in `shipmentApi.ts`, which was not touched.
-- `docker restart logistics-partner-service`: clean boot, 0 `MODULE_NOT_FOUND`, `/health` returns 200.
-- Audit script run against the imported prod data — output below.
+## Verified so far
 
-### What the audit found on real data
+- **184 tests passing** (8 suites; 76 new).
+- ESLint: 0 errors on every file touched.
+- `tsc --noEmit` (frontend): clean; only pre-existing errors in the untouched
+  `shipmentApi.ts`.
 
+## Blocked — Docker daemon was down for this whole session
+
+Nothing below has been run against a live stack:
+
+```bash
+docker-compose restart partner-service     # then check logs + /health
+
+# Stage 2 gate — what would newly fail if enforcement were switched on:
+yarn validate:charges                 # dev
+make validate-charge-configs          # server (docker-compose.production.yml)
 ```
-MISPRICED  Delhivery / B2C_BASIC_FREIGHT  (ba87b5fb…, partner-wide, v1)
-  source: suggestion 02246f0f… (APPROVED, LOW confidence, 4 candidates)
-  - the stored draft's config does not match the live rows — provenance is a guess
-  - worked example "35 km, 2 kg -> Rs 52": config computes Rs 130
-  -   ^ the Rs 130 minimum freight for milestone A is what binds; the worked
-        example ignores the minimum its own rate card states
-  NOT WRITABLE: provenance is LOW confidence
-```
 
-The config is **correct**; the admin's own worked example is not — it multiplies
-2 kg x Rs 26 = Rs 52 while the same card states a Rs 130 minimum for Zone A.
-Worth raising with them: either the example or the minimum is wrong.
-
-### End-to-end proof (run 2026-08-27, against the live dev stack)
-
-Three scratch suggestions, approved through the real API gateway with an admin
-token. All artifacts deleted afterwards — the 3 original configs are back at
-v1 and all 15 original suggestions are untouched.
-
-| Test                                                 | Defect | Result                                                                                            |
-| ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------- |
-| Approve a draft that re-emits an existing definition | A      | `APPLIED`, `definitions[0].action = "REUSED"`, `errors: []` — the exact case that failed 15 times |
-| Approve an identical second draft                    | B      | `action: "UPDATED"`, `v1 -> v2`, no duplicate-key collision                                       |
-| Approve a row stuck in terminal `APPROVED`           | E      | `APPLIED`, `v2 -> v3` — previously unretryable                                                    |
-| Channel scoping                                      | C      | config written with `channelId = e6f6af23…` from `inputContext`                                   |
-| Validation persistence                               | D      | `problems` survived, `applyErrors` cleared to `[]`                                                |
-
-The original blocker is gone: a per-channel base charge sat alongside the
-partner-wide one (`Delhivery 5kg Surface` + `(partner-wide)`), with
-`ChargeConfigVersion` snapshots at v1, v2 and v3 — no gaps, so nothing was
-overwritten unrecoverably.
-
-### After seeding (dev)
-
-39 definitions total: the 36 seeded plus the 3 pre-existing AI-created ones,
-which are untouched (`version 1`, `isSystem false`). `BASE_FREIGHT`, `GST`,
-`FUEL_SURCHARGE` and `COD_CHARGE` are now present.
-
-Only 4 of the 36 carry `isSystem: true` — my earlier note in the plan guessed
-"33+", which was wrong; the seed marks only the core few.
-
-**Two BASE-category definitions now coexist** — `BASE_FREIGHT` (seeded) and
-`B2C_BASIC_FREIGHT` (AI-created, and what Delhivery's live config uses). No
-partner has more than one BASE config, so there is no double-charging today,
-and the encoder's resolution order prefers _the definition a partner's base
-freight already lives on_ — so new rate cards for Delhivery keep binding to
-`B2C_BASIC_FREIGHT`, while a brand-new partner gets `BASE_FREIGHT`.
-Reconciling the two remains deliberately out of scope.
+**Stage 1 acceptance:** draft a prompt containing a deliberately unmappable line
+(_"also create the channel"_, _"volumetric divisor 5000"_). The draft must show a
+**"Not applied from your prompt"** block naming both. Before this change they
+vanished into `notes` and were never displayed.

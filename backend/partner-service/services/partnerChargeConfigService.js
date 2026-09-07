@@ -22,6 +22,7 @@ const {
   bumpConfigRevision,
   createAuditLog,
 } = require("./chargeConfigShared");
+const { validateConfigForMethod } = require("./chargeConfigMethods");
 
 const configIncludes = {
   partner: { select: { id: true, name: true, displayName: true } },
@@ -300,7 +301,15 @@ async function validateAllConfigs() {
   const findings = [];
   for (const cfg of configs) {
     const problems = [
-      ...findMatrixProblems(cfg.chargeDefinition.computation, cfg.config || {}),
+      // Report-only for now. validateConfigForMethod is NOT yet wired into
+      // assertConfigRefs (the throwing path): it is a real tightening, so run
+      // this sweep first and see what it flags before enforcing on writes.
+      // It supersedes findMatrixProblems for MATRIX (it delegates to it), so
+      // MATRIX is not double-reported.
+      ...validateConfigForMethod(
+        cfg.chargeDefinition.computation,
+        cfg.config || {},
+      ),
       ...(await findDanglingRefs(cfg.config || {}, {
         partnerId: cfg.partnerId,
       })),

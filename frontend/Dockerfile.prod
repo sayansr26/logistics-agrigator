@@ -1,11 +1,20 @@
 # =============== FRONTEND PRODUCTION DOCKERFILE ===============
 # Context: Root of project (has access to workspace files)
 # Usage: docker build -f frontend/Dockerfile.prod .
+#
+# Two stages. The build needs the full workspace install (devDependencies,
+# TypeScript, Tailwind) and leaves ~1.4GB of artifacts behind — root
+# node_modules, a ~600MB .next/cache, and a second copy of node_modules inside
+# the standalone output. None of it is read at runtime: the container has always
+# run `node frontend/server.js` from .next/standalone. Shipping the builder
+# stage as the final image meant pulling ~1.6GB to serve ~34MB.
 
-FROM node:20-alpine
+# ---------------------------------------------------------------- build stage
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Create non-root user
+# Same non-root user as the runtime stage: `yarn build` writes .next as this
+# user, so the files COPY'd out below are already owned correctly.
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Copy workspace files (needed for yarn to resolve dependencies)
@@ -24,28 +33,29 @@ COPY --chown=nodejs:nodejs frontend ./frontend
 USER nodejs
 RUN cd /app/frontend && yarn build
 
-# =============== PRODUCTION RUNTIME SETUP ===============
+# -------------------------------------------------------------- runtime stage
 # With experimental.outputFileTracingRoot set to the monorepo root, Next emits
 # the monorepo standalone layout:
 #   .next/standalone/frontend/server.js   <-- entrypoint (run from standalone root)
 #   .next/standalone/node_modules/        <-- complete traced deps (incl. styled-jsx)
-# Static assets are not bundled in standalone and must be copied to
-# .next/standalone/frontend/.next/static; public to .next/standalone/frontend/public.
-USER root
+# Static assets are NOT bundled into standalone and must be copied next to the
+# server: static to .next/standalone/frontend/.next/static, public to
+# .next/standalone/frontend/public.
+FROM node:20-alpine
+WORKDIR /app
 
-# CRITICAL: Copy static assets next to the standalone server
-RUN mkdir -p /app/frontend/.next/standalone/frontend/.next && \
-    cp -r /app/frontend/.next/static /app/frontend/.next/standalone/frontend/.next/static
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
-# Copy public assets (if exists - some projects don't have public folder)
-RUN if [ -d "/app/frontend/public" ]; then \
-        cp -r /app/frontend/public /app/frontend/.next/standalone/frontend/public; \
-    fi
+# The traced server plus its node_modules — the only code that actually runs.
+# Paths are kept identical to the previous single-stage image so WORKDIR and CMD
+# below are unchanged.
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/.next/standalone ./frontend/.next/standalone
 
-# Set ownership
-RUN chown -R nodejs:nodejs /app
+# CRITICAL: static assets sit next to the standalone server, not inside it.
+# Without these the site serves unstyled with broken images.
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/.next/static ./frontend/.next/standalone/frontend/.next/static
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/public ./frontend/.next/standalone/frontend/public
 
-# Run from the standalone root; the server entry is frontend/server.js
 USER nodejs
 WORKDIR /app/frontend/.next/standalone
 

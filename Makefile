@@ -55,7 +55,7 @@ PRISMA_SERVICES = auth-service user-service wallet-service partner-service \
         flush-redis flush-redis-uat redis-flush flush-cache flush-cache-uat \
         reset-ratelimit reset-ratelimit-uat \
         seed import-pincodes classify-cities load-pincodes seed-geo \
-        seed-charge-definitions \
+        seed-charge-definitions validate-charge-configs \
         migrate-shipment-ownership-dry migrate-shipment-ownership \
         migrate-charge-configs-dry migrate-charge-configs \
         clean clean-uat clean-keep-data clean-keep-data-uat \
@@ -660,6 +660,13 @@ seed-geo:
 # inert, so seeding cannot change any existing price.
 seed-charge-definitions:
 	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/prisma/seeds/chargeDefinitions.seed.js
+
+# Read-only sweep of every ACTIVE charge config: reports any whose stored JSON
+# cannot price (per-method problems, dangling zone/milestone/channel ids).
+# Exit code 1 if anything is invalid, so it can gate a deploy. Run this before
+# enabling write-time enforcement to see what the new rules would reject.
+validate-charge-configs:
+	$(COMPOSE_PROD) exec -T partner-service node backend/partner-service/scripts/validate-charge-configs.js
 
 # One-time backfill for shipments booked on behalf of an outlet: user_id becomes
 # the outlet owner (so the outlet portal + External API can see them) and
