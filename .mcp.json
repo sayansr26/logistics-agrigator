@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "logistics": {
+      "command": "node",
+      "args": ["${CLAUDE_PROJECT_DIR}/mcp-server/src/index.js"],
+      "env": {
+        "LOGISTICS_BASE_URL": "${LOGISTICS_BASE_URL:-http://localhost:3001}",
+        "LOGISTICS_CLIENT_ID": "${LOGISTICS_CLIENT_ID}",
+        "LOGISTICS_CLIENT_SECRET": "${LOGISTICS_CLIENT_SECRET}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

@@ -7,6 +7,7 @@ frontend/
 docs/
 wiki/
 .serena/
+.claude/
 
 # Development files  
 .git/

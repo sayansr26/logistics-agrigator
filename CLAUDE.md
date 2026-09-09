@@ -607,6 +607,42 @@ docker-compose.production.yml   # Production configuration
 | frontend-developer      | React/Next.js        | "Create shipment tracking component" |
 | documentation-updater   | Update docs          | "Update memory bank with progress"   |
 | integration-tester      | E2E testing          | "Test complete order flow"           |
+| api-tester              | curl-test endpoints  | "Test the bulk create endpoint"      |
+| docker-orchestrator     | Container vs host    | "Run the auth-service migration"     |
+| orchestrator            | Multi-domain tasks   | "Add refunds with UI and docs"       |
+| plan-executor           | Execute cursor plans | "Execute .cursor/plans/rbac.md"      |
+
+### Claude Code Skills (`.claude/skills/`)
+
+| Skill            | Purpose                                        | Invocation                                 |
+| ---------------- | ---------------------------------------------- | ------------------------------------------ |
+| `verify-service` | Run the mandatory Docker verification protocol | either                                     |
+| `release`        | Build/push to GHCR and deploy prod or UAT      | **user only** — never invoked by the model |
+
+```bash
+.claude/skills/verify-service/scripts/verify.sh shipment   # restart, logs, health, endpoint
+```
+
+### Claude Code Hooks (`.claude/settings.json`)
+
+| Hook                     | Event       | Effect                                                                                                                                             |
+| ------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `block-env-access.py`    | PreToolUse  | **Denies** reading/editing `.env`, `.env.production`, `.env.uat`, `backend/*/.env`. `*.example` files are allowed.                                 |
+| `check-route-pattern.py` | PostToolUse | Flags inline `(req, res)` handlers written into `backend/*/routes/*.js` — the controller-pattern rule, enforced structurally rather than by prose. |
+
+`.claude/settings.local.json` is personal and untracked; `.claude/settings.json`
+is the shared config and both are merged.
+
+### MCP Servers (`.mcp.json`)
+
+| Server      | Purpose                                                            |
+| ----------- | ------------------------------------------------------------------ |
+| `logistics` | This repo's own `mcp-server/` — the External Shipment API as tools |
+| `context7`  | Version-accurate docs for Prisma 5, Next 14, RTK, Express          |
+
+`logistics` reads `LOGISTICS_CLIENT_ID` / `LOGISTICS_CLIENT_SECRET` from the
+shell environment — they are **not** stored in `.mcp.json`, which is tracked in a
+public repo. Export them in your shell (see `mcp-server/README.md`).
 
 ## Active PRDs
 

@@ -16,6 +16,7 @@ CONTRIBUTING*
 docs/
 wiki/
 .serena/
+.claude/
 
 # IDE and Editor files
 .vscode/

@@ -9,6 +9,7 @@ shared/lib/database.js
 docs/
 wiki/
 .serena/
+.claude/
 
 # Development files
 .git/
