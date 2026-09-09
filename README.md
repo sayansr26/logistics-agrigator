@@ -69,7 +69,7 @@ logistics/
 ├── shared/                  # Shared utilities across services
 │   └── lib/               # Prisma helpers, validation, auth utils
 ├── docs/                    # Project documentation
-├── memory-bank/            # Project context and intelligence
+├── .serena/memories/       # Project context and intelligence (memory bank)
 ├── docker-compose.yml      # Development environment
 ├── .env.example           # Environment variables template
 ├── .gitignore             # Comprehensive gitignore
@@ -439,7 +439,7 @@ curl http://localhost:3000/api/health  # Frontend
 - **API Specs**: See `docs/API-Specifications.md`
 - **Architecture**: See `docs/SystemArchitecture.md`
 - **Development Roadmap**: See `docs/DevelopmentRoadmap.md`
-- **Memory Bank**: See `memory-bank/` for project intelligence
+- **Memory Bank**: See `.serena/memories/` for project intelligence (Serena memories)
 
 ## 🤝 Contributing
 

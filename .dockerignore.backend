@@ -6,7 +6,7 @@ frontend/
 *.md
 docs/
 wiki/
-memory-bank/
+.serena/
 
 # Development files  
 .git/

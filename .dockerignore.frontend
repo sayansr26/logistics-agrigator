@@ -8,7 +8,7 @@ shared/lib/database.js
 *.md
 docs/
 wiki/
-memory-bank/
+.serena/
 
 # Development files
 .git/

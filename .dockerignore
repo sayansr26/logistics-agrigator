@@ -15,7 +15,7 @@ LICENSE*
 CONTRIBUTING*
 docs/
 wiki/
-memory-bank/
+.serena/
 
 # IDE and Editor files
 .vscode/

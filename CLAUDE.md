@@ -5,12 +5,16 @@
 
 ## 🎯 Memory Bank Protocol (MANDATORY)
 
-**CRITICAL**: Read ALL memory bank files at session start. These files contain the complete project context and are the single source of truth.
+**CRITICAL**: Read ALL memory bank entries at session start. They contain the complete project context and are the single source of truth.
 
-### Core Memory Files (Read in Exact Order)
+The memory bank lives in **Serena memories** (`.serena/memories/`, read via the
+`mcp__serena__read_memory` tool by name — no `.md` extension). It was migrated
+out of the old top-level `memory-bank/` directory; that path no longer exists.
+
+### Core Memory Entries (Read in Exact Order)
 
 ```
-memory-bank/
+.serena/memories/
 ├── projectbrief.md      # Vision, scope, requirements
 ├── productContext.md    # Business problems & solutions
 ├── systemPatterns.md    # Architecture & design patterns
@@ -21,15 +25,23 @@ memory-bank/
 
 ### Session Start Checklist
 
-```bash
-# MANDATORY: Execute in this exact sequence
-1. cat memory-bank/projectbrief.md      # Core requirements
-2. cat memory-bank/productContext.md    # Business context
-3. cat memory-bank/systemPatterns.md    # Architecture
-4. cat memory-bank/techContext.md       # Tech stack
-5. cat memory-bank/activeContext.md     # Current work
-6. cat memory-bank/progress.md          # Latest status
 ```
+# MANDATORY: Execute in this exact sequence
+1. mcp__serena__read_memory("projectbrief")     # Core requirements
+2. mcp__serena__read_memory("productContext")   # Business context
+3. mcp__serena__read_memory("systemPatterns")   # Architecture
+4. mcp__serena__read_memory("techContext")      # Tech stack
+5. mcp__serena__read_memory("activeContext")    # Current work
+6. mcp__serena__read_memory("progress")         # Latest status
+
+# If the Serena MCP server is unavailable, read the files directly:
+#   cat .serena/memories/projectbrief.md   (etc.)
+```
+
+**Writing back**: use `mcp__serena__write_memory` / `mcp__serena__edit_memory`
+(or edit the file under `.serena/memories/` directly). `activeContext` and
+`progress` are the two that change most often. `.serena/memories/` is tracked
+in git — commit memory updates alongside the code change they describe.
 
 ## Project Overview
 
@@ -628,21 +640,21 @@ docker-compose.production.yml   # Production configuration
 
 ### 1. Start Session
 
-```bash
-# Read memory bank files first
-cat memory-bank/projectbrief.md
-cat memory-bank/productContext.md
-cat memory-bank/activeContext.md
-cat memory-bank/systemPatterns.md
-cat memory-bank/techContext.md
-cat memory-bank/progress.md
+```
+# Read memory bank entries first (Serena memories)
+mcp__serena__read_memory("projectbrief")
+mcp__serena__read_memory("productContext")
+mcp__serena__read_memory("activeContext")
+mcp__serena__read_memory("systemPatterns")
+mcp__serena__read_memory("techContext")
+mcp__serena__read_memory("progress")
 ```
 
 ### 2. Implement Feature
 
 ```bash
 # Plan first
-Review memory-bank/activeContext.md
+Review the activeContext memory
 Create implementation plan
 Ask clarifying questions
 
@@ -660,11 +672,11 @@ Check health endpoints
 
 ### 3. Update Documentation
 
-```bash
-# Update relevant memory bank files
-Update memory-bank/progress.md with changes
-Update memory-bank/activeContext.md with new focus
-Update memory-bank/systemPatterns.md if new patterns
+```
+# Update relevant memory bank entries (mcp__serena__write_memory / edit_memory)
+Update the progress memory with changes
+Update the activeContext memory with new focus
+Update the systemPatterns memory if new patterns
 ```
 
 ## Success Criteria

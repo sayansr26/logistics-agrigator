@@ -9,7 +9,7 @@ Thank you for your interest in contributing to the Logistics Aggregator Portal! 
 1. **Read the Documentation**:
    - [Project Overview](./wiki/README.md) - Understanding the project
    - [Quick Start Guide](./wiki/Quick-Start-Guide.md) - 10-minute setup
-   - [Architecture Overview](./memory-bank/systemPatterns.md) - Technical foundation
+   - [Architecture Overview](./.serena/memories/systemPatterns.md) - Technical foundation
 
 2. **Choose Your Track**:
    - **Frontend Developer**: [Frontend Development Guide](./docs/FRONTEND-DEVELOPMENT-GUIDE.md)
@@ -28,7 +28,7 @@ Thank you for your interest in contributing to the Logistics Aggregator Portal! 
 
 #### **Finding Work**
 
-- **Check Current Priorities**: Review [Active Context](./memory-bank/activeContext.md) for current focus
+- **Check Current Priorities**: Review [Active Context](./.serena/memories/activeContext.md) for current focus
 - **Browse Issues**: Look for issues labeled `good-first-issue` or `help-wanted`
 - **Weekly Priorities**: Check Week 2 tasks in development guides
 - **Team Coordination**: Coordinate with team leads for task assignment
@@ -582,7 +582,7 @@ git merge main
 ### **Resources**
 
 - **Project Wiki**: [./wiki/README.md](./wiki/README.md)
-- **Memory Bank**: [./memory-bank/](./memory-bank/) - Complete project context
+- **Memory Bank**: [./.serena/memories/](./.serena/memories/) - Complete project context
 - **Development Guides**: [./docs/](./docs/) - Detailed development instructions
 - **API Documentation**: [./docs/API-Specifications.md](./docs/API-Specifications.md)
 

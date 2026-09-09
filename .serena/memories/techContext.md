@@ -76,7 +76,7 @@ logistics-agrigator/
 ├── shared/                # Shared utilities
 ├── scripts/               # Automation scripts
 ├── docs/                  # Documentation
-├── memory-bank/           # Project intelligence
+├── .serena/memories/      # Project intelligence (memory bank)
 ├── docker-compose.yml     # Main compose file
 └── package.json           # Root workspace config
 ```

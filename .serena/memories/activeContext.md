@@ -40,7 +40,7 @@ Replaced the placeholder `/dashboard` (which only showed partner/zone/charge-def
   - `GET /api/v1/shipments/dashboard/couriers?days=30` — top 20 by `partnerId`/`partnerName`.
   - `GET /api/v1/shipments/dashboard/outlets?days=30&limit=10` — topByVolume/topByRevenue.
   - `GET /api/v1/shipments/dashboard/adjustments?days=30` — from `ShipmentFinancialAdjustment`, scoped via the `shipment` relation (the table itself has no outlet/client column).
-- wallet-service, `backend/wallet-service/services/dashboardService.js` + `controllers/dashboardController.js` (new), routes in `routes/wallet.js` ahead of `/:userId`. **IMPORTANT ARCHITECTURAL NOTE**: wallet-service runs **stateless** — it has no local DB of record; the local Prisma `Wallet`/`Transaction` models are essentially unused. A first pass of these endpoints queried them directly and returned schema-correct but permanently-zero data; it had to be reworked to go through `services/externalWalletClient.js` (`getExternalWalletClient()`), the same client `adminWalletController.js`/`outletWalletController.js` already use to talk to the real external wallet API (`wapi.websiteduniya.com`). See `memory-bank` note: **any future wallet-service work should check `externalWalletClient.js` first, not assume Prisma is the source of truth.**
+- wallet-service, `backend/wallet-service/services/dashboardService.js` + `controllers/dashboardController.js` (new), routes in `routes/wallet.js` ahead of `/:userId`. **IMPORTANT ARCHITECTURAL NOTE**: wallet-service runs **stateless** — it has no local DB of record; the local Prisma `Wallet`/`Transaction` models are essentially unused. A first pass of these endpoints queried them directly and returned schema-correct but permanently-zero data; it had to be reworked to go through `services/externalWalletClient.js` (`getExternalWalletClient()`), the same client `adminWalletController.js`/`outletWalletController.js` already use to talk to the real external wallet API (`wapi.websiteduniya.com`). See memory note: **any future wallet-service work should check `externalWalletClient.js` first, not assume Prisma is the source of truth.**
   - `GET /api/v1/wallet/dashboard/summary?days=30` — total balance/wallet count/status breakdown come from `listClientWallets`'s built-in `stats` block (cheap, no page-scanning needed). Top-ups vs debits classified using the **external API's actual transaction types** — `TOP_UP`/`REFUND` as top-ups, `DEBIT` as debits (verified against live data; these differ from the local Prisma `TransactionType` enum, which is a red herring here). Low-balance wallets (threshold 500) found via `sortBy=balance&sortDir=asc`, capped at `MAX_WALLET_PAGES=5` (500 wallets) with a `truncated` flag if the cap is hit.
   - `GET /api/v1/wallet/dashboard/trend?days=30` — daily top-up vs debit series. The external API's date-range filter (`from`/`to`) does not actually work (verified — silently ignored), so results are paged newest-first via `listClientTransactions`/`getUserTransactionHistory` until crossing the `days` boundary or hitting `MAX_TXN_PAGES=10` (1,000 records), with a `truncated` flag if capped.
   - Scoping: outlet role uses the per-user path (`req.user.phone`) exactly like `outletWalletController.js`; other roles resolve `clientCode` from `req.query.clientCode` (admin/superadmin only) → `req.user.clientCode` → `DEFAULT_CLIENT_CODE`. An outlet's `clientCode` query override is deliberately ignored. Verified live: admin sees 2 wallets/₹2664.80 total; the outlet token sees only its own 1 wallet/₹2144.80, cross-checked against the pre-existing `/admin/client-wallets` endpoint's numbers.
@@ -708,10 +708,10 @@ The primary focus is implementing a robust security layer and role-based access 
 ### Daily Workflow
 
 1. Check Docker services are running
-2. Review current task in memory-bank
+2. Review current task in the activeContext memory
 3. Follow auth-service patterns for implementation
 4. Run verification protocol before marking complete
-5. Update memory-bank with changes
+5. Update Serena memories (.serena/memories/) with changes
 
 ### Code Review Checklist
 
